@@ -97,6 +97,14 @@ def index():
     return render_template('index.html')
 
 
+@app.route("/debug/env")
+def debug_env():
+    return {
+        "DATABASE_URL_exists": bool(os.environ.get("DATABASE_URL")),
+        "PGHOST": os.environ.get("PGHOST"),
+        "PGDATABASE": os.environ.get("PGDATABASE"),
+    }
+
 @app.route('/log', methods=['GET', 'POST'])
 def log_workout():
     if request.method == 'GET':
