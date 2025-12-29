@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center" style="min-height: 80vh; align-items: center;">
+    <div class="col-12 col-md-5 col-lg-4">
+
+        <h6 class="text-center mb-4 text-muted" style="letter-spacing: 3px; font-weight: 500;">SELECT TARGET</h6>
+
+        <div class="d-grid gap-3">
+            <a href="/retrieve/days/1" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
+                CHEST & TRICEPS
+            </a>
+            <a href="/retrieve/days/2" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
+                BACK & BICEPS
+            </a>
+            <a href="/retrieve/days/3" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
+                ARMS
+            </a>
+            <a href="/retrieve/days/4" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
+                LEGS
+            </a>
+        </div>
+
+        <div class="text-center mt-5">
+            <a href="/" class="text-muted text-decoration-none small hover-gold" style="text-transform: uppercase; letter-spacing: 1px;">← Back Home</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

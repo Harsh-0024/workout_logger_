@@ -1,0 +1,22 @@
+# Python internals
+__pycache__/
+*.pyc
+
+# Virtual Environment (Do not upload this!)
+.venv/
+venv/
+env/
+
+# Database (Keep your local data local)
+*.db
+workout.db
+
+# Environment Variables (Secrets)
+.env
+
+# OS System Files
+.DS_Store
+
+# IDE Settings (Optional)
+.vscode/
+.idea/

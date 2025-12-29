@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="card shadow-lg">
+    <div class="d-flex justify-content-between align-items-center mb-4 border-bottom border-secondary border-opacity-10 pb-3">
+        <h3 class="m-0">Session Summary</h3>
+        <span class="badge bg-secondary bg-opacity-10 text-muted mono">{{ date }}</span>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th style="width: 35%;">Exercise</th>
+                    <th style="width: 25%;">Old Best</th>
+                    <th style="width: 25%;">Today</th>
+                    <th style="width: 15%; text-align: right;">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in summary %}
+                <tr>
+                    <td>
+                        <div class="fw-semibold text-white">{{ row.name }}</div>
+                    </td>
+
+                    <td class="text-muted small mono">
+                        {{ row.old if row.old != '-' else '—' }}
+                    </td>
+
+                    <td class="text-white small mono">
+                        {{ row.new }}
+                    </td>
+
+                    <td style="text-align: right;">
+                        {% if 'PEAK' in row.status %}
+                            <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25">PEAK</span>
+                        {% elif 'CONSISTENCY' in row.status %}
+                            <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25">CONSISTENCY</span>
+                        {% elif 'NEW' in row.status %}
+                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25">NEW</span>
+                        {% else %}
+                            <span class="text-muted small" style="opacity: 0.3;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="mt-5 text-center">
+        <a href="/" class="btn btn-gold-outline px-5">Back Home</a>
+    </div>
+</div>
+{% endblock %}
