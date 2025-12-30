@@ -76,7 +76,7 @@ Back & Biceps 3
 3. Lat Dumbbell Rows
 4. Hammer Rope Curl
 5. Wide-Grip Seated Row
-6. Superman
+6. Hyper Extension
 7. V Tucks
 break
 Back & Biceps 4
