@@ -192,7 +192,7 @@ Arms 4
 1. Machine Shoulder Press
 2. Forearm Ulnar + Radial Deviation
 3. Machine Lateral Raise
-4. Farmer’s Walk
+4. Forearm Roller
 5. Rear Delt Machine Fly
 6. Wrist Extension – Machine
 7. Crunches B
