@@ -10,7 +10,7 @@ list_of_exercises = [
     "Incline Barbell Press",
     "Triceps Rope Pushdown",
     "Flat Dumbbell Press",
-    "Barbell Overhead Extension",
+    "Skull Crushers",
     "Peck Deck Fly",
     "Dips",
     "Neutral-Grip Pull-Ups",
@@ -75,7 +75,7 @@ Chest & Triceps 2
 1. Incline Barbell Press
 2. Triceps Rope Pushdown
 3. Flat Dumbbell Press
-4. Barbell Overhead Extension
+4. Skull Crushers
 5. Peck Deck Fly
 6. Lower Abs
 break
@@ -83,7 +83,7 @@ Chest & Triceps 3
 1. Incline Dumbbell Press
 2. Triceps Rod Pushdown
 3. Flat Dumbbell Press
-4. Barbell Overhead Extension
+4. Skull Crushers
 5. Dips
 6. Lower Abs
 break
@@ -163,38 +163,38 @@ Legs 4
 break
 Arms 1
 1. Barbell Overhead Press
-2. Reverse Barbell Curl
+2. Wrist Flexion – Dumbbell
 3. Cable Lateral Raise
-4. Wrist Flexion - Dumbbell
+4. Reverse Barbell Curl
 5. Rear Delt Machine Fly
-6. Rope Face Pull
+6. Farmer’s Walk
 7. Crunches A
 break
 Arms 2
 1. Dumbbell Overhead Press
-2. Farmer's Walk
+2. Wrist Extension – Dumbbell
 3. Machine Lateral Raise
-4. Wrist Extension - Dumbbell
+4. Forearm Roller
 5. Rear Delt Machine Fly
-6. Forearm Ulnar Deviation
+6. Rope Face Pull
 7. Crunches B
 break
 Arms 3
-1. Machine Shoulder Press
-2. Forearm Roller
+1. Barbell Overhead Press
+2. Wrist Flexion – Machine
 3. Cable Lateral Raise
-4. Forearm Radial Deviation
+4. Reverse Dumbbell Curl
 5. Rear Delt Machine Fly
 6. Rope Face Pull
 7. Crunches A
 break
 Arms 4
-1. Dumbbell Overhead Press
-2. Reverse Dumbbell Curl
+1. Machine Shoulder Press
+2. Forearm Ulnar + Radial Deviation
 3. Machine Lateral Raise
-4. Wrist Flexion - Machine
+4. Farmer’s Walk
 5. Rear Delt Machine Fly
-6. Wrist Extension - Machine
+6. Wrist Extension – Machine
 7. Crunches B
 """
 
