@@ -64,9 +64,9 @@ list_of_exercises = [
 
 _workout_plan_text = """
 Chest & Triceps 1
-1. Incline Dumbbell Press
+1. Flat Barbell Press
 2. Triceps Rod Pushdown
-3. Flat Barbell Press
+3. Incline Dumbbell Press
 4. Dumbbell Overhead Extension
 5. Low Cable Fly
 6. Lower Abs
