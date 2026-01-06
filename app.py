@@ -10,14 +10,11 @@ import pyperclip
 from workout_parser import workout_parser
 from list_of_exercise import get_workout_days, list_of_exercises
 
-# ... imports remain the same ...
-
 app = Flask(__name__)
 # Use an environment variable for secret key, fallback to local for dev
 app.secret_key = os.environ.get('SECRET_KEY', 'muscle_gains_secret')
 
 # --- DATABASE SETUP ---
-# Check if we are on Railway (DATABASE_URL will exist)
 database_url = os.environ.get('DATABASE_URL')
 
 if database_url:
@@ -85,6 +82,44 @@ def get_set_stats(sets):
     return peak, strength_sum, volume
 
 
+def get_fuzzy_record(session, name):
+    """
+    Finds a record handling:
+    1. Exact Match
+    2. Python .title() quirk (Farmer's -> Farmer'S)
+    3. Smart Punctuation (Curly ' vs Straight ')
+    4. Dashes (En-dash vs Hyphen)
+    """
+    if not name: return None
+    name = name.strip()
+
+    # 1. Exact Match
+    rec = session.query(BestLift).get(name)
+    if rec: return rec
+
+    # 2. Try Python Title Case (Fixes "Farmer's" -> "Farmer'S" issue)
+    rec = session.query(BestLift).get(name.title())
+    if rec: return rec
+
+    # 3. Try Apostrophe Swap (Straight <-> Curly)
+    if "'" in name:
+        rec = session.query(BestLift).get(name.replace("'", "’"))
+        if rec: return rec
+    if "’" in name:
+        rec = session.query(BestLift).get(name.replace("’", "'"))
+        if rec: return rec
+
+    # 4. Try Dash Swap (Hyphen <-> En-dash)
+    if "-" in name:
+        rec = session.query(BestLift).get(name.replace("-", "–"))
+        if rec: return rec
+    if "–" in name:
+        rec = session.query(BestLift).get(name.replace("–", "-"))
+        if rec: return rec
+
+    return None
+
+
 @app.teardown_appcontext
 def remove_session(exception=None):
     Session.remove()
@@ -95,16 +130,6 @@ def remove_session(exception=None):
 @app.route('/')
 def index():
     return render_template('index.html')
-
-
-
-@app.route("/debug/env")
-def debug_env():
-    return {
-        "DATABASE_URL_exists": bool(os.environ.get("DATABASE_URL")),
-        "PGHOST": os.environ.get("PGHOST"),
-        "PGDATABASE": os.environ.get("PGDATABASE"),
-    }
 
 
 @app.route('/log', methods=['GET', 'POST'])
@@ -130,7 +155,8 @@ def log_workout():
         ex_name = exercise['name']
         new_str = exercise['exercise_string']
 
-        record = db_session.query(BestLift).get(ex_name)
+        # Use Fuzzy Matcher to ensure we find the record to update
+        record = get_fuzzy_record(db_session, ex_name)
 
         row = {'name': ex_name, 'old': '-', 'new': new_str, 'status': '-', 'class': 'neutral'}
 
@@ -156,6 +182,7 @@ def log_workout():
                 row['status'] = improvement
                 row['class'] = 'improved'
         else:
+            # Create new record using the name exactly as parsed
             new_record = BestLift(exercise=ex_name, best_string=new_str, sets_json=new_sets, updated_at=workout_date)
             db_session.add(new_record)
             row['old'] = 'First Log'
@@ -179,7 +206,7 @@ def retrieve_days(category_id):
 
 
 @app.route('/retrieve/final/<int:category_id>/<int:day_id>')
-def     retrieve_final(category_id, day_id):
+def retrieve_final(category_id, day_id):
     category_map = {1: "Chest & Triceps", 2: "Back & Biceps", 3: "Arms", 4: "Legs"}
     workout_category = category_map.get(category_id)
 
@@ -196,7 +223,9 @@ def     retrieve_final(category_id, day_id):
 
         db_session = Session()
         for exercise in exercises:
-            record = db_session.query(BestLift).get(exercise)
+            # --- USE FUZZY MATCHER TO RETRIEVE ---
+            record = get_fuzzy_record(db_session, exercise)
+
             if record and record.best_string:
                 output_text += "\n" + record.best_string
             else:
@@ -216,6 +245,5 @@ def     retrieve_final(category_id, day_id):
 
 if __name__ == '__main__':
     initialize_database()
-    # Railway provides a PORT variable. Localhost uses 5001.
     port = int(os.environ.get("PORT", 5001))
     app.run(host='0.0.0.0', port=port)

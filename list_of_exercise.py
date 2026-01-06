@@ -163,16 +163,16 @@ Legs 4
 break
 Arms 1
 1. Barbell Overhead Press
-2. Wrist Flexion – Dumbbell
+2. Wrist Flexion - Dumbbell
 3. Cable Lateral Raise
 4. Reverse Barbell Curl
 5. Rear Delt Machine Fly
-6. Farmer’s Walk
+6. Farmer's Walk
 7. Crunches A
 break
 Arms 2
 1. Dumbbell Overhead Press
-2. Wrist Extension – Dumbbell
+2. Wrist Extension - Dumbbell
 3. Machine Lateral Raise
 4. Forearm Roller
 5. Rear Delt Machine Fly
@@ -181,7 +181,7 @@ Arms 2
 break
 Arms 3
 1. Barbell Overhead Press
-2. Wrist Flexion – Machine
+2. Wrist Flexion - Machine
 3. Cable Lateral Raise
 4. Reverse Dumbbell Curl
 5. Rear Delt Machine Fly
@@ -194,7 +194,7 @@ Arms 4
 3. Machine Lateral Raise
 4. Forearm Roller
 5. Rear Delt Machine Fly
-6. Wrist Extension – Machine
+6. Wrist Extension - Machine
 7. Crunches B
 """
 
@@ -219,6 +219,7 @@ def get_workout_days():
 
         exercises_list = []
         for line in lines[1:]:
+            # Remove leading numbers/dots/bullets to get pure name
             ex = re.sub(r'^\s*\d+\s*(?:[.)\-:]?)\s*', '', line)
             exercises_list.append(ex)
 
