@@ -8,7 +8,7 @@ import pyperclip
 
 # Import your modules
 from workout_parser import workout_parser
-from list_of_exercise import get_workout_days, list_of_exercises
+from list_of_exercise import get_workout_days, list_of_exercises, EXERCISE_REP_RANGES
 
 app = Flask(__name__)
 # Use an environment variable for secret key, fallback to local for dev
@@ -223,13 +223,35 @@ def retrieve_final(category_id, day_id):
 
         db_session = Session()
         for exercise in exercises:
-            # --- USE FUZZY MATCHER TO RETRIEVE ---
+            # Look up Rep Range from our new Dictionary
+            # We strip fuzzy chars if necessary, but key lookup should match canonical name
+            rep_range = EXERCISE_REP_RANGES.get(exercise, "")
+            formatted_range = f" - [{rep_range}]" if rep_range else ""
+
             record = get_fuzzy_record(db_session, exercise)
 
             if record and record.best_string:
-                output_text += "\n" + record.best_string
+                # Logic: If the saved string ALREADY has " - [", use it as is.
+                # If it's an OLD string (no range), insert the range.
+                if " - [" in record.best_string:
+                    output_text += "\n" + record.best_string
+                else:
+                    # It's an old format: "Name Weights..."
+                    # We want: "Name - [Range] - Weights..."
+                    # We replace the exercise name part with "Name - [Range] -"
+                    # But to be safe (case sensitivity etc), we just prepend the range to the Data part?
+                    # Safer: Reconstruct it.
+                    # Remove the Exercise Name from the start of the string to get just data
+                    # (This assumes the stored string starts with the exercise name, which it does)
+                    data_part = record.best_string[len(exercise):].strip()
+                    # If it starts with a comma or something weird, clean it
+                    if data_part.startswith("-"): data_part = data_part[1:].strip()
+
+                    new_line = f"{exercise}{formatted_range} - {data_part}"
+                    output_text += "\n" + new_line
             else:
-                output_text += "\n" + exercise
+                # No history? Just show Name + Range
+                output_text += f"\n{exercise}{formatted_range}"
 
         # Server-side copy attempt (User convenience)
         try:

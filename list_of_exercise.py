@@ -1,5 +1,6 @@
 import re
 
+# Canonical list of exercises
 list_of_exercises = [
     "Incline Dumbbell Press",
     "Triceps Rod Pushdown",
@@ -59,8 +60,87 @@ list_of_exercises = [
     "Forearm Radial Deviation",
     "Reverse Dumbbell Curl",
     "Wrist Flexion - Machine",
-    "Wrist Extension - Machine"
+    "Wrist Extension - Machine",
+    "Wide-Grip Chest-Supported Row",
+    "Barbell Overhead Extension"
 ]
+
+# --- NEW: REP RANGES CONFIGURATION ---
+EXERCISE_REP_RANGES = {
+    # Chest & Triceps
+    "Flat Barbell Press": "5–8",
+    "Incline Dumbbell Press": "6–10",
+    "Incline Barbell Press": "5–8",
+    "Flat Dumbbell Press": "8–12",
+    "Low Cable Fly": "12–20",
+    "Peck Deck Fly": "12–20",
+    "Dips": "6–12",
+    "Triceps Rod Pushdown": "10–15",
+    "Triceps Rope Pushdown": "12–20",
+    "Dumbbell Overhead Extension": "8–12",
+    "Barbell Overhead Extension": "6–10",
+    "Skull Crushers": "6–10",
+
+    # Back & Biceps
+    "Deadlift": "3–6",
+    "Neutral-Grip Pull-Ups": "6–10",
+    "Pull Ups": "6–10",
+    "Neutral-Grip Lat Pulldown": "8–12",
+    "Lat Pulldown": "8–12",
+    "Wide-Grip Seated Row": "8–12",
+    "Neutral-Grip Seated Row": "8–12",
+    "Wide-Grip Chest-Supported Row": "10–15",
+    "Lat Dumbbell Rows": "8–12",
+    "Hyper Extension": "12–20",
+    "Barbell Curl": "6–10",
+    "Dumbbell Curl": "8–12",
+    "Preacher Curl": "8–12",
+    "Hammer Dumbbell Curl": "10–15",
+    "Hammer Rope Curl": "12–15",
+    "Reverse Barbell Curl": "10–15",
+    "Reverse Dumbbell Curl": "10–15",
+
+    # Legs & Glutes
+    "Smith Machine Squat": "6–10",
+    "Machine Squat": "8–12",
+    "Leg Press": "10–20",
+    "Romanian Deadlift": "6–10",
+    "Leg Extension": "12–20",
+    "Leg Curl": "10–15",
+    "Hip Thrust": "8–12",
+    "Walking Dumbbell Lunges": "10–20",
+    "Stationary Lunges": "8–15",
+    "Hip Adduction": "12–20",
+    "Hip Abduction": "12–20",
+    "Calf Raises Standing": "12–20",
+    "Calf Raises Sitting": "15–25",
+
+    # Shoulders
+    "Barbell Overhead Press": "5–8",
+    "Dumbbell Overhead Press": "6–10",
+    "Machine Shoulder Press": "8–12",
+    "Cable Lateral Raise": "12–20",
+    "Machine Lateral Raise": "15–25",
+    "Rear Delt Machine Fly": "12–20",
+    "Rope Face Pull": "12–20",
+
+    # Forearms & Grip
+    "Wrist Flexion - Dumbbell": "12–20",
+    "Wrist Extension - Dumbbell": "12–20",
+    "Wrist Flexion - Machine": "15–25",
+    "Wrist Extension - Machine": "15–25",
+    "Forearm Roller": "30–60s",
+    "Forearm Ulnar + Radial Deviation": "15–25",
+    "Forearm Ulnar Deviation": "15–25",
+    "Forearm Radial Deviation": "15–25",
+    "Farmer's Walk": "20–60s",
+
+    # Core
+    "Lower Abs": "12–20",
+    "V Tucks": "12–20",
+    "Crunches A": "15–25",
+    "Crunches B": "12–20"
+}
 
 _workout_plan_text = """
 Chest & Triceps 1
@@ -98,38 +178,36 @@ break
 Back & Biceps 1
 1. Neutral-Grip Pull-Ups
 2. Barbell Curl
-3. Wide-Grip Seated Row
+3. Lat Dumbbell Rows
 4. Preacher Curl
-5. Lat Dumbbell Rows
+5. Wide-Grip Chest-Supported Row
 6. Hyper Extension
 7. V Tucks
 break
 Back & Biceps 2
-1. Deadlift
-2. Pull Ups
-3. Dumbbell Curl
-4. Neutral-Grip Seated Row
-5. Hammer Dumbbell Curl
-6. Wide-Grip Chest-Supported Row
-7. V Tucks
+1. Pull Ups
+2. Dumbbell Curl
+3. Deadlift
+4. Hammer Dumbbell Curl
+5. Neutral-Grip Seated Row
+6. V Tucks
 break
 Back & Biceps 3
 1. Neutral-Grip Lat Pulldown
 2. Barbell Curl
-3. Wide-Grip Seated Row
+3. Lat Dumbbell Rows
 4. Hammer Rope Curl
-5. Lat Dumbbell Rows
+5. Wide-Grip Seated Row
 6. Hyper Extension
 7. V Tucks
 break
 Back & Biceps 4
-1. Deadlift
-2. Lat Pulldown
-3. Preacher Curl
-4. Neutral-Grip Seated Row
-5. Hammer Dumbbell Curl
-6. Wide-Grip Chest-Supported Row
-7. V Tucks
+1. Lat Pulldown
+2. Preacher Curl
+3. Deadlift
+4. Hammer Dumbbell Curl
+5. Neutral-Grip Seated Row
+6. V Tucks
 break
 Legs 1
 1. Smith Machine Squat
