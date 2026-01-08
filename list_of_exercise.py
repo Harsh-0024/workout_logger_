@@ -98,36 +98,38 @@ break
 Back & Biceps 1
 1. Neutral-Grip Pull-Ups
 2. Barbell Curl
-3. Lat Dumbbell Rows
+3. Wide-Grip Seated Row
 4. Preacher Curl
-5. Wide-Grip Seated Row
+5. Lat Dumbbell Rows
 6. Hyper Extension
 7. V Tucks
 break
 Back & Biceps 2
-1. Pull Ups
-2. Dumbbell Curl
-3. Deadlift
-4. Hammer Dumbbell Curl
-5. Neutral-Grip Seated Row
-6. V Tucks
+1. Deadlift
+2. Pull Ups
+3. Dumbbell Curl
+4. Neutral-Grip Seated Row
+5. Hammer Dumbbell Curl
+6. Wide-Grip Chest-Supported Row
+7. V Tucks
 break
 Back & Biceps 3
 1. Neutral-Grip Lat Pulldown
 2. Barbell Curl
-3. Lat Dumbbell Rows
+3. Wide-Grip Seated Row
 4. Hammer Rope Curl
-5. Wide-Grip Seated Row
+5. Lat Dumbbell Rows
 6. Hyper Extension
 7. V Tucks
 break
 Back & Biceps 4
-1. Lat Pulldown
-2. Preacher Curl
-3. Deadlift
-4. Hammer Dumbbell Curl
-5. Neutral-Grip Seated Row
-6. V Tucks
+1. Deadlift
+2. Lat Pulldown
+3. Preacher Curl
+4. Neutral-Grip Seated Row
+5. Hammer Dumbbell Curl
+6. Wide-Grip Chest-Supported Row
+7. V Tucks
 break
 Legs 1
 1. Smith Machine Squat
