@@ -3,7 +3,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from sqlalchemy import create_engine, Column, String, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 from sqlalchemy_utils import JSONType
-from datetime import datetime
+from datetime import datetime, timedelta
 import pyperclip
 import urllib.parse
 
@@ -348,7 +348,12 @@ def retrieve_final(category_name, day_id):
 
     try:
         exercises = all_plans["workout"][category_name][key]
-        today = datetime.now().strftime("%d/%m")
+
+        # --- DATE FIX: IST Offset (UTC + 5:30) ---
+        # Forces the server to display India time regardless of where it is hosted.
+        ist_offset = timedelta(hours=5, minutes=30)
+        today = (datetime.utcnow() + ist_offset).strftime("%d/%m")
+
         output_text = f"{today} {key}\n"
 
         db_session = Session()
