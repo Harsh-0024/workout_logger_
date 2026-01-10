@@ -132,8 +132,8 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/db_update')
-def index():
+@app.route('/bgfix')
+def bgfix():
     session = Session()
     rows = session.query(BestLift).all()
     legs_exercise = """Legs 1
