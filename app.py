@@ -179,28 +179,54 @@ def get_set_stats(sets):
 
 def get_fuzzy_record(db_session, model, name):
     """
-    Intelligent Search: Finds exercise record even with typos/formatting diffs.
-    Checks: Exact match -> Title Case -> Smart Quotes -> Dash/Hyphen variations.
+    UPDATED: Finds exercise record even with typos/formatting diffs.
+    CRITICAL FIX: Prioritizes records that actually have data (best_string).
     """
     if not name: return None
     name = name.strip()
-    rec = db_session.query(model).get(name)
-    if rec: return rec
-    rec = db_session.query(model).get(name.title())
-    if rec: return rec
+
+    # 1. Generate all Candidates
+    candidates = []
+    candidates.append(name)  # Straight Match
+    candidates.append(name.title())  # Title Case
+
+    # Apostrophe variations
     if "'" in name:
-        rec = db_session.query(model).get(name.replace("'", "’"))
-        if rec: return rec
+        swapped = name.replace("'", "’")
+        candidates.append(swapped)
+        candidates.append(swapped.title())
+
     if "’" in name:
-        rec = db_session.query(model).get(name.replace("’", "'"))
-        if rec: return rec
+        swapped = name.replace("’", "'")
+        candidates.append(swapped)
+        candidates.append(swapped.title())
+
+    # Dash variations
     if "-" in name:
-        rec = db_session.query(model).get(name.replace("-", "–"))
-        if rec: return rec
+        candidates.append(name.replace("-", "–"))
     if "–" in name:
-        rec = db_session.query(model).get(name.replace("–", "-"))
-        if rec: return rec
-    return None
+        candidates.append(name.replace("–", "-"))
+
+    # Remove duplicates
+    unique_candidates = []
+    for c in candidates:
+        if c not in unique_candidates: unique_candidates.append(c)
+
+    # 2. Search & Prioritize Data
+    first_match = None
+
+    for candidate in unique_candidates:
+        rec = db_session.query(model).get(candidate)
+        if rec:
+            if not first_match:
+                first_match = rec  # Save strictly as fallback
+
+            # If this record has data, it is the Winner. Return immediately.
+            if rec.best_string and rec.best_string.strip():
+                return rec
+
+    # If no data record found, return the empty match (or None)
+    return first_match
 
 
 # Custom Filter for templates to handle URL spaces
