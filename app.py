@@ -124,49 +124,55 @@ def get_fuzzy_record(session, name):
 def remove_session(exception=None):
     Session.remove()
 
-session = Session()
-rows = session.query(BestLift).all()
-legs_exercise = """Legs 1
-1. Smith Machine Squat
-2. Romanian Deadlift
-3. Leg Extension
-4. Leg Curl
-5. Hip Adduction
-6. Calf Raises Standing
-break
-Legs 2
-1. Leg Press
-2. Hip Thrust
-3. Walking Dumbbell Lunges
-4. Leg Curl
-5. Hip Abduction
-6. Calf Raises Sitting
-break
-Legs 3
-1. Machine Squat
-2. Stationary Lunges
-3. Leg Extension
-4. Leg Curl
-5. Hip Adduction
-6. Calf Raises Standing
-break
-Legs 4
-1. Leg Press
-2. Romanian Deadlift
-3. Hip Thrust
-4. Leg Extension
-5. Hip Abduction
-6. Calf Raises Sitting
-break"""
-for row in rows:
-    if row.exercise in legs_exercise:
-        row.best_string = row.exercise
-session.close()
 
 # --- ROUTES ---
 
 @app.route('/')
 def index():
+    return render_template('index.html')
+
+
+@app.route('/db_update')
+def index():
+    session = Session()
+    rows = session.query(BestLift).all()
+    legs_exercise = """Legs 1
+    1. Smith Machine Squat
+    2. Romanian Deadlift
+    3. Leg Extension
+    4. Leg Curl
+    5. Hip Adduction
+    6. Calf Raises Standing
+    break
+    Legs 2
+    1. Leg Press
+    2. Hip Thrust
+    3. Walking Dumbbell Lunges
+    4. Leg Curl
+    5. Hip Abduction
+    6. Calf Raises Sitting
+    break
+    Legs 3
+    1. Machine Squat
+    2. Stationary Lunges
+    3. Leg Extension
+    4. Leg Curl
+    5. Hip Adduction
+    6. Calf Raises Standing
+    break
+    Legs 4
+    1. Leg Press
+    2. Romanian Deadlift
+    3. Hip Thrust
+    4. Leg Extension
+    5. Hip Abduction
+    6. Calf Raises Sitting
+    break"""
+    for row in rows:
+        if row.exercise in legs_exercise:
+            row.best_string = row.exercise
+            row.sets_json = {"weights": [1, 1, 1], "reps": [1, 1, 1]}
+    session.close()
     return render_template('index.html')
 
 
