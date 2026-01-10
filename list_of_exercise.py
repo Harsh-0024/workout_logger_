@@ -13,7 +13,7 @@ list_of_exercises = [
     "Lat Dumbbell Rows", "Lat Pulldown", "Leg Curl", "Leg Extension",
     "Leg Press", "Low Cable Fly", "Lower Abs", "Machine Lateral Raise",
     "Machine Shoulder Press", "Machine Squat", "Neutral-Grip Lat Pulldown",
-    "Neutral-Grip Pull-Ups", "Neutral-Grip Seated Row", "Pec Deck Fly",
+    "Neutral-Grip Pull-Ups", "Neutral-Grip Seated Row", "Peck Deck Fly",
     "Preacher Curl", "Pull Ups", "Rear Delt Machine Fly", "Reverse Barbell Curl",
     "Reverse Dumbbell Curl", "Romanian Deadlift", "Rope Face Pull",
     "Skull Crushers", "Smith Machine Squat", "Stationary Lunges",
@@ -31,7 +31,7 @@ EXERCISE_REP_RANGES = {
     "Incline Barbell Press": "5–8",
     "Flat Dumbbell Press": "8–12",
     "Low Cable Fly": "12–20",
-    "Pec Deck Fly": "12–20",
+    "Peck Deck Fly": "12–20",
     "Dips": "6–12",
     "Triceps Rod Pushdown": "10–15",
     "Triceps Rope Pushdown": "12–20",
@@ -90,8 +90,8 @@ EXERCISE_REP_RANGES = {
     "Crunches B": "12–20"
 }
 
-# --- HARSH'S NEW CLEAN PLAN ---
-HARSH_PLAN_TEXT = """
+# --- DEFAULT PLANS (Used for Initial Database Seeding) ---
+HARSH_DEFAULT_PLAN = """
 Chest & Triceps 1
 Flat Barbell Press
 Triceps Rod Pushdown
@@ -105,7 +105,7 @@ Incline Barbell Press
 Triceps Rope Pushdown
 Flat Dumbbell Press
 Skull Crushers
-Pec Deck Fly
+Peck Deck Fly
 Lower Abs
 
 Chest & Triceps 3
@@ -121,7 +121,7 @@ Incline Barbell Press
 Triceps Rope Pushdown
 Flat Barbell Press
 Dumbbell Overhead Extension
-Pec Deck Fly
+Peck Deck Fly
 Lower Abs
 
 Back & Biceps 1
@@ -229,91 +229,44 @@ Wrist Extension - Machine
 Crunches B
 """
 
-# --- APURVA'S PLAN (Formatted to match new system) ---
-APURVA_PLAN_TEXT = """
+APURVA_DEFAULT_PLAN = """
 Chest & Triceps 1
-Incline Barbell Press
-Flat Dumbbell Press
-Low Cable Fly
-Overhead Triceps Extension
-Triceps Rod Pushdown
-Lower Abs
-
-Chest & Triceps 2
 Flat Barbell Press
+Triceps Rod Pushdown
 Incline Dumbbell Press
-Pec Deck Fly
-Dips
-Triceps Rope Pushdown
+Low Cable Fly
 Lower Abs
 
 Back & Biceps 1
-Neutral-Grip Pull-Ups
-Lat Dumbbell Row
-Wide-Grip Seated Row
-Hyperextension
+Lat Pulldown
 Barbell Curl
-Hammer Rope Curl
+Seated Row
+Hammer Curls
 V Tucks
-
-Back & Biceps 2
-Pull-Ups
-Neutral-Grip Seated Row
-Wide-Grip Seated Row
-Deadlift
-Dumbbell Curl
-Machine Preacher Curl
-V Tucks
-
-Arms 1
-Dumbbell Shoulder Press
-Cable Lateral Raise
-Rear Delt Machine Fly
-Wrist Extension
-Farmer’s Walk
-Reverse Dumbbell Curl
-Crunches A
-
-Arms 2
-Barbell Shoulder Press
-Cable Lateral Raise
-Rear Delt Machine Fly
-Rope Face Pull
-Wrist Flexion
-Reverse Barbell Curl
-Crunches B
 
 Legs 1
+Squats
 Leg Press
-Leg Curl
-Walking Dumbbell Lunges
-Hip Thrust
-Standing Calf Raises
-V Tucks
-
-Legs 2
-Barbell Squat
 Leg Extension
-Stationary Dumbbell Lunges
-Romanian Deadlift
-Seated Calf Raises
-V Tucks
+Leg Curl
+Calf Raises
+
+Arms 1
+Overhead Press
+Lateral Raises
+Bicep Curls
+Tricep Extensions
 """
 
 
-def get_workout_days(user="harsh"):
-    """Parses the text plan into a dictionary based on the user."""
-
-    # Select the correct plan text
-    if user == "apurva":
-        raw_text = APURVA_PLAN_TEXT
-    else:
-        raw_text = HARSH_PLAN_TEXT
-
+def get_workout_days(raw_text):
+    """
+    Parses the provided text string into a dictionary.
+    NOW DYNAMIC: It parses whatever text you pass to it.
+    """
     workout_days = {"workout": {}}
 
-    # LOGIC UPDATE: Split by empty lines (double newlines) instead of "break"
-    # regex matches: newline + optional whitespace + newline
+    # Split by empty lines (double newlines)
     sections = re.split(r'\n\s*\n', raw_text.strip())
 
     # Filter out any empty strings
@@ -334,8 +287,7 @@ def get_workout_days(user="harsh"):
         if workout_day_name not in workout_days["workout"]:
             workout_days["workout"][workout_day_name] = {}
 
-        # LOGIC UPDATE: No regex cleaning needed anymore since input is clean
-        # exercises are simply the rest of the lines
+        # Exercises are simply the rest of the lines
         exercises_list = lines[1:]
 
         workout_days["workout"][workout_day_name][workout_name] = exercises_list

@@ -1,6 +1,6 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash, session
-from sqlalchemy import create_engine, Column, String, DateTime
+from sqlalchemy import create_engine, Column, String, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 from sqlalchemy_utils import JSONType
 from datetime import datetime
@@ -9,10 +9,10 @@ import urllib.parse
 
 # Import your modules
 from workout_parser import workout_parser
-from list_of_exercise import get_workout_days, list_of_exercises, EXERCISE_REP_RANGES
+from list_of_exercise import get_workout_days, list_of_exercises, EXERCISE_REP_RANGES, HARSH_DEFAULT_PLAN, \
+    APURVA_DEFAULT_PLAN
 
 app = Flask(__name__)
-# Use an environment variable for secret key
 app.secret_key = os.environ.get('SECRET_KEY', 'muscle_gains_secret')
 
 # --- DATABASE SETUP ---
@@ -49,39 +49,61 @@ class ApurvaLift(Base, LiftMixin):
     __tablename__ = "apurva_lifts"
 
 
+# NEW: Table to store the Plan Text for each user
+class UserPlan(Base):
+    __tablename__ = "user_plans"
+    username = Column(String, primary_key=True)  # 'harsh' or 'apurva'
+    plan_text = Column(Text)  # The full text of the workout plan
+    updated_at = Column(DateTime, default=datetime.now)
+
+
 Base.metadata.create_all(engine)
 
 
 # --- HELPERS ---
 
 def get_user_model():
-    """Returns the correct DB Class based on the logged-in user."""
     user = session.get('user')
-    if user == 'apurva':
-        return ApurvaLift
+    if user == 'apurva': return ApurvaLift
     return HarshLift
 
 
 def initialize_database():
     db_session = Session()
     try:
+        # Seed Lifts
         if db_session.query(HarshLift).first() is None:
-            print("--- Seeding Harsh's Table ---")
             for ex in list_of_exercises:
                 if not db_session.get(HarshLift, ex):
                     db_session.add(HarshLift(exercise=ex, best_string="", sets_json={"weights": [], "reps": []}))
 
         if db_session.query(ApurvaLift).first() is None:
-            print("--- Seeding Apurva's Table ---")
             for ex in list_of_exercises:
                 if not db_session.get(ApurvaLift, ex):
                     db_session.add(ApurvaLift(exercise=ex, best_string="", sets_json={"weights": [], "reps": []}))
+
+        # Seed Plans (If missing, insert default text)
+        if not db_session.get(UserPlan, 'harsh'):
+            db_session.add(UserPlan(username='harsh', plan_text=HARSH_DEFAULT_PLAN))
+
+        if not db_session.get(UserPlan, 'apurva'):
+            db_session.add(UserPlan(username='apurva', plan_text=APURVA_DEFAULT_PLAN))
 
         db_session.commit()
     except Exception as e:
         print(f"Init Error: {e}")
     finally:
         db_session.close()
+
+
+def get_current_plan_text():
+    """Fetches the plan text from the DB for the current user."""
+    user = session.get('user', 'harsh')
+    db_session = Session()
+    plan_record = db_session.get(UserPlan, user)
+    if plan_record:
+        return plan_record.plan_text
+    return ""  # Should not happen if seeded correctly
 
 
 def get_set_stats(sets):
@@ -127,7 +149,7 @@ def remove_session(exception=None):
     Session.remove()
 
 
-# --- SMART ROUTES ---
+# --- ROUTES ---
 
 @app.route('/')
 def index():
@@ -154,14 +176,32 @@ def apurva_dashboard():
     return render_template('index.html', user='Apurva')
 
 
+# --- SET PLAN ROUTE (NEW) ---
+@app.route('/set_plan', methods=['GET', 'POST'])
+def set_plan():
+    if 'user' not in session: return redirect(url_for('index'))
+
+    db_session = Session()
+    user_plan = db_session.get(UserPlan, session['user'])
+
+    if request.method == 'POST':
+        new_text = request.form.get('plan_text')
+        if user_plan:
+            user_plan.plan_text = new_text
+            user_plan.updated_at = datetime.now()
+            db_session.commit()
+            flash("Plan updated successfully!", "success")
+            return redirect(url_for(f"{session['user']}_dashboard"))
+
+    return render_template('set_plan.html', current_plan=user_plan.plan_text)
+
+
 # --- FUNCTIONAL ROUTES ---
 
 @app.route('/log', methods=['GET', 'POST'])
 def log_workout():
     if 'user' not in session: return redirect(url_for('index'))
-
-    if request.method == 'GET':
-        return render_template('log.html')
+    if request.method == 'GET': return render_template('log.html')
 
     raw_text = request.form.get('workout_text')
     if not raw_text: return redirect(url_for('log_workout'))
@@ -172,9 +212,9 @@ def log_workout():
         return redirect(url_for('log_workout'))
 
     db_session = Session()
-    summary_data = []
     workout_date = parsed['date']
     UserModel = get_user_model()
+    summary_data = []
 
     for exercise in parsed["exercises"]:
         new_sets = {"weights": exercise["weights"], "reps": exercise["reps"]}
@@ -211,23 +251,21 @@ def log_workout():
             row['old'] = 'First Log'
             row['status'] = "NEW"
             row['class'] = 'new'
-
         summary_data.append(row)
 
     db_session.commit()
     return render_template('result.html', summary=summary_data, date=workout_date.strftime('%Y-%m-%d'))
 
 
-# --- DYNAMIC RETRIEVE ROUTES ---
-
 @app.route('/retrieve/categories')
 def retrieve_categories():
     if 'user' not in session: return redirect(url_for('index'))
 
-    # DYNAMIC: Fetch plan and get list of keys (e.g., "Push", "Pull")
-    all_plans = get_workout_days(session['user'])
-    categories = list(all_plans["workout"].keys())
+    # FETCH FROM DB -> PARSE DYNAMICALLY
+    raw_text = get_current_plan_text()
+    all_plans = get_workout_days(raw_text)
 
+    categories = list(all_plans["workout"].keys())
     return render_template('retrieve_step1.html', categories=categories)
 
 
@@ -235,14 +273,10 @@ def retrieve_categories():
 def retrieve_days(category_name):
     if 'user' not in session: return redirect(url_for('index'))
 
-    all_plans = get_workout_days(session['user'])
-    if category_name not in all_plans["workout"]:
-        return "Invalid Category"
+    raw_text = get_current_plan_text()
+    all_plans = get_workout_days(raw_text)
 
-    # DYNAMIC: Count how many variations exist (Push 1, Push 2...)
-    # We find all keys that start with the category name
-    # Actually, our parser stores them as a dict under the category key.
-    # e.g. all_plans["workout"]["Chest"]["Chest 1"]
+    if category_name not in all_plans["workout"]: return "Invalid Category"
 
     days_dict = all_plans["workout"][category_name]
     num_days = len(days_dict)
@@ -254,12 +288,12 @@ def retrieve_days(category_name):
 def retrieve_final(category_name, day_id):
     if 'user' not in session: return redirect(url_for('index'))
 
-    # Construct key dynamically: "Chest 1"
     key = f"{category_name} {day_id}"
-    all_plans = get_workout_days(session['user'])
+
+    raw_text = get_current_plan_text()
+    all_plans = get_workout_days(raw_text)
 
     try:
-        # Access safely
         exercises = all_plans["workout"][category_name][key]
         today = datetime.now().strftime("%d/%m")
         output_text = f"{today} {key}\n"
@@ -288,7 +322,7 @@ def retrieve_final(category_name, day_id):
             pass
 
     except KeyError:
-        output_text = f"Plan '{key}' not found for {session['user'].title()}."
+        output_text = f"Plan '{key}' not found."
 
     return render_template('retrieve_step3.html', output=output_text)
 
