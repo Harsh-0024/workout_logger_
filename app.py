@@ -3,13 +3,14 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from sqlalchemy import create_engine, Column, String, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session
 from sqlalchemy_utils import JSONType
+# 1. IMPORT TIMEDELTA FOR THE DATE FIX
 from datetime import datetime, timedelta
 import pyperclip
 import urllib.parse
 
 # Custom Module Imports
 from workout_parser import workout_parser
-from list_of_exercise import get_workout_days, list_of_exercises, EXERCISE_REP_RANGES, HARSH_DEFAULT_PLAN, \
+from list_of_exercise import get_workout_days, list_of_exercises, DEFAULT_REP_RANGES, HARSH_DEFAULT_PLAN, \
     APURVA_DEFAULT_PLAN
 
 app = Flask(__name__)
@@ -67,6 +68,14 @@ class UserPlan(Base):
     updated_at = Column(DateTime, default=datetime.now)
 
 
+# Rep Range / Master Exercise List Table
+class UserRepRange(Base):
+    __tablename__ = "user_rep_ranges"
+    username = Column(String, primary_key=True)
+    rep_text = Column(Text)  # Stores "Exercise: Range" lines
+    updated_at = Column(DateTime, default=datetime.now)
+
+
 # Create tables if they don't exist
 Base.metadata.create_all(engine)
 
@@ -83,7 +92,7 @@ def get_user_model():
 
 
 def initialize_database():
-    """Runs on startup. Seeds DB with default exercises and plans if empty."""
+    """Runs on startup. Seeds DB with default exercises, plans, and rep ranges if empty."""
     db_session = Session()
     try:
         # Seed Exercises for Harsh
@@ -105,6 +114,17 @@ def initialize_database():
         if not db_session.get(UserPlan, 'apurva'):
             db_session.add(UserPlan(username='apurva', plan_text=APURVA_DEFAULT_PLAN))
 
+        # Seed Default Rep Ranges Text (Master List)
+        # Convert Dictionary to String Format: "Key: Value\n"
+        default_rep_text = ""
+        for ex, rng in DEFAULT_REP_RANGES.items():
+            default_rep_text += f"{ex}: {rng}\n"
+
+        if not db_session.get(UserRepRange, 'harsh'):
+            db_session.add(UserRepRange(username='harsh', rep_text=default_rep_text))
+        if not db_session.get(UserRepRange, 'apurva'):
+            db_session.add(UserRepRange(username='apurva', rep_text=default_rep_text))
+
         db_session.commit()
     except Exception as e:
         print(f"Init Error: {e}")
@@ -120,6 +140,29 @@ def get_current_plan_text():
     if plan_record:
         return plan_record.plan_text
     return ""
+
+
+def get_current_rep_ranges_dict():
+    """
+    Helper to fetch and parse the rep range text into a dictionary.
+    Returns: {"Bench Press": "5-8", ...}
+    """
+    user = session.get('user', 'harsh')
+    db_session = Session()
+    range_record = db_session.get(UserRepRange, user)
+
+    rep_dict = {}
+    if range_record and range_record.rep_text:
+        # Parse line by line
+        for line in range_record.rep_text.strip().split('\n'):
+            line = line.strip()
+            if ':' in line:
+                # Split only on the first colon
+                parts = line.split(':', 1)
+                ex_name = parts[0].strip()
+                ex_range = parts[1].strip()
+                rep_dict[ex_name] = ex_range
+    return rep_dict
 
 
 def get_set_stats(sets):
@@ -178,11 +221,6 @@ def remove_session(exception=None):
 
 @app.route('/')
 def index():
-    """
-    Root URL logic:
-    - If user cookie exists -> Go straight to Dashboard.
-    - If no cookie -> Show Profile Selector.
-    """
     if 'user' in session:
         return redirect(url_for(f"{session['user']}_dashboard"))
     return render_template('select_user.html')
@@ -190,42 +228,35 @@ def index():
 
 @app.route('/switch')
 def switch_user():
-    """Logout Logic: Clears session and returns to Selector."""
     session.pop('user', None)
     return redirect(url_for('index'))
 
 
 @app.route('/harsh')
 def harsh_dashboard():
-    """Direct Login URL for Harsh"""
     session['user'] = 'harsh'
     return render_template('index.html', user='Harsh')
 
 
 @app.route('/apurva')
 def apurva_dashboard():
-    """Direct Login URL for Apurva"""
     session['user'] = 'apurva'
     return render_template('index.html', user='Apurva')
 
 
 # ==========================================
-# 5. PLAN EDITING ROUTE
+# 5. PLAN & EXERCISE EDITING ROUTES
 # ==========================================
 
 @app.route('/set_plan', methods=['GET', 'POST'])
 def set_plan():
-    """
-    Page to View/Edit the raw text plan.
-    Accessed via hidden button or direct URL.
-    """
+    """Page to View/Edit the raw text plan."""
     if 'user' not in session: return redirect(url_for('index'))
 
     db_session = Session()
     user_plan = db_session.get(UserPlan, session['user'])
 
     if request.method == 'POST':
-        # Save new text to DB
         new_text = request.form.get('plan_text')
         if user_plan:
             user_plan.plan_text = new_text
@@ -235,6 +266,30 @@ def set_plan():
             return redirect(url_for(f"{session['user']}_dashboard"))
 
     return render_template('set_plan.html', current_plan=user_plan.plan_text)
+
+
+@app.route('/set_exercises', methods=['GET', 'POST'])
+def set_exercises():
+    """
+    Page to View/Edit the Master List of Exercises & Rep Ranges.
+    Adding a line here adds the exercise to the system memory for ranges.
+    """
+    if 'user' not in session: return redirect(url_for('index'))
+
+    db_session = Session()
+    user_reps = db_session.get(UserRepRange, session['user'])
+
+    if request.method == 'POST':
+        new_text = request.form.get('rep_text')
+        if user_reps:
+            user_reps.rep_text = new_text
+            user_reps.updated_at = datetime.now()
+            db_session.commit()
+            flash("Exercise list updated successfully!", "success")
+            return redirect(url_for(f"{session['user']}_dashboard"))
+
+    # Renders the new template 'set_exercises.html'
+    return render_template('set_exercises.html', current_reps=user_reps.rep_text)
 
 
 # ==========================================
@@ -346,11 +401,13 @@ def retrieve_final(category_name, day_id):
     raw_text = get_current_plan_text()
     all_plans = get_workout_days(raw_text)
 
+    # NEW: Fetch Custom Exercises/Ranges from DB
+    custom_ranges = get_current_rep_ranges_dict()
+
     try:
         exercises = all_plans["workout"][category_name][key]
 
         # --- DATE FIX: IST Offset (UTC + 5:30) ---
-        # Forces the server to display India time regardless of where it is hosted.
         ist_offset = timedelta(hours=5, minutes=30)
         today = (datetime.utcnow() + ist_offset).strftime("%d/%m")
 
@@ -360,15 +417,14 @@ def retrieve_final(category_name, day_id):
         UserModel = get_user_model()
 
         for exercise in exercises:
-            # Inject Rep Range Guidelines
-            rep_range = EXERCISE_REP_RANGES.get(exercise, "")
+            # Inject Rep Range from Custom DB Dict (fallback to empty)
+            rep_range = custom_ranges.get(exercise, "")
             formatted_range = f" - [{rep_range}]" if rep_range else ""
 
             # Fetch Previous Best
             record = get_fuzzy_record(db_session, UserModel, exercise)
 
             if record and record.best_string:
-                # If history exists, format appropriately
                 if " - [" in record.best_string:
                     output_text += "\n" + record.best_string
                 else:
@@ -376,7 +432,6 @@ def retrieve_final(category_name, day_id):
                     if data_part.startswith("-"): data_part = data_part[1:].strip()
                     output_text += f"\n{exercise}{formatted_range} - {data_part}"
             else:
-                # No history, just show name + range
                 output_text += f"\n{exercise}{formatted_range}"
 
         try:
