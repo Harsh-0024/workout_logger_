@@ -2,8 +2,13 @@
 {% block content %}
 <div class="row justify-content-center" style="min-height: 60vh; align-items: center;">
     <div class="col-md-6 col-lg-5 text-center">
-        <h1 class="fw-bold mb-3 display-5">Workout Tracker</h1>
-        <p class="text-muted mb-5">Track progress. Build consistency.</p>
+
+        <div class="mb-5">
+            <h6 class="text-muted mb-2" style="letter-spacing: 3px; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; opacity: 0.8;">
+                Active Profile
+            </h6>
+            <h1 class="fw-bold display-4 mb-0">{{ user }}</h1>
+        </div>
 
         <div class="d-grid gap-3">
             <a href="/log" class="btn btn-gold-solid shadow">
@@ -11,6 +16,12 @@
             </a>
             <a href="/retrieve/categories" class="btn btn-gold-outline">
                 Retrieve Plan
+            </a>
+        </div>
+
+        <div class="mt-5">
+            <a href="/switch" class="text-muted small text-decoration-none hover-gold" style="text-transform: uppercase; letter-spacing: 2px; font-size: 0.75rem;">
+                ⟵ Switch Profile
             </a>
         </div>
     </div>
