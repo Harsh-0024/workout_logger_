@@ -172,6 +172,7 @@ def bgfix():
         if row.exercise in legs_exercise:
             row.best_string = row.exercise
             row.sets_json = {"weights": [1, 1, 1], "reps": [1, 1, 1]}
+    session.commit()
     session.close()
     return render_template('index.html')
 
