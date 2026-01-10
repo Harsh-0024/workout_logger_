@@ -1,6 +1,11 @@
 import re
 
-# --- SHARED EXERCISE LIST ---
+# ==========================================
+# 1. SHARED DATA KNOWLEDGE BASE
+# ==========================================
+
+# Master list of all valid exercises known to the system.
+# Used for auto-seeding the database if a user is new.
 list_of_exercises = [
     "Barbell Curl", "Barbell Overhead Extension", "Barbell Overhead Press",
     "Cable Lateral Raise", "Calf Raises Sitting", "Calf Raises Standing",
@@ -24,7 +29,8 @@ list_of_exercises = [
     "Wrist Flexion - Machine"
 ]
 
-# --- REP RANGES ---
+# Dictionary mapping specific exercises to their recommended Rep Ranges.
+# Used in the "Retrieve Plan" feature to display guidelines (e.g., [8-12]).
 EXERCISE_REP_RANGES = {
     "Flat Barbell Press": "5–8",
     "Incline Dumbbell Press": "6–10",
@@ -90,7 +96,12 @@ EXERCISE_REP_RANGES = {
     "Crunches B": "12–20"
 }
 
-# --- DEFAULT PLANS (Used for Initial Database Seeding) ---
+# ==========================================
+# 2. DEFAULT PLANS (Used for Initial Setup)
+# ==========================================
+# These strings are only used when the database is empty.
+# Afterward, the plan is read from the 'user_plans' table in the DB.
+
 HARSH_DEFAULT_PLAN = """
 Chest & Triceps 1
 Flat Barbell Press
@@ -259,37 +270,55 @@ Tricep Extensions
 """
 
 
+# ==========================================
+# 3. DYNAMIC PARSING LOGIC
+# ==========================================
+
 def get_workout_days(raw_text):
     """
-    Parses the provided text string into a dictionary.
-    NOW DYNAMIC: It parses whatever text you pass to it.
+    Parses the raw plan text (from DB) into a structured dictionary.
+
+    Format Expected:
+    Title DayNum
+    Exercise 1
+    Exercise 2
+    (Empty Line)
+
+    Returns:
+        dict: { "workout": { "Chest": { "Chest 1": [List of exercises] } } }
     """
     workout_days = {"workout": {}}
 
-    # Split by empty lines (double newlines)
+    # Logic: Split the text into blocks wherever there is an "Empty Line" (double newline)
+    # This regex matches: \n (newline) followed by optional whitespace \s* followed by \n
     sections = re.split(r'\n\s*\n', raw_text.strip())
 
-    # Filter out any empty strings
+    # Filter out empty entries if any exist
     sections = [s.strip() for s in sections if s.strip()]
 
     for block in sections:
         lines = [line.strip() for line in block.split("\n") if line.strip()]
         if not lines: continue
 
-        workout_name = lines[0]  # e.g. "Chest & Triceps 1"
+        # First line is the Title (e.g., "Chest & Triceps 1")
+        workout_name = lines[0]
 
+        # Extract the Category Name by removing the trailing number
+        # e.g., "Chest & Triceps 1" -> "Chest & Triceps"
         match = re.search(r"\s+\d+$", workout_name)
         if not match:
             continue
 
-        workout_day_name = workout_name[:match.start()].strip()  # e.g. "Chest & Triceps"
+        workout_day_name = workout_name[:match.start()].strip()
 
+        # Initialize dictionary structure if new category
         if workout_day_name not in workout_days["workout"]:
             workout_days["workout"][workout_day_name] = {}
 
-        # Exercises are simply the rest of the lines
+        # The rest of the lines are the exercises for that day
         exercises_list = lines[1:]
 
+        # Store it: { "Chest & Triceps 1": ["Bench Press", ...] }
         workout_days["workout"][workout_day_name][workout_name] = exercises_list
 
     return workout_days

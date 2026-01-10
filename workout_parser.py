@@ -3,7 +3,12 @@ from datetime import datetime
 
 
 def normalize(values):
-    """Ensures we always have a list of 3 values."""
+    """
+    Ensures a list of weights/reps always has 3 elements.
+    - If 1 val:  [10] -> [10, 10, 10]
+    - If 2 vals: [10, 12] -> [10, 12, 12] (repeats last)
+    - If 3+ vals: Truncates to first 3
+    """
     if not values: return [0, 0, 0]
     if len(values) == 1: return [values[0], values[0], values[0]]
     if len(values) == 2: return [values[0], values[1], values[1]]
@@ -11,7 +16,7 @@ def normalize(values):
 
 
 def is_number(s):
-    """Helper: Checks if a string is a number (integer or decimal)."""
+    """Checks if a string can be converted to a float/int."""
     try:
         float(s)
         return True
@@ -20,24 +25,31 @@ def is_number(s):
 
 
 def workout_parser(workout_day_received):
+    """
+    Main Logic: Converts raw pasted text from the 'Log' page into a structured object.
+    """
+
+    # 1. Basic Cleanup: split by lines, strip whitespace
     raw_lines = [line.strip() for line in workout_day_received.strip().split("\n") if line.strip()]
 
     if not raw_lines:
         return None
 
-    # Apply the numbering cleanup to all lines immediately
+    # 2. Numbering Cleanup: Remove "1.", "2." from start of lines
     list_of_lines = [re.sub(r'^\s*\d+\s*(?:[.)\-:]?)\s*', '', line) for line in raw_lines]
 
+    # 3. Header Extraction: The first line is treated as the Title/Date line
     title_line = raw_lines[0]
 
-    # Extract date nums
+    # Try to find a date in the header (e.g., "08/01 Arms 1")
     date_nums = re.findall(r'\d+', title_line.split()[0])
-
     current_year = datetime.now().year
     current_month = datetime.now().month
 
     if len(date_nums) >= 2:
+        # Date found, assume format DD/MM
         parsed_month = int(date_nums[1])
+        # Logic to handle year rollovers (logging December in January)
         if parsed_month > current_month + 1:
             year = current_year - 1
         else:
@@ -45,8 +57,10 @@ def workout_parser(workout_day_received):
         date_str = f"{date_nums[0]}-{date_nums[1]}-{year}"
         date_obj = datetime.strptime(date_str, "%d-%m-%Y")
     else:
+        # No date found, default to Today
         date_obj = datetime.now()
 
+    # Extract workout name (everything after the date part)
     workout_name = title_line[title_line.find(" ") + 1:].strip()
 
     workout_day = {
@@ -55,35 +69,38 @@ def workout_parser(workout_day_received):
         "exercises": []
     }
 
-    # Skip the title line [1:]
+    # 4. Process each Exercise Line (skipping the title)
     for clean_line in list_of_lines[1:]:
 
-        # --- NEW LOGIC: Handle "Name - [Range] - Data" format ---
-        # If the line contains the rep range separator, split it to isolate name and data
+        # --- LOGIC for "Name - [Range] - Data" ---
+        # Checks if line matches the Retrieve format
         if " - [" in clean_line and "] - " in clean_line:
             parts = clean_line.split(" - [")
             name_part = parts[0].strip()
 
-            # The rest is "Range] - Data"
-            # Split by "] - " to get the data part
+            # The rest is "Range] - Data" -> Split by "] - "
             remainder = clean_line.split("] - ")[1].strip()
 
-            # Use the extracted name
             name = name_part
             data_part = remainder
         else:
-            # Fallback to old format (just name and data mixed)
+            # Fallback: Standard "Name Data" format
             name = ""
             data_part = clean_line
 
-        # Now parse the 'data_part' (weights/reps) using the standard logic
+        # --- PARSING DATA (Weights & Reps) ---
+        # Logic to separate weights (left) from reps (right)
+
         if ',' in data_part:
+            # Format: "10 20 30, 10 10 10" (Comma separates weights/reps)
             parts = data_part.split(',')
             left_part = parts[0].strip()
             right_part = parts[1].strip()
 
-            if not name:  # If we didn't extract name from the new format above
+            if not name:
+                # If name wasn't extracted earlier, extract from left_part
                 left_tokens = left_part.split()
+                # Find index of first number
                 num_idx = next((i for i, t in enumerate(left_tokens) if is_number(t)), None)
                 if num_idx is not None:
                     name = " ".join(left_tokens[:num_idx]).strip()
@@ -92,12 +109,12 @@ def workout_parser(workout_day_received):
                     name = left_part
                     weights = [1, 1, 1]
             else:
-                # If name is already found, left_part is just weights
+                # Name known, left_part is purely weights
                 weights = [float(i) if '.' in i else int(i) for i in left_part.split()]
 
             reps = [int(i) for i in right_part.split()]
         else:
-            # No comma case
+            # Format: "10 20 30" (No comma, assumes weights only, or mixed)
             tokens = data_part.split()
 
             if not name:
@@ -113,9 +130,10 @@ def workout_parser(workout_day_received):
 
             reps = [1, 1, 1]
 
+        # Build the final object
         exercise = {
             "name": name.title(),
-            "exercise_string": clean_line,  # Save the full original line (including ranges)
+            "exercise_string": clean_line,  # Keep original string for display
             "weights": normalize(weights),
             "reps": normalize(reps),
         }
