@@ -242,31 +242,72 @@ Crunches B
 
 APURVA_DEFAULT_PLAN = """
 Chest & Triceps 1
-Flat Barbell Press
-Triceps Rod Pushdown
-Incline Dumbbell Press
+Incline Barbell Press
+Flat Dumbbell Press
 Low Cable Fly
+Dumbbell Overhead Extension
+Triceps Rod Pushdown
+Lower Abs
+
+Chest & Triceps 2
+Flat Barbell Press
+Incline Dumbbell Press
+Pec Deck Fly
+Dips
+Triceps Rope Pushdown
 Lower Abs
 
 Back & Biceps 1
-Lat Pulldown
+Neutral-Grip Pull-Ups
+Lat Dumbbell Row
+Wide-Grip Seated Row
+Hyperextension
 Barbell Curl
-Seated Row
-Hammer Curls
+Hammer Rope Curl
 V Tucks
 
-Legs 1
-Squats
-Leg Press
-Leg Extension
-Leg Curl
-Calf Raises
+Back & Biceps 2
+Pull-Ups
+Neutral-Grip Seated Row
+Wide-Grip Seated Row
+Deadlift
+Dumbbell Curl
+Machine Preacher Curl
+V Tucks
 
 Arms 1
-Overhead Press
-Lateral Raises
-Bicep Curls
-Tricep Extensions
+Dumbbell Shoulder Press
+Cable Lateral Raise
+Rear Delt Machine Fly
+Wrist Extension
+Farmer’s Walk
+Reverse Dumbbell Curl
+Crunches A
+
+Arms 2
+Barbell Shoulder Press
+Cable Lateral Raise
+Rear Delt Machine Fly
+Rope Face Pull
+Wrist Flexion
+Reverse Barbell Curl
+Crunches B
+
+Legs 1
+Leg Press
+Leg Curl
+Walking Dumbbell Lunges
+Hip Thrust
+Standing Calf Raises
+V Tucks
+
+Legs 2
+Barbell Squat
+Leg Extension
+Stationary Dumbbell Lunges
+Romanian Deadlift
+Seated Calf Raises
+V Tucks
 """
 
 
