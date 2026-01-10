@@ -18,7 +18,7 @@ list_of_exercises = [
     "Lat Dumbbell Rows", "Lat Pulldown", "Leg Curl", "Leg Extension",
     "Leg Press", "Low Cable Fly", "Lower Abs", "Machine Lateral Raise",
     "Machine Shoulder Press", "Machine Squat", "Neutral-Grip Lat Pulldown",
-    "Neutral-Grip Pull-Ups", "Neutral-Grip Seated Row", "Peck Deck Fly",
+    "Neutral-Grip Pull-Ups", "Neutral-Grip Seated Row", "Pec Deck Fly",
     "Preacher Curl", "Pull Ups", "Rear Delt Machine Fly", "Reverse Barbell Curl",
     "Reverse Dumbbell Curl", "Romanian Deadlift", "Rope Face Pull",
     "Skull Crushers", "Smith Machine Squat", "Stationary Lunges",
@@ -37,7 +37,7 @@ EXERCISE_REP_RANGES = {
     "Incline Barbell Press": "5–8",
     "Flat Dumbbell Press": "8–12",
     "Low Cable Fly": "12–20",
-    "Peck Deck Fly": "12–20",
+    "Pec Deck Fly": "12–20",
     "Dips": "6–12",
     "Triceps Rod Pushdown": "10–15",
     "Triceps Rope Pushdown": "12–20",
@@ -116,7 +116,7 @@ Incline Barbell Press
 Triceps Rope Pushdown
 Flat Dumbbell Press
 Skull Crushers
-Peck Deck Fly
+Pec Deck Fly
 Lower Abs
 
 Chest & Triceps 3
@@ -132,7 +132,7 @@ Incline Barbell Press
 Triceps Rope Pushdown
 Flat Barbell Press
 Dumbbell Overhead Extension
-Peck Deck Fly
+Pec Deck Fly
 Lower Abs
 
 Back & Biceps 1
