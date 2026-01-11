@@ -5,10 +5,6 @@ from datetime import datetime
 def normalize(values):
     """
     Ensures specific set counts for stats (Math only).
-    Input:  [100]
-    Output: [100, 100, 100] (Expands to 3 sets)
-    Input:  [100, 110]
-    Output: [100, 110, 110] (Repeats last set)
     """
     if not values: return [0, 0, 0]
     if len(values) == 1: return [values[0], values[0], values[0]]
@@ -19,15 +15,8 @@ def normalize(values):
 def parse_weight_x_reps(segment):
     """
     Strict Parser: Looks for 'Weight x Reps'.
-    Removes units (kg, lbs) but does NOT convert words like 'BW'.
-    Allows negative numbers (e.g. -35x5).
     """
-    # Just handle simple cleanup (kg/lbs removal happens in regex matching implicitly)
-    # Allow * to be used as x
     segment = segment.replace('*', 'x').lower()
-
-    # Regex: Number (float/int) x Number
-    # Matches: 100x5, 100.5 x 5, -35x5
     matches = re.findall(r'(-?\d+(?:\.\d+)?)\s*x\s*(\d+)', segment)
 
     if matches:
@@ -37,13 +26,11 @@ def parse_weight_x_reps(segment):
             weights.append(float(w))
             reps.append(int(r))
         return weights, reps
-
     return None, None
 
 
 def extract_numbers(segment):
-    """Extracts standalone numbers (e.g. for comma separated format)."""
-    # Remove units first
+    """Extracts standalone numbers."""
     segment = re.sub(r'(kg|lbs|lb)', '', segment.lower())
     tokens = segment.split()
     numbers = []
@@ -62,7 +49,7 @@ def workout_parser(workout_day_received):
     if not raw_lines:
         return None
 
-    # --- 1. Header Parsing (Date & Title) ---
+    # --- 1. Header Parsing ---
     title_line = raw_lines[0]
     date_nums = re.findall(r'\d+', title_line.split()[0])
 
@@ -71,7 +58,6 @@ def workout_parser(workout_day_received):
 
     if len(date_nums) >= 2:
         parsed_month = int(date_nums[1])
-        # Handle year rollover (Logging December in January)
         year = current_year - 1 if parsed_month > current_month + 1 else current_year
         date_str = f"{date_nums[0]}-{date_nums[1]}-{year}"
         try:
@@ -94,7 +80,6 @@ def workout_parser(workout_day_received):
     }
 
     # --- 2. Exercise Parsing ---
-    # Remove numbering "1." from start of lines
     list_of_lines = [re.sub(r'^\s*\d+\s*(?:[.)\-:]?)\s*', '', line) for line in raw_lines]
 
     for clean_line in list_of_lines[1:]:
@@ -102,7 +87,7 @@ def workout_parser(workout_day_received):
         weights = []
         reps = []
 
-        # Strategy A: Retrieve Format "Name - [Range] - Data"
+        # Strategy A: Retrieve Format
         if " - [" in clean_line and "] - " in clean_line:
             try:
                 parts = clean_line.split(" - [")
@@ -112,13 +97,11 @@ def workout_parser(workout_day_received):
                 name = ""
                 data_part = clean_line
         else:
-            # Strategy B: Standard "Name Data"
-            # Split at first digit
+            # Strategy B: Standard Format
             tokens = clean_line.split()
             first_num_idx = -1
 
             for i, token in enumerate(tokens):
-                # Look strictly for digits (no BW checks)
                 if re.match(r'^-?\d', token):
                     first_num_idx = i
                     break
@@ -130,32 +113,37 @@ def workout_parser(workout_day_received):
                 name = clean_line
                 data_part = ""
 
-        # --- Data Extraction ---
         if data_part:
-            # 1. Try "Weight x Reps" (Priority)
             w_list, r_list = parse_weight_x_reps(data_part)
             if w_list:
-                weights = w_list
-                reps = r_list
-
-            # 2. Try Comma Separation "Weights , Reps"
+                weights, reps = w_list, r_list
             elif ',' in data_part:
                 subparts = data_part.split(',')
                 weights = extract_numbers(subparts[0])
                 reps = extract_numbers(subparts[1])
-
-            # 3. Fallback: Implicit Reps (Weights only, Reps=1)
             else:
                 weights = extract_numbers(data_part)
                 reps = [1] * len(weights)
 
         if not name: name = "Unknown Exercise"
 
+        final_weights = normalize(weights)
+
+        # --- NEW: VALIDATION CHECK ---
+        # If max weight is 0 (and it's not a negative lift), we consider it invalid/empty
+        # We check if absolute max value is 0 to handle cases like just text
+        is_valid = False
+        for w in final_weights:
+            if w != 0:
+                is_valid = True
+                break
+
         exercise = {
             "name": name.title(),
             "exercise_string": clean_line,
-            "weights": normalize(weights),  # Expands 1 set to 3
-            "reps": normalize(reps),  # Expands 1 set to 3
+            "weights": final_weights,
+            "reps": normalize(reps),
+            "valid": is_valid  # <--- The Flag
         }
         workout_day["exercises"].append(exercise)
 
