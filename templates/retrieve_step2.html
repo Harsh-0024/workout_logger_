@@ -6,8 +6,8 @@
         <h6 class="text-center mb-4 text-muted" style="letter-spacing: 3px; font-weight: 500;">SELECT DAY</h6>
 
         <div class="d-grid gap-3">
-            {% for i in range(1, 5) %}
-            <a href="/retrieve/final/{{ category_id }}/{{ i }}" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
+            {% for i in range(1, num_days + 1) %}
+            <a href="/retrieve/final/{{ category_name | url_encode }}/{{ i }}" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
                 DAY {{ i }}
             </a>
             {% endfor %}

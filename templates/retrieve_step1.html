@@ -6,18 +6,11 @@
         <h6 class="text-center mb-4 text-muted" style="letter-spacing: 3px; font-weight: 500;">SELECT TARGET</h6>
 
         <div class="d-grid gap-3">
-            <a href="/retrieve/days/1" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
-                CHEST & TRICEPS
+            {% for cat in categories %}
+            <a href="/retrieve/days/{{ cat | url_encode }}" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
+                {{ cat | upper }}
             </a>
-            <a href="/retrieve/days/2" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
-                BACK & BICEPS
-            </a>
-            <a href="/retrieve/days/3" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
-                ARMS
-            </a>
-            <a href="/retrieve/days/4" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
-                LEGS
-            </a>
+            {% endfor %}
         </div>
 
         <div class="text-center mt-5">

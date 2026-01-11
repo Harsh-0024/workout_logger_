@@ -1,0 +1,59 @@
+from models import Lift
+from services.helpers import find_best_match, get_set_stats
+
+
+def handle_workout_log(db_session, user, parsed_data):
+    summary = []
+    workout_date = parsed_data['date']
+
+    for item in parsed_data["exercises"]:
+        ex_name = item['name']
+        new_sets = {"weights": item["weights"], "reps": item["reps"]}
+        new_str = item['exercise_string']
+        is_valid = item.get('valid', True)
+
+        record = find_best_match(db_session, user.id, ex_name)
+
+        row = {
+            'name': ex_name, 'old': '-', 'new': new_str,
+            'status': '-', 'class': 'neutral', 'valid': is_valid
+        }
+
+        if is_valid:
+            if record:
+                row['old'] = record.best_string
+                p_peak, _, p_vol = get_set_stats(new_sets)
+                r_peak, r_sum, r_vol = get_set_stats(record.sets_json)
+
+                improvement = None
+                if p_peak > r_peak:
+                    diff = p_peak - r_peak
+                    improvement = f"PEAK (+{diff:.1f})"
+                elif p_peak == r_peak:
+                    _, p_sum, _ = get_set_stats(new_sets)
+                    if p_sum > r_sum:
+                        improvement = "CONSISTENCY"
+                    elif p_vol > r_vol:
+                        improvement = "VOLUME"
+
+                if improvement:
+                    record.sets_json = new_sets
+                    record.best_string = new_str
+                    record.updated_at = workout_date
+                    row['status'] = improvement
+                    row['class'] = 'improved'
+            else:
+                new_rec = Lift(
+                    user_id=user.id, exercise=ex_name, best_string=new_str,
+                    sets_json=new_sets, updated_at=workout_date
+                )
+                db_session.add(new_rec)
+                row['old'] = 'First Log'
+                row['status'] = "NEW"
+                row['class'] = 'new'
+        else:
+            row['status'] = "ERROR"
+
+        summary.append(row)
+
+    return summary
