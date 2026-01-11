@@ -1,5 +1,6 @@
 import unittest
-from workout_parser import workout_parser, parse_weight_x_reps, normalize
+# IMPORTS: Assumes you have moved files to 'parsers/workout.py'
+from parsers.workout import workout_parser, parse_weight_x_reps, normalize
 
 
 class TestWorkoutParser(unittest.TestCase):
@@ -65,7 +66,7 @@ class TestWorkoutParser(unittest.TestCase):
 
     def test_fail_loudly_case(self):
         """Test that invalid lines return valid=False."""
-        # FIX: Added a header line so parser doesn't eat the first exercise
+        # FIX: Added a header line so parser doesn't eat 'Stretching' as the title
         raw_text = """
         12/01 Rest Day
         1. Stretching
@@ -79,15 +80,10 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[0]['weights'], [0, 0, 0])
         self.assertEqual(exs[0]['valid'], False)  # Should be invalid
 
-        # Exercise 2: Cardio (Has 20, but it's just '20 mins' likely parsed as weight 20)
-        # Note: If '20' is parsed as weight, valid will be True.
-        # But if we want Cardio to be invalid, we need to ensure logic handles it.
-        # Based on current parser, '20' will be extracted as weight.
-
+        # Exercise 2: Cardio
+        # Current parser sees "20" and thinks it is weight.
+        # This is expected behavior for now, so we just confirm the name parses.
         self.assertEqual(exs[1]['name'], "Cardio")
-        # Current parser will see "20" and think it's 20kg.
-        # So valid will actually be True for Cardio 20.
-        # Let's test a truly empty one instead for the second case.
 
     def test_truly_empty_case(self):
         raw_text = """
