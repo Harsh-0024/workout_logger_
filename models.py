@@ -1,5 +1,5 @@
 import os
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, ForeignKey
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session, relationship
 from sqlalchemy_utils import JSONType
 from datetime import datetime
@@ -30,9 +30,10 @@ class User(Base):
     lifts = relationship("Lift", back_populates="user")
     plan = relationship("Plan", uselist=False, back_populates="user")
     rep_ranges = relationship("RepRange", uselist=False, back_populates="user")
+    logs = relationship("WorkoutLog", back_populates="user")
 
 
-# --- 2. LIFTS TABLE ---
+# --- 2. LIFTS TABLE (PR Tracker) ---
 class Lift(Base):
     __tablename__ = 'lifts'
     id = Column(Integer, primary_key=True)
@@ -66,6 +67,21 @@ class RepRange(Base):
     updated_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="rep_ranges")
+
+
+# --- 5. HISTORY TABLE (New) ---
+class WorkoutLog(Base):
+    __tablename__ = 'workout_logs'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+
+    date = Column(DateTime, default=datetime.now)
+    exercise = Column(String, index=True)
+    top_weight = Column(Float)  # Heaviest weight moved that day
+    top_reps = Column(Integer)  # Reps at that top weight
+    estimated_1rm = Column(Float)  # Calculated strength metric
+
+    user = relationship("User", back_populates="logs")
 
 
 # --- INITIALIZATION ---

@@ -1,12 +1,13 @@
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, Response
 import urllib.parse
 
 # --- NEW IMPORTS ---
 from parsers.workout import workout_parser
 from services.logging import handle_workout_log
 from services.retrieve import generate_retrieve_output
-from models import initialize_database, Session, User, Plan, RepRange
+from services.stats import get_csv_export, get_chart_data
+from models import initialize_database, Session, User, Plan, RepRange, WorkoutLog
 from list_of_exercise import get_workout_days
 import migrate_db
 
@@ -69,7 +70,6 @@ def log_workout():
     if request.method == 'GET': return render_template('log.html')
 
     raw = request.form.get('workout_text')
-    # Call Parser from new location
     parsed = workout_parser(raw)
 
     if not parsed:
@@ -77,7 +77,6 @@ def log_workout():
         return redirect(url_for('log_workout'))
 
     try:
-        # Call Service from new location
         summary = handle_workout_log(Session, user, parsed)
         Session.commit()
         return render_template('result.html', summary=summary, date=parsed['date'].strftime('%Y-%m-%d'))
@@ -86,6 +85,39 @@ def log_workout():
         print(f"Transaction Failed: {e}")
         flash("Error saving workout.", "error")
         return redirect(url_for('log_workout'))
+
+
+# --- NEW STATS ROUTES ---
+
+@app.route('/stats')
+def stats_index():
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
+    # Get list of exercises the user has logged history for
+    exercises = Session.query(WorkoutLog.exercise).filter_by(user_id=user.id).distinct().all()
+    exercises = sorted([e[0] for e in exercises])
+    return render_template('stats.html', exercises=exercises)
+
+
+@app.route('/stats/data/<exercise>')
+def stats_data(exercise):
+    user = get_current_user()
+    if not user: return {}
+    return get_chart_data(Session, user, exercise)
+
+
+@app.route('/export_csv')
+def export_csv():
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
+    csv_data = get_csv_export(Session, user)
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-disposition": "attachment; filename=workout_history.csv"}
+    )
+
+# -----------------------
 
 
 @app.route('/retrieve/categories')
@@ -112,7 +144,6 @@ def retrieve_days(category):
 def retrieve_final(category, day_id):
     user = get_current_user()
     if not user: return redirect(url_for('index'))
-    # Call Service from new location
     output = generate_retrieve_output(Session, user, category, day_id)
     return render_template('retrieve_step3.html', output=output)
 

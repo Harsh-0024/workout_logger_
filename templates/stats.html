@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-10">
+        <div class="card p-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h3 class="fw-bold text-white mb-0">Progress Tracking</h3>
+                <a href="/export_csv" class="btn btn-gold-outline btn-sm">Download CSV</a>
+            </div>
+
+            <div class="mb-4">
+                <label class="text-muted mb-2">Select Exercise</label>
+                <select id="exerciseSelect" class="form-control" onchange="loadChart()">
+                    <option value="">-- Choose Exercise --</option>
+                    {% for ex in exercises %}
+                    <option value="{{ ex }}">{{ ex }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="chart-container" style="position: relative; height:40vh; width:100%">
+                <canvas id="progressChart"></canvas>
+            </div>
+
+            <div class="text-center mt-4">
+                 <a href="/" class="text-muted text-decoration-none small hover-gold">Back Home</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    let myChart = null;
+
+    function loadChart() {
+        const exercise = document.getElementById('exerciseSelect').value;
+        if (!exercise) return;
+
+        fetch(`/stats/data/${encodeURIComponent(exercise)}`)
+            .then(response => response.json())
+            .then(data => {
+                const ctx = document.getElementById('progressChart').getContext('2d');
+
+                if (myChart) myChart.destroy();
+
+                myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.labels,
+                        datasets: [{
+                            label: 'Estimated 1RM (kg)',
+                            data: data.data,
+                            borderColor: '#D4AF37',
+                            backgroundColor: 'rgba(212, 175, 55, 0.1)',
+                            borderWidth: 2,
+                            tension: 0.3,
+                            fill: true,
+                            pointRadius: 4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { labels: { color: '#A1A1AA' } }
+                        },
+                        scales: {
+                            y: {
+                                grid: { color: 'rgba(255,255,255,0.05)' },
+                                ticks: { color: '#A1A1AA' }
+                            },
+                            x: {
+                                grid: { display: false },
+                                ticks: { color: '#A1A1AA' }
+                            }
+                        }
+                    }
+                });
+            });
+    }
+</script>
+{% endblock %}

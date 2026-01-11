@@ -1,4 +1,4 @@
-from models import Lift
+from models import Lift, WorkoutLog
 from services.helpers import find_best_match, get_set_stats
 
 
@@ -12,6 +12,18 @@ def handle_workout_log(db_session, user, parsed_data):
         new_str = item['exercise_string']
         is_valid = item.get('valid', True)
 
+        # 1. Calculate Stats for Today
+        p_peak, _, p_vol = get_set_stats(new_sets)
+
+        # Find the heaviest weight used today (for history)
+        daily_max_weight = 0
+        daily_max_reps = 0
+        if is_valid and new_sets['weights']:
+            daily_max_weight = max(new_sets['weights'])
+            # Find reps corresponding to that max weight
+            idx = new_sets['weights'].index(daily_max_weight)
+            daily_max_reps = new_sets['reps'][idx]
+
         record = find_best_match(db_session, user.id, ex_name)
 
         row = {
@@ -20,9 +32,20 @@ def handle_workout_log(db_session, user, parsed_data):
         }
 
         if is_valid:
+            # --- SAVE TO HISTORY (New) ---
+            history_log = WorkoutLog(
+                user_id=user.id,
+                date=workout_date,
+                exercise=ex_name,
+                top_weight=daily_max_weight,
+                top_reps=daily_max_reps,
+                estimated_1rm=p_peak
+            )
+            db_session.add(history_log)
+            # -----------------------------
+
             if record:
                 row['old'] = record.best_string
-                p_peak, _, p_vol = get_set_stats(new_sets)
                 r_peak, r_sum, r_vol = get_set_stats(record.sets_json)
 
                 improvement = None
