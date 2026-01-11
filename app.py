@@ -1,21 +1,17 @@
 import os
 from flask import Flask, render_template, request, redirect, url_for, flash, session
-from datetime import datetime
-import pyperclip
 import urllib.parse
-
-# Import Custom Modules (The new structure)
 from workout_parser import workout_parser
 from list_of_exercise import get_workout_days
-# We import the DB engine and logic functions
-from models import initialize_database, Session, UserPlan, UserRepRange
+from models import initialize_database, Session, User, Plan, RepRange
 import logic
+
+# Import the migration module so we can run it via route
+import migrate_db
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'muscle_gains_secret')
 
-
-# --- HELPERS ---
 
 @app.template_filter('url_encode')
 def url_encode_filter(s):
@@ -23,140 +19,132 @@ def url_encode_filter(s):
 
 
 @app.teardown_appcontext
-def remove_session(exception=None):
+def shutdown_session(exception=None):
     Session.remove()
 
 
-# --- ENTRY POINTS ---
+def get_current_user():
+    if 'user_id' not in session: return None
+    return Session.query(User).get(session['user_id'])
+
+
+# --- THE SECRET FIX ROUTE ---
+@app.route('/internal_db_fix')
+def internal_db_fix():
+    """Triggers the migration logic from the browser."""
+    try:
+        result_log = migrate_db.run_migration()
+        # Return plain text log so you can see what happened
+        return f"<pre>{result_log}</pre>"
+    except Exception as e:
+        return f"Error launching migration: {e}"
+
+
+# --- REGULAR ROUTES ---
 
 @app.route('/')
 def index():
-    if 'user' in session:
-        return redirect(url_for(f"{session['user']}_dashboard"))
+    user = get_current_user()
+    if user:
+        return render_template('index.html', user=user.username.title())
     return render_template('select_user.html')
+
+
+@app.route('/login/<username>')
+def login(username):
+    user = Session.query(User).filter_by(username=username).first()
+    if user:
+        session['user_id'] = user.id
+        return redirect(url_for('index'))
+    return "User not found", 404
 
 
 @app.route('/switch')
 def switch_user():
-    session.pop('user', None)
+    session.clear()
     return redirect(url_for('index'))
 
 
-@app.route('/harsh')
-def harsh_dashboard():
-    session['user'] = 'harsh'
-    return render_template('index.html', user='Harsh')
-
-
-@app.route('/apurva')
-def apurva_dashboard():
-    session['user'] = 'apurva'
-    return render_template('index.html', user='Apurva')
-
-
-# --- PLAN & SETTINGS ---
-
-@app.route('/set_plan', methods=['GET', 'POST'])
-def set_plan():
-    if 'user' not in session: return redirect(url_for('index'))
-    db_session = Session()
-    user_plan = db_session.get(UserPlan, session['user'])
-
-    if request.method == 'POST':
-        user_plan.plan_text = request.form.get('plan_text')
-        user_plan.updated_at = datetime.now()
-        db_session.commit()
-        flash("Plan updated successfully!", "success")
-        return redirect(url_for(f"{session['user']}_dashboard"))
-
-    return render_template('set_plan.html', current_plan=user_plan.plan_text)
-
-
-@app.route('/set_exercises', methods=['GET', 'POST'])
-def set_exercises():
-    if 'user' not in session: return redirect(url_for('index'))
-    db_session = Session()
-    user_reps = db_session.get(UserRepRange, session['user'])
-
-    if request.method == 'POST':
-        user_reps.rep_text = request.form.get('rep_text')
-        user_reps.updated_at = datetime.now()
-        db_session.commit()
-        flash("Exercise list updated successfully!", "success")
-        return redirect(url_for(f"{session['user']}_dashboard"))
-
-    return render_template('set_exercises.html', current_reps=user_reps.rep_text)
-
-
-# --- CORE ROUTES ---
-
 @app.route('/log', methods=['GET', 'POST'])
 def log_workout():
-    if 'user' not in session: return redirect(url_for('index'))
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
+
     if request.method == 'GET': return render_template('log.html')
 
-    raw_text = request.form.get('workout_text')
-    if not raw_text: return redirect(url_for('log_workout'))
-
-    parsed = workout_parser(raw_text)
+    raw = request.form.get('workout_text')
+    parsed = workout_parser(raw)
     if not parsed:
-        flash("Could not parse workout.", "error")
+        flash("Parsing failed", "error")
         return redirect(url_for('log_workout'))
 
-    # Delegate logic to logic.py
-    db_session = Session()
-    summary_data = logic.process_workout_log(db_session, session['user'], parsed)
-    db_session.commit()
+    summary = logic.handle_workout_log(Session, user, parsed)
+    Session.commit()
 
-    return render_template('result.html', summary=summary_data, date=parsed['date'].strftime('%Y-%m-%d'))
+    return render_template('result.html', summary=summary, date=parsed['date'].strftime('%Y-%m-%d'))
 
 
 @app.route('/retrieve/categories')
 def retrieve_categories():
-    if 'user' not in session: return redirect(url_for('index'))
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
 
-    # Logic is cleaner: Get text -> Parse -> Show keys
-    db_session = Session()
-    raw_text = logic.get_current_plan_text(db_session, session['user'])
-    all_plans = get_workout_days(raw_text)
-    categories = list(all_plans["workout"].keys())
+    plan = Session.query(Plan).filter_by(user_id=user.id).first()
+    raw_text = plan.text_content if plan else ""
+    data = get_workout_days(raw_text)
 
-    return render_template('retrieve_step1.html', categories=categories)
-
-
-@app.route('/retrieve/days/<category_name>')
-def retrieve_days(category_name):
-    if 'user' not in session: return redirect(url_for('index'))
-
-    db_session = Session()
-    raw_text = logic.get_current_plan_text(db_session, session['user'])
-    all_plans = get_workout_days(raw_text)
-
-    if category_name not in all_plans["workout"]: return "Invalid Category"
-
-    days_dict = all_plans["workout"][category_name]
-    num_days = len(days_dict)
-
-    return render_template('retrieve_step2.html', category_name=category_name, num_days=num_days)
+    return render_template('retrieve_step1.html', categories=list(data["workout"].keys()))
 
 
-@app.route('/retrieve/final/<category_name>/<int:day_id>')
-def retrieve_final(category_name, day_id):
-    if 'user' not in session: return redirect(url_for('index'))
+@app.route('/retrieve/days/<category>')
+def retrieve_days(category):
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
 
-    # Delegate logic to logic.py
-    db_session = Session()
-    output_text = logic.generate_retrieve_text(db_session, session['user'], category_name, day_id)
+    plan = Session.query(Plan).filter_by(user_id=user.id).first()
+    data = get_workout_days(plan.text_content)
 
-    if output_text:
-        try:
-            pyperclip.copy(output_text)
-        except Exception:
-            pass
-    else:
-        output_text = f"Plan '{category_name} {day_id}' not found."
+    if category not in data["workout"]: return "Invalid"
+    count = len(data["workout"][category])
 
-    return render_template('retrieve_step3.html', output=output_text)
+    return render_template('retrieve_step2.html', category_name=category, num_days=count)
+
+
+@app.route('/retrieve/final/<category>/<int:day_id>')
+def retrieve_final(category, day_id):
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
+
+    output = logic.generate_retrieve_output(Session, user, category, day_id)
+    return render_template('retrieve_step3.html', output=output)
+
+
+@app.route('/set_plan', methods=['GET', 'POST'])
+def set_plan():
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
+
+    plan = Session.query(Plan).filter_by(user_id=user.id).first()
+    if request.method == 'POST':
+        plan.text_content = request.form.get('plan_text')
+        Session.commit()
+        return redirect(url_for('index'))
+
+    return render_template('set_plan.html', current_plan=plan.text_content)
+
+
+@app.route('/set_exercises', methods=['GET', 'POST'])
+def set_exercises():
+    user = get_current_user()
+    if not user: return redirect(url_for('index'))
+
+    reps = Session.query(RepRange).filter_by(user_id=user.id).first()
+    if request.method == 'POST':
+        reps.text_content = request.form.get('rep_text')
+        Session.commit()
+        return redirect(url_for('index'))
+
+    return render_template('set_exercises.html', current_reps=reps.text_content)
 
 
 if __name__ == '__main__':
