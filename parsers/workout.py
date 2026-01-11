@@ -24,6 +24,8 @@ def parse_weight_x_reps(segment):
 def extract_numbers(segment):
     segment = re.sub(r'(kg|lbs|lb)', '', segment.lower())
     numbers = []
+    # FIX: Replace comma with space to ensure "16,16" parses as two numbers
+    segment = segment.replace(',', ' ')
     for t in segment.split():
         try:
             numbers.append(float(t))
@@ -74,7 +76,8 @@ def workout_parser(workout_day_received):
             tokens = clean_line.split()
             first_num_idx = -1
             for i, token in enumerate(tokens):
-                if re.match(r'^-?\d', token):
+                # FIX 1: Recognize tokens starting with comma (e.g. ",16") as data start
+                if re.match(r'^-?\d', token) or token.startswith(','):
                     first_num_idx = i
                     break
             if first_num_idx != -1:
@@ -88,14 +91,23 @@ def workout_parser(workout_day_received):
             if w_list:
                 weights, reps = w_list, r_list
             elif ',' in data_part:
-                subparts = data_part.split(',')
+                # Comma separated (Weights, Reps)
+                subparts = data_part.split(',', 1)  # Split only on first comma
                 weights = extract_numbers(subparts[0])
                 reps = extract_numbers(subparts[1])
+
+                # FIX 2: Default Logic for "Lower Abs ,16"
+                if not weights and reps:
+                    weights = [1.0] * len(reps)
+                elif weights and not reps:
+                    reps = [1] * len(weights)
             else:
+                # Space separated (Weights only -> Reps=1)
                 weights = extract_numbers(data_part)
                 reps = [1] * len(weights)
 
         if not name: name = "Unknown Exercise"
+
         final_weights = normalize(weights)
         is_valid = any(w != 0 for w in final_weights)
 
