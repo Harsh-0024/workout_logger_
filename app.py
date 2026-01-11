@@ -5,8 +5,6 @@ from workout_parser import workout_parser
 from list_of_exercise import get_workout_days
 from models import initialize_database, Session, User, Plan, RepRange
 import logic
-
-# Import the migration module so we can run it via route
 import migrate_db
 
 app = Flask(__name__)
@@ -28,19 +26,7 @@ def get_current_user():
     return Session.query(User).get(session['user_id'])
 
 
-# --- THE SECRET FIX ROUTE ---
-@app.route('/internal_db_fix')
-def internal_db_fix():
-    """Triggers the migration logic from the browser."""
-    try:
-        result_log = migrate_db.run_migration()
-        # Return plain text log so you can see what happened
-        return f"<pre>{result_log}</pre>"
-    except Exception as e:
-        return f"Error launching migration: {e}"
-
-
-# --- REGULAR ROUTES ---
+# --- ROUTES ---
 
 @app.route('/')
 def index():
@@ -65,6 +51,16 @@ def switch_user():
     return redirect(url_for('index'))
 
 
+@app.route('/internal_db_fix')
+def internal_db_fix():
+    try:
+        result_log = migrate_db.run_migration()
+        return f"<pre>{result_log}</pre>"
+    except Exception as e:
+        return f"Error launching migration: {e}"
+
+
+# --- SECURE LOGGING ROUTE ---
 @app.route('/log', methods=['GET', 'POST'])
 def log_workout():
     user = get_current_user()
@@ -74,14 +70,29 @@ def log_workout():
 
     raw = request.form.get('workout_text')
     parsed = workout_parser(raw)
+
     if not parsed:
-        flash("Parsing failed", "error")
+        flash("Could not parse workout data.", "error")
         return redirect(url_for('log_workout'))
 
-    summary = logic.handle_workout_log(Session, user, parsed)
-    Session.commit()
+    # --- TRANSACTION SAFETY START ---
+    try:
+        # 1. Try to process all exercises
+        summary = logic.handle_workout_log(Session, user, parsed)
 
-    return render_template('result.html', summary=summary, date=parsed['date'].strftime('%Y-%m-%d'))
+        # 2. If successful, Commit (Save) everything at once
+        Session.commit()
+
+        # 3. Render success page
+        return render_template('result.html', summary=summary, date=parsed['date'].strftime('%Y-%m-%d'))
+
+    except Exception as e:
+        # 4. If ANY error happens, Undo everything (Rollback)
+        Session.rollback()
+        print(f"Transaction Failed: {e}")
+        flash("Error saving workout. No data was changed.", "error")
+        return redirect(url_for('log_workout'))
+    # --- TRANSACTION SAFETY END ---
 
 
 @app.route('/retrieve/categories')
@@ -89,6 +100,7 @@ def retrieve_categories():
     user = get_current_user()
     if not user: return redirect(url_for('index'))
 
+    # Logic remains clean: Route asks Logic Layer for data
     plan = Session.query(Plan).filter_by(user_id=user.id).first()
     raw_text = plan.text_content if plan else ""
     data = get_workout_days(raw_text)
@@ -115,6 +127,8 @@ def retrieve_final(category, day_id):
     user = get_current_user()
     if not user: return redirect(url_for('index'))
 
+    # We solved problem 3.5 here:
+    # The Route does NOT do formatting. It calls logic.generate_retrieve_output
     output = logic.generate_retrieve_output(Session, user, category, day_id)
     return render_template('retrieve_step3.html', output=output)
 
