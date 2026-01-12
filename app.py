@@ -35,8 +35,35 @@ def get_current_user():
 @app.route('/')
 def index():
     user = get_current_user()
-    if user: return render_template('index.html', user=user.username.title())
+    if user:
+        # If logged in, instantly redirect to the specific profile URL
+        if user.username == 'harsh':
+            return redirect(url_for('harsh_dashboard'))
+        elif user.username == 'apurva':
+            return redirect(url_for('apurva_dashboard'))
     return render_template('select_user.html')
+
+
+# --- PERSONALIZED SHORTCUT ROUTES (The "Home Screen" Links) ---
+
+@app.route('/harsh')
+def harsh_dashboard():
+    return _login_and_dashboard('harsh')
+
+
+@app.route('/apurva')
+def apurva_dashboard():
+    return _login_and_dashboard('apurva')
+
+
+def _login_and_dashboard(username):
+    """Helper to auto-login and show dashboard without redirecting."""
+    user = Session.query(User).filter_by(username=username).first()
+    if user:
+        session['user_id'] = user.id
+        # We render index.html here so the URL stays '/harsh' or '/apurva'
+        return render_template('index.html', user=user.username.title())
+    return "User not found", 404
 
 
 @app.route('/login/<username>')
@@ -44,6 +71,11 @@ def login(username):
     user = Session.query(User).filter_by(username=username).first()
     if user:
         session['user_id'] = user.id
+        # Redirect to the specific dashboard instead of generic index
+        if username == 'harsh':
+            return redirect(url_for('harsh_dashboard'))
+        elif username == 'apurva':
+            return redirect(url_for('apurva_dashboard'))
         return redirect(url_for('index'))
     return "User not found", 404
 
@@ -117,8 +149,8 @@ def export_csv():
         headers={"Content-disposition": "attachment; filename=workout_history.csv"}
     )
 
-# -----------------------
 
+# --- RETRIEVE & PLAN ROUTES ---
 
 @app.route('/retrieve/categories')
 def retrieve_categories():
