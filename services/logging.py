@@ -1,10 +1,31 @@
+"""
+Workout logging service for processing and saving workout data.
+"""
+from typing import List, Dict
+from datetime import datetime
 from models import Lift, WorkoutLog
 from services.helpers import find_best_match, get_set_stats
+from utils.logger import logger
 
 
-def handle_workout_log(db_session, user, parsed_data):
+def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
+    """
+    Process and save a workout log.
+    
+    Args:
+        db_session: Database session
+        user: User object
+        parsed_data: Parsed workout data dictionary
+        
+    Returns:
+        List of summary dictionaries for each exercise
+    """
     summary = []
-    workout_date = parsed_data['date']
+    workout_date = parsed_data.get('date', datetime.now())
+    
+    if 'exercises' not in parsed_data or not parsed_data['exercises']:
+        logger.warning(f"No exercises found in workout data for user {user.username}")
+        return summary
 
     for item in parsed_data["exercises"]:
         ex_name = item['name']
@@ -32,17 +53,20 @@ def handle_workout_log(db_session, user, parsed_data):
         }
 
         if is_valid:
-            # --- SAVE TO HISTORY (New) ---
-            history_log = WorkoutLog(
-                user_id=user.id,
-                date=workout_date,
-                exercise=ex_name,
-                top_weight=daily_max_weight,
-                top_reps=daily_max_reps,
-                estimated_1rm=p_peak
-            )
-            db_session.add(history_log)
-            # -----------------------------
+            # --- SAVE TO HISTORY ---
+            try:
+                history_log = WorkoutLog(
+                    user_id=user.id,
+                    date=workout_date,
+                    exercise=ex_name,
+                    top_weight=daily_max_weight if daily_max_weight > 0 else None,
+                    top_reps=daily_max_reps if daily_max_reps > 0 else None,
+                    estimated_1rm=p_peak if p_peak > 0 else None
+                )
+                db_session.add(history_log)
+            except Exception as e:
+                logger.error(f"Error creating workout log for {ex_name}: {e}", exc_info=True)
+                # Continue processing other exercises even if one fails
 
             if record:
                 row['old'] = record.best_string

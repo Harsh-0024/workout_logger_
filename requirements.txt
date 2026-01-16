@@ -1,5 +1,5 @@
-flask
-sqlalchemy
-sqlalchemy-utils
-psycopg2-binary
-pyperclip
+flask>=2.3.0
+sqlalchemy>=2.0.0
+sqlalchemy-utils>=0.41.0
+psycopg2-binary>=2.9.0
+pyperclip>=1.8.2

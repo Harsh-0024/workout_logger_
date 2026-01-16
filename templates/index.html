@@ -1,33 +1,89 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="row justify-content-center" style="min-height: 60vh; align-items: center;">
-    <div class="col-md-6 col-lg-5 text-center">
+<div class="row">
+    <!-- Main Dashboard -->
+    <div class="col-lg-8 mb-4">
+        <div class="card">
+            <div class="text-center mb-4">
+                <h6 class="text-muted mb-2" style="letter-spacing: 3px; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; opacity: 0.8;">
+                    Active Profile
+                </h6>
+                <h1 class="fw-bold display-4 mb-0">{{ user }}</h1>
+            </div>
 
-        <div class="mb-5">
-            <h6 class="text-muted mb-2" style="letter-spacing: 3px; font-weight: 500; font-size: 0.75rem; text-transform: uppercase; opacity: 0.8;">
-                Active Profile
-            </h6>
-            <h1 class="fw-bold display-4 mb-0">{{ user }}</h1>
+            <div class="d-grid gap-3">
+                <a href="/log" class="btn btn-gold-solid shadow">
+                    Log Workout
+                </a>
+                <a href="/retrieve/categories" class="btn btn-gold-solid shadow">
+                    Retrieve Plan
+                </a>
+                <a href="/stats" class="btn btn-gold-outline">
+                    View Progress
+                </a>
+            </div>
+
+            <div class="mt-4 text-center">
+                <a href="/switch" class="text-muted small text-decoration-none hover-gold" style="text-transform: uppercase; letter-spacing: 2px; font-size: 0.75rem;">
+                    ⟵ Switch Profile
+                </a>
+            </div>
         </div>
+    </div>
 
-        <div class="d-grid gap-3">
-            <a href="/log" class="btn btn-gold-solid shadow">
-                Log Workout
-            </a>
-            <a href="/retrieve/categories" class="btn btn-gold-solid shadow">
-                Retrieve Plan
-            </a>
-
-            <a href="/stats" class="btn btn-gold-outline">
-                View Progress
-            </a>
+    <!-- Stats & Recent Workouts Sidebar -->
+    <div class="col-lg-4">
+        <!-- Quick Stats -->
+        {% if stats %}
+        <div class="card mb-4">
+            <h5 class="mb-3 fw-bold">Quick Stats</h5>
+            <div class="row g-3">
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.total_workouts }}</div>
+                        <div class="stat-label">Workouts</div>
+                    </div>
+                </div>
+                <div class="col-6">
+                    <div class="stat-card">
+                        <div class="stat-value">{{ stats.total_exercises }}</div>
+                        <div class="stat-label">Exercises</div>
+                    </div>
+                </div>
+            </div>
+            {% if stats.latest_workout %}
+            <div class="mt-3 text-center">
+                <small class="text-muted">Last workout: {{ stats.latest_workout | format_date }}</small>
+            </div>
+            {% endif %}
         </div>
+        {% endif %}
 
-        <div class="mt-5">
-            <a href="/switch" class="text-muted small text-decoration-none hover-gold" style="text-transform: uppercase; letter-spacing: 2px; font-size: 0.75rem;">
-                ⟵ Switch Profile
-            </a>
+        <!-- Recent Workouts -->
+        {% if recent_workouts %}
+        <div class="card">
+            <h5 class="mb-3 fw-bold">Recent Workouts</h5>
+            <div>
+                {% for workout_date in recent_workouts %}
+                <div class="recent-workout-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-white">{{ workout_date | format_date }}</span>
+                        <small class="text-muted">{{ workout_date.strftime('%A')[:3] }}</small>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="mt-3 text-center">
+                <a href="/stats" class="text-muted small text-decoration-none hover-gold">View All →</a>
+            </div>
         </div>
+        {% else %}
+        <div class="card">
+            <h5 class="mb-3 fw-bold">Get Started</h5>
+            <p class="text-muted small mb-3">Start logging your workouts to see your progress here!</p>
+            <a href="/log" class="btn btn-gold-outline btn-sm w-100">Log Your First Workout</a>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

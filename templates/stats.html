@@ -1,41 +1,82 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-md-10">
+<div class="row">
+    <div class="col-12">
         <div class="card p-4">
-            <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
                 <h3 class="fw-bold text-white mb-0">Progress Tracking</h3>
-                <a href="/export_csv" class="btn btn-gold-outline btn-sm">Download CSV</a>
+                <div class="d-flex gap-2">
+                    <a href="/export_csv" class="btn btn-gold-outline btn-sm">Export CSV</a>
+                    <a href="/export_json" class="btn btn-gold-outline btn-sm">Export JSON</a>
+                </div>
             </div>
 
-            <div class="mb-4">
-                <label class="text-muted mb-2">Select Exercise</label>
-                <select id="exerciseSelect" class="form-control" onchange="loadChart()">
-                    <option value="">-- Choose Exercise --</option>
-                    {% for ex in exercises %}
-                    <option value="{{ ex }}">{{ ex }}</option>
-                    {% endfor %}
-                </select>
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="text-muted mb-2 d-block">Select Exercise</label>
+                    <select id="exerciseSelect" class="form-control" onchange="loadChart()">
+                        <option value="">-- Choose Exercise --</option>
+                        {% for ex in exercises %}
+                        <option value="{{ ex }}">{{ ex }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
-            <div class="chart-container" style="position: relative; height:40vh; width:100%">
+            <!-- Stats Summary -->
+            <div id="statsSummary" class="row mb-4" style="display: none;">
+                <div class="col-md-3 col-6 mb-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="current1RM">-</div>
+                        <div class="stat-label">Current 1RM</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6 mb-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="max1RM">-</div>
+                        <div class="stat-label">Max 1RM</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6 mb-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="improvement">-</div>
+                        <div class="stat-label">Improvement</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6 mb-3">
+                    <div class="stat-card">
+                        <div class="stat-value" id="improvementPct">-</div>
+                        <div class="stat-label">% Change</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Container -->
+            <div class="chart-container" style="position: relative; height:50vh; width:100%">
                 <canvas id="progressChart"></canvas>
             </div>
 
             <div class="text-center mt-4">
-                 <a href="/" class="text-muted text-decoration-none small hover-gold">Back Home</a>
+                <a href="/" class="text-muted text-decoration-none small hover-gold">Back Home</a>
             </div>
         </div>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
     let myChart = null;
 
     function loadChart() {
         const exercise = document.getElementById('exerciseSelect').value;
-        if (!exercise) return;
+        if (!exercise) {
+            document.getElementById('statsSummary').style.display = 'none';
+            if (myChart) {
+                myChart.destroy();
+                myChart = null;
+            }
+            return;
+        }
 
         fetch(`/stats/data/${encodeURIComponent(exercise)}`)
             .then(response => response.json())
@@ -43,6 +84,16 @@
                 const ctx = document.getElementById('progressChart').getContext('2d');
 
                 if (myChart) myChart.destroy();
+
+                // Update stats summary
+                if (data.stats) {
+                    document.getElementById('statsSummary').style.display = 'flex';
+                    document.getElementById('current1RM').textContent = data.stats.current_1rm.toFixed(1);
+                    document.getElementById('max1RM').textContent = data.stats.max_1rm.toFixed(1);
+                    const improvement = data.stats.improvement;
+                    document.getElementById('improvement').textContent = (improvement >= 0 ? '+' : '') + improvement.toFixed(1);
+                    document.getElementById('improvementPct').textContent = (data.stats.improvement_pct >= 0 ? '+' : '') + data.stats.improvement_pct.toFixed(1) + '%';
+                }
 
                 myChart = new Chart(ctx, {
                     type: 'line',
@@ -56,19 +107,36 @@
                             borderWidth: 2,
                             tension: 0.3,
                             fill: true,
-                            pointRadius: 4
+                            pointRadius: 4,
+                            pointHoverRadius: 6,
+                            pointBackgroundColor: '#D4AF37',
+                            pointBorderColor: '#FFFFFF',
+                            pointBorderWidth: 2
                         }]
                     },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
                         plugins: {
-                            legend: { labels: { color: '#A1A1AA' } }
+                            legend: { 
+                                labels: { color: '#A1A1AA' },
+                                display: true
+                            },
+                            tooltip: {
+                                backgroundColor: 'rgba(15, 15, 17, 0.95)',
+                                titleColor: '#FFFFFF',
+                                bodyColor: '#A1A1AA',
+                                borderColor: '#D4AF37',
+                                borderWidth: 1,
+                                padding: 12,
+                                displayColors: false
+                            }
                         },
                         scales: {
                             y: {
                                 grid: { color: 'rgba(255,255,255,0.05)' },
-                                ticks: { color: '#A1A1AA' }
+                                ticks: { color: '#A1A1AA' },
+                                beginAtZero: false
                             },
                             x: {
                                 grid: { display: false },
@@ -77,6 +145,9 @@
                         }
                     }
                 });
+            })
+            .catch(error => {
+                console.error('Error loading chart:', error);
             });
     }
 </script>

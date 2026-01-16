@@ -1,5 +1,9 @@
+"""
+Workout text parser for converting raw workout text into structured data.
+"""
 import re
 from datetime import datetime
+from typing import Optional, Dict, List, Tuple
 
 
 def normalize(values):
@@ -34,9 +38,22 @@ def extract_numbers(segment):
     return numbers
 
 
-def workout_parser(workout_day_received):
+def workout_parser(workout_day_received: str) -> Optional[Dict]:
+    """
+    Parse raw workout text into structured data.
+    
+    Args:
+        workout_day_received: Raw workout text string
+        
+    Returns:
+        Dictionary with date, workout_name, and exercises list, or None if parsing fails
+    """
+    if not workout_day_received or not workout_day_received.strip():
+        return None
+    
     raw_lines = [line.strip() for line in workout_day_received.strip().split("\n") if line.strip()]
-    if not raw_lines: return None
+    if not raw_lines:
+        return None
 
     # Header
     title_line = raw_lines[0]

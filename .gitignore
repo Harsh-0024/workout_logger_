@@ -1,24 +1,65 @@
-# Python internals
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Virtual Environment (Do not upload this!)
-.venv/
+# Virtual Environment
 venv/
 env/
+ENV/
+.venv
 
-# Database (Keep your local data local)
+# Database
 *.db
+*.sqlite
+*.sqlite3
 workout.db
 
-exp.py
-
-# Environment Variables (Secrets)
+# Environment variables
 .env
+.env.local
+.env.*.local
 
-# OS System Files
-.DS_Store
-
-# IDE Settings (Optional)
+# IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Migration files (if needed)
+migrations/
+
+# Temporary files
+*.tmp
+*.bak
