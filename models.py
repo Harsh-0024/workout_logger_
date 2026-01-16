@@ -131,15 +131,25 @@ def migrate_schema():
         users_columns = [col['name'] for col in inspector.get_columns('users')]
         
         with engine.begin() as conn:  # Use begin() for transaction management
+            dialect = engine.dialect.name
+            # Choose appropriate timestamp type per dialect
+            if dialect == 'mysql':
+                ts_type = 'DATETIME'
+                now_func = 'CURRENT_TIMESTAMP'
+            else:
+                # PostgreSQL, SQLite (and others) accept TIMESTAMP
+                ts_type = 'TIMESTAMP'
+                now_func = 'CURRENT_TIMESTAMP'
+            
             if 'created_at' not in users_columns:
                 logger.info("Adding created_at column to users table")
-                conn.execute(text("ALTER TABLE users ADD COLUMN created_at DATETIME"))
-                conn.execute(text("UPDATE users SET created_at = CURRENT_TIMESTAMP WHERE created_at IS NULL"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN created_at {ts_type}"))
+                conn.execute(text(f"UPDATE users SET created_at = {now_func} WHERE created_at IS NULL"))
             
             if 'updated_at' not in users_columns:
                 logger.info("Adding updated_at column to users table")
-                conn.execute(text("ALTER TABLE users ADD COLUMN updated_at DATETIME"))
-                conn.execute(text("UPDATE users SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN updated_at {ts_type}"))
+                conn.execute(text(f"UPDATE users SET updated_at = {now_func} WHERE updated_at IS NULL"))
                 
     except Exception as e:
         logger.warning(f"Migration warning (may be expected): {e}")
