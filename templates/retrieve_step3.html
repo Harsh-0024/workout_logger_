@@ -1,24 +1,34 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-8">
-        <div class="card p-4 p-md-5 text-center">
+    <div class="col-12 col-md-10 col-lg-9">
+        <div class="card text-center">
+            <div class="mb-4 mb-md-5">
+                <i class="bi bi-check-circle-fill" style="font-size: clamp(4rem, 12vw, 5rem); color: var(--gold-primary); opacity: 0.8;"></i>
+            </div>
 
-            <h3 class="mb-3 fw-bold text-white tracking-wide">PLAN READY</h3>
+            <h2 class="mb-2 mb-md-3 fw-bold tracking-wide" style="font-size: clamp(1.5rem, 5vw, 2rem);">Plan Ready</h2>
+            <p class="text-muted mb-4 mb-md-5" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Your workout plan is prepared</p>
 
-            <textarea id="planText" class="form-control mb-5" rows="12"
-                      style="font-family: 'SF Mono', 'Menlo', monospace; font-size: 0.85rem; background: #09090b;
-                      border: 1px solid #27272a; color: #a1a1aa; border-radius: 4px; padding: 20px;"
-                      readonly>{{ output }}</textarea>
+            <div class="mb-4 mb-md-5">
+                <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide text-start" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                    <i class="bi bi-file-text me-2"></i>Workout Plan
+                </label>
+                <textarea id="planText" class="form-control" rows="14"
+                          style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6;"
+                          readonly>{{ output }}</textarea>
+            </div>
 
-            <div class="d-grid gap-3">
-                <button onclick="manualCopy()" id="copyBtn" class="btn btn-gold-solid py-3 fw-bold"
-                        style="text-transform: uppercase; letter-spacing: 1px; font-size: 0.9rem;">
-                    Copy to Clipboard
+            <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4">
+                <button onclick="manualCopy()" id="copyBtn" class="btn btn-gold-solid py-3 fw-bold">
+                    <i class="bi bi-clipboard-check me-2"></i>Copy to Clipboard
                 </button>
+            </div>
 
-                <a href="/" class="text-muted text-decoration-none mt-3 small hover-gold"
-                   style="text-transform: uppercase; letter-spacing: 1px;">Return Home</a>
+            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
+                <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                    <i class="bi bi-arrow-left me-1"></i>Return Home
+                </a>
             </div>
         </div>
     </div>
@@ -48,15 +58,17 @@
     }
 
     function updateButtonSuccess(btn) {
-        var originalText = btn.innerText;
-        btn.innerText = "COPIED SUCCESSFULLY";
-        btn.style.backgroundColor = "#10b981"; // Emerald Green
+        var originalHTML = btn.innerHTML;
+        btn.innerHTML = '<i class="bi bi-check-circle-fill me-2"></i>Copied Successfully';
+        btn.style.background = "linear-gradient(135deg, #10b981 0%, #059669 100%)";
         btn.style.color = "white";
+        btn.style.borderColor = "#10b981";
 
         setTimeout(function() {
-            btn.innerText = originalText;
-            btn.style.backgroundColor = ""; // Revert to gold class
+            btn.innerHTML = originalHTML;
+            btn.style.background = "";
             btn.style.color = "";
+            btn.style.borderColor = "";
         }, 2000);
     }
 </script>

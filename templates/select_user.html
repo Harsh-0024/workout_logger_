@@ -1,20 +1,30 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="row justify-content-center" style="min-height: 80vh; align-items: center;">
-    <div class="col-12 col-md-5 col-lg-4">
+    <div class="col-12 col-md-6 col-lg-5">
+        <div class="card text-center">
+            <div class="mb-4 mb-md-5">
+                <i class="bi bi-person-badge" style="font-size: clamp(4rem, 12vw, 5rem); color: var(--gold-primary); opacity: 0.6;"></i>
+            </div>
+            
+            <h6 class="text-center mb-4 mb-md-5 text-muted tracking-wide" style="font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 4px;">
+                Select Profile
+            </h6>
 
-        <h6 class="text-center mb-4 text-muted" style="letter-spacing: 3px; font-weight: 500;">SELECT PROFILE</h6>
+            <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4">
+                <a href="/login/harsh" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">
+                    <i class="bi bi-person-circle me-2"></i>HARSH
+                </a>
 
-        <div class="d-grid gap-3">
-            <a href="/login/harsh" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
-                HARSH
-            </a>
+                <a href="/login/apurva" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">
+                    <i class="bi bi-person-circle me-2"></i>APURVA
+                </a>
+            </div>
 
-            <a href="/login/apurva" class="btn btn-gold-solid py-3 fs-6 fw-bold shadow">
-                APURVA
-            </a>
+            <p class="text-muted mt-3 mt-md-4 mb-0" style="font-size: var(--fs-sm); opacity: 0.7;">
+                Elite Performance Platform
+            </p>
         </div>
-
     </div>
 </div>
 {% endblock %}
