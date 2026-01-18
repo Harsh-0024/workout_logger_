@@ -1,1 +1,1 @@
-web: alembic upgrade head && python app.py
+web: alembic stamp head && python app.py
