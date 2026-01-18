@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, F
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session, relationship
 from sqlalchemy_utils import JSONType
 from datetime import datetime
+import os
 from config import Config
 from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, HARSH_DEFAULT_PLAN, APURVA_DEFAULT_PLAN
 import enum
@@ -265,6 +266,8 @@ def initialize_database():
     
     session = Session()
     try:
+        _bootstrap_admin_user(session)
+
         # Default users (can be made configurable)
         default_users = ['harsh', 'apurva']
         for name in default_users:
@@ -288,6 +291,36 @@ def initialize_database():
         raise
     finally:
         session.close()
+
+
+def _bootstrap_admin_user(session):
+    admin_password = Config.ADMIN_PASSWORD
+    if not admin_password:
+        return
+
+    admin_username = (Config.ADMIN_USERNAME or 'admin').lower()
+    admin_email = (Config.ADMIN_EMAIL or 'admin@workouttracker.local').lower()
+
+    try:
+        import bcrypt
+
+        user = session.query(User).filter_by(username=admin_username).first()
+        if not user:
+            user = User(username=admin_username)
+            session.add(user)
+
+        user.email = admin_email
+        user.password_hash = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        user.role = UserRole.ADMIN
+        user.is_verified = True
+        user.verification_token = None
+        user.verification_token_expires = None
+        if not user.created_at:
+            user.created_at = datetime.now()
+        user.updated_at = datetime.now()
+    except Exception:
+        from utils.logger import logger
+        logger.error("Failed to bootstrap admin user", exc_info=True)
 
 
 def _seed_user_data(session, user):
