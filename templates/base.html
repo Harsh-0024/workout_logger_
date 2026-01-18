@@ -1053,6 +1053,12 @@
             </div>
             <div class="navbar-nav ms-auto gap-2">
                 {% if current_user.is_authenticated %}
+                    {% if current_user.is_admin() %}
+                        <a class="nav-link" href="{{ url_for('admin_dashboard') }}">
+                            <i class="bi bi-shield-lock"></i>
+                            <span class="d-none d-sm-inline ms-2">Admin</span>
+                        </a>
+                    {% endif %}
                     <a class="nav-link" href="{{ url_for('logout') }}">
                         <i class="bi bi-box-arrow-right"></i>
                         <span class="d-none d-sm-inline ms-2">Logout</span>
