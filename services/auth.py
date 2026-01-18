@@ -5,7 +5,7 @@ import bcrypt
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-from models import User, UserRole, Session
+from models import User, UserRole, Session, _seed_user_data
 from config import Config
 
 
@@ -98,6 +98,8 @@ class AuthService:
             )
             
             session.add(user)
+            session.flush()
+            _seed_user_data(session, user)
             session.commit()
             session.refresh(user)
             

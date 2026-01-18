@@ -8,16 +8,16 @@
             </div>
             
             <h6 class="text-center mb-4 mb-md-5 text-muted tracking-wide" style="font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 4px;">
-                Select Profile
+                Welcome
             </h6>
 
             <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4">
-                <a href="/login/harsh" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">
-                    <i class="bi bi-person-circle me-2"></i>HARSH
+                <a href="{{ url_for('login') }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">
+                    <i class="bi bi-box-arrow-in-right me-2"></i>LOGIN
                 </a>
 
-                <a href="/login/apurva" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">
-                    <i class="bi bi-person-circle me-2"></i>APURVA
+                <a href="{{ url_for('register') }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">
+                    <i class="bi bi-person-plus me-2"></i>REGISTER
                 </a>
             </div>
 

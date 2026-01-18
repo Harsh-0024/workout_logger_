@@ -60,7 +60,7 @@ logs/
 htmlcov/
 
 # Migration files (if needed)
-migrations/
+
 
 # Temporary files
 *.tmp

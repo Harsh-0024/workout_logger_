@@ -7,7 +7,7 @@ from sqlalchemy_utils import JSONType
 from datetime import datetime
 import os
 from config import Config
-from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, HARSH_DEFAULT_PLAN, APURVA_DEFAULT_PLAN
+from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, DEFAULT_PLAN
 import enum
 
 # --- DATABASE CONNECTION ---
@@ -255,21 +255,26 @@ def migrate_schema():
 def initialize_database():
     """Initialize database tables and seed default data."""
     # Create all tables (only creates new tables, not new columns)
-    Base.metadata.create_all(engine)
-    
-    # Migrate existing schema if needed
-    try:
-        migrate_schema()
-    except Exception as e:
-        from utils.logger import logger
-        logger.warning(f"Schema migration skipped: {e}")
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if 'users' not in tables:
+        auto_create = os.environ.get('AUTO_CREATE_SCHEMA', '').lower() == 'true'
+        if not auto_create:
+            raise RuntimeError(
+                "Database schema is not initialized. Run `alembic upgrade head` first "
+                "(or set AUTO_CREATE_SCHEMA=true for dev-only auto-create)."
+            )
+
+        Base.metadata.create_all(engine)
     
     session = Session()
     try:
         _bootstrap_admin_user(session)
 
         # Default users (can be made configurable)
-        default_users = ['harsh', 'apurva']
+        default_users = []
         for name in default_users:
             user = session.query(User).filter_by(username=name).first()
             if not user:
@@ -324,13 +329,18 @@ def _bootstrap_admin_user(session):
 
 
 def _seed_user_data(session, user):
-    for ex in list_of_exercises:
-        session.add(Lift(user_id=user.id, exercise=ex, best_string="", sets_json={"weights": [], "reps": []}))
+    existing_lift = session.query(Lift).filter(Lift.user_id == user.id).first()
+    if not existing_lift:
+        for ex in list_of_exercises:
+            session.add(Lift(user_id=user.id, exercise=ex, best_string="", sets_json={"weights": [], "reps": []}))
 
-    default_plan = HARSH_DEFAULT_PLAN if user.username == 'harsh' else APURVA_DEFAULT_PLAN
-    session.add(Plan(user_id=user.id, text_content=default_plan))
+    existing_plan = session.query(Plan).filter(Plan.user_id == user.id).first()
+    if not existing_plan:
+        session.add(Plan(user_id=user.id, text_content=DEFAULT_PLAN))
 
-    default_rep_text = ""
-    for ex, rng in DEFAULT_REP_RANGES.items():
-        default_rep_text += f"{ex}: {rng}\n"
-    session.add(RepRange(user_id=user.id, text_content=default_rep_text))
+    existing_rep_ranges = session.query(RepRange).filter(RepRange.user_id == user.id).first()
+    if not existing_rep_ranges:
+        default_rep_text = ""
+        for ex, rng in DEFAULT_REP_RANGES.items():
+            default_rep_text += f"{ex}: {rng}\n"
+        session.add(RepRange(user_id=user.id, text_content=default_rep_text))

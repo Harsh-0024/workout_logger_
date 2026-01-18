@@ -299,6 +299,7 @@ Seated Calf Raises
 V Tucks
 """
 
+DEFAULT_PLAN = HARSH_DEFAULT_PLAN
 
 def get_workout_days(raw_text):
     """
