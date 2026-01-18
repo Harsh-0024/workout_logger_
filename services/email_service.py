@@ -103,35 +103,107 @@ Workout Tracker Team
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
-        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
-        .code-box {{ background: white; border: 2px dashed #667eea; padding: 20px; margin: 20px 0; text-align: center; border-radius: 5px; }}
-        .code {{ font-size: 32px; font-weight: bold; color: #667eea; letter-spacing: 5px; }}
-        .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            padding: 40px 20px;
+            line-height: 1.6;
+        }}
+        .container {{ 
+            max-width: 600px;
+            margin: 0 auto;
+            background: rgba(20, 20, 20, 0.95);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.1);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+        }}
+        .header h1 {{
+            color: #D4AF37;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
+        }}
+        .header p {{
+            color: rgba(212, 175, 55, 0.7);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }}
+        .content {{ 
+            padding: 40px 30px;
+            color: rgba(255, 255, 255, 0.9);
+        }}
+        .content h2 {{
+            color: #D4AF37;
+            font-size: 22px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }}
+        .content p {{
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 16px;
+            font-size: 15px;
+        }}
+        .code-box {{ 
+            background: rgba(212, 175, 55, 0.05);
+            border: 2px solid rgba(212, 175, 55, 0.3);
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.1);
+        }}
+        .code {{ 
+            font-size: 36px;
+            font-weight: 700;
+            color: #D4AF37;
+            letter-spacing: 8px;
+            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
+            font-family: 'Courier New', monospace;
+        }}
+        .highlight {{
+            color: #D4AF37;
+            font-weight: 600;
+        }}
+        .footer {{ 
+            text-align: center;
+            padding: 30px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            border-top: 1px solid rgba(212, 175, 55, 0.1);
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏋️ Workout Tracker</h1>
+            <h1>🏋️ WORKOUT TRACKER</h1>
             <p>Email Verification</p>
         </div>
         <div class="content">
             <h2>Hello {username.title()},</h2>
-            <p>Welcome to Workout Tracker! To complete your registration, please verify your email address using the code below:</p>
+            <p>Welcome to <span class="highlight">Workout Tracker</span>! To complete your registration, please verify your email address using the code below:</p>
             
             <div class="code-box">
                 <div class="code">{verification_code}</div>
             </div>
             
-            <p><strong>This code will expire in 24 hours.</strong></p>
+            <p><span class="highlight">This code will expire in 24 hours.</span></p>
             
             <p>If you didn't create this account, please ignore this email.</p>
             
-            <p>Best regards,<br>Workout Tracker Team</p>
+            <p style="margin-top: 30px;">Best regards,<br><span class="highlight">Workout Tracker Team</span></p>
         </div>
         <div class="footer">
             <p>This is an automated message, please do not reply.</p>
@@ -187,24 +259,98 @@ Workout Tracker Team
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
-        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
-        .message-box {{ background: white; border-left: 4px solid #f5576c; padding: 15px; margin: 20px 0; border-radius: 5px; }}
-        .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            padding: 40px 20px;
+            line-height: 1.6;
+        }}
+        .container {{ 
+            max-width: 600px;
+            margin: 0 auto;
+            background: rgba(20, 20, 20, 0.95);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(220, 38, 38, 0.2);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, rgba(220, 38, 38, 0.15) 0%, rgba(220, 38, 38, 0.05) 100%);
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(220, 38, 38, 0.3);
+        }}
+        .header h1 {{
+            color: #DC2626;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 10px rgba(220, 38, 38, 0.3);
+        }}
+        .header p {{
+            color: rgba(220, 38, 38, 0.7);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }}
+        .content {{ 
+            padding: 40px 30px;
+            color: rgba(255, 255, 255, 0.9);
+        }}
+        .content h2 {{
+            color: #D4AF37;
+            font-size: 22px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }}
+        .content p {{
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 16px;
+            font-size: 15px;
+        }}
+        .message-box {{ 
+            background: rgba(220, 38, 38, 0.05);
+            border-left: 4px solid #DC2626;
+            padding: 20px;
+            margin: 25px 0;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(220, 38, 38, 0.1);
+        }}
+        .message-box h3 {{
+            color: #DC2626;
+            font-size: 16px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }}
+        .message-box p {{
+            color: rgba(255, 255, 255, 0.8);
+            font-style: italic;
+        }}
+        .highlight {{
+            color: #D4AF37;
+            font-weight: 600;
+        }}
+        .footer {{ 
+            text-align: center;
+            padding: 30px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            border-top: 1px solid rgba(212, 175, 55, 0.1);
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏋️ Workout Tracker</h1>
+            <h1>🏋️ WORKOUT TRACKER</h1>
             <p>Account Deletion Notice</p>
         </div>
         <div class="content">
             <h2>Hello {username.title()},</h2>
-            <p>Your Workout Tracker account has been deleted by an administrator.</p>
+            <p>Your <span class="highlight">Workout Tracker</span> account has been deleted by an administrator.</p>
             
             <div class="message-box">
                 <h3>Reason from Administrator ({admin_username}):</h3>
@@ -213,7 +359,7 @@ Workout Tracker Team
             
             <p>If you believe this was done in error, please contact support.</p>
             
-            <p>Best regards,<br>Workout Tracker Team</p>
+            <p style="margin-top: 30px;">Best regards,<br><span class="highlight">Workout Tracker Team</span></p>
         </div>
         <div class="footer">
             <p>This is an automated message, please do not reply.</p>
@@ -266,26 +412,100 @@ Workout Tracker Team
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-        .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
-        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }}
-        .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }}
-        .features {{ background: white; padding: 20px; margin: 20px 0; border-radius: 5px; }}
-        .feature {{ padding: 10px 0; border-bottom: 1px solid #eee; }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{ 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            padding: 40px 20px;
+            line-height: 1.6;
+        }}
+        .container {{ 
+            max-width: 600px;
+            margin: 0 auto;
+            background: rgba(20, 20, 20, 0.95);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.1);
+        }}
+        .header {{ 
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+        }}
+        .header h1 {{
+            color: #D4AF37;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
+        }}
+        .header p {{
+            color: rgba(212, 175, 55, 0.7);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }}
+        .content {{ 
+            padding: 40px 30px;
+            color: rgba(255, 255, 255, 0.9);
+        }}
+        .content h2 {{
+            color: #D4AF37;
+            font-size: 22px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }}
+        .content p {{
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 16px;
+            font-size: 15px;
+        }}
+        .features {{ 
+            background: rgba(212, 175, 55, 0.05);
+            border: 1px solid rgba(212, 175, 55, 0.2);
+            padding: 25px;
+            margin: 25px 0;
+            border-radius: 12px;
+        }}
+        .features h3 {{
+            color: #D4AF37;
+            font-size: 18px;
+            margin-bottom: 16px;
+            font-weight: 600;
+        }}
+        .feature {{ 
+            padding: 12px 0;
+            color: rgba(255, 255, 255, 0.8);
+            border-bottom: 1px solid rgba(212, 175, 55, 0.1);
+            font-size: 15px;
+        }}
         .feature:last-child {{ border-bottom: none; }}
-        .footer {{ text-align: center; margin-top: 20px; color: #666; font-size: 12px; }}
+        .highlight {{
+            color: #D4AF37;
+            font-weight: 600;
+        }}
+        .footer {{ 
+            text-align: center;
+            padding: 30px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            border-top: 1px solid rgba(212, 175, 55, 0.1);
+        }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏋️ Workout Tracker</h1>
+            <h1>🏋️ WORKOUT TRACKER</h1>
             <p>Welcome Aboard!</p>
         </div>
         <div class="content">
             <h2>Hello {username.title()},</h2>
-            <p>Your email has been successfully verified! Welcome to Workout Tracker.</p>
+            <p>Your email has been successfully verified! Welcome to <span class="highlight">Workout Tracker</span>.</p>
             
             <div class="features">
                 <h3>Features Available:</h3>
@@ -297,7 +517,7 @@ Workout Tracker Team
             
             <p>You can now log in and start tracking your fitness journey!</p>
             
-            <p>Best regards,<br>Workout Tracker Team</p>
+            <p style="margin-top: 30px;">Best regards,<br><span class="highlight">Workout Tracker Team</span></p>
         </div>
         <div class="footer">
             <p>This is an automated message, please do not reply.</p>
