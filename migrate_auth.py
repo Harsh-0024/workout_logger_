@@ -56,7 +56,10 @@ def migrate_users_table():
         # Add is_verified column
         if not check_column_exists('users', 'is_verified'):
             logger.info("Adding is_verified column...")
-            conn.execute(text(f"ALTER TABLE users ADD COLUMN is_verified {bool_type} DEFAULT 0"))
+            if dialect == 'postgresql':
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN is_verified {bool_type} DEFAULT FALSE"))
+            else:
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN is_verified {bool_type} DEFAULT 0"))
         
         # Add verification_token column
         if not check_column_exists('users', 'verification_token'):
