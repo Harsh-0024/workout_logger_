@@ -2,6 +2,7 @@
 Main Flask application for the Workout Tracker.
 """
 
+
 from config import Config
 from models import initialize_database
 from utils.logger import logger
