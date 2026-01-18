@@ -1,12 +1,13 @@
 """
 Database models for the Workout Tracker application.
 """
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index, Boolean, Enum
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session, relationship
 from sqlalchemy_utils import JSONType
 from datetime import datetime
 from config import Config
 from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, HARSH_DEFAULT_PLAN, APURVA_DEFAULT_PLAN
+import enum
 
 # --- DATABASE CONNECTION ---
 database_url = Config.get_database_url()
@@ -23,11 +24,31 @@ Session = scoped_session(session_factory)
 Base = declarative_base()
 
 
+# --- USER ROLE ENUM ---
+class UserRole(enum.Enum):
+    USER = "user"
+    ADMIN = "admin"
+
+
 # --- 1. USERS TABLE ---
 class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
     username = Column(String(50), unique=True, nullable=False, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    password_hash = Column(String(255), nullable=True)
+    role = Column(
+        Enum(
+            UserRole,
+            values_callable=lambda enum_cls: [e.value for e in enum_cls],
+            native_enum=False,
+        ),
+        default=UserRole.USER,
+        nullable=False,
+    )
+    is_verified = Column(Boolean, default=False, nullable=False)
+    verification_token = Column(String(255), nullable=True)
+    verification_token_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=True)
 
@@ -36,8 +57,31 @@ class User(Base):
     rep_ranges = relationship("RepRange", uselist=False, back_populates="user", cascade="all, delete-orphan")
     logs = relationship("WorkoutLog", back_populates="user", cascade="all, delete-orphan")
     
+    def is_admin(self):
+        """Check if user has admin role."""
+        return self.role == UserRole.ADMIN
+    
+    def get_id(self):
+        """Flask-Login integration: return user ID as string."""
+        return str(self.id)
+    
+    @property
+    def is_authenticated(self):
+        """Flask-Login integration: return True if user is authenticated."""
+        return True
+    
+    @property
+    def is_active(self):
+        """Flask-Login integration: return True if user account is active."""
+        return self.is_verified
+    
+    @property
+    def is_anonymous(self):
+        """Flask-Login integration: return False for regular users."""
+        return False
+    
     def __repr__(self):
-        return f"<User(id={self.id}, username='{self.username}')>"
+        return f"<User(id={self.id}, username='{self.username}', role={self.role.value})>"
 
 
 # --- 2. LIFTS TABLE (PR Tracker) ---
@@ -127,19 +171,55 @@ def migrate_schema():
         if 'users' not in inspector.get_table_names():
             return
         
-        # Check and add created_at/updated_at to users table
+        # Check and add missing columns to users table
         users_columns = [col['name'] for col in inspector.get_columns('users')]
         
         with engine.begin() as conn:  # Use begin() for transaction management
             dialect = engine.dialect.name
-            # Choose appropriate timestamp type per dialect
+            # Choose appropriate types per dialect
             if dialect == 'mysql':
                 ts_type = 'DATETIME'
+                str_type = 'VARCHAR(255)'
+                bool_type = 'TINYINT(1)'
+                now_func = 'CURRENT_TIMESTAMP'
+            elif dialect == 'postgresql':
+                ts_type = 'TIMESTAMP'
+                str_type = 'VARCHAR(255)'
+                bool_type = 'BOOLEAN'
                 now_func = 'CURRENT_TIMESTAMP'
             else:
-                # PostgreSQL, SQLite (and others) accept TIMESTAMP
+                # SQLite (and others)
                 ts_type = 'TIMESTAMP'
+                str_type = 'VARCHAR(255)'
+                bool_type = 'BOOLEAN'
                 now_func = 'CURRENT_TIMESTAMP'
+
+            # --- Auth columns ---
+            if 'email' not in users_columns:
+                logger.info("Adding email column to users table")
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN email {str_type}"))
+
+            if 'password_hash' not in users_columns:
+                logger.info("Adding password_hash column to users table")
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN password_hash {str_type}"))
+
+            if 'role' not in users_columns:
+                logger.info("Adding role column to users table")
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN role {str_type} DEFAULT 'user'"))
+                conn.execute(text("UPDATE users SET role = 'user' WHERE role IS NULL"))
+
+            if 'is_verified' not in users_columns:
+                logger.info("Adding is_verified column to users table")
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN is_verified {bool_type} DEFAULT 0"))
+                conn.execute(text("UPDATE users SET is_verified = 0 WHERE is_verified IS NULL"))
+
+            if 'verification_token' not in users_columns:
+                logger.info("Adding verification_token column to users table")
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN verification_token {str_type}"))
+
+            if 'verification_token_expires' not in users_columns:
+                logger.info("Adding verification_token_expires column to users table")
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN verification_token_expires {ts_type}"))
             
             if 'created_at' not in users_columns:
                 logger.info("Adding created_at column to users table")

@@ -19,6 +19,8 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+merge_files.py
+merged_code.txt
 
 # Virtual Environment
 venv/

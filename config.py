@@ -4,6 +4,12 @@ Configuration management for the Workout Tracker application.
 import os
 from typing import Optional
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
+
 
 class Config:
     """Base configuration class."""
@@ -28,6 +34,28 @@ class Config:
     # Timezone (IST)
     TIMEZONE_OFFSET_HOURS = 5
     TIMEZONE_OFFSET_MINUTES = 30
+    
+    # Email Configuration
+    MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
+    MAIL_PORT = int(os.environ.get('MAIL_PORT', 587))
+    MAIL_USE_TLS = os.environ.get('MAIL_USE_TLS', 'True').lower() == 'true'
+    MAIL_USE_SSL = os.environ.get('MAIL_USE_SSL', 'False').lower() == 'true'
+    MAIL_USERNAME = os.environ.get('MAIL_USERNAME')
+    MAIL_PASSWORD = os.environ.get('MAIL_PASSWORD')
+    MAIL_DEFAULT_SENDER = (
+        os.environ.get('MAIL_DEFAULT_SENDER')
+        or os.environ.get('MAIL_USERNAME')
+        or 'noreply@workouttracker.com'
+    )
+
+    # Brevo Transactional Email API (recommended for Railway)
+    BREVO_API_KEY = os.environ.get('BREVO_API_KEY')
+    BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL') or MAIL_DEFAULT_SENDER
+    BREVO_SENDER_NAME = os.environ.get('BREVO_SENDER_NAME', 'Workout Tracker')
+    
+    # Authentication
+    REMEMBER_COOKIE_DURATION = 30  # days
+    VERIFICATION_TOKEN_EXPIRY = 24  # hours
     
     @staticmethod
     def get_database_url() -> str:

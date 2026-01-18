@@ -3,9 +3,13 @@ Main Flask application for the Workout Tracker.
 """
 import os
 import urllib.parse
+from threading import Thread
 from datetime import datetime, timedelta
 from flask import Flask, render_template, request, redirect, url_for, flash, session, Response, jsonify
+from flask_login import LoginManager, login_user, logout_user, login_required, current_user
+from flask_mail import Mail
 from sqlalchemy import desc
+import time
 
 # Application imports
 from config import Config
@@ -13,7 +17,10 @@ from parsers.workout import workout_parser
 from services.logging import handle_workout_log
 from services.retrieve import generate_retrieve_output
 from services.stats import get_csv_export, get_chart_data
-from models import initialize_database, Session, User, Plan, RepRange, WorkoutLog
+from services.auth import AuthService, AuthenticationError
+from services.email_service import EmailService
+from services.admin import AdminService, AdminError
+from models import initialize_database, Session, User, Plan, RepRange, WorkoutLog, UserRole
 from list_of_exercise import get_workout_days
 from utils.logger import logger
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
@@ -24,6 +31,25 @@ import migrate_db
 app = Flask(__name__)
 app.secret_key = Config.SECRET_KEY
 app.config.from_object(Config)
+
+# Initialize Flask-Login
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+login_manager.login_message = 'Please log in to access this page.'
+login_manager.login_message_category = 'info'
+
+# Initialize Flask-Mail
+mail = Mail(app)
+email_service = EmailService(mail)
+
+# Flask-Login user loader
+@login_manager.user_loader
+def load_user(user_id):
+    try:
+        return Session.query(User).get(int(user_id))
+    except Exception:
+        return None
 
 # Template filters
 @app.template_filter('url_encode')
@@ -63,29 +89,39 @@ def internal_error(error):
 
 
 # Helper functions
-def get_current_user():
-    """Get the currently logged in user."""
-    if 'user_id' not in session:
-        return None
-    try:
-        return Session.query(User).get(session['user_id'])
-    except Exception as e:
-        logger.error(f"Error getting current user: {e}", exc_info=True)
-        session.clear()
-        return None
-
-
-def require_login(f):
-    """Decorator to require user login."""
+def require_admin(f):
+    """Decorator to require admin role."""
     from functools import wraps
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        user = get_current_user()
-        if not user:
+        if not current_user.is_authenticated:
             flash("Please log in to continue.", "info")
-            return redirect(url_for('index'))
+            return redirect(url_for('login'))
+        if not current_user.is_admin():
+            flash("Access denied. Admin privileges required.", "error")
+            return redirect(url_for('user_dashboard', username=current_user.username))
         return f(*args, **kwargs)
     return decorated_function
+
+
+def send_deletion_email_async(user_info):
+    """Send account deletion email in a background thread."""
+    if not user_info.get('email'):
+        return
+
+    def _send():
+        try:
+            with app.app_context():
+                email_service.send_account_deletion_email(
+                    email=user_info['email'],
+                    username=user_info['username'],
+                    admin_message=user_info['deletion_reason'],
+                    admin_username=user_info['admin_username']
+                )
+        except Exception as exc:
+            logger.error(f"Failed to send deletion email: {exc}", exc_info=True)
+
+    Thread(target=_send, daemon=True).start()
 
 
 def get_recent_workouts(user, limit=5):
@@ -136,26 +172,28 @@ def get_workout_stats(user):
 
 @app.route('/')
 def index():
-    """Home page - redirects to user dashboard or shows user selection."""
-    user = get_current_user()
-    if user:
-        # Redirect to personalized dashboard
-        return redirect(url_for('user_dashboard', username=user.username))
-    return render_template('select_user.html')
+    """Home page - redirects to user dashboard or shows login."""
+    if current_user.is_authenticated:
+        return redirect(url_for('user_dashboard', username=current_user.username))
+    return redirect(url_for('login'))
 
 
 @app.route('/<username>')
+@login_required
 def user_dashboard(username):
     """User-specific dashboard."""
     try:
         username = validate_username(username)
+        
+        # Only allow users to view their own dashboard (except admins)
+        if current_user.username != username and not current_user.is_admin():
+            flash("You can only view your own dashboard.", "error")
+            return redirect(url_for('user_dashboard', username=current_user.username))
+        
         user = Session.query(User).filter_by(username=username).first()
         
         if not user:
             raise UserNotFoundError(f"User '{username}' not found")
-        
-        # Auto-login
-        session['user_id'] = user.id
         
         # Get dashboard data
         recent_workouts = get_recent_workouts(user, limit=5)
@@ -176,34 +214,202 @@ def user_dashboard(username):
         return redirect(url_for('index'))
 
 
-@app.route('/login/<username>')
-def login(username):
-    """Login route for a specific user."""
+# --- AUTHENTICATION ROUTES ---
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """User registration."""
+    if current_user.is_authenticated:
+        return redirect(url_for('user_dashboard', username=current_user.username))
+    
+    if request.method == 'POST':
+        try:
+            name = request.form.get('name', '').strip()
+            username = request.form.get('username', '').strip()
+            email = request.form.get('email', '').strip()
+            password = request.form.get('password', '')
+            
+            # Register user
+            user, verification_code = AuthService.register_user(
+                username=username,
+                email=email,
+                password=password,
+                name=name
+            )
+            
+            # Send verification email
+            email_sent = email_service.send_verification_email(
+                email=user.email,
+                username=user.username,
+                verification_code=verification_code
+            )
+            
+            if not email_sent:
+                logger.warning(f"Failed to send verification email to {email}")
+                flash("Account created but verification email could not be sent. Please contact support.", "warning")
+            else:
+                flash("Account created! Please check your email for the verification code.", "success")
+            
+            # Store user_id in session for verification page
+            session['pending_verification_user_id'] = user.id
+            return redirect(url_for('verify_email'))
+            
+        except AuthenticationError as e:
+            flash(str(e), "error")
+            return render_template('register.html')
+        except Exception as e:
+            logger.error(f"Registration error: {e}", exc_info=True)
+            flash("An error occurred during registration. Please try again.", "error")
+            return render_template('register.html')
+    
+    return render_template('register.html')
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """User login."""
+    if current_user.is_authenticated:
+        return redirect(url_for('user_dashboard', username=current_user.username))
+    
+    if request.method == 'POST':
+        try:
+            username_or_email = request.form.get('username_or_email', '').strip()
+            password = request.form.get('password', '')
+            remember_me = request.form.get('remember_me') == 'on'
+            
+            user = AuthService.authenticate_user(username_or_email, password)
+            
+            if not user:
+                flash("Invalid username/email or password.", "error")
+                return render_template('login.html')
+            
+            # Log user in with remember me option
+            login_user(user, remember=remember_me, duration=timedelta(days=Config.REMEMBER_COOKIE_DURATION))
+            
+            flash(f"Welcome back, {user.username.title()}!", "success")
+            
+            # Redirect to next page or dashboard
+            next_page = request.args.get('next')
+            if next_page:
+                return redirect(next_page)
+            return redirect(url_for('user_dashboard', username=user.username))
+            
+        except AuthenticationError as e:
+            flash(str(e), "error")
+            return render_template('login.html')
+        except Exception as e:
+            logger.error(f"Login error: {e}", exc_info=True)
+            flash("An error occurred during login. Please try again.", "error")
+            return render_template('login.html')
+    
+    return render_template('login.html')
+
+
+@app.route('/verify-email', methods=['GET', 'POST'])
+def verify_email():
+    """Email verification."""
+    if current_user.is_authenticated:
+        return redirect(url_for('user_dashboard', username=current_user.username))
+    
+    user_id = session.get('pending_verification_user_id')
+    if not user_id:
+        flash("No pending verification found. Please register first.", "error")
+        return redirect(url_for('register'))
+    
+    user = Session.query(User).get(user_id)
+    if not user:
+        flash("User not found.", "error")
+        return redirect(url_for('register'))
+
+    user_email = user.email
+    user_username = user.username
+    
+    if user.is_verified:
+        flash("Email already verified. Please log in.", "info")
+        return redirect(url_for('login'))
+    
+    if request.method == 'POST':
+        try:
+            verification_code = request.form.get('verification_code', '').strip()
+            
+            if AuthService.verify_email(user_id, verification_code):
+                # Send welcome email
+                email_service.send_welcome_email(user_email, user_username)
+                
+                session.pop('pending_verification_user_id', None)
+                # Re-fetch the user in a fresh session and log them in.
+                # AuthService.verify_email() closes the scoped session, which can detach instances.
+                Session.remove()
+                verified_user = Session.query(User).get(user_id)
+                if verified_user:
+                    login_user(
+                        verified_user,
+                        remember=True,
+                        duration=timedelta(days=Config.REMEMBER_COOKIE_DURATION)
+                    )
+                    flash("Email verified successfully! You're now signed in.", "success")
+                    return redirect(url_for('user_dashboard', username=verified_user.username))
+
+                flash("Email verified successfully! Please log in.", "success")
+                return redirect(url_for('login'))
+            else:
+                flash("Invalid verification code. Please try again.", "error")
+                
+        except AuthenticationError as e:
+            flash(str(e), "error")
+        except Exception as e:
+            logger.error(f"Verification error: {e}", exc_info=True)
+            flash("An error occurred. Please try again.", "error")
+    
+    return render_template('verify_email.html', email=user_email)
+
+
+@app.route('/resend-verification', methods=['POST'])
+def resend_verification():
+    """Resend verification code."""
+    user_id = session.get('pending_verification_user_id')
+    if not user_id:
+        flash("No pending verification found.", "error")
+        return redirect(url_for('register'))
+    
     try:
-        username = validate_username(username)
-        user = Session.query(User).filter_by(username=username).first()
-        
+        user = Session.query(User).get(user_id)
         if not user:
-            raise UserNotFoundError(f"User '{username}' not found")
+            flash("User not found.", "error")
+            return redirect(url_for('register'))
+
+        user_email = user.email
+        user_username = user.username
         
-        session['user_id'] = user.id
-        flash(f"Welcome back, {user.username.title()}!", "success")
-        return redirect(url_for('user_dashboard', username=user.username))
-    except (ValidationError, UserNotFoundError) as e:
+        verification_code = AuthService.resend_verification_code(user_id)
+        
+        email_sent = email_service.send_verification_email(
+            email=user_email,
+            username=user_username,
+            verification_code=verification_code
+        )
+        
+        if email_sent:
+            flash("Verification code resent! Please check your email.", "success")
+        else:
+            flash("Failed to send verification email. Please try again later.", "error")
+            
+    except AuthenticationError as e:
         flash(str(e), "error")
-        return redirect(url_for('index'))
     except Exception as e:
-        logger.error(f"Error in login: {e}", exc_info=True)
-        flash("An error occurred during login.", "error")
-        return redirect(url_for('index'))
+        logger.error(f"Resend verification error: {e}", exc_info=True)
+        flash("An error occurred. Please try again.", "error")
+    
+    return redirect(url_for('verify_email'))
 
 
-@app.route('/switch')
-def switch_user():
-    """Switch/logout current user."""
-    session.clear()
+@app.route('/logout')
+@login_required
+def logout():
+    """User logout."""
+    logout_user()
     flash("Logged out successfully.", "info")
-    return redirect(url_for('index'))
+    return redirect(url_for('login'))
 
 
 @app.route('/internal_db_fix')
@@ -218,10 +424,10 @@ def internal_db_fix():
 
 
 @app.route('/log', methods=['GET', 'POST'])
-@require_login
+@login_required
 def log_workout():
     """Log a workout session."""
-    user = get_current_user()
+    user = current_user
     
     if request.method == 'GET':
         return render_template('log.html')
@@ -267,10 +473,10 @@ def log_workout():
 # --- STATS ROUTES ---
 
 @app.route('/stats')
-@require_login
+@login_required
 def stats_index():
     """Statistics dashboard."""
-    user = get_current_user()
+    user = current_user
     
     try:
         # Get list of exercises the user has logged history for
@@ -287,10 +493,10 @@ def stats_index():
 
 
 @app.route('/stats/data/<exercise>')
-@require_login
+@login_required
 def stats_data(exercise):
     """Get chart data for a specific exercise."""
-    user = get_current_user()
+    user = current_user
     
     try:
         exercise = sanitize_text_input(exercise, max_length=100)
@@ -301,10 +507,10 @@ def stats_data(exercise):
 
 
 @app.route('/export_csv')
-@require_login
+@login_required
 def export_csv():
     """Export workout history as CSV."""
-    user = get_current_user()
+    user = current_user
     
     try:
         csv_data = get_csv_export(Session, user)
@@ -322,10 +528,10 @@ def export_csv():
 
 
 @app.route('/export_json')
-@require_login
+@login_required
 def export_json():
     """Export workout history as JSON."""
-    user = get_current_user()
+    user = current_user
     
     try:
         logs = Session.query(WorkoutLog).filter_by(
@@ -374,10 +580,10 @@ def export_json():
 # --- RETRIEVE & PLAN ROUTES ---
 
 @app.route('/retrieve/categories')
-@require_login
+@login_required
 def retrieve_categories():
     """Show workout categories."""
-    user = get_current_user()
+    user = current_user
     
     try:
         plan = Session.query(Plan).filter_by(user_id=user.id).first()
@@ -398,10 +604,10 @@ def retrieve_categories():
 
 
 @app.route('/retrieve/days/<category>')
-@require_login
+@login_required
 def retrieve_days(category):
     """Show workout days for a category."""
-    user = get_current_user()
+    user = current_user
     
     try:
         category = sanitize_text_input(category, max_length=100)
@@ -430,10 +636,10 @@ def retrieve_days(category):
 
 
 @app.route('/retrieve/final/<category>/<int:day_id>')
-@require_login
+@login_required
 def retrieve_final(category, day_id):
     """Generate final workout plan."""
-    user = get_current_user()
+    user = current_user
     
     try:
         category = sanitize_text_input(category, max_length=100)
@@ -446,10 +652,10 @@ def retrieve_final(category, day_id):
 
 
 @app.route('/set_plan', methods=['GET', 'POST'])
-@require_login
+@login_required
 def set_plan():
     """Set or update workout plan."""
-    user = get_current_user()
+    user = current_user
     
     try:
         plan = Session.query(Plan).filter_by(user_id=user.id).first()
@@ -477,10 +683,10 @@ def set_plan():
 
 
 @app.route('/set_exercises', methods=['GET', 'POST'])
-@require_login
+@login_required
 def set_exercises():
     """Set or update exercise rep ranges."""
-    user = get_current_user()
+    user = current_user
     
     try:
         reps = Session.query(RepRange).filter_by(user_id=user.id).first()
@@ -507,6 +713,67 @@ def set_exercises():
         return redirect(url_for('user_dashboard', username=user.username))
 
 
+# --- ADMIN ROUTES ---
+
+@app.route('/admin')
+@require_admin
+def admin_dashboard():
+    """Admin dashboard for user management."""
+    try:
+        users = AdminService.get_all_users()
+        stats = AdminService.get_user_count()
+        
+        return render_template(
+            'admin_dashboard.html',
+            users=users,
+            stats=stats
+        )
+    except Exception as e:
+        logger.error(f"Admin dashboard error: {e}", exc_info=True)
+        flash("Error loading admin dashboard.", "error")
+        return redirect(url_for('user_dashboard', username=current_user.username))
+
+
+@app.route('/admin/delete-user', methods=['POST'])
+@require_admin
+def admin_delete_user():
+    """Delete a user account (admin only)."""
+    try:
+        start = time.perf_counter()
+        user_id = int(request.form.get('user_id'))
+        deletion_reason = request.form.get('deletion_reason', '').strip()
+
+        logger.info(f"Admin delete requested: admin_user_id={current_user.id} target_user_id={user_id}")
+        
+        if not deletion_reason:
+            flash("Deletion reason is required.", "error")
+            return redirect(url_for('admin_dashboard'))
+        
+        # Delete user and get info for email
+        delete_start = time.perf_counter()
+        user_info = AdminService.delete_user(
+            admin_user_id=current_user.id,
+            target_user_id=user_id,
+            deletion_reason=deletion_reason
+        )
+        logger.info(f"Admin delete DB step completed in {time.perf_counter() - delete_start:.3f}s")
+        
+        # Send deletion notification email asynchronously
+        send_deletion_email_async(user_info)
+
+        logger.info(f"Admin delete request finished in {time.perf_counter() - start:.3f}s")
+        
+        flash(f"User '{user_info['username']}' has been deleted successfully.", "success")
+        
+    except AdminError as e:
+        flash(str(e), "error")
+    except Exception as e:
+        logger.error(f"Delete user error: {e}", exc_info=True)
+        flash("An error occurred while deleting the user.", "error")
+    
+    return redirect(url_for('admin_dashboard'))
+
+
 # Application entry point
 if __name__ == '__main__':
     try:
@@ -518,7 +785,7 @@ if __name__ == '__main__':
         debug = Config.DEBUG
         
         logger.info(f"Starting Workout Tracker on {host}:{port} (debug={debug})")
-        app.run(host=host, port=port, debug=debug)
+        app.run(host=host, port=port, debug=debug, threaded=True)
     except Exception as e:
         logger.critical(f"Failed to start application: {e}", exc_info=True)
         raise

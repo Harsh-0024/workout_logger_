@@ -13,9 +13,9 @@ def validate_username(username: str) -> str:
     
     username = username.strip().lower()
     
-    # Only allow alphanumeric and underscore
-    if not re.match(r'^[a-z0-9_]+$', username):
-        raise ValidationError("Username can only contain letters, numbers, and underscores")
+    # Only allow alphanumeric, underscore, and hyphen
+    if not re.match(r'^[a-z0-9_-]+$', username):
+        raise ValidationError("Username can only contain letters, numbers, underscores, and hyphens")
     
     if len(username) < 2 or len(username) > 30:
         raise ValidationError("Username must be between 2 and 30 characters")

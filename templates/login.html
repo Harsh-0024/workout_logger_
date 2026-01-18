@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Workout Tracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-7 col-lg-5">
+        <div class="card">
+            <div class="text-center mb-4 mb-md-5">
+                <div class="mb-3">
+                    <i class="bi bi-box-arrow-in-right text-gold" style="font-size: clamp(2.5rem, 6vw, 3rem); opacity: 0.7;"></i>
+                </div>
+                <h2 class="fw-bold mb-2">Welcome Back</h2>
+                <p class="text-muted mb-0">Sign in to continue tracking your progress</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('login') }}">
+                <div class="mb-3">
+                    <label for="username_or_email" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        Username or Email
+                    </label>
+                    <input 
+                        type="text" 
+                        id="username_or_email" 
+                        name="username_or_email" 
+                        required 
+                        class="form-control"
+                        placeholder="Enter your username or email"
+                    >
+                </div>
+
+                <div class="mb-3">
+                    <label for="password" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        Password
+                    </label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        name="password" 
+                        required 
+                        class="form-control"
+                        placeholder="Enter your password"
+                    >
+                </div>
+
+                <div class="form-check mb-4">
+                    <input 
+                        type="checkbox" 
+                        id="remember_me" 
+                        name="remember_me" 
+                        class="form-check-input"
+                    >
+                    <label for="remember_me" class="form-check-label text-muted">
+                        Remember me (30 days)
+                    </label>
+                </div>
+
+                <button 
+                    type="submit" 
+                    class="btn btn-gold-solid w-100"
+                >
+                    Sign In
+                </button>
+            </form>
+
+            <div class="text-center pt-4 mt-4 border-top" style="border-color: var(--border-subtle) !important;">
+                <span class="text-muted small">Don't have an account?</span>
+                <a href="{{ url_for('register') }}" class="text-gold text-decoration-none hover-gold ms-1">
+                    Create Account
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
