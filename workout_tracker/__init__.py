@@ -1,4 +1,4 @@
-
+import os
 import urllib.parse
 from datetime import datetime
 
@@ -19,7 +19,12 @@ from .routes.workouts import register_workout_routes
 
 
 def create_app(config_object=Config):
-    app = Flask(__name__)
+    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
+    app = Flask(
+        __name__,
+        template_folder=os.path.join(base_dir, 'templates'),
+        static_folder=os.path.join(base_dir, 'static'),
+    )
     app.secret_key = config_object.SECRET_KEY
     app.config.from_object(config_object)
 
