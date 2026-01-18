@@ -195,41 +195,56 @@ def migrate_schema():
                 now_func = 'CURRENT_TIMESTAMP'
 
             # --- Auth columns ---
-            if 'email' not in users_columns:
-                logger.info("Adding email column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN email {str_type}"))
-
-            if 'password_hash' not in users_columns:
-                logger.info("Adding password_hash column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN password_hash {str_type}"))
-
-            if 'role' not in users_columns:
-                logger.info("Adding role column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN role {str_type} DEFAULT 'user'"))
+            if dialect == 'postgresql':
+                logger.info("Ensuring auth columns exist for PostgreSQL")
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS email {str_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash {str_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS role {str_type} DEFAULT 'user'"))
                 conn.execute(text("UPDATE users SET role = 'user' WHERE role IS NULL"))
-
-            if 'is_verified' not in users_columns:
-                logger.info("Adding is_verified column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN is_verified {bool_type} DEFAULT 0"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS is_verified {bool_type} DEFAULT 0"))
                 conn.execute(text("UPDATE users SET is_verified = 0 WHERE is_verified IS NULL"))
-
-            if 'verification_token' not in users_columns:
-                logger.info("Adding verification_token column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN verification_token {str_type}"))
-
-            if 'verification_token_expires' not in users_columns:
-                logger.info("Adding verification_token_expires column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN verification_token_expires {ts_type}"))
-            
-            if 'created_at' not in users_columns:
-                logger.info("Adding created_at column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN created_at {ts_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token {str_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires {ts_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at {ts_type}"))
                 conn.execute(text(f"UPDATE users SET created_at = {now_func} WHERE created_at IS NULL"))
-            
-            if 'updated_at' not in users_columns:
-                logger.info("Adding updated_at column to users table")
-                conn.execute(text(f"ALTER TABLE users ADD COLUMN updated_at {ts_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at {ts_type}"))
                 conn.execute(text(f"UPDATE users SET updated_at = {now_func} WHERE updated_at IS NULL"))
+            else:
+                if 'email' not in users_columns:
+                    logger.info("Adding email column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN email {str_type}"))
+
+                if 'password_hash' not in users_columns:
+                    logger.info("Adding password_hash column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN password_hash {str_type}"))
+
+                if 'role' not in users_columns:
+                    logger.info("Adding role column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN role {str_type} DEFAULT 'user'"))
+                    conn.execute(text("UPDATE users SET role = 'user' WHERE role IS NULL"))
+
+                if 'is_verified' not in users_columns:
+                    logger.info("Adding is_verified column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN is_verified {bool_type} DEFAULT 0"))
+                    conn.execute(text("UPDATE users SET is_verified = 0 WHERE is_verified IS NULL"))
+
+                if 'verification_token' not in users_columns:
+                    logger.info("Adding verification_token column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN verification_token {str_type}"))
+
+                if 'verification_token_expires' not in users_columns:
+                    logger.info("Adding verification_token_expires column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN verification_token_expires {ts_type}"))
+                
+                if 'created_at' not in users_columns:
+                    logger.info("Adding created_at column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN created_at {ts_type}"))
+                    conn.execute(text(f"UPDATE users SET created_at = {now_func} WHERE created_at IS NULL"))
+                
+                if 'updated_at' not in users_columns:
+                    logger.info("Adding updated_at column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN updated_at {ts_type}"))
+                    conn.execute(text(f"UPDATE users SET updated_at = {now_func} WHERE updated_at IS NULL"))
                 
     except Exception as e:
         logger.warning(f"Migration warning (may be expected): {e}")
