@@ -1,1 +1,1 @@
-web: flask db stamp head && gunicorn -w 4 -b 0.0.0.0:$PORT "workout_tracker:create_app()"
+web: flask db upgrade && gunicorn -w 4 -b 0.0.0.0:$PORT "workout_tracker:create_app()"
