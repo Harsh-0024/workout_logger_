@@ -1,1 +1,1 @@
-web: python app.py
+web: flask db stamp head && gunicorn -w 4 -b 0.0.0.0:$PORT "workout_tracker:create_app()"
