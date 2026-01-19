@@ -1,0 +1,4111 @@
+PROJECT DIRECTORY STRUCTURE:
+============================
+DB_Update/
+    the_lifts/
+        lifts.json
+        best_lifts.json
+        apurva_lifts.json
+        user_plans.json
+        user_rep_ranges.json
+        workout_logs.json
+        users.json
+        rep_ranges.json
+        harsh_lifts.json
+        plans.json
+
+==================================================
+
+==============================
+FILE PATH: the_lifts/lifts.json
+==============================
+
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "exercise": "Barbell Curl",
+    "best_string": "Barbell Curl 12.5 10 9, 9 9 10",
+    "sets_json": "{\"weights\": [12.5, 10.0, 9.0], \"reps\": [9.0, 9.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 2,
+    "user_id": 1,
+    "exercise": "Barbell Overhead Extension",
+    "best_string": "Barbell Overhead Extension 5 2.5 1, 9 8 11",
+    "sets_json": "{\"weights\": [5.0, 2.5, 1.0], \"reps\": [9.0, 8.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 3,
+    "user_id": 1,
+    "exercise": "Barbell Overhead Press",
+    "best_string": "Barbell Overhead Press 15 12.5, 7 10 8",
+    "sets_json": "{\"weights\": [15.0, 12.5, 12.5], \"reps\": [7.0, 10.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 4,
+    "user_id": 1,
+    "exercise": "Cable Lateral Raise",
+    "best_string": "Cable Lateral Raise 12 8.8, 14 15",
+    "sets_json": "{\"weights\": [12.0, 8.8, 8.8], \"reps\": [14.0, 15.0, 15.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 5,
+    "user_id": 1,
+    "exercise": "Calf Raises Sitting",
+    "best_string": "Calf Raises Sitting 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 6,
+    "user_id": 1,
+    "exercise": "Calf Raises Standing",
+    "best_string": "Calf Raises Standing - [12–20] - 2.5, 14 15",
+    "sets_json": "{\"weights\": [2.5, 2.5, 2.5], \"reps\": [14.0, 15.0, 15.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 7,
+    "user_id": 1,
+    "exercise": "Crunches A",
+    "best_string": "Crunches A , 15",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [15.0, 15.0, 15.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 8,
+    "user_id": 1,
+    "exercise": "Crunches B",
+    "best_string": "Crunches B 10, 11",
+    "sets_json": "{\"weights\": [10.0, 10.0, 10.0], \"reps\": [11.0, 11.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 9,
+    "user_id": 1,
+    "exercise": "Deadlift",
+    "best_string": "Deadlift - [3–6] - 35 35 30, 4 4 6",
+    "sets_json": "{\"weights\": [35.0, 35.0, 30.0], \"reps\": [4.0, 4.0, 6.0]}",
+    "updated_at": "2026-01-12 00:00:00"
+  },
+  {
+    "id": 10,
+    "user_id": 1,
+    "exercise": "Dips",
+    "best_string": "Dips 30 25, 8",
+    "sets_json": "{\"weights\": [30.0, 25.0, 25.0], \"reps\": [8.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 11,
+    "user_id": 1,
+    "exercise": "Dumbbell Curl",
+    "best_string": "Dumbbell Curl - [8–12] - 12.5 10, 8 10",
+    "sets_json": "{\"weights\": [12.5, 10.0, 10.0], \"reps\": [8.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-12 00:00:00"
+  },
+  {
+    "id": 12,
+    "user_id": 1,
+    "exercise": "Dumbbell Overhead Extension",
+    "best_string": "Dumbbell Overhead Extension 22.5 20 17.5, 8 10 12",
+    "sets_json": "{\"weights\": [22.5, 20.0, 17.5], \"reps\": [8.0, 10.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 13,
+    "user_id": 1,
+    "exercise": "Dumbbell Overhead Press",
+    "best_string": "Dumbbell Overhead Press - [6–10] - 17.5, 10",
+    "sets_json": "{\"weights\": [17.5, 17.5, 17.5], \"reps\": [10.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-17 00:00:00"
+  },
+  {
+    "id": 14,
+    "user_id": 1,
+    "exercise": "Farmer's Walk",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:57.491994"
+  },
+  {
+    "id": 15,
+    "user_id": 1,
+    "exercise": "Flat Barbell Press",
+    "best_string": "Flat Barbell Press - [5–8] - 20 20 17.5, 8 6 10",
+    "sets_json": "{\"weights\": [20.0, 20.0, 17.5], \"reps\": [8.0, 6.0, 10.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 16,
+    "user_id": 1,
+    "exercise": "Flat Dumbbell Press",
+    "best_string": "Flat Dumbbell Press 24.2 20, 10 11",
+    "sets_json": "{\"weights\": [24.2, 20.0, 20.0], \"reps\": [10.0, 11.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 17,
+    "user_id": 1,
+    "exercise": "Forearm Radial Deviation",
+    "best_string": "Forearm Radial Deviation 15, 12",
+    "sets_json": "{\"weights\": [15.0, 15.0, 15.0], \"reps\": [12.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 18,
+    "user_id": 1,
+    "exercise": "Forearm Roller",
+    "best_string": "Forearm Roller - [30–60s] - 6 4, 2",
+    "sets_json": "{\"weights\": [6.0, 4.0, 4.0], \"reps\": [2.0, 2.0, 2.0]}",
+    "updated_at": "2026-01-17 00:00:00"
+  },
+  {
+    "id": 19,
+    "user_id": 1,
+    "exercise": "Forearm Ulnar Deviation",
+    "best_string": "Forearm Ulnar Deviation 15 12 10, 12",
+    "sets_json": "{\"weights\": [15.0, 12.0, 10.0], \"reps\": [12.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 20,
+    "user_id": 1,
+    "exercise": "Hammer Dumbbell Curl",
+    "best_string": "Hammer Dumbbell Curl - [10–15] - 15 12.5 10, 10 12",
+    "sets_json": "{\"weights\": [15.0, 12.5, 10.0], \"reps\": [10.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-12 00:00:00"
+  },
+  {
+    "id": 21,
+    "user_id": 1,
+    "exercise": "Hammer Rope Curl",
+    "best_string": "Hammer Rope Curl 35, 12 10",
+    "sets_json": "{\"weights\": [35.0, 35.0, 35.0], \"reps\": [12.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 22,
+    "user_id": 1,
+    "exercise": "Hip Abduction",
+    "best_string": "Hip Abduction 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 23,
+    "user_id": 1,
+    "exercise": "Hip Adduction",
+    "best_string": "Hip Adduction - [12–20] - 20 15, 14",
+    "sets_json": "{\"weights\": [20.0, 15.0, 15.0], \"reps\": [14.0, 14.0, 14.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 24,
+    "user_id": 1,
+    "exercise": "Hip Thrust",
+    "best_string": "Hip Thrust 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 25,
+    "user_id": 1,
+    "exercise": "Hyper Extension",
+    "best_string": "Hyper extension 8, 11",
+    "sets_json": "{\"weights\": [8.0, 8.0, 8.0], \"reps\": [11.0, 11.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 26,
+    "user_id": 1,
+    "exercise": "Incline Barbell Press",
+    "best_string": "Incline Barbell Press - [5–8] - 25 20 17.5, 5 7 8",
+    "sets_json": "{\"weights\": [25.0, 20.0, 17.5], \"reps\": [5.0, 7.0, 8.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 27,
+    "user_id": 1,
+    "exercise": "Incline Dumbbell Press",
+    "best_string": "Incline Dumbbell Press 25 22.5 20, 7 9 10",
+    "sets_json": "{\"weights\": [25.0, 22.5, 20.0], \"reps\": [7.0, 9.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 28,
+    "user_id": 1,
+    "exercise": "Lat Dumbbell Rows",
+    "best_string": "Lat Dumbbell Rows 25 22.5 20, 10 11",
+    "sets_json": "{\"weights\": [25.0, 22.5, 20.0], \"reps\": [10.0, 11.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 29,
+    "user_id": 1,
+    "exercise": "Lat Pulldown",
+    "best_string": "Lat Pulldown 42.3 36, 10 12",
+    "sets_json": "{\"weights\": [42.3, 36.0, 36.0], \"reps\": [10.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 30,
+    "user_id": 1,
+    "exercise": "Leg Curl",
+    "best_string": "Leg Curl - [10–15] - 55, 15 14",
+    "sets_json": "{\"weights\": [55.0, 55.0, 55.0], \"reps\": [15.0, 14.0, 14.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 31,
+    "user_id": 1,
+    "exercise": "Leg Extension",
+    "best_string": "Leg Extension - [12–20] - 45 40, 11 14",
+    "sets_json": "{\"weights\": [45.0, 40.0, 40.0], \"reps\": [11.0, 14.0, 14.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 32,
+    "user_id": 1,
+    "exercise": "Leg Press",
+    "best_string": "Leg Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 33,
+    "user_id": 1,
+    "exercise": "Low Cable Fly",
+    "best_string": "Low Cable Fly 25 20, 12 16",
+    "sets_json": "{\"weights\": [25.0, 20.0, 20.0], \"reps\": [12.0, 16.0, 16.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 34,
+    "user_id": 1,
+    "exercise": "Lower Abs",
+    "best_string": "Lower Abs ,16",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [16.0, 16.0, 16.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 35,
+    "user_id": 1,
+    "exercise": "Machine Lateral Raise",
+    "best_string": "Machine Lateral Raise - [15–25] - 25 20 17.27, 16 18 22",
+    "sets_json": "{\"weights\": [25.0, 20.0, 17.27], \"reps\": [16.0, 18.0, 22.0]}",
+    "updated_at": "2026-01-17 00:00:00"
+  },
+  {
+    "id": 36,
+    "user_id": 1,
+    "exercise": "Machine Shoulder Press",
+    "best_string": "Machine Shoulder Press 22.5 20 15, 9 12 10",
+    "sets_json": "{\"weights\": [22.5, 20.0, 15.0], \"reps\": [9.0, 12.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 37,
+    "user_id": 1,
+    "exercise": "Machine Squat",
+    "best_string": "Machine Squat 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 38,
+    "user_id": 1,
+    "exercise": "Neutral-Grip Lat Pulldown",
+    "best_string": "Neutral-Grip Lat Pulldown 45 42 36, 11 12",
+    "sets_json": "{\"weights\": [45.0, 42.0, 36.0], \"reps\": [11.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 39,
+    "user_id": 1,
+    "exercise": "Neutral-Grip Pull-Ups",
+    "best_string": "Neutral-Grip Pull-Ups 65 30, 10",
+    "sets_json": "{\"weights\": [65.0, 30.0, 30.0], \"reps\": [10.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 40,
+    "user_id": 1,
+    "exercise": "Neutral-Grip Seated Row",
+    "best_string": "Neutral-Grip Seated Row - [8–12] - 56 48, 8 12",
+    "sets_json": "{\"weights\": [56.0, 48.0, 48.0], \"reps\": [8.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-12 00:00:00"
+  },
+  {
+    "id": 41,
+    "user_id": 1,
+    "exercise": "Pec Deck Fly",
+    "best_string": "Pec Deck Fly - [12–20] - 40 35, 12 16 12",
+    "sets_json": "{\"weights\": [40.0, 35.0, 35.0], \"reps\": [12.0, 16.0, 12.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 42,
+    "user_id": 1,
+    "exercise": "Preacher Curl",
+    "best_string": "Preacher Curl 30 25 20, 8 10 15",
+    "sets_json": "{\"weights\": [30.0, 25.0, 20.0], \"reps\": [8.0, 10.0, 15.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 43,
+    "user_id": 1,
+    "exercise": "Pull Ups",
+    "best_string": "Pull Ups - [6–10] - 69 57, 8 10",
+    "sets_json": "{\"weights\": [69.0, 57.0, 57.0], \"reps\": [8.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-12 00:00:00"
+  },
+  {
+    "id": 44,
+    "user_id": 1,
+    "exercise": "Rear Delt Machine Fly",
+    "best_string": "Rear Delt Machine Fly - [12–20] - 50 45 43.5, 15 15 20",
+    "sets_json": "{\"weights\": [50.0, 45.0, 43.5], \"reps\": [15.0, 15.0, 20.0]}",
+    "updated_at": "2026-01-17 00:00:00"
+  },
+  {
+    "id": 45,
+    "user_id": 1,
+    "exercise": "Reverse Barbell Curl",
+    "best_string": "Reverse Barbell Curl 7.5 5, 8 12",
+    "sets_json": "{\"weights\": [7.5, 5.0, 5.0], \"reps\": [8.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 46,
+    "user_id": 1,
+    "exercise": "Reverse Dumbbell Curl",
+    "best_string": "Reverse Dumbbell Curl 7.5,12 11",
+    "sets_json": "{\"weights\": [7.5, 7.5, 7.5], \"reps\": [12.0, 11.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 47,
+    "user_id": 1,
+    "exercise": "Romanian Deadlift",
+    "best_string": "Romanian Deadlift - [6–10] - 1, 8",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [8.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 48,
+    "user_id": 1,
+    "exercise": "Rope Face Pull",
+    "best_string": "Rope Face Pull - [12–20] - 35 30, 15",
+    "sets_json": "{\"weights\": [35.0, 30.0, 30.0], \"reps\": [15.0, 15.0, 15.0]}",
+    "updated_at": "2026-01-17 00:00:00"
+  },
+  {
+    "id": 49,
+    "user_id": 1,
+    "exercise": "Skull Crushers",
+    "best_string": "Skull Crushers 5 2.5 1, 9 8 11",
+    "sets_json": "{\"weights\": [5.0, 2.5, 1.0], \"reps\": [9.0, 8.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 50,
+    "user_id": 1,
+    "exercise": "Smith Machine Squat",
+    "best_string": "Smith Machine Squat - [6–10] - 2.5, 8",
+    "sets_json": "{\"weights\": [2.5, 2.5, 2.5], \"reps\": [8.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 51,
+    "user_id": 1,
+    "exercise": "Stationary Lunges",
+    "best_string": "Stationary Lunges 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 52,
+    "user_id": 1,
+    "exercise": "Triceps Rod Pushdown",
+    "best_string": "Triceps Rod Pushdown 45 40, 10 15 10",
+    "sets_json": "{\"weights\": [45.0, 40.0, 40.0], \"reps\": [10.0, 15.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 53,
+    "user_id": 1,
+    "exercise": "Triceps Rope Pushdown",
+    "best_string": "Triceps Rope Pushdown - [12–20] - 40 35 32.5, 12 18 16",
+    "sets_json": "{\"weights\": [40.0, 35.0, 32.5], \"reps\": [12.0, 18.0, 16.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 54,
+    "user_id": 1,
+    "exercise": "V Tucks",
+    "best_string": "V Tucks 5 2.5, 18 21",
+    "sets_json": "{\"weights\": [5.0, 2.5, 2.5], \"reps\": [18.0, 21.0, 21.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 55,
+    "user_id": 1,
+    "exercise": "Walking Dumbbell Lunges",
+    "best_string": "Walking Dumbbell Lunges 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 56,
+    "user_id": 1,
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "best_string": "Wide-Grip Chest-Supported Row 25, 12",
+    "sets_json": "{\"weights\": [25.0, 25.0, 25.0], \"reps\": [12.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 57,
+    "user_id": 1,
+    "exercise": "Wide-Grip Seated Row",
+    "best_string": "Wide-Grip Seated Row 50 36, 12 8",
+    "sets_json": "{\"weights\": [50.0, 36.0, 36.0], \"reps\": [12.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 58,
+    "user_id": 1,
+    "exercise": "Wrist Extension - Dumbbell",
+    "best_string": "Wrist Extension - Dumbbell - [12–20] - 6.25 5, 18",
+    "sets_json": "{\"weights\": [6.25, 5.0, 5.0], \"reps\": [18.0, 18.0, 18.0]}",
+    "updated_at": "2026-01-17 00:00:00"
+  },
+  {
+    "id": 59,
+    "user_id": 1,
+    "exercise": "Wrist Extension - Machine",
+    "best_string": "Wrist Extension - Machine 2 1, 12 18 12",
+    "sets_json": "{\"weights\": [2.0, 1.0, 1.0], \"reps\": [12.0, 18.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 60,
+    "user_id": 1,
+    "exercise": "Wrist Flexion - Dumbbell",
+    "best_string": "Wrist Flexion – Dumbbell 13.75 12.5 10, 16 20",
+    "sets_json": "{\"weights\": [13.75, 12.5, 10.0], \"reps\": [16.0, 20.0, 20.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 61,
+    "user_id": 1,
+    "exercise": "Wrist Flexion - Machine",
+    "best_string": "Wrist Flexion - Machine 5 5 4, 15",
+    "sets_json": "{\"weights\": [5.0, 5.0, 4.0], \"reps\": [15.0, 15.0, 15.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 62,
+    "user_id": 2,
+    "exercise": "Barbell Curl",
+    "best_string": "Barbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 63,
+    "user_id": 2,
+    "exercise": "Barbell Overhead Extension",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900257"
+  },
+  {
+    "id": 64,
+    "user_id": 2,
+    "exercise": "Barbell Overhead Press",
+    "best_string": "Barbell Overhead Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 65,
+    "user_id": 2,
+    "exercise": "Cable Lateral Raise",
+    "best_string": "Cable Lateral Raise 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 66,
+    "user_id": 2,
+    "exercise": "Calf Raises Sitting",
+    "best_string": "Calf Raises Sitting 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 67,
+    "user_id": 2,
+    "exercise": "Calf Raises Standing",
+    "best_string": "Calf Raises Standing 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 68,
+    "user_id": 2,
+    "exercise": "Crunches A",
+    "best_string": "Crunches A , 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 69,
+    "user_id": 2,
+    "exercise": "Crunches B",
+    "best_string": "Crunches B 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 70,
+    "user_id": 2,
+    "exercise": "Deadlift",
+    "best_string": "Deadlift - [3–6] - 20 15, 3 5",
+    "sets_json": "{\"weights\": [20.0, 15.0, 15.0], \"reps\": [3.0, 5.0, 5.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 71,
+    "user_id": 2,
+    "exercise": "Dips",
+    "best_string": "Dips 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 72,
+    "user_id": 2,
+    "exercise": "Dumbbell Curl",
+    "best_string": "Dumbbell Curl - [8–12] - 7.5 5, 9 12",
+    "sets_json": "{\"weights\": [7.5, 5.0, 5.0], \"reps\": [9.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 73,
+    "user_id": 2,
+    "exercise": "Dumbbell Overhead Extension",
+    "best_string": "Dumbbell Overhead Extension 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 74,
+    "user_id": 2,
+    "exercise": "Dumbbell Overhead Press",
+    "best_string": "Dumbbell Overhead Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 75,
+    "user_id": 2,
+    "exercise": "Farmer's Walk",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900263"
+  },
+  {
+    "id": 76,
+    "user_id": 2,
+    "exercise": "Flat Barbell Press",
+    "best_string": "Flat Barbell Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 77,
+    "user_id": 2,
+    "exercise": "Flat Dumbbell Press",
+    "best_string": "Flat Dumbbell Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 78,
+    "user_id": 2,
+    "exercise": "Forearm Radial Deviation",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900264"
+  },
+  {
+    "id": 79,
+    "user_id": 2,
+    "exercise": "Forearm Roller",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900265"
+  },
+  {
+    "id": 80,
+    "user_id": 2,
+    "exercise": "Forearm Ulnar Deviation",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900265"
+  },
+  {
+    "id": 81,
+    "user_id": 2,
+    "exercise": "Hammer Dumbbell Curl",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900266"
+  },
+  {
+    "id": 82,
+    "user_id": 2,
+    "exercise": "Hammer Rope Curl",
+    "best_string": "Hammer Rope Curl 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 83,
+    "user_id": 2,
+    "exercise": "Hip Abduction",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900267"
+  },
+  {
+    "id": 84,
+    "user_id": 2,
+    "exercise": "Hip Adduction",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900267"
+  },
+  {
+    "id": 85,
+    "user_id": 2,
+    "exercise": "Hip Thrust",
+    "best_string": "Hip Thrust 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 86,
+    "user_id": 2,
+    "exercise": "Hyper Extension",
+    "best_string": "Hyper Extension 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 87,
+    "user_id": 2,
+    "exercise": "Incline Barbell Press",
+    "best_string": "Incline Barbell Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 88,
+    "user_id": 2,
+    "exercise": "Incline Dumbbell Press",
+    "best_string": "Incline Dumbbell Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 89,
+    "user_id": 2,
+    "exercise": "Lat Dumbbell Rows",
+    "best_string": "Lat Dumbbell Rows 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 90,
+    "user_id": 2,
+    "exercise": "Lat Pulldown",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900269"
+  },
+  {
+    "id": 91,
+    "user_id": 2,
+    "exercise": "Leg Curl",
+    "best_string": "Leg Curl 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 92,
+    "user_id": 2,
+    "exercise": "Leg Extension",
+    "best_string": "Leg Extension 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 93,
+    "user_id": 2,
+    "exercise": "Leg Press",
+    "best_string": "Leg Press 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 94,
+    "user_id": 2,
+    "exercise": "Low Cable Fly",
+    "best_string": "Low Cable Fly 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 95,
+    "user_id": 2,
+    "exercise": "Lower Abs",
+    "best_string": "Lower Abs 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 96,
+    "user_id": 2,
+    "exercise": "Machine Lateral Raise",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900272"
+  },
+  {
+    "id": 97,
+    "user_id": 2,
+    "exercise": "Machine Shoulder Press",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900273"
+  },
+  {
+    "id": 98,
+    "user_id": 2,
+    "exercise": "Machine Squat",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900273"
+  },
+  {
+    "id": 99,
+    "user_id": 2,
+    "exercise": "Neutral-Grip Lat Pulldown",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900273"
+  },
+  {
+    "id": 100,
+    "user_id": 2,
+    "exercise": "Neutral-Grip Pull-Ups",
+    "best_string": "Neutral-Grip Pull-Ups 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 101,
+    "user_id": 2,
+    "exercise": "Neutral-Grip Seated Row",
+    "best_string": "Neutral-Grip Seated Row - [8–12] - 40 35, 8 10",
+    "sets_json": "{\"weights\": [40.0, 35.0, 35.0], \"reps\": [8.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 102,
+    "user_id": 2,
+    "exercise": "Pec Deck Fly",
+    "best_string": "Pec Deck Fly 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 103,
+    "user_id": 2,
+    "exercise": "Preacher Curl",
+    "best_string": "Preacher Curl - [8–12] - 30 24, 8 12",
+    "sets_json": "{\"weights\": [30.0, 24.0, 24.0], \"reps\": [8.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 104,
+    "user_id": 2,
+    "exercise": "Pull Ups",
+    "best_string": "Pull Ups - [6–10] - 61, 9",
+    "sets_json": "{\"weights\": [61.0, 61.0, 61.0], \"reps\": [9.0, 9.0, 9.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 105,
+    "user_id": 2,
+    "exercise": "Rear Delt Machine Fly",
+    "best_string": "Rear Delt Machine Fly 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 106,
+    "user_id": 2,
+    "exercise": "Reverse Barbell Curl",
+    "best_string": "Reverse Barbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 107,
+    "user_id": 2,
+    "exercise": "Reverse Dumbbell Curl",
+    "best_string": "Reverse Dumbbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 108,
+    "user_id": 2,
+    "exercise": "Romanian Deadlift",
+    "best_string": "Romanian Deadlift 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 109,
+    "user_id": 2,
+    "exercise": "Rope Face Pull",
+    "best_string": "Rope Face Pull 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 110,
+    "user_id": 2,
+    "exercise": "Skull Crushers",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900285"
+  },
+  {
+    "id": 111,
+    "user_id": 2,
+    "exercise": "Smith Machine Squat",
+    "best_string": "Smith Machine Squat 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 112,
+    "user_id": 2,
+    "exercise": "Stationary Lunges",
+    "best_string": "Stationary Lunges 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 113,
+    "user_id": 2,
+    "exercise": "Triceps Rod Pushdown",
+    "best_string": "Triceps Rod Pushdown 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 114,
+    "user_id": 2,
+    "exercise": "Triceps Rope Pushdown",
+    "best_string": "Triceps Rope Pushdown 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 115,
+    "user_id": 2,
+    "exercise": "V Tucks",
+    "best_string": "V Tucks - [12–20] - 2.5, 18",
+    "sets_json": "{\"weights\": [2.5, 2.5, 2.5], \"reps\": [18.0, 18.0, 18.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 116,
+    "user_id": 2,
+    "exercise": "Walking Dumbbell Lunges",
+    "best_string": "Walking Dumbbell Lunges 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 117,
+    "user_id": 2,
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "best_string": "Wide-Grip Chest-Supported Row - [10–15] - 25 20, 10 12",
+    "sets_json": "{\"weights\": [25.0, 20.0, 20.0], \"reps\": [10.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  },
+  {
+    "id": 118,
+    "user_id": 2,
+    "exercise": "Wide-Grip Seated Row",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900289"
+  },
+  {
+    "id": 119,
+    "user_id": 2,
+    "exercise": "Wrist Extension - Dumbbell",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.90029"
+  },
+  {
+    "id": 120,
+    "user_id": 2,
+    "exercise": "Wrist Extension - Machine",
+    "best_string": "Wrist Extension - Machine 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 121,
+    "user_id": 2,
+    "exercise": "Wrist Flexion - Dumbbell",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-11 09:40:58.900291"
+  },
+  {
+    "id": 122,
+    "user_id": 2,
+    "exercise": "Wrist Flexion - Machine",
+    "best_string": "Wrist Flexion - Machine 1, 1",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [1.0, 1.0, 1.0]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 123,
+    "user_id": 1,
+    "exercise": "Hammer Grip Rows",
+    "best_string": "Hammer Grip Rows 39 32, 9 12",
+    "sets_json": "{\"weights\": [39, 32, 32], \"reps\": [9, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 124,
+    "user_id": 1,
+    "exercise": "Triceps Overhead Extension",
+    "best_string": "Triceps overhead extension 20 17.5 15, 8 9 12",
+    "sets_json": "{\"weights\": [20, 17.5, 15], \"reps\": [8, 9, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 125,
+    "user_id": 1,
+    "exercise": "Farmer’S Walk",
+    "best_string": "Farmer’s Walk 20",
+    "sets_json": "{\"weights\": [20, 20, 20], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 126,
+    "user_id": 2,
+    "exercise": "Barbell Curl -",
+    "best_string": "Barbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 127,
+    "user_id": 2,
+    "exercise": "Barbell Overhead Extension -",
+    "best_string": "Barbell Overhead Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 128,
+    "user_id": 2,
+    "exercise": "Barbell Overhead Press -",
+    "best_string": "Barbell Overhead Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 129,
+    "user_id": 2,
+    "exercise": "Cable Lateral Raise -",
+    "best_string": "Cable Lateral Raise - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 130,
+    "user_id": 2,
+    "exercise": "Calf Raises Sitting -",
+    "best_string": "Calf Raises Sitting - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 131,
+    "user_id": 2,
+    "exercise": "Calf Raises Standing -",
+    "best_string": "Calf Raises Standing - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 132,
+    "user_id": 2,
+    "exercise": "Crunches A -",
+    "best_string": "Crunches A - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 133,
+    "user_id": 2,
+    "exercise": "Crunches B -",
+    "best_string": "Crunches B - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 134,
+    "user_id": 2,
+    "exercise": "Deadlift -",
+    "best_string": "Deadlift - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 135,
+    "user_id": 2,
+    "exercise": "Dips -",
+    "best_string": "Dips - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 136,
+    "user_id": 2,
+    "exercise": "Dumbbell Curl -",
+    "best_string": "Dumbbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 137,
+    "user_id": 2,
+    "exercise": "Dumbbell Overhead Extension -",
+    "best_string": "Dumbbell Overhead Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 138,
+    "user_id": 2,
+    "exercise": "Dumbbell Overhead Press -",
+    "best_string": "Dumbbell Overhead Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 139,
+    "user_id": 2,
+    "exercise": "Farmer'S Walk -",
+    "best_string": "Farmer's Walk - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 140,
+    "user_id": 2,
+    "exercise": "Flat Barbell Press -",
+    "best_string": "Flat Barbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 141,
+    "user_id": 2,
+    "exercise": "Flat Dumbbell Press -",
+    "best_string": "Flat Dumbbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 142,
+    "user_id": 2,
+    "exercise": "Forearm Radial Deviation -",
+    "best_string": "Forearm Radial Deviation - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 143,
+    "user_id": 2,
+    "exercise": "Forearm Roller -",
+    "best_string": "Forearm Roller - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 144,
+    "user_id": 2,
+    "exercise": "Forearm Ulnar Deviation -",
+    "best_string": "Forearm Ulnar Deviation - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 145,
+    "user_id": 2,
+    "exercise": "Hammer Dumbbell Curl -",
+    "best_string": "Hammer Dumbbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 146,
+    "user_id": 2,
+    "exercise": "Hammer Rope Curl -",
+    "best_string": "Hammer Rope Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 147,
+    "user_id": 2,
+    "exercise": "Hip Abduction -",
+    "best_string": "Hip Abduction - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 148,
+    "user_id": 2,
+    "exercise": "Hip Adduction -",
+    "best_string": "Hip Adduction - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 149,
+    "user_id": 2,
+    "exercise": "Hip Thrust -",
+    "best_string": "Hip Thrust - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 150,
+    "user_id": 2,
+    "exercise": "Hyper Extension -",
+    "best_string": "Hyper Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 151,
+    "user_id": 2,
+    "exercise": "Incline Barbell Press -",
+    "best_string": "Incline Barbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 152,
+    "user_id": 2,
+    "exercise": "Incline Dumbbell Press -",
+    "best_string": "Incline Dumbbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 153,
+    "user_id": 2,
+    "exercise": "Lat Dumbbell Rows -",
+    "best_string": "Lat Dumbbell Rows - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 154,
+    "user_id": 2,
+    "exercise": "Lat Pulldown -",
+    "best_string": "Lat Pulldown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 155,
+    "user_id": 2,
+    "exercise": "Leg Curl -",
+    "best_string": "Leg Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 156,
+    "user_id": 2,
+    "exercise": "Leg Extension -",
+    "best_string": "Leg Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 157,
+    "user_id": 2,
+    "exercise": "Leg Press -",
+    "best_string": "Leg Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 158,
+    "user_id": 2,
+    "exercise": "Low Cable Fly -",
+    "best_string": "Low Cable Fly - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 159,
+    "user_id": 2,
+    "exercise": "Lower Abs -",
+    "best_string": "Lower Abs - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 160,
+    "user_id": 2,
+    "exercise": "Machine Lateral Raise -",
+    "best_string": "Machine Lateral Raise - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 161,
+    "user_id": 2,
+    "exercise": "Machine Shoulder Press -",
+    "best_string": "Machine Shoulder Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 162,
+    "user_id": 2,
+    "exercise": "Machine Squat -",
+    "best_string": "Machine Squat - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 163,
+    "user_id": 2,
+    "exercise": "Neutral-Grip Lat Pulldown -",
+    "best_string": "Neutral-Grip Lat Pulldown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 164,
+    "user_id": 2,
+    "exercise": "Neutral-Grip Pull-Ups -",
+    "best_string": "Neutral-Grip Pull-Ups - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 165,
+    "user_id": 2,
+    "exercise": "Neutral-Grip Seated Row -",
+    "best_string": "Neutral-Grip Seated Row - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 166,
+    "user_id": 2,
+    "exercise": "Pec Deck Fly -",
+    "best_string": "Pec Deck Fly - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 167,
+    "user_id": 2,
+    "exercise": "Preacher Curl -",
+    "best_string": "Preacher Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 168,
+    "user_id": 2,
+    "exercise": "Pull Ups -",
+    "best_string": "Pull Ups - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 169,
+    "user_id": 2,
+    "exercise": "Rear Delt Machine Fly -",
+    "best_string": "Rear Delt Machine Fly - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 170,
+    "user_id": 2,
+    "exercise": "Reverse Barbell Curl -",
+    "best_string": "Reverse Barbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 171,
+    "user_id": 2,
+    "exercise": "Reverse Dumbbell Curl -",
+    "best_string": "Reverse Dumbbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 172,
+    "user_id": 2,
+    "exercise": "Romanian Deadlift -",
+    "best_string": "Romanian Deadlift - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 173,
+    "user_id": 2,
+    "exercise": "Rope Face Pull -",
+    "best_string": "Rope Face Pull - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 174,
+    "user_id": 2,
+    "exercise": "Skull Crushers -",
+    "best_string": "Skull Crushers - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 175,
+    "user_id": 2,
+    "exercise": "Smith Machine Squat -",
+    "best_string": "Smith Machine Squat - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 176,
+    "user_id": 2,
+    "exercise": "Stationary Lunges -",
+    "best_string": "Stationary Lunges - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 177,
+    "user_id": 2,
+    "exercise": "Triceps Rod Pushdown -",
+    "best_string": "Triceps Rod Pushdown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 178,
+    "user_id": 2,
+    "exercise": "Triceps Rope Pushdown -",
+    "best_string": "Triceps Rope Pushdown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 179,
+    "user_id": 2,
+    "exercise": "V Tucks -",
+    "best_string": "V Tucks - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 180,
+    "user_id": 2,
+    "exercise": "Walking Dumbbell Lunges -",
+    "best_string": "Walking Dumbbell Lunges - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 181,
+    "user_id": 2,
+    "exercise": "Wide-Grip Chest-Supported Row -",
+    "best_string": "Wide-Grip Chest-Supported Row - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 182,
+    "user_id": 2,
+    "exercise": "Wide-Grip Seated Row -",
+    "best_string": "Wide-Grip Seated Row - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 183,
+    "user_id": 2,
+    "exercise": "Wrist Extension - Dumbbell -",
+    "best_string": "Wrist Extension - Dumbbell - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 184,
+    "user_id": 2,
+    "exercise": "Wrist Extension - Machine -",
+    "best_string": "Wrist Extension - Machine - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 185,
+    "user_id": 2,
+    "exercise": "Wrist Flexion - Dumbbell -",
+    "best_string": "Wrist Flexion - Dumbbell - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 186,
+    "user_id": 2,
+    "exercise": "Wrist Flexion - Machine -",
+    "best_string": "Wrist Flexion - Machine - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "id": 187,
+    "user_id": 2,
+    "exercise": "Farmer'S Walk",
+    "best_string": "Farmer's Walk 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 188,
+    "user_id": 2,
+    "exercise": "Lat Dumbbell Row",
+    "best_string": "Lat Dumbbell Row 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 189,
+    "user_id": 2,
+    "exercise": "Hyperextension",
+    "best_string": "Hyperextension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 190,
+    "user_id": 2,
+    "exercise": "Pull-Ups",
+    "best_string": "Pull-Ups 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 191,
+    "user_id": 2,
+    "exercise": "Machine Preacher Curl",
+    "best_string": "Machine Preacher Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 192,
+    "user_id": 2,
+    "exercise": "Dumbbell Shoulder Press",
+    "best_string": "Dumbbell Shoulder Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 193,
+    "user_id": 2,
+    "exercise": "Wrist Extension",
+    "best_string": "Wrist Extension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 194,
+    "user_id": 2,
+    "exercise": "Barbell Shoulder Press",
+    "best_string": "Barbell Shoulder Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 195,
+    "user_id": 2,
+    "exercise": "Wrist Flexion",
+    "best_string": "Wrist Flexion 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 196,
+    "user_id": 2,
+    "exercise": "Standing Calf Raises",
+    "best_string": "Standing Calf Raises 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 197,
+    "user_id": 2,
+    "exercise": "Barbell Squat",
+    "best_string": "Barbell Squat 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 198,
+    "user_id": 2,
+    "exercise": "Stationary Dumbbell Lunges",
+    "best_string": "Stationary Dumbbell Lunges 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 199,
+    "user_id": 2,
+    "exercise": "Seated Calf Raises",
+    "best_string": "Seated Calf Raises 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "id": 200,
+    "user_id": 2,
+    "exercise": "Peck Deck Fly",
+    "best_string": "Peck Deck Fly 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 201,
+    "user_id": 2,
+    "exercise": "Wide-Grip Row",
+    "best_string": "Wide-Grip Row 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 202,
+    "user_id": 1,
+    "exercise": "Crunches A ,",
+    "best_string": "Crunches A , 15",
+    "sets_json": "{\"weights\": [15.0, 15.0, 15.0], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 203,
+    "user_id": 1,
+    "exercise": "Hammer Lat Pull Down",
+    "best_string": "Hammer Lat Pull Down 36, 10",
+    "sets_json": "{\"weights\": [36.0, 36.0, 36.0], \"reps\": [10.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 204,
+    "user_id": 1,
+    "exercise": "Hammer Pull Ups",
+    "best_string": "Hammer Pull ups 65 30, 9 10",
+    "sets_json": "{\"weights\": [65.0, 30.0, 30.0], \"reps\": [9.0, 10.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 205,
+    "user_id": 1,
+    "exercise": "Lateral Raises Cable",
+    "best_string": "Lateral Raises Cable 10 7.5 7, 12 16 15",
+    "sets_json": "{\"weights\": [10.0, 7.5, 7.0], \"reps\": [12.0, 16.0, 15.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 206,
+    "user_id": 1,
+    "exercise": "Lateral Raises Machine",
+    "best_string": "Lateral Raises Machine 25 20, 9",
+    "sets_json": "{\"weights\": [25.0, 20.0, 20.0], \"reps\": [9.0, 9.0, 9.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 207,
+    "user_id": 1,
+    "exercise": "Lower Chest - Cable",
+    "best_string": "Lower chest - cable 20, 11",
+    "sets_json": "{\"weights\": [20.0, 20.0, 20.0], \"reps\": [11.0, 11.0, 11.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 208,
+    "user_id": 1,
+    "exercise": "Middle Chest - Barbell",
+    "best_string": "Middle chest - barbell 20 12 10, 6 8",
+    "sets_json": "{\"weights\": [20.0, 12.0, 10.0], \"reps\": [6.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 209,
+    "user_id": 1,
+    "exercise": "Middle Chest - Dumbbell",
+    "best_string": "Middle Chest - Dumbbell 21.8 17, 8",
+    "sets_json": "{\"weights\": [21.8, 17.0, 17.0], \"reps\": [8.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 210,
+    "user_id": 1,
+    "exercise": "Romanian Dead Lift",
+    "best_string": "Romanian Dead Lift 10, 5",
+    "sets_json": "{\"weights\": [10.0, 10.0, 10.0], \"reps\": [5.0, 5.0, 5.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 211,
+    "user_id": 1,
+    "exercise": "Rope Face Pulls",
+    "best_string": "Rope Face Pulls 35 30 25, 10 11 12",
+    "sets_json": "{\"weights\": [35.0, 30.0, 25.0], \"reps\": [10.0, 11.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 212,
+    "user_id": 1,
+    "exercise": "Shoulder Press - Barbell",
+    "best_string": "Shoulder press - barbell 10, 8",
+    "sets_json": "{\"weights\": [10.0, 10.0, 10.0], \"reps\": [8.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 213,
+    "user_id": 1,
+    "exercise": "Shoulder Press - Dumbbell",
+    "best_string": "Shoulder Press - Dumbbell 10 12, 11 9",
+    "sets_json": "{\"weights\": [10.0, 12.0, 12.0], \"reps\": [11.0, 9.0, 9.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 214,
+    "user_id": 1,
+    "exercise": "Shoulder Press - Machine",
+    "best_string": "Shoulder Press - Machine 22.5 20 15, 9 12 10",
+    "sets_json": "{\"weights\": [22.5, 20.0, 15.0], \"reps\": [9.0, 12.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 215,
+    "user_id": 1,
+    "exercise": "Shoulder Rear Machine",
+    "best_string": "Shoulder Rear Machine 40 35, 11 12 10",
+    "sets_json": "{\"weights\": [40.0, 35.0, 35.0], \"reps\": [11.0, 12.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 216,
+    "user_id": 1,
+    "exercise": "Squats Smith Machine",
+    "best_string": "Squats Smith Machine 5, 8",
+    "sets_json": "{\"weights\": [5.0, 5.0, 5.0], \"reps\": [8.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 217,
+    "user_id": 1,
+    "exercise": "Superman",
+    "best_string": "Superman 1, 5",
+    "sets_json": "{\"weights\": [1.0, 1.0, 1.0], \"reps\": [5.0, 5.0, 5.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 218,
+    "user_id": 1,
+    "exercise": "Triceps Rod",
+    "best_string": "Triceps rod 35, 12",
+    "sets_json": "{\"weights\": [35.0, 35.0, 35.0], \"reps\": [12.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 219,
+    "user_id": 1,
+    "exercise": "Triceps Rope",
+    "best_string": "Triceps Rope 36 30 28, 9 13 12",
+    "sets_json": "{\"weights\": [36.0, 30.0, 28.0], \"reps\": [9.0, 13.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 220,
+    "user_id": 1,
+    "exercise": "Upper Chest - Barbell",
+    "best_string": "Upper Chest - Barbell 20 17.5 15, 8 9 10",
+    "sets_json": "{\"weights\": [20.0, 17.5, 15.0], \"reps\": [8.0, 9.0, 10.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 221,
+    "user_id": 1,
+    "exercise": "Upper Chest - Dumbbell",
+    "best_string": "Upper chest - dumbbell 20 20 17, 9 8 9",
+    "sets_json": "{\"weights\": [20.0, 20.0, 17.0], \"reps\": [9.0, 8.0, 9.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 222,
+    "user_id": 1,
+    "exercise": "Weighted Lunges Walking",
+    "best_string": "Weighted Lunges Walking 5, 8",
+    "sets_json": "{\"weights\": [5.0, 5.0, 5.0], \"reps\": [8.0, 8.0, 8.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 223,
+    "user_id": 1,
+    "exercise": "Wide Grip Rows",
+    "best_string": "Wide Grip Rows 36 32, 12",
+    "sets_json": "{\"weights\": [36.0, 32.0, 32.0], \"reps\": [12.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "id": 224,
+    "user_id": 1,
+    "exercise": "Standing Dumbbell Hammer Curl",
+    "best_string": "Standing Dumbbell Hammer Curl - [6-10] - 15 12.5 10, 10 12",
+    "sets_json": "{\"weights\": [15.0, 12.5, 10.0], \"reps\": [10.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-12 00:00:00"
+  },
+  {
+    "id": 225,
+    "user_id": 1,
+    "exercise": "Seated Dumbbell Hammer Curl",
+    "best_string": "Seated Dumbbell Hammer Curl - [6-10] - 15 12.5 10, 10 12",
+    "sets_json": "{\"weights\": [15.0, 12.5, 10.0], \"reps\": [10.0, 12.0, 12.0]}",
+    "updated_at": "2026-01-12 00:00:00"
+  },
+  {
+    "id": 226,
+    "user_id": 1,
+    "exercise": "Wide-Grip T-Bar Row",
+    "best_string": "Wide-Grip T-Bar Row - [8–12] - 20 20 15, 9 8 10",
+    "sets_json": "{\"weights\": [20.0, 20.0, 15.0], \"reps\": [9.0, 8.0, 10.0]}",
+    "updated_at": "2026-01-13 00:00:00"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/best_lifts.json
+==============================
+
+[
+  {
+    "exercise": "Barbell Curl",
+    "best_string": "Barbell Curl 12.5 10 9, 9 9 10",
+    "sets_json": "{\"weights\": [12.5, 10, 9], \"reps\": [9, 9, 10]}",
+    "updated_at": "2026-01-08 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Extension",
+    "best_string": "Barbell Overhead Extension 5 2.5 1, 9 8 11",
+    "sets_json": "{\"weights\": [5, 2.5, 1], \"reps\": [9, 8, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Press",
+    "best_string": "Barbell Overhead Press 15 12.5, 7 10 8",
+    "sets_json": "{\"weights\": [15, 12.5, 12.5], \"reps\": [7, 10, 8]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Cable Lateral Raise",
+    "best_string": "Cable Lateral Raise 12 8.8, 14 15",
+    "sets_json": "{\"weights\": [12, 8.8, 8.8], \"reps\": [14, 15, 15]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Sitting",
+    "best_string": "Calf Raises Sitting",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Standing",
+    "best_string": "Calf Raises Standing - [12–20] - 2.5, 14 15",
+    "sets_json": "{\"weights\": [2.5, 2.5, 2.5], \"reps\": [14, 15, 15]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Crunches A",
+    "best_string": "Crunches A , 15",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [15, 15, 15]}",
+    "updated_at": "2025-12-31 00:00:00"
+  },
+  {
+    "exercise": "Crunches B",
+    "best_string": "Crunches B 10, 11",
+    "sets_json": "{\"weights\": [10, 10, 10], \"reps\": [11, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Deadlift",
+    "best_string": "Deadlift 30, 5",
+    "sets_json": "{\"weights\": [30, 30, 30], \"reps\": [5, 5, 5]}",
+    "updated_at": "2025-12-26 00:00:00"
+  },
+  {
+    "exercise": "Dead Lift",
+    "best_string": "Dead Lift 27.5 25, 5",
+    "sets_json": "{\"weights\": [27.5, 25, 25], \"reps\": [5, 5, 5]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Dips",
+    "best_string": "Dips 30 25, 8",
+    "sets_json": "{\"weights\": [30, 25, 25], \"reps\": [8, 8, 8]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Curl",
+    "best_string": "Dumbbell Curl 10 7.5, 8 10 9",
+    "sets_json": "{\"weights\": [10, 7.5, 7.5], \"reps\": [8, 10, 9]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Extension",
+    "best_string": "Dumbbell Overhead Extension 22.5 20 17.5, 8 10 12",
+    "sets_json": "{\"weights\": [22.5, 20, 17.5], \"reps\": [8, 10, 12]}",
+    "updated_at": "2026-01-03 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Press",
+    "best_string": "Dumbbell Overhead Press 15, 11 10",
+    "sets_json": "{\"weights\": [15, 15, 15], \"reps\": [11, 10, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Farmer'S Walk",
+    "best_string": "Farmer's Walk 20",
+    "sets_json": "{\"weights\": [20, 20, 20], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Farmer’S Walk",
+    "best_string": "Farmer’s Walk 20",
+    "sets_json": "{\"weights\": [20, 20, 20], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Farmer Walk",
+    "best_string": "Farmer Walk 17 15",
+    "sets_json": "{\"weights\": [17, 15, 15], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Flat Barbell Press",
+    "best_string": "Flat Barbell Press 20 17.5, 8 10",
+    "sets_json": "{\"weights\": [20, 17.5, 17.5], \"reps\": [8, 10, 10]}",
+    "updated_at": "2026-01-03 00:00:00"
+  },
+  {
+    "exercise": "Flat Dumbbell Press",
+    "best_string": "Flat Dumbbell Press 24.2 20, 10 11",
+    "sets_json": "{\"weights\": [24.2, 20, 20], \"reps\": [10, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Forearm Radial Deviation",
+    "best_string": "Forearm Radial Deviation 15, 12",
+    "sets_json": "{\"weights\": [15, 15, 15], \"reps\": [12, 12, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Forearm Roller",
+    "best_string": "Forearm Roller 5 3.5, 2",
+    "sets_json": "{\"weights\": [5, 3.5, 3.5], \"reps\": [2, 2, 2]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Forearm Ulnar Deviation",
+    "best_string": "Forearm Ulnar Deviation 15 12 10, 12",
+    "sets_json": "{\"weights\": [15, 12, 10], \"reps\": [12, 12, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Hammer Dumbbell Curl",
+    "best_string": "Hammer Dumbbell Curl 12 10, 9 12 9",
+    "sets_json": "{\"weights\": [12, 10, 10], \"reps\": [9, 12, 9]}",
+    "updated_at": "2025-12-26 00:00:00"
+  },
+  {
+    "exercise": "Hammer Grip Rows",
+    "best_string": "Hammer Grip Rows 39 32, 9 12",
+    "sets_json": "{\"weights\": [39, 32, 32], \"reps\": [9, 12, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Hammer Lat Pull Down",
+    "best_string": "Hammer Lat Pull Down 36, 10",
+    "sets_json": "{\"weights\": [36, 36, 36], \"reps\": [10, 10, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Hammer Pull Ups",
+    "best_string": "Hammer Pull ups 65 30, 9 10",
+    "sets_json": "{\"weights\": [65, 30, 30], \"reps\": [9, 10, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Hammer Rope Curl",
+    "best_string": "Hammer Rope Curl 35, 12 10",
+    "sets_json": "{\"weights\": [35, 35, 35], \"reps\": [12, 10, 10]}",
+    "updated_at": "2025-12-30 00:00:00"
+  },
+  {
+    "exercise": "Hip Abduction",
+    "best_string": "Hip Abduction",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Hip Adduction",
+    "best_string": "Hip Adduction - [12–20] - 20 15, 14",
+    "sets_json": "{\"weights\": [20, 15, 15], \"reps\": [14, 14, 14]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Hip Thrust",
+    "best_string": "Hip Thrust",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Hyper Extension",
+    "best_string": "Hyper extension 8, 11",
+    "sets_json": "{\"weights\": [8, 8, 8], \"reps\": [11, 11, 11]}",
+    "updated_at": "2026-01-04 00:00:00"
+  },
+  {
+    "exercise": "Incline Barbell Press",
+    "best_string": "Incline Barbell Press 21.8 19.4 17.5, 8 11 10",
+    "sets_json": "{\"weights\": [21.8, 19.4, 17.5], \"reps\": [8, 11, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Incline Dumbbell Press",
+    "best_string": "Incline Dumbbell Press 25 22.5 20, 7 9 10",
+    "sets_json": "{\"weights\": [25, 22.5, 20], \"reps\": [7, 9, 10]}",
+    "updated_at": "2026-01-03 00:00:00"
+  },
+  {
+    "exercise": "Lat Dumbbell Rows",
+    "best_string": "Lat Dumbbell Rows 25 22.5 20, 10 11",
+    "sets_json": "{\"weights\": [25, 22.5, 20], \"reps\": [10, 11, 11]}",
+    "updated_at": "2026-01-08 00:00:00"
+  },
+  {
+    "exercise": "Lateral Raises Cable",
+    "best_string": "Lateral Raises Cable 10 7.5 7, 12 16 15",
+    "sets_json": "{\"weights\": [10, 7.5, 7], \"reps\": [12, 16, 15]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Lateral Raises Machine",
+    "best_string": "Lateral Raises Machine 25 20, 9",
+    "sets_json": "{\"weights\": [25, 20, 20], \"reps\": [9, 9, 9]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Lat Pulldown",
+    "best_string": "Lat Pulldown 42.3 36, 10 12",
+    "sets_json": "{\"weights\": [42.3, 36, 36], \"reps\": [10, 12, 12]}",
+    "updated_at": "2025-12-26 00:00:00"
+  },
+  {
+    "exercise": "Lat Pull Down",
+    "best_string": "Lat Pull Down",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Leg Curl",
+    "best_string": "Leg Curl - [10–15] - 55, 15 14",
+    "sets_json": "{\"weights\": [55, 55, 55], \"reps\": [15, 14, 14]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Leg Extension",
+    "best_string": "Leg Extension - [12–20] - 45 40, 11 14",
+    "sets_json": "{\"weights\": [45, 40, 40], \"reps\": [11, 14, 14]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Leg Press",
+    "best_string": "Leg Press",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Low Cable Fly",
+    "best_string": "Low Cable Fly 25 20, 12 16",
+    "sets_json": "{\"weights\": [25, 20, 20], \"reps\": [12, 16, 16]}",
+    "updated_at": "2026-01-03 00:00:00"
+  },
+  {
+    "exercise": "Lower Abs",
+    "best_string": "Lower Abs ,16",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [16, 16, 16]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Lower Chest - Cable",
+    "best_string": "Lower chest - cable 20, 11",
+    "sets_json": "{\"weights\": [20, 20, 20], \"reps\": [11, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Machine Lateral Raise",
+    "best_string": "Machine Lateral Raise 25 20, 11 11 10",
+    "sets_json": "{\"weights\": [25, 20, 20], \"reps\": [11, 11, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Machine Shoulder Press",
+    "best_string": "Machine Shoulder Press 22.5 20 15, 9 12 10",
+    "sets_json": "{\"weights\": [22.5, 20, 15], \"reps\": [9, 12, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Machine Squat",
+    "best_string": "Machine Squat",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Middle Chest - Barbell",
+    "best_string": "Middle chest - barbell 20 12 10, 6 8",
+    "sets_json": "{\"weights\": [20, 12, 10], \"reps\": [6, 8, 8]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Middle Chest - Dumbbell",
+    "best_string": "Middle Chest - Dumbbell 21.8 17, 8",
+    "sets_json": "{\"weights\": [21.8, 17, 17], \"reps\": [8, 8, 8]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Lat Pulldown",
+    "best_string": "Neutral-Grip Lat Pulldown 45 42 36, 11 12",
+    "sets_json": "{\"weights\": [45, 42, 36], \"reps\": [11, 12, 12]}",
+    "updated_at": "2025-12-30 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Pull-Ups",
+    "best_string": "Neutral-Grip Pull-Ups 65 30, 10",
+    "sets_json": "{\"weights\": [65, 30, 30], \"reps\": [10, 10, 10]}",
+    "updated_at": "2026-01-04 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Seated Row",
+    "best_string": "Neutral-Grip Seated Row 45 39, 9 11",
+    "sets_json": "{\"weights\": [45, 39, 39], \"reps\": [9, 11, 11]}",
+    "updated_at": "2025-12-26 00:00:00"
+  },
+  {
+    "exercise": "Peck Dec Fly",
+    "best_string": "Peck Dec Fly 36 30, 10 11",
+    "sets_json": "{\"weights\": [36, 30, 30], \"reps\": [10, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Peck Deck Fly",
+    "best_string": "Peck Deck Fly 40 36, 8 11 10",
+    "sets_json": "{\"weights\": [40, 36, 36], \"reps\": [8, 11, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Preacher Curl",
+    "best_string": "Preacher Curl 30 25 20, 8 10 15",
+    "sets_json": "{\"weights\": [30, 25, 20], \"reps\": [8, 10, 15]}",
+    "updated_at": "2026-01-08 00:00:00"
+  },
+  {
+    "exercise": "Pull Ups",
+    "best_string": "Pull Ups 65 30, 8 9",
+    "sets_json": "{\"weights\": [65, 30, 30], \"reps\": [8, 9, 9]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Rear Delt Machine Fly",
+    "best_string": "Rear Delt Machine Fly 45 43 40, 15",
+    "sets_json": "{\"weights\": [45, 43, 40], \"reps\": [15, 15, 15]}",
+    "updated_at": "2025-12-31 00:00:00"
+  },
+  {
+    "exercise": "Reverse Barbell Curl",
+    "best_string": "Reverse Barbell Curl 7.5 5, 8 12",
+    "sets_json": "{\"weights\": [7.5, 5, 5], \"reps\": [8, 12, 12]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Reverse Curls",
+    "best_string": "Reverse Curls 5 4, 9",
+    "sets_json": "{\"weights\": [5, 4, 4], \"reps\": [9, 9, 9]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Reverse Curls - Dumbbell",
+    "best_string": "Reverse Curls - Dumbbell 5 2.5, 9",
+    "sets_json": "{\"weights\": [5, 2.5, 2.5], \"reps\": [9, 9, 9]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Reverse Dumbbell Curl",
+    "best_string": "Reverse Dumbbell Curl 7.5,12 11",
+    "sets_json": "{\"weights\": [7.5, 7.5, 7.5], \"reps\": [12, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Romanian Deadlift",
+    "best_string": "Romanian Deadlift - [6–10] - 1, 8",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [8, 8, 8]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Romanian Dead Lift",
+    "best_string": "Romanian Dead Lift 10, 5",
+    "sets_json": "{\"weights\": [10, 10, 10], \"reps\": [5, 5, 5]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Rope Face Pull",
+    "best_string": "Rope Face Pull 35 30, 10 11",
+    "sets_json": "{\"weights\": [35, 30, 30], \"reps\": [10, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Rope Face Pulls",
+    "best_string": "Rope Face Pulls 35 30 25, 10 11 12",
+    "sets_json": "{\"weights\": [35, 30, 25], \"reps\": [10, 11, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Shoulder Press - Barbell",
+    "best_string": "Shoulder press - barbell 10, 8",
+    "sets_json": "{\"weights\": [10, 10, 10], \"reps\": [8, 8, 8]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Shoulder Press - Dumbbell",
+    "best_string": "Shoulder Press - Dumbbell 10 12, 11 9",
+    "sets_json": "{\"weights\": [10, 12, 12], \"reps\": [11, 9, 9]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Shoulder Press - Machine",
+    "best_string": "Shoulder Press - Machine 22.5 20 15, 9 12 10",
+    "sets_json": "{\"weights\": [22.5, 20, 15], \"reps\": [9, 12, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Shoulder Rear Machine",
+    "best_string": "Shoulder Rear Machine 40 35, 11 12 10",
+    "sets_json": "{\"weights\": [40, 35, 35], \"reps\": [11, 12, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Smith Machine Squat",
+    "best_string": "Smith Machine Squat - [6–10] - 2.5, 8",
+    "sets_json": "{\"weights\": [2.5, 2.5, 2.5], \"reps\": [8, 8, 8]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Squats Smith Machine",
+    "best_string": "Squats Smith Machine 5, 8",
+    "sets_json": "{\"weights\": [5, 5, 5], \"reps\": [8, 8, 8]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Squats Special Machine",
+    "best_string": "Squats Special Machine",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Stationary Lunges",
+    "best_string": "Stationary Lunges",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Superman",
+    "best_string": "Superman 1, 5",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [5, 5, 5]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Triceps Overhead Extension",
+    "best_string": "Triceps overhead extension 20 17.5 15, 8 9 12",
+    "sets_json": "{\"weights\": [20, 17.5, 15], \"reps\": [8, 9, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rod",
+    "best_string": "Triceps rod 35, 12",
+    "sets_json": "{\"weights\": [35, 35, 35], \"reps\": [12, 12, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rod Pushdown",
+    "best_string": "Triceps Rod Pushdown 45 40, 10 15 10",
+    "sets_json": "{\"weights\": [45, 40, 40], \"reps\": [10, 15, 10]}",
+    "updated_at": "2026-01-03 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rope",
+    "best_string": "Triceps Rope 36 30 28, 9 13 12",
+    "sets_json": "{\"weights\": [36, 30, 28], \"reps\": [9, 13, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rope Pushdown",
+    "best_string": "Triceps Rope Pushdown 36 36 33, 12 11",
+    "sets_json": "{\"weights\": [36, 36, 33], \"reps\": [12, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Upper Chest - Barbell",
+    "best_string": "Upper Chest - Barbell 20 17.5 15, 8 9 10",
+    "sets_json": "{\"weights\": [20, 17.5, 15], \"reps\": [8, 9, 10]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Upper Chest - Dumbbell",
+    "best_string": "Upper chest - dumbbell 20 20 17, 9 8 9",
+    "sets_json": "{\"weights\": [20, 20, 17], \"reps\": [9, 8, 9]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "V Tucks",
+    "best_string": "V Tucks 5 2.5, 18 21",
+    "sets_json": "{\"weights\": [5, 2.5, 2.5], \"reps\": [18, 21, 21]}",
+    "updated_at": "2026-01-08 00:00:00"
+  },
+  {
+    "exercise": "Walking Dumbbell Lunges",
+    "best_string": "Walking Dumbbell Lunges",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Weighted Lunges One Place",
+    "best_string": "Weighted Lunges One Place",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Weighted Lunges Walking",
+    "best_string": "Weighted Lunges Walking 5, 8",
+    "sets_json": "{\"weights\": [5, 5, 5], \"reps\": [8, 8, 8]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "best_string": "Wide-Grip Chest-Supported Row 25, 12",
+    "sets_json": "{\"weights\": [25, 25, 25], \"reps\": [12, 12, 12]}",
+    "updated_at": "2026-01-08 00:00:00"
+  },
+  {
+    "exercise": "Wide Grip Rows",
+    "best_string": "Wide Grip Rows 36 32, 12",
+    "sets_json": "{\"weights\": [36, 32, 32], \"reps\": [12, 12, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Seated Row",
+    "best_string": "Wide-Grip Seated Row 50 36, 12 8",
+    "sets_json": "{\"weights\": [50, 36, 36], \"reps\": [12, 8, 8]}",
+    "updated_at": "2025-12-30 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Dumbbell",
+    "best_string": "Wrist Extension - Dumbbell 6 5, 11",
+    "sets_json": "{\"weights\": [6, 5, 5], \"reps\": [11, 11, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Machine",
+    "best_string": "Wrist Extension - Machine 2 1, 12 18 12",
+    "sets_json": "{\"weights\": [2, 1, 1], \"reps\": [12, 18, 12]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Dumbbell",
+    "best_string": "Wrist flexion - dumbbell 7 10 12, 11 12 11",
+    "sets_json": "{\"weights\": [7, 10, 12], \"reps\": [11, 12, 11]}",
+    "updated_at": "2025-12-29 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion – Dumbbell",
+    "best_string": "Wrist Flexion – Dumbbell 13.75 12.5 10, 16 20",
+    "sets_json": "{\"weights\": [13.75, 12.5, 10], \"reps\": [16, 20, 20]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Machine",
+    "best_string": "Wrist Flexion - Machine 5 5 4, 15",
+    "sets_json": "{\"weights\": [5, 5, 4], \"reps\": [15, 15, 15]}",
+    "updated_at": "2025-12-29 00:00:00"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/apurva_lifts.json
+==============================
+
+[
+  {
+    "exercise": "Barbell Curl",
+    "best_string": "Barbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Barbell Curl -",
+    "best_string": "Barbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Extension",
+    "best_string": "Barbell Overhead Extension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Extension -",
+    "best_string": "Barbell Overhead Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Press",
+    "best_string": "Barbell Overhead Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Press -",
+    "best_string": "Barbell Overhead Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Barbell Shoulder Press",
+    "best_string": "Barbell Shoulder Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Barbell Squat",
+    "best_string": "Barbell Squat 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Cable Lateral Raise",
+    "best_string": "Cable Lateral Raise 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Cable Lateral Raise -",
+    "best_string": "Cable Lateral Raise - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Sitting",
+    "best_string": "Calf Raises Sitting 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Sitting -",
+    "best_string": "Calf Raises Sitting - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Standing",
+    "best_string": "Calf Raises Standing 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Standing -",
+    "best_string": "Calf Raises Standing - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Crunches A",
+    "best_string": "Crunches A 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Crunches A -",
+    "best_string": "Crunches A - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Crunches B",
+    "best_string": "Crunches B 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Crunches B -",
+    "best_string": "Crunches B - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Deadlift",
+    "best_string": "Deadlift 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Deadlift -",
+    "best_string": "Deadlift - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dips",
+    "best_string": "Dips 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Dips -",
+    "best_string": "Dips - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Curl",
+    "best_string": "Dumbbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Curl -",
+    "best_string": "Dumbbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Extension",
+    "best_string": "Dumbbell Overhead Extension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Extension -",
+    "best_string": "Dumbbell Overhead Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Press",
+    "best_string": "Dumbbell Overhead Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Press -",
+    "best_string": "Dumbbell Overhead Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Shoulder Press",
+    "best_string": "Dumbbell Shoulder Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Farmer's Walk",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-10 20:22:06.746781"
+  },
+  {
+    "exercise": "Farmer'S Walk",
+    "best_string": "Farmer's Walk 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Farmer'S Walk -",
+    "best_string": "Farmer's Walk - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Flat Barbell Press",
+    "best_string": "Flat Barbell Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Flat Barbell Press -",
+    "best_string": "Flat Barbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Flat Dumbbell Press",
+    "best_string": "Flat Dumbbell Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Flat Dumbbell Press -",
+    "best_string": "Flat Dumbbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Forearm Radial Deviation",
+    "best_string": "Forearm Radial Deviation 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Forearm Radial Deviation -",
+    "best_string": "Forearm Radial Deviation - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Forearm Roller",
+    "best_string": "Forearm Roller 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Forearm Roller -",
+    "best_string": "Forearm Roller - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Forearm Ulnar Deviation",
+    "best_string": "Forearm Ulnar Deviation 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Forearm Ulnar Deviation -",
+    "best_string": "Forearm Ulnar Deviation - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hammer Dumbbell Curl",
+    "best_string": "Hammer Dumbbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Hammer Dumbbell Curl -",
+    "best_string": "Hammer Dumbbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hammer Rope Curl",
+    "best_string": "Hammer Rope Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Hammer Rope Curl -",
+    "best_string": "Hammer Rope Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hip Abduction",
+    "best_string": "Hip Abduction 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Hip Abduction -",
+    "best_string": "Hip Abduction - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hip Adduction",
+    "best_string": "Hip Adduction 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Hip Adduction -",
+    "best_string": "Hip Adduction - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hip Thrust",
+    "best_string": "Hip Thrust 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Hip Thrust -",
+    "best_string": "Hip Thrust - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hyperextension",
+    "best_string": "Hyperextension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Hyper Extension",
+    "best_string": "Hyper Extension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Hyper Extension -",
+    "best_string": "Hyper Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Incline Barbell Press",
+    "best_string": "Incline Barbell Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Incline Barbell Press -",
+    "best_string": "Incline Barbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Incline Dumbbell Press",
+    "best_string": "Incline Dumbbell Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Incline Dumbbell Press -",
+    "best_string": "Incline Dumbbell Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Lat Dumbbell Row",
+    "best_string": "Lat Dumbbell Row 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Lat Dumbbell Rows",
+    "best_string": "Lat Dumbbell Rows 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Lat Dumbbell Rows -",
+    "best_string": "Lat Dumbbell Rows - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Lat Pulldown",
+    "best_string": "Lat Pulldown 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Lat Pulldown -",
+    "best_string": "Lat Pulldown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Leg Curl",
+    "best_string": "Leg Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Leg Curl -",
+    "best_string": "Leg Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Leg Extension",
+    "best_string": "Leg Extension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Leg Extension -",
+    "best_string": "Leg Extension - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Leg Press",
+    "best_string": "Leg Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Leg Press -",
+    "best_string": "Leg Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Low Cable Fly",
+    "best_string": "Low Cable Fly 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Low Cable Fly -",
+    "best_string": "Low Cable Fly - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Lower Abs",
+    "best_string": "Lower Abs 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Lower Abs -",
+    "best_string": "Lower Abs - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Machine Lateral Raise",
+    "best_string": "Machine Lateral Raise 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Machine Lateral Raise -",
+    "best_string": "Machine Lateral Raise - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Machine Preacher Curl",
+    "best_string": "Machine Preacher Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Machine Shoulder Press",
+    "best_string": "Machine Shoulder Press 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Machine Shoulder Press -",
+    "best_string": "Machine Shoulder Press - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Machine Squat",
+    "best_string": "Machine Squat 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Machine Squat -",
+    "best_string": "Machine Squat - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Lat Pulldown",
+    "best_string": "Neutral-Grip Lat Pulldown 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Lat Pulldown -",
+    "best_string": "Neutral-Grip Lat Pulldown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Pull-Ups",
+    "best_string": "Neutral-Grip Pull-Ups 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Pull-Ups -",
+    "best_string": "Neutral-Grip Pull-Ups - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Seated Row",
+    "best_string": "Neutral-Grip Seated Row 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Seated Row -",
+    "best_string": "Neutral-Grip Seated Row - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Pec Deck Fly",
+    "best_string": "Pec Deck Fly 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Pec Deck Fly -",
+    "best_string": "Pec Deck Fly - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Peck Deck Fly",
+    "best_string": "Peck Deck Fly 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Preacher Curl",
+    "best_string": "Preacher Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Preacher Curl -",
+    "best_string": "Preacher Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Pull Ups",
+    "best_string": "Pull Ups 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Pull Ups -",
+    "best_string": "Pull Ups - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Pull-Ups",
+    "best_string": "Pull-Ups 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Rear Delt Machine Fly",
+    "best_string": "Rear Delt Machine Fly 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Rear Delt Machine Fly -",
+    "best_string": "Rear Delt Machine Fly - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Reverse Barbell Curl",
+    "best_string": "Reverse Barbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Reverse Barbell Curl -",
+    "best_string": "Reverse Barbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Reverse Dumbbell Curl",
+    "best_string": "Reverse Dumbbell Curl 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Reverse Dumbbell Curl -",
+    "best_string": "Reverse Dumbbell Curl - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Romanian Deadlift",
+    "best_string": "Romanian Deadlift 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Romanian Deadlift -",
+    "best_string": "Romanian Deadlift - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Rope Face Pull",
+    "best_string": "Rope Face Pull 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Rope Face Pull -",
+    "best_string": "Rope Face Pull - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Seated Calf Raises",
+    "best_string": "Seated Calf Raises 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Skull Crushers",
+    "best_string": "Skull Crushers 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Skull Crushers -",
+    "best_string": "Skull Crushers - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Smith Machine Squat",
+    "best_string": "Smith Machine Squat 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Smith Machine Squat -",
+    "best_string": "Smith Machine Squat - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Standing Calf Raises",
+    "best_string": "Standing Calf Raises 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Stationary Dumbbell Lunges",
+    "best_string": "Stationary Dumbbell Lunges 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Stationary Lunges",
+    "best_string": "Stationary Lunges 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Stationary Lunges -",
+    "best_string": "Stationary Lunges - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rod Pushdown",
+    "best_string": "Triceps Rod Pushdown 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rod Pushdown -",
+    "best_string": "Triceps Rod Pushdown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rope Pushdown",
+    "best_string": "Triceps Rope Pushdown 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rope Pushdown -",
+    "best_string": "Triceps Rope Pushdown - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "V Tucks",
+    "best_string": "V Tucks 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "V Tucks -",
+    "best_string": "V Tucks - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Walking Dumbbell Lunges",
+    "best_string": "Walking Dumbbell Lunges 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Walking Dumbbell Lunges -",
+    "best_string": "Walking Dumbbell Lunges - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "best_string": "Wide-Grip Chest-Supported Row 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Chest-Supported Row -",
+    "best_string": "Wide-Grip Chest-Supported Row - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Row",
+    "best_string": "Wide-Grip Row 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Seated Row",
+    "best_string": "Wide-Grip Seated Row 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Seated Row -",
+    "best_string": "Wide-Grip Seated Row - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension",
+    "best_string": "Wrist Extension 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Dumbbell",
+    "best_string": "Wrist Extension - Dumbbell 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Dumbbell -",
+    "best_string": "Wrist Extension - Dumbbell - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Machine",
+    "best_string": "Wrist Extension - Machine 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Machine -",
+    "best_string": "Wrist Extension - Machine - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion",
+    "best_string": "Wrist Flexion 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-06 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Dumbbell",
+    "best_string": "Wrist Flexion - Dumbbell 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Dumbbell -",
+    "best_string": "Wrist Flexion - Dumbbell - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Machine",
+    "best_string": "Wrist Flexion - Machine 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Machine -",
+    "best_string": "Wrist Flexion - Machine - 1, 1",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/user_plans.json
+==============================
+
+[
+  {
+    "username": "apurva",
+    "plan_text": "Chest & Triceps 1\r\nIncline Dumbbell Press\r\nFlat Barbell Press\r\nLow Cable Fly\r\nDumbbell Overhead Extension\r\nTriceps Rod Pushdown\r\nLower Abs\r\n\r\nChest & Triceps 2\r\nIncline Barbell Press\r\nFlat Dumbbell Press\r\nPeck Deck Fly\r\nDips\r\nTriceps Rope Pushdown\r\nLower Abs\r\n\r\nBack & Biceps 1\r\nNeutral-Grip Pull-Ups\r\nLat Dumbbell Rows\r\nWide-Grip Row\r\nHyper Extension\r\nBarbell Curl\r\nHammer Rope Curl\r\nV Tucks\r\n\r\nBack & Biceps 2\r\nPull Ups\r\nNeutral-Grip Seated Row\r\nWide-Grip Row\r\nDeadlift\r\nDumbbell Curl\r\nPreacher Curl\r\nV Tucks\r\n\r\nArms 1\r\nDumbbell Overhead Press\r\nCable Lateral Raise\r\nRear Delt Machine Fly\r\nWrist Extension\r\nFarmer’s Walk\r\nReverse Dumbbell Curl\r\nCrunches A\r\n\r\nArms 2\r\nBarbell Overhead Press\r\nCable Lateral Raise\r\nRear Delt Machine Fly\r\nRope Face Pull\r\nWrist Flexion\r\nReverse Barbell Curl\r\nCrunches B\r\n\r\nLegs 1\r\nLeg Press\r\nLeg Curl\r\nWalking Dumbbell Lunges\r\nHip Thrust\r\nCalf Raises Standing\r\nV Tucks\r\n\r\nLegs 2\r\nSmith Machine Squat\r\nLeg Extension\r\nStationary Lunges\r\nRomanian Deadlift\r\nCalf Raises Sitting\r\nV Tucks",
+    "updated_at": "2026-01-10 22:21:53.973161"
+  },
+  {
+    "username": "harsh",
+    "plan_text": "Chest & Triceps 1\r\nFlat Barbell Press\r\nTriceps Rod Pushdown\r\nIncline Dumbbell Press\r\nDumbbell Overhead Extension\r\nLow Cable Fly\r\nLower Abs\r\n\r\nChest & Triceps 2\r\nIncline Barbell Press\r\nTriceps Rope Pushdown\r\nFlat Dumbbell Press\r\nSkull Crushers\r\nPec Deck Fly\r\nLower Abs\r\n\r\nChest & Triceps 3\r\nIncline Dumbbell Press\r\nTriceps Rod Pushdown\r\nFlat Dumbbell Press\r\nSkull Crushers\r\nDips\r\nLower Abs\r\n\r\nChest & Triceps 4\r\nIncline Barbell Press\r\nTriceps Rope Pushdown\r\nFlat Barbell Press\r\nDumbbell Overhead Extension\r\nPec Deck Fly\r\nLower Abs\r\n\r\nBack & Biceps 1\r\nNeutral-Grip Pull-Ups\r\nBarbell Curl\r\nWide-Grip Seated Row\r\nPreacher Curl\r\nLat Dumbbell Rows\r\nHyper Extension\r\nV Tucks\r\n\r\nBack & Biceps 2\r\nDeadlift\r\nPull Ups\r\nDumbbell Curl\r\nNeutral-Grip Seated Row\r\nHammer Dumbbell Curl\r\nWide-Grip Chest-Supported Row\r\nV Tucks\r\n\r\nBack & Biceps 3\r\nNeutral-Grip Lat Pulldown\r\nBarbell Curl\r\nWide-Grip Seated Row\r\nHammer Rope Curl\r\nLat Dumbbell Rows\r\nHyper Extension\r\nV Tucks\r\n\r\nBack & Biceps 4\r\nDeadlift\r\nLat Pulldown\r\nPreacher Curl\r\nNeutral-Grip Seated Row\r\nHammer Dumbbell Curl\r\nWide-Grip Chest-Supported Row\r\nV Tucks\r\n\r\nLegs 1\r\nSmith Machine Squat\r\nRomanian Deadlift\r\nLeg Extension\r\nLeg Curl\r\nHip Adduction\r\nCalf Raises Standing\r\n\r\nLegs 2\r\nLeg Press\r\nHip Thrust\r\nWalking Dumbbell Lunges\r\nLeg Curl\r\nHip Abduction\r\nCalf Raises Sitting\r\n\r\nLegs 3\r\nMachine Squat\r\nStationary Lunges\r\nLeg Extension\r\nLeg Curl\r\nHip Adduction\r\nCalf Raises Standing\r\n\r\nLegs 4\r\nLeg Press\r\nRomanian Deadlift\r\nHip Thrust\r\nLeg Extension\r\nHip Abduction\r\nCalf Raises Sitting\r\n\r\nArms 1\r\nBarbell Overhead Press\r\nWrist Flexion - Dumbbell\r\nCable Lateral Raise\r\nReverse Barbell Curl\r\nRear Delt Machine Fly\r\nFarmer's Walk\r\nCrunches A\r\n\r\nArms 2\r\nDumbbell Overhead Press\r\nWrist Extension - Dumbbell\r\nMachine Lateral Raise\r\nForearm Roller\r\nRear Delt Machine Fly\r\nRope Face Pull\r\nCrunches B\r\n\r\nArms 3\r\nBarbell Overhead Press\r\nWrist Flexion - Machine\r\nCable Lateral Raise\r\nReverse Dumbbell Curl\r\nRear Delt Machine Fly\r\nRope Face Pull\r\nCrunches A\r\n\r\nArms 4\r\nMachine Shoulder Press\r\nForearm Ulnar + Radial Deviation\r\nMachine Lateral Raise\r\nForearm Roller\r\nRear Delt Machine Fly\r\nWrist Extension - Machine\r\nCrunches B",
+    "updated_at": "2026-01-10 21:49:56.080583"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/user_rep_ranges.json
+==============================
+
+[
+  {
+    "username": "apurva",
+    "rep_text": "Barbell Curl: 6–10\r\nBarbell Overhead Extension: 6–10\r\nBarbell Overhead Press: 5–8\r\nCable Lateral Raise: 12–20\r\nCalf Raises Sitting: 15–25\r\nCalf Raises Standing: 12–20\r\nCrunches A: 15–25\r\nCrunches B: 12–20\r\nDeadlift: 3–6\r\nDips: 6–12\r\nDumbbell Curl: 8–12\r\nDumbbell Overhead Extension: 8–12\r\nDumbbell Overhead Press: 6–10\r\nFarmer's Walk: 20–60s\r\nFarmer’s Walk: 20–60s\r\nFlat Barbell Press: 5–8\r\nFlat Dumbbell Press: 8–12\r\nForearm Radial Deviation: 15–25\r\nForearm Roller: 30–60s\r\nForearm Ulnar + Radial Deviation: 15–25\r\nForearm Ulnar Deviation: 15–25\r\nHammer Dumbbell Curl: 10–15\r\nHammer Rope Curl: 12–15\r\nHip Abduction: 12–20\r\nHip Adduction: 12–20\r\nHip Thrust: 8–12\r\nHyper Extension: 12–20\r\nIncline Barbell Press: 5–8\r\nIncline Dumbbell Press: 6–10\r\nLat Dumbbell Rows: 8–12\r\nLat Pulldown: 8–12\r\nLeg Curl: 10–15\r\nLeg Extension: 12–20\r\nLeg Press: 10–20\r\nLower Abs: 12–20\r\nMachine Lateral Raise: 15–25\r\nMachine Shoulder Press: 8–12\r\nMachine Squat: 8–12\r\nNeutral-Grip Lat Pulldown: 8–12\r\nNeutral-Grip Pull-Ups: 6–10\r\nNeutral-Grip Seated Row: 8–12\r\nPec Deck Fly: 12–20\r\nPeck Deck Fly: 12–20\r\nPreacher Curl: 8–12\r\nPull Ups: 6–10\r\nRear Delt Machine Fly: 12–20\r\nReverse Barbell Curl: 10–15\r\nReverse Dumbbell Curl: 10–15\r\nRomanian Deadlift: 6–10\r\nRope Face Pull: 12–20\r\nSkull Crushers: 6–10\r\nSmith Machine Squat: 6–10\r\nStationary Lunges: 8–15\r\nTriceps Rod Pushdown: 10–15\r\nTriceps Rope Pushdown: 12–20\r\nV Tucks: 12–20\r\nWalking Dumbbell Lunges: 10–20\r\nWide-Grip Chest-Supported Row: 10–15\r\nWide-Grip Row: 10–15\r\nWide-Grip Seated Row: 8–12\r\nWrist Extension: 15–25\r\nWrist Extension - Dumbbell: 12–20\r\nWrist Extension - Machine: 15–25\r\nWrist Flexion: 15–25\r\nWrist Flexion - Dumbbell: 12–20\r\nWrist Flexion - Machine: 15–25",
+    "updated_at": "2026-01-10 22:27:49.687383"
+  },
+  {
+    "username": "harsh",
+    "rep_text": "Flat Barbell Press: 5–8\nIncline Dumbbell Press: 6–10\nIncline Barbell Press: 5–8\nFlat Dumbbell Press: 8–12\nLow Cable Fly: 12–20\nPec Deck Fly: 12–20\nDips: 6–12\nTriceps Rod Pushdown: 10–15\nTriceps Rope Pushdown: 12–20\nDumbbell Overhead Extension: 8–12\nBarbell Overhead Extension: 6–10\nSkull Crushers: 6–10\nDeadlift: 3–6\nNeutral-Grip Pull-Ups: 6–10\nPull Ups: 6–10\nNeutral-Grip Lat Pulldown: 8–12\nLat Pulldown: 8–12\nWide-Grip Seated Row: 8–12\nNeutral-Grip Seated Row: 8–12\nWide-Grip Chest-Supported Row: 10–15\nLat Dumbbell Rows: 8–12\nHyper Extension: 12–20\nBarbell Curl: 6–10\nDumbbell Curl: 8–12\nPreacher Curl: 8–12\nHammer Dumbbell Curl: 10–15\nHammer Rope Curl: 12–15\nReverse Barbell Curl: 10–15\nReverse Dumbbell Curl: 10–15\nSmith Machine Squat: 6–10\nMachine Squat: 8–12\nLeg Press: 10–20\nRomanian Deadlift: 6–10\nLeg Extension: 12–20\nLeg Curl: 10–15\nHip Thrust: 8–12\nWalking Dumbbell Lunges: 10–20\nStationary Lunges: 8–15\nHip Adduction: 12–20\nHip Abduction: 12–20\nCalf Raises Standing: 12–20\nCalf Raises Sitting: 15–25\nBarbell Overhead Press: 5–8\nDumbbell Overhead Press: 6–10\nMachine Shoulder Press: 8–12\nCable Lateral Raise: 12–20\nMachine Lateral Raise: 15–25\nRear Delt Machine Fly: 12–20\nRope Face Pull: 12–20\nWrist Flexion - Dumbbell: 12–20\nWrist Extension - Dumbbell: 12–20\nWrist Flexion - Machine: 15–25\nWrist Extension - Machine: 15–25\nForearm Roller: 30–60s\nForearm Ulnar + Radial Deviation: 15–25\nForearm Ulnar Deviation: 15–25\nForearm Radial Deviation: 15–25\nFarmer's Walk: 20–60s\nLower Abs: 12–20\nV Tucks: 12–20\nCrunches A: 15–25\nCrunches B: 12–20\n",
+    "updated_at": "2026-01-10 21:46:42.283468"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/workout_logs.json
+==============================
+
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Deadlift",
+    "top_weight": 35,
+    "top_reps": 4,
+    "estimated_1rm": 39.666666666666664
+  },
+  {
+    "id": 2,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Pull Ups",
+    "top_weight": 69,
+    "top_reps": 8,
+    "estimated_1rm": 87.39999999999999
+  },
+  {
+    "id": 3,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Dumbbell Curl",
+    "top_weight": 12.5,
+    "top_reps": 8,
+    "estimated_1rm": 15.833333333333332
+  },
+  {
+    "id": 4,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Neutral-Grip Seated Row",
+    "top_weight": 56,
+    "top_reps": 8,
+    "estimated_1rm": 70.93333333333334
+  },
+  {
+    "id": 5,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Hammer Dumbbell Curl",
+    "top_weight": 15,
+    "top_reps": 10,
+    "estimated_1rm": 20
+  },
+  {
+    "id": 6,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Deadlift",
+    "top_weight": 35,
+    "top_reps": 4,
+    "estimated_1rm": 39.666666666666664
+  },
+  {
+    "id": 7,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Pull Ups",
+    "top_weight": 69,
+    "top_reps": 8,
+    "estimated_1rm": 87.39999999999999
+  },
+  {
+    "id": 8,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Dumbbell Curl",
+    "top_weight": 12.5,
+    "top_reps": 8,
+    "estimated_1rm": 15.833333333333332
+  },
+  {
+    "id": 9,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Neutral-Grip Seated Row",
+    "top_weight": 56,
+    "top_reps": 8,
+    "estimated_1rm": 70.93333333333334
+  },
+  {
+    "id": 10,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Standing Dumbbell Hammer Curl",
+    "top_weight": 15,
+    "top_reps": 10,
+    "estimated_1rm": 20
+  },
+  {
+    "id": 11,
+    "user_id": 1,
+    "date": "2026-01-12 00:00:00",
+    "exercise": "Seated Dumbbell Hammer Curl",
+    "top_weight": 15,
+    "top_reps": 10,
+    "estimated_1rm": 20
+  },
+  {
+    "id": 12,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Pull Ups",
+    "top_weight": 61,
+    "top_reps": 7,
+    "estimated_1rm": 75.23333333333333
+  },
+  {
+    "id": 13,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Neutral-Grip Seated Row",
+    "top_weight": 32,
+    "top_reps": 10,
+    "estimated_1rm": 42.666666666666664
+  },
+  {
+    "id": 14,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "top_weight": 20,
+    "top_reps": 10,
+    "estimated_1rm": 26.666666666666664
+  },
+  {
+    "id": 15,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Deadlift",
+    "top_weight": 5,
+    "top_reps": 9,
+    "estimated_1rm": 6.5
+  },
+  {
+    "id": 16,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Dumbbell Curl",
+    "top_weight": 7.5,
+    "top_reps": 8,
+    "estimated_1rm": 9.5
+  },
+  {
+    "id": 17,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Preacher Curl",
+    "top_weight": 24,
+    "top_reps": 12,
+    "estimated_1rm": 33.599999999999994
+  },
+  {
+    "id": 18,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "V Tucks",
+    "top_weight": 2.5,
+    "top_reps": 15,
+    "estimated_1rm": 3.75
+  },
+  {
+    "id": 19,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Pull Ups",
+    "top_weight": 61,
+    "top_reps": 8,
+    "estimated_1rm": 77.26666666666667
+  },
+  {
+    "id": 20,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Neutral-Grip Seated Row",
+    "top_weight": 35,
+    "top_reps": 10,
+    "estimated_1rm": 46.666666666666664
+  },
+  {
+    "id": 21,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "top_weight": 20,
+    "top_reps": 12,
+    "estimated_1rm": 28
+  },
+  {
+    "id": 22,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Deadlift",
+    "top_weight": 15,
+    "top_reps": 5,
+    "estimated_1rm": 17.5
+  },
+  {
+    "id": 23,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Dumbbell Curl",
+    "top_weight": 7.5,
+    "top_reps": 8,
+    "estimated_1rm": 9.5
+  },
+  {
+    "id": 24,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Preacher Curl",
+    "top_weight": 24,
+    "top_reps": 12,
+    "estimated_1rm": 33.599999999999994
+  },
+  {
+    "id": 25,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "V Tucks",
+    "top_weight": 2.5,
+    "top_reps": 15,
+    "estimated_1rm": 3.75
+  },
+  {
+    "id": 26,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Pull Ups",
+    "top_weight": 61,
+    "top_reps": 9,
+    "estimated_1rm": 79.3
+  },
+  {
+    "id": 27,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Neutral-Grip Seated Row",
+    "top_weight": 40,
+    "top_reps": 8,
+    "estimated_1rm": 50.666666666666664
+  },
+  {
+    "id": 28,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "top_weight": 25,
+    "top_reps": 10,
+    "estimated_1rm": 33.33333333333333
+  },
+  {
+    "id": 29,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Deadlift",
+    "top_weight": 20,
+    "top_reps": 3,
+    "estimated_1rm": 22
+  },
+  {
+    "id": 30,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Dumbbell Curl",
+    "top_weight": 7.5,
+    "top_reps": 9,
+    "estimated_1rm": 9.75
+  },
+  {
+    "id": 31,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Preacher Curl",
+    "top_weight": 30,
+    "top_reps": 8,
+    "estimated_1rm": 38
+  },
+  {
+    "id": 32,
+    "user_id": 2,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "V Tucks",
+    "top_weight": 2.5,
+    "top_reps": 18,
+    "estimated_1rm": 4
+  },
+  {
+    "id": 33,
+    "user_id": 1,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Incline Barbell Press",
+    "top_weight": 25,
+    "top_reps": 5,
+    "estimated_1rm": 29.166666666666668
+  },
+  {
+    "id": 34,
+    "user_id": 1,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Triceps Rope Pushdown",
+    "top_weight": 40,
+    "top_reps": 12,
+    "estimated_1rm": 56
+  },
+  {
+    "id": 35,
+    "user_id": 1,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Flat Barbell Press",
+    "top_weight": 20,
+    "top_reps": 8,
+    "estimated_1rm": 25.333333333333332
+  },
+  {
+    "id": 36,
+    "user_id": 1,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Dumbbell Overhead Extension",
+    "top_weight": 22.5,
+    "top_reps": 8,
+    "estimated_1rm": 28.5
+  },
+  {
+    "id": 37,
+    "user_id": 1,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Wide-Grip T-Bar Row",
+    "top_weight": 20,
+    "top_reps": 9,
+    "estimated_1rm": 26
+  },
+  {
+    "id": 38,
+    "user_id": 1,
+    "date": "2026-01-13 00:00:00",
+    "exercise": "Pec Deck Fly",
+    "top_weight": 40,
+    "top_reps": 12,
+    "estimated_1rm": 56
+  },
+  {
+    "id": 39,
+    "user_id": 1,
+    "date": "2026-01-17 00:00:00",
+    "exercise": "Dumbbell Overhead Press",
+    "top_weight": 17.5,
+    "top_reps": 10,
+    "estimated_1rm": 23.333333333333332
+  },
+  {
+    "id": 40,
+    "user_id": 1,
+    "date": "2026-01-17 00:00:00",
+    "exercise": "Wrist Extension - Dumbbell",
+    "top_weight": 6.25,
+    "top_reps": 18,
+    "estimated_1rm": 10
+  },
+  {
+    "id": 41,
+    "user_id": 1,
+    "date": "2026-01-17 00:00:00",
+    "exercise": "Machine Lateral Raise",
+    "top_weight": 25,
+    "top_reps": 16,
+    "estimated_1rm": 38.33333333333333
+  },
+  {
+    "id": 42,
+    "user_id": 1,
+    "date": "2026-01-17 00:00:00",
+    "exercise": "Rear Delt Machine Fly",
+    "top_weight": 50,
+    "top_reps": 15,
+    "estimated_1rm": 75
+  },
+  {
+    "id": 43,
+    "user_id": 1,
+    "date": "2026-01-17 00:00:00",
+    "exercise": "Forearm Roller",
+    "top_weight": 6,
+    "top_reps": 2,
+    "estimated_1rm": 6.4
+  },
+  {
+    "id": 44,
+    "user_id": 1,
+    "date": "2026-01-17 00:00:00",
+    "exercise": "Rope Face Pull",
+    "top_weight": 35,
+    "top_reps": 15,
+    "estimated_1rm": 52.5
+  }
+]
+
+==============================
+FILE PATH: the_lifts/users.json
+==============================
+
+[
+  {
+    "id": 1,
+    "username": "harsh",
+    "created_at": "2026-01-16 03:43:05.260316",
+    "updated_at": "2026-01-16 03:43:05.260316"
+  },
+  {
+    "id": 2,
+    "username": "apurva",
+    "created_at": "2026-01-16 03:43:05.260316",
+    "updated_at": "2026-01-16 03:43:05.260316"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/rep_ranges.json
+==============================
+
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "text_content": "Barbell Curl: 6–10\r\nBarbell Overhead Extension: 6–10\r\nBarbell Overhead Press: 5–8\r\nCable Lateral Raise: 12–20\r\nCalf Raises Sitting: 15–25\r\nCalf Raises Standing: 12–20\r\nCrunches A: 15–25\r\nCrunches B: 12–20\r\nDeadlift: 3–6\r\nDips: 6–12\r\nDumbbell Curl: 8–12\r\nDumbbell Overhead Extension: 8–12\r\nDumbbell Overhead Press: 6–10\r\nFarmer's Walk: 20–60s\r\nFlat Barbell Press: 5–8\r\nFlat Dumbbell Press: 8–12\r\nForearm Radial Deviation: 15–25\r\nForearm Roller: 30–60s\r\nForearm Ulnar + Radial Deviation: 15–25\r\nForearm Ulnar Deviation: 15–25\r\nSeated Dumbbell Hammer Curl: 10–15\r\nStanding Dumbbell Hammer Curl: 6-10\r\nHammer Rope Curl: 12–15\r\nHip Abduction: 12–20\r\nHip Adduction: 12–20\r\nHip Thrust: 8–12\r\nHyper Extension: 12–20\r\nIncline Barbell Press: 5–8\r\nIncline Dumbbell Press: 6–10\r\nLat Dumbbell Rows: 8–12\r\nLat Pulldown: 8–12\r\nLeg Curl: 10–15\r\nLeg Extension: 12–20\r\nLeg Press: 10–20\r\nLow Cable Fly: 12–20\r\nLower Abs: 12–20\r\nMachine Lateral Raise: 15–25\r\nMachine Shoulder Press: 8–12\r\nMachine Squat: 8–12\r\nNeutral-Grip Lat Pulldown: 8–12\r\nNeutral-Grip Pull-Ups: 6–10\r\nNeutral-Grip Seated Row: 8–12\r\nPec Deck Fly: 12–20\r\nPendulum Lunges: 8–12\r\nPreacher Curl: 8–12\r\nPull Ups: 6–10\r\nRear Delt Machine Fly: 12–20\r\nReverse Barbell Curl: 10–15\r\nReverse Dumbbell Curl: 10–15\r\nRomanian Deadlift: 6–10\r\nRope Face Pull: 12–20\r\nSkull Crushers: 6–10\r\nSmith Machine Squat: 6–10\r\nStationary Lunges: 8–15\r\nTriceps Rod Pushdown: 10–15\r\nTriceps Rope Pushdown: 12–20\r\nV Tucks: 12–20\r\nWalking Dumbbell Lunges: 10–20\r\nWide-Grip Chest-Supported Row: 10–15\r\nWide-Grip Seated Row: 8–12\r\nWide-Grip T-Bar Row: 8-12\r\nWrist Extension - Dumbbell: 12–20\r\nWrist Extension - Machine: 15–25\r\nWrist Flexion - Dumbbell: 12–20\r\nWrist Flexion - Machine: 15–25",
+    "updated_at": "2026-01-11 09:40:57.847698"
+  },
+  {
+    "id": 2,
+    "user_id": 2,
+    "text_content": "Barbell Curl: 6–10\r\nBarbell Overhead Extension: 6–10\r\nBarbell Overhead Press: 5–8\r\nCable Lateral Raise: 12–20\r\nCalf Raises Sitting: 15–25\r\nCalf Raises Standing: 12–20\r\nCrunches A: 15–25\r\nCrunches B: 12–20\r\nDeadlift: 3–6\r\nDips: 6–12\r\nDumbbell Curl: 8–12\r\nDumbbell Overhead Extension: 8–12\r\nDumbbell Overhead Press: 6–10\r\nFarmer's Walk: 20–60s\r\nFarmer’s Walk: 20–60s\r\nFlat Barbell Press: 5–8\r\nFlat Dumbbell Press: 8–12\r\nForearm Radial Deviation: 15–25\r\nForearm Roller: 30–60s\r\nForearm Ulnar + Radial Deviation: 15–25\r\nForearm Ulnar Deviation: 15–25\r\nHammer Dumbbell Curl: 10–15\r\nHammer Rope Curl: 12–15\r\nHip Abduction: 12–20\r\nHip Adduction: 12–20\r\nHip Thrust: 8–12\r\nHyper Extension: 12–20\r\nIncline Barbell Press: 5–8\r\nIncline Dumbbell Press: 6–10\r\nLat Dumbbell Rows: 8–12\r\nLat Pulldown: 8–12\r\nLeg Curl: 10–15\r\nLeg Extension: 12–20\r\nLow Cable Fly: 12–20\r\nWide-Grip Chest-Supported Row: 10–15\r\nLeg Press: 10–20\r\nLower Abs: 12–20\r\nMachine Lateral Raise: 15–25\r\nMachine Shoulder Press: 8–12\r\nMachine Squat: 8–12\r\nNeutral-Grip Lat Pulldown: 8–12\r\nNeutral-Grip Pull-Ups: 6–10\r\nNeutral-Grip Seated Row: 8–12\r\nPec Deck Fly: 12–20\r\nPeck Deck Fly: 12–20\r\nPreacher Curl: 8–12\r\nPull Ups: 6–10\r\nRear Delt Machine Fly: 12–20\r\nReverse Barbell Curl: 10–15\r\nReverse Dumbbell Curl: 10–15\r\nRomanian Deadlift: 6–10\r\nRope Face Pull: 12–20\r\nSkull Crushers: 6–10\r\nSmith Machine Squat: 6–10\r\nStationary Lunges: 8–15\r\nTriceps Rod Pushdown: 10–15\r\nTriceps Rope Pushdown: 12–20\r\nV Tucks: 12–20\r\nWalking Dumbbell Lunges: 10–20\r\nWide-Grip Chest-Supported Row: 10–15\r\nWide-Grip Row: 10–15\r\nWide-Grip Seated Row: 8–12\r\nWrist Extension: 15–25\r\nWrist Extension - Dumbbell: 12–20\r\nWrist Extension - Machine: 15–25\r\nWrist Flexion: 15–25\r\nWrist Flexion - Dumbbell: 12–20\r\nWrist Flexion - Machine: 15–25",
+    "updated_at": "2026-01-11 09:40:59.253498"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/harsh_lifts.json
+==============================
+
+[
+  {
+    "exercise": "Barbell Curl",
+    "best_string": "Barbell Curl 12.5 10 9, 9 9 10",
+    "sets_json": "{\"weights\": [12.5, 10, 9], \"reps\": [9, 9, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Extension",
+    "best_string": "Barbell Overhead Extension 5 2.5 1, 9 8 11",
+    "sets_json": "{\"weights\": [5, 2.5, 1], \"reps\": [9, 8, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Barbell Overhead Press",
+    "best_string": "Barbell Overhead Press 15 12.5, 7 10 8",
+    "sets_json": "{\"weights\": [15, 12.5, 12.5], \"reps\": [7, 10, 8]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Cable Lateral Raise",
+    "best_string": "Cable Lateral Raise 12 8.8, 14 15",
+    "sets_json": "{\"weights\": [12, 8.8, 8.8], \"reps\": [14, 15, 15]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Sitting",
+    "best_string": "Calf Raises Sitting",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Calf Raises Standing",
+    "best_string": "Calf Raises Standing - [12–20] - 2.5, 14 15",
+    "sets_json": "{\"weights\": [2.5, 2.5, 2.5], \"reps\": [14, 15, 15]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Crunches A",
+    "best_string": "Crunches A , 15",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [15, 15, 15]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Crunches B",
+    "best_string": "Crunches B 10, 11",
+    "sets_json": "{\"weights\": [10, 10, 10], \"reps\": [11, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Deadlift",
+    "best_string": "Deadlift 30, 5",
+    "sets_json": "{\"weights\": [30, 30, 30], \"reps\": [5, 5, 5]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dips",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-10 20:21:44.158761"
+  },
+  {
+    "exercise": "Dumbbell Curl",
+    "best_string": "Dumbbell Curl 10 7.5, 8 10 9",
+    "sets_json": "{\"weights\": [10, 7.5, 7.5], \"reps\": [8, 10, 9]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Extension",
+    "best_string": "Dumbbell Overhead Extension 22.5 20 17.5, 8 10 12",
+    "sets_json": "{\"weights\": [22.5, 20, 17.5], \"reps\": [8, 10, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Dumbbell Overhead Press",
+    "best_string": "Dumbbell Overhead Press 15, 11 10",
+    "sets_json": "{\"weights\": [15, 15, 15], \"reps\": [11, 10, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Farmer's Walk",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-10 20:21:45.53947"
+  },
+  {
+    "exercise": "Farmer’S Walk",
+    "best_string": "Farmer’s Walk 20",
+    "sets_json": "{\"weights\": [20, 20, 20], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Flat Barbell Press",
+    "best_string": "Flat Barbell Press 20 17.5, 8 10",
+    "sets_json": "{\"weights\": [20, 17.5, 17.5], \"reps\": [8, 10, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Flat Dumbbell Press",
+    "best_string": "Flat Dumbbell Press 24.2 20, 10 11",
+    "sets_json": "{\"weights\": [24.2, 20, 20], \"reps\": [10, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Forearm Radial Deviation",
+    "best_string": "Forearm Radial Deviation 15, 12",
+    "sets_json": "{\"weights\": [15, 15, 15], \"reps\": [12, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Forearm Roller",
+    "best_string": "Forearm Roller 5 3.5, 2",
+    "sets_json": "{\"weights\": [5, 3.5, 3.5], \"reps\": [2, 2, 2]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Forearm Ulnar Deviation",
+    "best_string": "Forearm Ulnar Deviation 15 12 10, 12",
+    "sets_json": "{\"weights\": [15, 12, 10], \"reps\": [12, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hammer Dumbbell Curl",
+    "best_string": "Hammer Dumbbell Curl 12 10, 9 12 9",
+    "sets_json": "{\"weights\": [12, 10, 10], \"reps\": [9, 12, 9]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hammer Grip Rows",
+    "best_string": "Hammer Grip Rows 39 32, 9 12",
+    "sets_json": "{\"weights\": [39, 32, 32], \"reps\": [9, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hammer Rope Curl",
+    "best_string": "Hammer Rope Curl 35, 12 10",
+    "sets_json": "{\"weights\": [35, 35, 35], \"reps\": [12, 10, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hip Abduction",
+    "best_string": "Hip Abduction",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hip Adduction",
+    "best_string": "Hip Adduction - [12–20] - 20 15, 14",
+    "sets_json": "{\"weights\": [20, 15, 15], \"reps\": [14, 14, 14]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hip Thrust",
+    "best_string": "Hip Thrust",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Hyper Extension",
+    "best_string": "",
+    "sets_json": "{\"weights\": [], \"reps\": []}",
+    "updated_at": "2026-01-10 20:21:49.330514"
+  },
+  {
+    "exercise": "Incline Barbell Press",
+    "best_string": "Incline Barbell Press 21.8 19.4 17.5, 8 11 10",
+    "sets_json": "{\"weights\": [21.8, 19.4, 17.5], \"reps\": [8, 11, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Incline Dumbbell Press",
+    "best_string": "Incline Dumbbell Press 25 22.5 20, 7 9 10",
+    "sets_json": "{\"weights\": [25, 22.5, 20], \"reps\": [7, 9, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Lat Dumbbell Rows",
+    "best_string": "Lat Dumbbell Rows 25 22.5 20, 10 11",
+    "sets_json": "{\"weights\": [25, 22.5, 20], \"reps\": [10, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Lat Pulldown",
+    "best_string": "Lat Pulldown 42.3 36, 10 12",
+    "sets_json": "{\"weights\": [42.3, 36, 36], \"reps\": [10, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Leg Curl",
+    "best_string": "Leg Curl - [10–15] - 55, 15 14",
+    "sets_json": "{\"weights\": [55, 55, 55], \"reps\": [15, 14, 14]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Leg Extension",
+    "best_string": "Leg Extension - [12–20] - 45 40, 11 14",
+    "sets_json": "{\"weights\": [45, 40, 40], \"reps\": [11, 14, 14]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Leg Press",
+    "best_string": "Leg Press",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Low Cable Fly",
+    "best_string": "Low Cable Fly 25 20, 12 16",
+    "sets_json": "{\"weights\": [25, 20, 20], \"reps\": [12, 16, 16]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Lower Abs",
+    "best_string": "Lower Abs ,16",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [16, 16, 16]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Machine Lateral Raise",
+    "best_string": "Machine Lateral Raise 25 20, 11 11 10",
+    "sets_json": "{\"weights\": [25, 20, 20], \"reps\": [11, 11, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Machine Shoulder Press",
+    "best_string": "Machine Shoulder Press 22.5 20 15, 9 12 10",
+    "sets_json": "{\"weights\": [22.5, 20, 15], \"reps\": [9, 12, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Machine Squat",
+    "best_string": "Machine Squat",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Lat Pulldown",
+    "best_string": "Neutral-Grip Lat Pulldown 45 42 36, 11 12",
+    "sets_json": "{\"weights\": [45, 42, 36], \"reps\": [11, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Pull-Ups",
+    "best_string": "Neutral-Grip Pull-Ups 65 30, 10",
+    "sets_json": "{\"weights\": [65, 30, 30], \"reps\": [10, 10, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Neutral-Grip Seated Row",
+    "best_string": "Neutral-Grip Seated Row 45 39, 9 11",
+    "sets_json": "{\"weights\": [45, 39, 39], \"reps\": [9, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Pec Deck Fly",
+    "best_string": "Pec Deck Fly 40 36, 8 11 10",
+    "sets_json": "{\"weights\": [40, 36, 36], \"reps\": [8, 11, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Preacher Curl",
+    "best_string": "Preacher Curl 30 25 20, 8 10 15",
+    "sets_json": "{\"weights\": [30, 25, 20], \"reps\": [8, 10, 15]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Pull Ups",
+    "best_string": "Pull Ups 65 30, 8 9",
+    "sets_json": "{\"weights\": [65, 30, 30], \"reps\": [8, 9, 9]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Rear Delt Machine Fly",
+    "best_string": "Rear Delt Machine Fly 45 43 40, 15",
+    "sets_json": "{\"weights\": [45, 43, 40], \"reps\": [15, 15, 15]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Reverse Barbell Curl",
+    "best_string": "Reverse Barbell Curl 7.5 5, 8 12",
+    "sets_json": "{\"weights\": [7.5, 5, 5], \"reps\": [8, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Reverse Dumbbell Curl",
+    "best_string": "Reverse Dumbbell Curl 7.5,12 11",
+    "sets_json": "{\"weights\": [7.5, 7.5, 7.5], \"reps\": [12, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Romanian Deadlift",
+    "best_string": "Romanian Deadlift - [6–10] - 1, 8",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [8, 8, 8]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Rope Face Pull",
+    "best_string": "Rope Face Pull 35 30, 10 11",
+    "sets_json": "{\"weights\": [35, 30, 30], \"reps\": [10, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Skull Crushers",
+    "best_string": "Skull Crushers - [6–10] - 5 2.5 1, 9 8 11",
+    "sets_json": "{\"weights\": [5, 2.5, 1], \"reps\": [9, 8, 11]}",
+    "updated_at": "2026-01-10 00:00:00"
+  },
+  {
+    "exercise": "Smith Machine Squat",
+    "best_string": "Smith Machine Squat - [6–10] - 2.5, 8",
+    "sets_json": "{\"weights\": [2.5, 2.5, 2.5], \"reps\": [8, 8, 8]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Stationary Lunges",
+    "best_string": "Stationary Lunges",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Triceps Overhead Extension",
+    "best_string": "Triceps overhead extension 20 17.5 15, 8 9 12",
+    "sets_json": "{\"weights\": [20, 17.5, 15], \"reps\": [8, 9, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rod Pushdown",
+    "best_string": "Triceps Rod Pushdown 45 40, 10 15 10",
+    "sets_json": "{\"weights\": [45, 40, 40], \"reps\": [10, 15, 10]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Triceps Rope Pushdown",
+    "best_string": "Triceps Rope Pushdown 36 36 33, 12 11",
+    "sets_json": "{\"weights\": [36, 36, 33], \"reps\": [12, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "V Tucks",
+    "best_string": "V Tucks 5 2.5, 18 21",
+    "sets_json": "{\"weights\": [5, 2.5, 2.5], \"reps\": [18, 21, 21]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Walking Dumbbell Lunges",
+    "best_string": "Walking Dumbbell Lunges",
+    "sets_json": "{\"weights\": [1, 1, 1], \"reps\": [1, 1, 1]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Chest-Supported Row",
+    "best_string": "Wide-Grip Chest-Supported Row 25, 12",
+    "sets_json": "{\"weights\": [25, 25, 25], \"reps\": [12, 12, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wide-Grip Seated Row",
+    "best_string": "Wide-Grip Seated Row 50 36, 12 8",
+    "sets_json": "{\"weights\": [50, 36, 36], \"reps\": [12, 8, 8]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Dumbbell",
+    "best_string": "Wrist Extension - Dumbbell 6 5, 11",
+    "sets_json": "{\"weights\": [6, 5, 5], \"reps\": [11, 11, 11]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Extension - Machine",
+    "best_string": "Wrist Extension - Machine 2 1, 12 18 12",
+    "sets_json": "{\"weights\": [2, 1, 1], \"reps\": [12, 18, 12]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Dumbbell",
+    "best_string": "Wrist Flexion – Dumbbell 13.75 12.5 10, 16 20",
+    "sets_json": "{\"weights\": [13.75, 12.5, 10], \"reps\": [16, 20, 20]}",
+    "updated_at": "2026-01-11 00:00:00"
+  },
+  {
+    "exercise": "Wrist Flexion - Machine",
+    "best_string": "Wrist Flexion - Machine 5 5 4, 15",
+    "sets_json": "{\"weights\": [5, 5, 4], \"reps\": [15, 15, 15]}",
+    "updated_at": "2026-01-11 00:00:00"
+  }
+]
+
+==============================
+FILE PATH: the_lifts/plans.json
+==============================
+
+[
+  {
+    "id": 1,
+    "user_id": 1,
+    "text_content": "Chest & Triceps 1\r\nFlat Barbell Press\r\nTriceps Rod Pushdown\r\nIncline Dumbbell Press\r\nDumbbell Overhead Extension\r\nLow Cable Fly\r\nLower Abs\r\n\r\nChest & Triceps 2\r\nIncline Barbell Press\r\nTriceps Rope Pushdown\r\nFlat Dumbbell Press\r\nSkull Crushers\r\nPec Deck Fly\r\nLower Abs\r\n\r\nChest & Triceps 3\r\nIncline Dumbbell Press\r\nTriceps Rod Pushdown\r\nFlat Dumbbell Press\r\nSkull Crushers\r\nDips\r\nLower Abs\r\n\r\nChest & Triceps 4\r\nIncline Barbell Press\r\nTriceps Rope Pushdown\r\nFlat Barbell Press\r\nDumbbell Overhead Extension\r\nPec Deck Fly\r\nLower Abs\r\n\r\nBack & Biceps 1\r\nNeutral-Grip Pull-Ups\r\nBarbell Curl\r\nWide-Grip Seated Row\r\nPreacher Curl\r\nLat Dumbbell Rows\r\nHyper Extension\r\nV Tucks\r\n\r\nBack & Biceps 2\r\nDeadlift\r\nPull Ups\r\nDumbbell Curl\r\nNeutral-Grip Seated Row\r\nSeated Dumbbell Hammer Curl\r\nWide-Grip Chest-Supported Row\r\nV Tucks\r\n\r\nBack & Biceps 3\r\nNeutral-Grip Lat Pulldown\r\nBarbell Curl\r\nWide-Grip Seated Row\r\nHammer Rope Curl\r\nLat Dumbbell Rows\r\nHyper Extension\r\nV Tucks\r\n\r\nBack & Biceps 4\r\nDeadlift\r\nLat Pulldown\r\nPreacher Curl\r\nNeutral-Grip Seated Row\r\nStanding Dumbbell Hammer Curl\r\nWide-Grip Chest-Supported Row\r\nV Tucks\r\n\r\nArms 1\r\nBarbell Overhead Press\r\nCable Lateral Raise\r\nWrist Flexion - Dumbbell\r\nReverse Barbell Curl\r\nRear Delt Machine Fly\r\nFarmer's Walk\r\nCrunches A\r\n\r\nArms 2\r\nDumbbell Overhead Press\r\nMachine Lateral Raise\r\nWrist Extension - Dumbbell\r\nRear Delt Machine Fly\r\nForearm Roller\r\nRope Face Pull\r\nCrunches B\r\n\r\nArms 3\r\nBarbell Overhead Press\r\nCable Lateral Raise\r\nWrist Flexion - Machine\r\nRear Delt Machine Fly\r\nReverse Dumbbell Curl\r\nRope Face Pull\r\nCrunches A\r\n\r\nArms 4\r\nMachine Shoulder Press\r\nMachine Lateral Raise\r\nForearm Ulnar + Radial Deviation\r\nForearm Roller\r\nRear Delt Machine Fly\r\nWrist Extension - Machine\r\nCrunches B\r\n\r\nLegs 1\r\nSmith Machine Squat\r\nRomanian Deadlift\r\nLeg Extension\r\nLeg Curl\r\nHip Adduction\r\nCalf Raises Standing\r\n\r\nLegs 2\r\nLeg Press\r\nHip Thrust\r\nWalking Dumbbell Lunges\r\nLeg Curl\r\nHip Abduction\r\nCalf Raises Sitting\r\n\r\nLegs 3\r\nMachine Squat\r\nPendulum Lunges\r\nLeg Extension\r\nLeg Curl\r\nHip Adduction\r\nCalf Raises Standing\r\n\r\nLegs 4\r\nLeg Press\r\nRomanian Deadlift\r\nHip Thrust\r\nLeg Extension\r\nHip Abduction\r\nCalf Raises Sitting",
+    "updated_at": "2026-01-17 15:37:24.783713"
+  },
+  {
+    "id": 2,
+    "user_id": 2,
+    "text_content": "Chest & Triceps 1\r\nIncline Dumbbell Press\r\nFlat Barbell Press\r\nLow Cable Fly\r\nDumbbell Overhead Extension\r\nTriceps Rod Pushdown\r\nLower Abs\r\n\r\nChest & Triceps 2\r\nIncline Barbell Press\r\nFlat Dumbbell Press\r\nPec Deck Fly\r\nDips\r\nTriceps Rope Pushdown\r\nLower Abs\r\n\r\nBack & Biceps 1\r\nNeutral-Grip Pull-Ups\r\nLat Dumbbell Rows\r\nWide-Grip Chest-Supported Row\r\nHyper Extension\r\nBarbell Curl\r\nHammer Rope Curl\r\nV Tucks\r\n\r\nBack & Biceps 2\r\nPull Ups\r\nNeutral-Grip Seated Row\r\nWide-Grip Chest-Supported Row\r\nDeadlift\r\nDumbbell Curl\r\nPreacher Curl\r\nV Tucks\r\n\r\nArms 1\r\nDumbbell Overhead Press\r\nCable Lateral Raise\r\nRear Delt Machine Fly\r\nWrist Extension - Machine\r\nFarmer's Walk\r\nReverse Dumbbell Curl\r\nCrunches A\r\n\r\nArms 2\r\nBarbell Overhead Press\r\nCable Lateral Raise\r\nRear Delt Machine Fly\r\nRope Face Pull\r\nWrist Flexion - Machine\r\nReverse Barbell Curl\r\nCrunches B\r\n\r\nLegs 1\r\nLeg Press\r\nLeg Curl\r\nWalking Dumbbell Lunges\r\nHip Thrust\r\nCalf Raises Standing\r\nV Tucks\r\n\r\nLegs 2\r\nSmith Machine Squat\r\nLeg Extension\r\nStationary Lunges\r\nRomanian Deadlift\r\nCalf Raises Sitting\r\nV Tucks",
+    "updated_at": "2026-01-11 09:40:59.077736"
+  }
+]
+
