@@ -2,7 +2,7 @@ import os
 import urllib.parse
 from datetime import datetime
 
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory
 from flask_login import LoginManager
 from flask_mail import Mail
 
@@ -59,6 +59,13 @@ def create_app(config_object=Config):
         if isinstance(date_obj, datetime):
             return date_obj.strftime('%Y-%m-%d')
         return str(date_obj)
+
+    @app.route('/favicon.ico')
+    def favicon():
+        favicon_path = os.path.join(app.static_folder, 'favicon.ico')
+        if os.path.exists(favicon_path):
+            return send_from_directory(app.static_folder, 'favicon.ico')
+        return '', 204
 
     @app.teardown_appcontext
     def shutdown_session(exception=None):
