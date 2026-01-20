@@ -687,6 +687,10 @@
                 padding-right: 16px;
             }
 
+            .app-content {
+                padding-top: 16px;
+            }
+
             /* Mobile Cards */
             .card {
                 padding: var(--space-lg);
@@ -1247,7 +1251,7 @@
         </div>
     </nav>
 
-    <div class="container mb-5">
+    <div class="container mb-5 app-content">
         <!-- Flash Messages -->
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}

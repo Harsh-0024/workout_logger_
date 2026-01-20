@@ -202,10 +202,18 @@ def register_auth_routes(app, email_service):
                 if form_type == 'profile':
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
+                    current_password = request.form.get('current_password', '')
 
                     if not username or not email:
                         flash("Username and email are required.", "error")
                         return redirect(url_for('user_settings'))
+
+                    if not current_password:
+                        flash("Please enter your current password to update profile details.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    if not AuthService.verify_password(current_password, user.password_hash):
+                        raise AuthenticationError("Current password is incorrect")
 
                     username = validate_username(username)
 
