@@ -719,11 +719,85 @@
 
             /* Mobile Header */
             .mobile-header {
-                background: rgba(0, 0, 0, 0.95);
+                background: rgba(6, 6, 6, 0.95);
                 border-bottom: 1px solid var(--border-subtle);
                 position: sticky;
                 top: 0;
                 z-index: 100;
+                backdrop-filter: blur(12px);
+            }
+
+            .mobile-header-inner {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+                padding: 14px 0;
+            }
+
+            .mobile-brand {
+                display: flex;
+                align-items: center;
+                gap: 10px;
+            }
+
+            .brand-mark {
+                width: 32px;
+                height: 32px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: 700;
+                font-size: 0.75rem;
+                color: var(--gold-primary);
+                background: rgba(212, 175, 55, 0.12);
+                border: 1px solid rgba(212, 175, 55, 0.35);
+            }
+
+            .brand-text {
+                display: flex;
+                flex-direction: column;
+                line-height: 1.05;
+            }
+
+            .brand-title {
+                font-size: 0.95rem;
+                font-weight: 700;
+                letter-spacing: 0.2px;
+                color: var(--text-primary);
+            }
+
+            .brand-subtitle {
+                font-size: 0.7rem;
+                letter-spacing: 2px;
+                text-transform: uppercase;
+                color: var(--text-muted);
+            }
+
+            .mobile-header-actions {
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            }
+
+            .mobile-header-btn {
+                display: inline-flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 12px;
+                font-size: 0.7rem;
+                font-weight: 600;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                background: rgba(212, 175, 55, 0.08);
+                border: 1px solid rgba(212, 175, 55, 0.25);
+                color: var(--gold-primary);
+                border-radius: 999px;
+            }
+
+            .mobile-header-btn i {
+                font-size: 0.85rem;
             }
 
             /* Mobile Bottom Navigation */
@@ -1057,24 +1131,34 @@
 <body>
     <!-- Mobile Top Header -->
     <div class="mobile-header d-sm-none">
-        <div class="container d-flex justify-content-between align-items-center gap-2" style="padding: 16px;">
-            <h1 class="mb-0" style="font-size: 1.25rem; font-weight: 700; background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-bright) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.5px;">Workout Tracker</h1>
-            <div class="d-flex gap-2">
+        <div class="container mobile-header-inner">
+            <div class="mobile-brand">
+                <div class="brand-mark">WT</div>
+                <div class="brand-text">
+                    <span class="brand-title">Workout</span>
+                    <span class="brand-subtitle">Tracker</span>
+                </div>
+            </div>
+            <div class="mobile-header-actions">
             {% if current_user.is_authenticated %}
                 {% if current_user.is_admin() %}
-                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
-                        <i class="bi bi-shield-lock me-1"></i>Admin
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm mobile-header-btn">
+                        <i class="bi bi-shield-lock"></i>
+                        <span>Admin</span>
                     </a>
                 {% endif %}
-                <a href="{{ url_for('logout') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
-                    <i class="bi bi-box-arrow-right me-1"></i>Logout
+                <a href="{{ url_for('logout') }}" class="btn btn-sm mobile-header-btn">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span>Logout</span>
                 </a>
             {% else %}
-                <a href="{{ url_for('login') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
-                    <i class="bi bi-person me-1"></i>Login
+                <a href="{{ url_for('login') }}" class="btn btn-sm mobile-header-btn">
+                    <i class="bi bi-person"></i>
+                    <span>Login</span>
                 </a>
-                <a href="{{ url_for('register') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
-                    <i class="bi bi-person-plus me-1"></i>Register
+                <a href="{{ url_for('register') }}" class="btn btn-sm mobile-header-btn">
+                    <i class="bi bi-person-plus"></i>
+                    <span>Register</span>
                 </a>
             {% endif %}
             </div>

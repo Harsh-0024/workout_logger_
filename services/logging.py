@@ -22,6 +22,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
     """
     summary = []
     workout_date = parsed_data.get('date', datetime.now())
+    workout_name = parsed_data.get('workout_name')
     
     if 'exercises' not in parsed_data or not parsed_data['exercises']:
         logger.warning(f"No exercises found in workout data for user {user.username}")
@@ -58,6 +59,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 history_log = WorkoutLog(
                     user_id=user.id,
                     date=workout_date,
+                    workout_name=workout_name,
                     exercise=ex_name,
                     top_weight=daily_max_weight if daily_max_weight > 0 else None,
                     top_reps=daily_max_reps if daily_max_reps > 0 else None,

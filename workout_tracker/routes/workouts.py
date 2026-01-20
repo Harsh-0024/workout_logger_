@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import desc
@@ -14,43 +14,30 @@ from utils.validators import validate_username
 def register_workout_routes(app):
     def get_recent_workouts(user, limit=5):
         try:
-            recent_dates = (
-                Session.query(WorkoutLog.date)
+            logs = (
+                Session.query(WorkoutLog)
                 .filter_by(user_id=user.id)
-                .distinct()
-                .order_by(desc(WorkoutLog.date))
-                .limit(limit)
+                .order_by(desc(WorkoutLog.date), WorkoutLog.id)
                 .all()
             )
-            
+
             workouts = []
-            for date_tuple in recent_dates:
-                workout_date = date_tuple[0]
-                # Get first exercise of the day to extract workout title
-                first_log = (
-                    Session.query(WorkoutLog)
-                    .filter_by(user_id=user.id, date=workout_date)
-                    .order_by(WorkoutLog.id)
-                    .first()
-                )
-                
-                # Extract workout title from exercise name (e.g., "Chest & Triceps 1")
-                title = "Workout"
-                if first_log and first_log.exercise:
-                    # Try to extract day info from exercise name
-                    parts = first_log.exercise.split()
-                    if len(parts) >= 2:
-                        # Look for pattern like "19/01 Chest & Triceps 1"
-                        if '/' in parts[0]:
-                            title = ' '.join(parts[1:]) if len(parts) > 1 else "Workout"
-                        else:
-                            title = first_log.exercise
-                
+            seen_dates = set()
+            for log in logs:
+                date_key = log.date.date() if isinstance(log.date, datetime) else log.date
+                if date_key in seen_dates:
+                    continue
+
+                title = log.workout_name or "Workout"
                 workouts.append({
-                    'date': workout_date,
+                    'date': log.date,
                     'title': title
                 })
-            
+                seen_dates.add(date_key)
+
+                if len(workouts) >= limit:
+                    break
+
             return workouts
         except Exception as e:
             logger.error(f"Error getting recent workouts: {e}", exc_info=True)
@@ -134,14 +121,15 @@ def register_workout_routes(app):
         user = current_user
         
         try:
-            from datetime import datetime
             workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            start_dt = datetime.combine(workout_date, datetime.min.time())
+            end_dt = start_dt + timedelta(days=1)
             
             logs = (
                 Session.query(WorkoutLog)
                 .filter_by(user_id=user.id)
-                .filter(WorkoutLog.date >= workout_date)
-                .filter(WorkoutLog.date < workout_date + timedelta(days=1))
+                .filter(WorkoutLog.date >= start_dt)
+                .filter(WorkoutLog.date < end_dt)
                 .order_by(WorkoutLog.id)
                 .all()
             )
@@ -149,16 +137,13 @@ def register_workout_routes(app):
             if not logs:
                 flash("Workout not found.", "error")
                 return redirect(url_for('user_dashboard', username=user.username))
-            
-            # Format workout data for display
-            workout_text = f"{date_str}\n\n"
-            for log in logs:
-                workout_text += f"{log.exercise}\n"
+
+            workout_name = logs[0].workout_name or "Workout"
             
             return render_template(
                 'workout_detail.html',
                 date=date_str,
-                workout_text=workout_text,
+                workout_name=workout_name,
                 logs=logs
             )
         except ValueError:

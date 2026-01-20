@@ -142,6 +142,7 @@ class WorkoutLog(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
 
     date = Column(DateTime, default=datetime.now, nullable=False, index=True)
+    workout_name = Column(String(100), nullable=True, index=True)
     exercise = Column(String(100), nullable=False, index=True)
     top_weight = Column(Float)  # Heaviest weight moved that day
     top_reps = Column(Integer)  # Reps at that top weight
