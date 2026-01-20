@@ -8,10 +8,19 @@ from parsers.workout import workout_parser
 from services.logging import handle_workout_log
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
-from utils.validators import validate_username
+from utils.validators import sanitize_text_input, validate_username
 
 
 def register_workout_routes(app):
+    def build_exercise_text(logs):
+        lines = []
+        for log in logs:
+            if log.top_weight and log.top_reps:
+                lines.append(f"{log.exercise} {log.top_weight} x {log.top_reps}")
+            else:
+                lines.append(log.exercise)
+        return "\n".join(lines)
+
     def get_recent_workouts(user, limit=5):
         try:
             logs = (
@@ -155,6 +164,106 @@ def register_workout_routes(app):
             return redirect(url_for('user_dashboard', username=user.username))
 
     @login_required
+    def edit_workout(date_str):
+        user = current_user
+
+        try:
+            workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            start_dt = datetime.combine(workout_date, datetime.min.time())
+            end_dt = start_dt + timedelta(days=1)
+
+            logs = (
+                Session.query(WorkoutLog)
+                .filter_by(user_id=user.id)
+                .filter(WorkoutLog.date >= start_dt)
+                .filter(WorkoutLog.date < end_dt)
+                .order_by(WorkoutLog.id)
+                .all()
+            )
+
+            if not logs:
+                flash("Workout not found.", "error")
+                return redirect(url_for('user_dashboard', username=user.username))
+
+            workout_name = logs[0].workout_name or "Workout"
+            workout_text = build_exercise_text(logs)
+
+            if request.method == 'POST':
+                title = sanitize_text_input(request.form.get('workout_title', ''), max_length=100) or "Workout"
+                date_input = request.form.get('workout_date', '').strip()
+                exercises_input = request.form.get('workout_text', '').strip()
+
+                if not date_input:
+                    flash("Please select a workout date.", "error")
+                    return redirect(url_for('edit_workout', date_str=date_str))
+
+                if not exercises_input:
+                    flash("Please enter workout exercises.", "error")
+                    return redirect(url_for('edit_workout', date_str=date_str))
+
+                try:
+                    new_date = datetime.strptime(date_input, '%Y-%m-%d').date()
+                except ValueError:
+                    flash("Invalid date format.", "error")
+                    return redirect(url_for('edit_workout', date_str=date_str))
+
+                new_start_dt = datetime.combine(new_date, datetime.min.time())
+                new_end_dt = new_start_dt + timedelta(days=1)
+
+                if new_date != workout_date:
+                    conflict = (
+                        Session.query(WorkoutLog)
+                        .filter_by(user_id=user.id)
+                        .filter(WorkoutLog.date >= new_start_dt)
+                        .filter(WorkoutLog.date < new_end_dt)
+                        .first()
+                    )
+                    if conflict:
+                        flash("A workout already exists on that date. Edit that day instead.", "error")
+                        return redirect(url_for('edit_workout', date_str=date_str))
+
+                header_date = new_date.strftime('%d/%m')
+                raw_text = f"{header_date} {title}\n{exercises_input}"
+
+                parsed = workout_parser(raw_text)
+                if not parsed:
+                    raise ParsingError("Could not parse workout data. Please check the format.")
+
+                parsed['date'] = new_start_dt
+                parsed['workout_name'] = title
+
+                Session.query(WorkoutLog).filter_by(user_id=user.id).filter(
+                    WorkoutLog.date >= start_dt,
+                    WorkoutLog.date < end_dt,
+                ).delete(synchronize_session=False)
+
+                handle_workout_log(Session, user, parsed)
+                Session.commit()
+
+                flash("Workout updated successfully!", "success")
+                return redirect(url_for('view_workout', date_str=new_date.strftime('%Y-%m-%d')))
+
+            return render_template(
+                'workout_edit.html',
+                workout_date=workout_date.strftime('%Y-%m-%d'),
+                workout_name=workout_name,
+                workout_text=workout_text,
+                date=date_str,
+            )
+        except ValueError:
+            flash("Invalid date format.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+        except ParsingError as e:
+            Session.rollback()
+            flash(str(e), "error")
+            return redirect(url_for('edit_workout', date_str=date_str))
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Error editing workout: {e}", exc_info=True)
+            flash("Error updating workout.", "error")
+            return redirect(url_for('edit_workout', date_str=date_str))
+
+    @login_required
     def log_workout():
         user = current_user
 
@@ -207,4 +316,5 @@ def register_workout_routes(app):
         methods=['GET'],
     )
     app.add_url_rule('/workout/<date_str>', endpoint='view_workout', view_func=view_workout, methods=['GET'])
+    app.add_url_rule('/workout/<date_str>/edit', endpoint='edit_workout', view_func=edit_workout, methods=['GET', 'POST'])
     app.add_url_rule('/log', endpoint='log_workout', view_func=log_workout, methods=['GET', 'POST'])

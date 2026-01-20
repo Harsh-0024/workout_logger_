@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card">
+            <div class="text-center mb-4 mb-md-5">
+                <div class="mb-3 mb-md-4">
+                    <i class="bi bi-gear" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
+                </div>
+                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">Profile Settings</h2>
+                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Manage your account details</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('user_settings') }}" class="mb-4 mb-md-5">
+                <input type="hidden" name="form_type" value="profile">
+                <div class="mb-3 mb-md-4">
+                    <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        Username
+                    </label>
+                    <input type="text" name="username" class="form-control" value="{{ user.username }}" maxlength="30" autocomplete="username" required>
+                </div>
+                <div class="mb-3 mb-md-4">
+                    <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        Email
+                    </label>
+                    <input type="email" name="email" class="form-control" value="{{ user.email }}" maxlength="255" autocomplete="email" required>
+                </div>
+                <button type="submit" class="btn btn-gold-solid w-100">
+                    <i class="bi bi-check-circle-fill me-2"></i>Update Profile
+                </button>
+            </form>
+
+            <div class="border-top pt-4 pt-md-5" style="border-color: var(--border-subtle) !important;">
+                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                    <i class="bi bi-shield-lock text-gold"></i>
+                    <h5 class="mb-0 fw-bold">Change Password</h5>
+                </div>
+                <form method="POST" action="{{ url_for('user_settings') }}">
+                    <input type="hidden" name="form_type" value="password">
+                    <div class="mb-3 mb-md-4">
+                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                            Current Password
+                        </label>
+                        <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                    </div>
+                    <div class="mb-3 mb-md-4">
+                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                            New Password
+                        </label>
+                        <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                    </div>
+                    <div class="mb-3 mb-md-4">
+                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                            Confirm New Password
+                        </label>
+                        <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                    </div>
+                    <button type="submit" class="btn btn-gold-solid w-100">
+                        <i class="bi bi-key-fill me-2"></i>Update Password
+                    </button>
+                </form>
+            </div>
+
+            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
+                <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

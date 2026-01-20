@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card">
+            <div class="text-center mb-4 mb-md-5">
+                <div class="mb-3 mb-md-4">
+                    <i class="bi bi-pencil" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
+                </div>
+                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">Edit Workout</h2>
+                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Update title, date, or exercises</p>
+            </div>
+
+            <form method="POST" action="{{ url_for('edit_workout', date_str=date) }}">
+                <div class="row g-3 mb-3 mb-md-4">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                            Workout Title
+                        </label>
+                        <input type="text" name="workout_title" class="form-control" value="{{ workout_name }}" maxlength="100" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                            Workout Date
+                        </label>
+                        <input type="date" name="workout_date" class="form-control" value="{{ workout_date }}" required>
+                    </div>
+                </div>
+
+                <div class="mb-3 mb-md-4">
+                    <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        Exercises
+                    </label>
+                    <textarea name="workout_text" class="form-control" rows="10" style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6;" spellcheck="false">{{ workout_text }}</textarea>
+                    <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                        <i class="bi bi-info-circle me-1"></i>Use the same logging format (e.g., Bench Press 100 x 5)
+                    </small>
+                </div>
+
+                <button type="submit" class="btn btn-gold-solid w-100 mb-3">
+                    <i class="bi bi-check-circle-fill me-2"></i>Save Changes
+                </button>
+            </form>
+
+            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
+                <a href="{{ url_for('view_workout', date_str=date) }}" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Workout
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

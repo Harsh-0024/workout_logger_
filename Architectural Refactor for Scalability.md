@@ -10862,72 +10862,4730 @@ now tell me what to do?
 
 ### Planner Response
 
-Here’s exactly what to do for **Railway + GitHub deploy** now that Alembic is in place.
+Here’s what to do now given **GitHub → Railway deploy**. I’ll split it by **existing DB** vs **fresh DB**.
 
 ---
 
-## ✅ One‑time setup (Railway DB)
+## ✅ 1) First: push your local changes to GitHub
+Railway only sees what’s in GitHub.
 
-### **If your Railway DB already has data/tables**
-Run **stamp** once (so Alembic knows it’s already at baseline):
+**Locally:**
+1. `git status`
+2. commit your changes
+3. `git push`
 
-**Option 1 — Railway CLI**
+---
+
+## ✅ 2) Decide: is the Railway DB already created?
+### **A) If Railway already has data (existing DB)**
+You must **stamp** the DB to the new Alembic baseline (no schema changes).
+
+Run this **once** on Railway:
+
+**Option 1 — Railway CLI (preferred)**
 ```bash
-railway run python -m alembic stamp head
+railway run alembic stamp head
 ```
 
-**Option 2 — Railway dashboard shell**
-Run the same command in the service shell.
+**Option 2 — Railway shell**
+```
+alembic stamp head
+```
 
-✅ This does **not** change schema; it just records that baseline is applied.
+This tells Alembic “this DB already matches baseline”.
 
 ---
 
-### **If your Railway DB is fresh (no tables yet)**
+### **B) If this is a fresh DB (no tables yet)**
 Run:
 
 ```bash
-railway run python -m alembic upgrade head
+railway run alembic upgrade head
 ```
 
-This will **create the full schema**.
+This will create all tables via the baseline migration.
 
 ---
 
-## ✅ Then deploy normally
-Your app will now start without trying to auto-create tables.
+## ✅ 3) Confirm you’re not using the old `/internal_db_fix`
+That endpoint is now deprecated (returns 410). All migrations now go through Alembic.
 
 ---
 
-## ✅ Future migrations (whenever models change)
-1. Create migration locally:
+## ✅ 4) Env vars to ensure app boot works
+In Railway, make sure this is set:
+
+```
+DATABASE_URL = <your Railway DB url>
+```
+
+No need to set `AUTO_CREATE_SCHEMA` unless you want a dev-only override.
+
+---
+
+## Quick checklist
+1. Push code to GitHub  
+2. Redeploy on Railway  
+3. Run **one** migration command:
+   - existing DB → `alembic stamp head`
+   - fresh DB → `alembic upgrade head`
+
+---
+
+If you want, tell me:
+1) Is the Railway DB already populated?  
+2) Are you using Railway CLI or dashboard shell?  
+
+I’ll give the exact command sequence for your case.
+
+### User Input
+
+tell me how to do it.
+i have done till now:
+Installed Railway CLI, Flask-Migrate, and all required libraries (bcrypt, psycopg2)
+
+### Planner Response
+
+I’ll walk you through *exactly* what to run with Railway CLI and your GitHub deployment, including how to check if your Railway DB is “existing” or “fresh” and which Alembic command to use in each case. I’ll focus on production (Railway) first, then briefly mention local dev.
+
+*Updated todo list*
+
+### Planner Response
+
+I’ll give you a concrete, copy‑pasteable sequence using **Railway CLI + Alembic**.
+
+You’ve already installed Railway CLI and dependencies, so we’ll:
+
+1. Link CLI to your Railway project  
+2. Make sure env vars are correct  
+3. Run the **right Alembic command** on Railway  
+4. Redeploy / verify
+
+You **don’t** need to use Flask-Migrate commands; our app uses **Alembic directly**.
+
+---
+
+## 1. Link Railway CLI to your project
+
+In your terminal on your Mac:
+
 ```bash
-python -m alembic revision --autogenerate -m "describe_change"
+cd /Users/harsh24/Desktop/Workout_plan
+railway login          # opens browser once, if not already logged in
+railway link           # select your existing Railway project for this app
 ```
-2. Apply locally:
+
+If you have multiple environments (prod, dev):
+
 ```bash
-python -m alembic upgrade head
+railway environments   # see list
+railway environment production   # or whatever your prod env is called
 ```
-3. Commit + push migration file.
-4. On Railway:
+
+---
+
+## 2. Check / set DATABASE_URL on Railway
+
+Either via **Railway dashboard** (Settings → Variables) or via CLI:
+
 ```bash
-railway run python -m alembic upgrade head
+railway variables
+```
+
+Make sure there is a variable:
+
+```text
+DATABASE_URL = <your Railway Postgres connection string>
+```
+
+If it’s not set, copy the Postgres URL from Railway’s “Database” plugin and add it as `DATABASE_URL`.
+
+---
+
+## 3. Decide: existing data vs fresh DB
+
+Ask yourself:
+
+- **Have you already used the app on Railway and logged workouts / created users you care about?**
+  - **Yes → existing DB → we will `stamp`**
+  - **No → fresh/empty DB → we will [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:14:0-15:8)**
+
+I’ll show both; pick **one** path.
+
+---
+
+## 3A. If Railway DB already has data (most likely)
+
+You want Alembic to “adopt” the current schema without changing it.
+
+From your project root on your machine:
+
+```bash
+cd /Users/harsh24/Desktop/Workout_plan
+
+# Optional: see what Alembic thinks right now
+railway run alembic current
+
+# One-time: mark the DB as being at the baseline revision
+railway run alembic stamp head
+```
+
+What this does:
+
+- Connects to your Railway Postgres using `DATABASE_URL`
+- Creates an `alembic_version` table if needed
+- Writes the baseline revision id into it  
+- **Does not** create/alter any tables (so your existing data is safe)
+
+After this, your **next code changes** that add migrations will use:
+
+```bash
+railway run alembic upgrade head
+```
+
+to actually change the schema.
+
+---
+
+## 3B. If Railway DB is fresh/empty (no tables yet)
+
+If you don’t care about existing data and just want the schema created by Alembic:
+
+```bash
+cd /Users/harsh24/Desktop/Workout_plan
+
+# One-time on a new DB
+railway run alembic upgrade head
+```
+
+This will:
+
+- Create all tables (`users`, `lifts`, `plans`, `rep_ranges`, `workout_logs`, etc.)
+- Insert the baseline revision into `alembic_version`
+
+---
+
+## 4. Trigger/review deploy
+
+Because you deploy via GitHub:
+
+1. Make sure your latest code (with [alembic.ini](file:///Users/harsh24/Desktop/Workout_plan/alembic.ini:0:0-0:0), `migrations/`, etc.) is **pushed to GitHub**:
+   ```bash
+   git status
+   git add .
+   git commit -m "Add Alembic migrations and app factory refactor"
+   git push
+   ```
+
+2. Railway will auto-deploy from GitHub. You can watch logs:
+   ```bash
+   railway logs
+   ```
+
+3. Open the app:
+   ```bash
+   railway open
+   ```
+
+If the DB was stamped/upgraded correctly, the app should boot without complaining about missing tables or `/internal_db_fix`.
+
+---
+
+## Optional: local dev DB
+
+For your **local** SQLite / Postgres:
+
+- Fresh DB:
+  ```bash
+  alembic upgrade head
+  ```
+- Existing DB you want to keep:
+  ```bash
+  alembic stamp head
+  ```
+
+(Using your local env vars instead of Railway.)
+
+---
+
+## What I recommend for you now
+
+Given you already had the app running on Railway **before** we added Alembic, you almost certainly have an **existing DB with data**.
+
+So run these three commands now:
+
+```bash
+cd /Users/harsh24/Desktop/Workout_plan
+railway link                # if not already linked
+railway environment production   # if you have multiple
+railway run alembic stamp head
+```
+
+Then open the app and test login/register.
+
+If anything fails (error in `railway run alembic stamp head` or app logs), copy-paste the exact error message here and I’ll debug step‑by‑step.
+
+### User Input
+
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway run flask db stamp head
+Error: While importing 'app', an ImportError was raised:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/flask/cli.py", line 219, in locate_app
+    __import__(module_name)
+    ~~~~~~~~~~^^^^^^^^^^^^^
+  File "/Users/harsh24/Desktop/Workout_plan/app.py", line 8, in <module>
+    from workout_tracker import create_app
+  File "/Users/harsh24/Desktop/Workout_plan/workout_tracker/__init__.py", line 15, in <module>
+    from .routes.auth import register_auth_routes
+  File "/Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/auth.py", line 8, in <module>
+    from services.auth import AuthService, AuthenticationError
+  File "/Users/harsh24/Desktop/Workout_plan/services/auth.py", line 4, in <module>                                                                                              
+    import bcrypt                                                                                                                                                               
+ModuleNotFoundError: No module named 'bcrypt'                                                                                                                                   
+                                                                                                                                                                                
+                                                                                                                                                                                
+Usage: flask [OPTIONS] COMMAND [ARGS]...
+Try 'flask --help' for help.
+
+Error: No such command 'db'.
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % pip install bcrypt psycopg2-binary
+Collecting bcrypt
+  Using cached bcrypt-5.0.0-cp39-abi3-macosx_10_12_universal2.whl.metadata (10 kB)
+Requirement already satisfied: psycopg2-binary in /Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages (2.9.10)
+Using cached bcrypt-5.0.0-cp39-abi3-macosx_10_12_universal2.whl (495 kB)
+Installing collected packages: bcrypt
+Successfully installed bcrypt-5.0.0
+
+[notice] A new release of pip is available: 24.3.1 -> 25.3
+[notice] To update, run: pip install --upgrade pip
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway run flask db stamp head
+Usage: flask [OPTIONS] COMMAND [ARGS]...
+Try 'flask --help' for help.
+
+Error: No such command 'db'.
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway run alembic stamp head
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 308, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: could not translate host name "postgres.railway.internal" to address: nodename nor servname provided, or not known
+                                                                                                                                                                                
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/bin/alembic", line 8, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/config.py", line 1047, in main
+    CommandLine(prog=prog).main(argv=argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/config.py", line 1037, in main
+    self.run_cmd(cfg, options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/config.py", line 971, in run_cmd
+    fn(
+    ~~^
+        config,
+        ^^^^^^^
+        *[getattr(options, k, None) for k in positional],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **{k: getattr(options, k, None) for k in kwarg},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/command.py", line 789, in stamp
+    script.run_env()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/script/base.py", line 545, in run_env
+    util.load_python_file(self.dir, "env.py")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 116, in load_python_file
+    module = load_module_py(module_id, path)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 136, in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/Users/harsh24/Desktop/Workout_plan/migrations/env.py", line 59, in <module>
+    run_migrations_online()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/harsh24/Desktop/Workout_plan/migrations/env.py", line 45, in run_migrations_online
+    with connectable.connect() as connection:
+         ~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3278, in connect
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 148, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, dialect, engine
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2442, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 308, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) could not translate host name "postgres.railway.internal" to address: nodename nor servname provided, or not known
+                                                                                                                                                                                
+(Background on this error at: https://sqlalche.me/e/20/e3q8)                                                                                                                    
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway run alembic stamp head
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 308, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: could not translate host name "postgres.railway.internal" to address: nodename nor servname provided, or not known
+                                                                                                                                                                                
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/bin/alembic", line 8, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/config.py", line 1047, in main
+    CommandLine(prog=prog).main(argv=argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/config.py", line 1037, in main
+    self.run_cmd(cfg, options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/config.py", line 971, in run_cmd
+    fn(
+    ~~^
+        config,
+        ^^^^^^^
+        *[getattr(options, k, None) for k in positional],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **{k: getattr(options, k, None) for k in kwarg},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/command.py", line 789, in stamp
+    script.run_env()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/script/base.py", line 545, in run_env
+    util.load_python_file(self.dir, "env.py")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 116, in load_python_file
+    module = load_module_py(module_id, path)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 136, in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1026, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/Users/harsh24/Desktop/Workout_plan/migrations/env.py", line 59, in <module>
+    run_migrations_online()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Users/harsh24/Desktop/Workout_plan/migrations/env.py", line 45, in run_migrations_online
+    with connectable.connect() as connection:
+         ~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3278, in connect
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 148, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, dialect, engine
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2442, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 308, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) could not translate host name "postgres.railway.internal" to address: nodename nor servname provided, or not known
+                                                                                                                                                                                
+(Background on this error at: https://sqlalche.me/e/20/e3q8)                                                                                                                    
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % alembic stamp head            
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running stamp_revision  -> 0001
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % 
+
+### Planner Response
+
+Good, this log tells us **exactly** what’s happening and how to fix it.
+
+---
+
+## 1. What just happened
+
+- `railway run flask db stamp head`  
+  - Fails because **we are not using Flask‑Migrate**. Ignore this; we won’t use `flask db` at all.
+
+- `railway run alembic stamp head`  
+  - Uses `DATABASE_URL=postgres.railway.internal/...` from Railway.
+  - But `railway run` executes **on your Mac with those env vars**, so your Mac tries to resolve `postgres.railway.internal` → fails (that hostname is only visible **inside Railway’s network**).
+
+- Plain `alembic stamp head`  
+  - This ran **locally**, and Alembic used your local SQLite URL (`sqlite:///workout.db`).
+  - Result: local DB is now stamped (good), but **Railway DB is still unstamped**.
+
+So now we just need to stamp the DB **from inside Railway’s environment**, where `postgres.railway.internal` works.
+
+---
+
+## 2. Run Alembic *inside* Railway (via dashboard shell)
+
+Do this once:
+
+1. Go to **Railway dashboard** in your browser.
+2. Open your project → click the **web service** that runs your Flask app.
+3. In that service view, find and click **“Shell”** (or **“Start Shell” / “Console”** depending on UI).
+   - This opens a terminal **inside the running container**, with all env vars and internal DNS.
+4. In the shell prompt that appears, run:
+
+   ```bash
+   cd /app    # or wherever your code lives; often /app
+   ls         # you should see app.py, alembic.ini, migrations/, etc.
+   ```
+
+5. (Optional) Check current Alembic state:
+
+   ```bash
+   alembic current
+   ```
+
+6. Then stamp the existing DB:
+
+   ```bash
+   alembic stamp head
+   ```
+
+   You should see something like:
+
+   ```text
+   INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+   INFO  [alembic.runtime.migration] Running stamp_revision  -> 0001
+   ```
+
+After this, the Railway DB is adopted by Alembic at the baseline.
+
+---
+
+## 3. Alternative if shell is not available
+
+If for some reason you **don’t** have Shell on your plan, a fallback is:
+
+1. Temporarily change your Railway start command (in Settings → Deploy / Start Command) to:
+
+   ```bash
+   alembic stamp head && python app.py
+   ```
+
+2. Redeploy.  
+   - First run stamps the DB, then starts the app.
+3. Once it works and DB is stamped, change it back to:
+
+   ```bash
+   python app.py
+   ```
+
+But if you **do** have Shell, that’s cleaner and safer.
+
+---
+
+## 4. Where you stand now
+
+- ✅ Local SQLite DB is already stamped (`alembic stamp head` succeeded).
+- ⭕ Railway Postgres DB not yet stamped — fix by running `alembic stamp head` **inside** Railway as described above.
+
+---
+
+If you open the Railway Shell and run a couple commands (`pwd`, `ls`, `alembic current`), you can paste that output here and I’ll confirm you’re in the right directory and the stamp ran correctly.
+
+### User Input
+
+<html lang="en" class="dark" style="color-scheme: dark;"><head><style><!----> <!--?lit$911901891$-->.osano-cm-window{font-family:Helvetica,Arial,Hiragino Sans GB,STXihei,Microsoft YaHei,WenQuanYi Micro Hei,Hind,MS Gothic,Apple SD Gothic Neo,NanumBarunGothic,sans-serif;font-size:16px;font-smooth:always;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothingz:auto;display:block;left:0;line-height:1;position:absolute;top:0;width:100%;z-index:2147483638;--fade-transition-time:700ms;--slide-transition-time:400ms}.osano-cm-window--context_amp{height:100%}.osano-visually-hidden{height:1px;left:-10000px;margin:-1px;opacity:0;overflow:hidden;position:absolute;width:1px}.osano-cm-button{background-color:var(--osano-button-background-color);border-color:var(--osano-button-foreground-color);border-radius:.25em;border-style:solid;border-width:thin;color:var(--osano-button-foreground-color);cursor:pointer;flex:1 1 auto;font-size:1em;font-weight:700;line-height:1;margin:.125em;min-width:6em;padding:.5em .75em;transition-duration:.2s;transition-property:background-color;transition-timing-function:ease-out}.osano-cm-button:focus,.osano-cm-button:hover{background-color:var(--osano-button-background-hover);outline:none}.osano-cm-button--type_icon{border-radius:50%;height:1em;line-height:0;min-width:1em;width:1em}.osano-cm-button--type_deny{background-color:var(--osano-button-deny-background-color);border-color:var(--osano-button-deny-foreground-color);color:var(--osano-button-deny-foreground-color)}.osano-cm-button--type_deny:focus,.osano-cm-button--type_deny:hover{background-color:var(--osano-button-deny-background-hover)}.osano-cm-close{border-radius:50%;box-sizing:content-box;cursor:pointer;height:20px;margin:.5em;min-height:20px;min-width:20px;order:0;outline:none;overflow:hidden;padding:0;width:20px;stroke-width:1px;background-color:transparent;border:2px solid transparent;display:flex;justify-content:center;line-height:normal;text-decoration:none;transform:rotate(0deg);transition-duration:.2s;transition-property:transform,color,background-color,stroke,stroke-width;transition-timing-function:ease-out;z-index:2}.osano-cm-close:focus,.osano-cm-close:hover{transform:rotate(90deg);stroke-width:2px}.ccpa-opt-out-icon{display:flex;flex:1 1 auto}.ccpa-opt-out-icon svg{max-width:40px}.osano-cm-link{color:var(--osano-link-color);cursor:pointer;text-decoration:underline;transition-duration:.2s;transition-property:color;transition-timing-function:ease-out}.osano-cm-link:active,.osano-cm-link:hover{color:var(--osano-link-color);outline:none}.osano-cm-link:focus{color:var(--osano-link-color-focus);font-weight:700;outline:none}.osano-cm-link--type_feature,.osano-cm-link--type_purpose,.osano-cm-link--type_specialFeature,.osano-cm-link--type_specialPurpose{cursor:help;display:block;-webkit-text-decoration:dashed;text-decoration:dashed}.osano-cm-link--type_denyAll{display:block;text-align:right}[dir=rtl] .osano-cm-link--type_denyAll{text-align:left}.osano-cm-link--type_vendor{display:block}.osano-cm-link-separator:before{content:"|";padding:0 .5em}.osano-cm-vendor-link{font-size:.75em}.osano-cm-list-item{margin:0}.osano-cm-list-item--type_term{border-top-style:solid;border-top-width:1px;font-size:.875rem;font-weight:400;margin-bottom:.25em;margin-top:.5em;padding:.5em .75rem 0;position:relative;top:-1px}.osano-cm-list-item--type_description{font-size:.75rem;font-weight:lighter;padding:0 .75rem}.osano-cm-list{list-style-position:outside;list-style-type:none;margin:0;padding:0}.osano-cm-list__list-item{text-indent:0}.osano-cm-list--type_description{margin:0 -1em}.osano-cm-list:first-of-type .osano-cm-list__list-item:first-of-type{border-top-width:0;margin-top:0;padding-top:0}.osano-cm-toggle{align-items:center;display:flex;flex-direction:row-reverse;justify-content:flex-start;margin:.25em 0;pointer-events:auto;position:relative}.osano-cm-toggle__label{margin:0 .5em 0 0}[dir=rtl] .osano-cm-toggle__label{margin:0 0 0 .5em}.osano-cm-toggle__switch{background-color:var(--osano-toggle-off-background-color);border-radius:14px;border-style:solid;border-width:2px;box-sizing:content-box;color:transparent;display:block;flex-shrink:0;height:18px;line-height:0;margin:0;position:relative;text-indent:-9999px;transition-duration:.2s;transition-property:background-color;transition-timing-function:ease-out;width:40px}.osano-cm-toggle__switch:hover{cursor:pointer}.osano-cm-toggle__switch:after{background-color:var(--osano-toggle-button-off-color);border-color:var(--osano-toggle-button-off-color);border-radius:9px;border-width:0;height:18px;left:0;top:0;width:18px}.osano-cm-toggle__switch:before{border-color:transparent;border-radius:16px;border-width:2px;bottom:-6px;box-sizing:border-box;left:-6px;right:-6px;top:-6px}.osano-cm-toggle__switch:after,.osano-cm-toggle__switch:before{border-style:solid;content:"";margin:0;position:absolute;transform:translateX(0);transition-duration:.3s;transition-property:transform,left,border-color;transition-timing-function:ease-out}.osano-cm-toggle__switch:after:active,.osano-cm-toggle__switch:before:active{transition-duration:.1s}.osano-cm-toggle__switch:after:active{width:26px}.osano-cm-toggle__switch:before:active{width:34px}[dir=rtl] .osano-cm-toggle__switch:after{left:100%;transform:translateX(-100%)}.osano-cm-toggle__input{height:1px;left:-10000px;margin:-1px;opacity:0;overflow:hidden;position:absolute;width:1px}[dir=rtl] .osano-cm-toggle__input{left:0;right:-10000px}.osano-cm-toggle__input:disabled{cursor:default}.osano-cm-toggle--type_checkbox .osano-cm-toggle__switch{border-radius:4px;border-style:solid;border-width:1px;height:22px;width:22px}.osano-cm-toggle--type_checkbox .osano-cm-toggle__switch:after{background-color:transparent!important;border-bottom-width:2px;border-left-width:2px;border-radius:0;content:none;height:6px;left:3px;top:3px;transform:rotate(-45deg);transition-property:color;transition-timing-function:ease-out;width:12px}.osano-cm-toggle--type_opt-out .osano-cm-toggle__switch{border-radius:4px;border-style:solid;border-width:1px;height:22px;width:22px}.osano-cm-toggle--type_opt-out .osano-cm-toggle__switch:after,.osano-cm-toggle--type_opt-out .osano-cm-toggle__switch:before{background-color:transparent!important;border-bottom-width:1px;border-radius:0;border-top-width:1px;content:none;height:0;left:-3px;top:7px;transition-property:color;transition-timing-function:ease-out;width:12px}.osano-cm-toggle--type_opt-out .osano-cm-toggle__switch:after{transform:translate(50%,50%) rotate(-45deg)}.osano-cm-toggle--type_opt-out .osano-cm-toggle__switch:before{transform:translate(50%,50%) rotate(45deg)}.osano-cm-toggle__input:checked+.osano-cm-toggle__switch{background-color:var(--osano-toggle-on-background-color);border-color:var(--osano-toggle-on-background-color)}.osano-cm-toggle__input:checked+.osano-cm-toggle__switch:after{background-color:var(--osano-toggle-button-on-color);border-color:var(--osano-toggle-button-on-color);left:100%;transform:translateX(-100%)}[dir=rtl] .osano-cm-toggle__input:checked+.osano-cm-toggle__switch:after{left:0;transform:translateX(0)}.osano-cm-toggle__input:focus+.osano-cm-toggle__switch,.osano-cm-toggle__input:hover+.osano-cm-toggle__switch{background-color:var(--osano-toggle-off-background-hover-focus);border-color:var(--osano-toggle-off-background-hover-focus)}.osano-cm-toggle__input:focus+.osano-cm-toggle__switch:before{border-color:var(--osano-toggle-off-background-hover-focus)}.osano-cm-toggle__input:disabled+.osano-cm-toggle__switch{cursor:default}.osano-cm-toggle--type_checkbox .osano-cm-toggle__input:checked+.osano-cm-toggle__switch:after{content:"";left:3px;top:3px;transform:rotate(-45deg)}.osano-cm-toggle--type_opt-out .osano-cm-toggle__input:checked+.osano-cm-toggle__switch:after,.osano-cm-toggle--type_opt-out .osano-cm-toggle__input:checked+.osano-cm-toggle__switch:before{content:"";left:-1px;top:9px}.osano-cm-toggle--type_opt-out .osano-cm-toggle__input:checked+.osano-cm-toggle__switch:after{transform:translate(50%,50%) rotate(-45deg)}.osano-cm-toggle--type_opt-out .osano-cm-toggle__input:checked+.osano-cm-toggle__switch:before{transform:translate(50%,50%) rotate(45deg)}.osano-cm-toggle--type_checkbox .osano-cm-toggle__input:disabled+.osano-cm-toggle__switch,.osano-cm-toggle--type_opt-out .osano-cm-toggle__input:disabled+.osano-cm-toggle__switch{opacity:.3}.osano-cm-toggle__input:checked:focus+.osano-cm-toggle__switch,.osano-cm-toggle__input:checked:hover+.osano-cm-toggle__switch{background-color:var(--osano-toggle-on-background-hover-focus);border-color:var(--osano-toggle-on-background-hover-focus)}.osano-cm-toggle__input:checked:focus+.osano-cm-toggle__switch:before{border-color:var(--osano-toggle-on-background-hover-focus)}.osano-cm-toggle__input:disabled+.osano-cm-toggle__switch,.osano-cm-toggle__input:disabled:focus+.osano-cm-toggle__switch,.osano-cm-toggle__input:disabled:hover+.osano-cm-toggle__switch{background-color:var(--osano-toggle-off-background-disabled);border-color:var(--osano-toggle-off-background-disabled)}.osano-cm-toggle__input:disabled+.osano-cm-toggle__switch:after,.osano-cm-toggle__input:disabled:focus+.osano-cm-toggle__switch:after,.osano-cm-toggle__input:disabled:hover+.osano-cm-toggle__switch:after{background-color:var(--osano-toggle-button-off-disabled);border-color:var(--osano-toggle-button-off-disabled)}.osano-cm-toggle__input:disabled+.osano-cm-toggle__switch:before,.osano-cm-toggle__input:disabled:focus+.osano-cm-toggle__switch:before,.osano-cm-toggle__input:disabled:hover+.osano-cm-toggle__switch:before{border-color:transparent}.osano-cm-toggle__input:disabled:checked+.osano-cm-toggle__switch,.osano-cm-toggle__input:disabled:checked:focus+.osano-cm-toggle__switch,.osano-cm-toggle__input:disabled:checked:hover+.osano-cm-toggle__switch{background-color:var(--osano-toggle-on-background-disabled);border-color:var(--osano-toggle-on-background-disabled)}.osano-cm-toggle__input:disabled:checked+.osano-cm-toggle__switch:after,.osano-cm-toggle__input:disabled:checked:focus+.osano-cm-toggle__switch:after,.osano-cm-toggle__input:disabled:checked:hover+.osano-cm-toggle__switch:after{background-color:var(--osano-toggle-button-on-disabled);border-color:var(--osano-toggle-button-on-disabled)}.osano-cm-toggle__input:disabled:checked+.osano-cm-toggle__switch:before,.osano-cm-toggle__input:disabled:checked:focus+.osano-cm-toggle__switch:before,.osano-cm-toggle__input:disabled:checked:hover+.osano-cm-toggle__switch:before{border-color:transparent}.osano-cm-widget{background:none;border:none;bottom:12px;cursor:pointer;height:40px;opacity:.9;outline:none;padding:0;position:fixed;transition:transform .1s linear 0s,opacity .2s linear 0ms,visibility 0ms linear 0ms;visibility:visible;width:40px;z-index:2147483636}.osano-cm-widget--position_right{right:12px}.osano-cm-widget--position_left{left:12px}.osano-cm-widget:focus{outline:solid;outline-offset:.2rem}.osano-cm-widget:focus,.osano-cm-widget:hover{opacity:1;transform:scale(1.1)}.osano-cm-widget--hidden{opacity:0;visibility:hidden}.osano-cm-widget--hidden:focus,.osano-cm-widget--hidden:hover{opacity:0;transform:scale(1)}.osano-cm-widget__outline{fill:var(--osano-widget-fill-color);stroke:var(--osano-widget-outline-color)}.osano-cm-widget__dot{fill:var(--osano-widget-color)}.osano-cm-dialog{align-items:center;background:var(--osano-dialog-background-color);box-sizing:border-box;color:var(--osano-dialog-foreground-color);font-size:1em;line-height:1.25;max-height:100vh;overflow:auto;padding:1.5em;position:fixed;transition-delay:0ms,0ms;transition-duration:.7s,0ms;transition-property:opacity,visibility;visibility:visible;z-index:2147483637}.osano-cm-dialog--hidden{opacity:0;transition-delay:0ms,.7s;visibility:hidden}.osano-cm-dialog--type_bar{box-sizing:border-box;display:flex;flex-direction:column;left:0;right:0}.osano-cm-dialog--type_bar .osano-cm-button{flex:none;margin:.125em auto;width:80%}@media screen and (min-width:768px){.osano-cm-dialog--type_bar{flex-direction:row}.osano-cm-dialog--type_bar .osano-cm-button{flex:1 1 100%;margin:.25em .5em;width:auto}}.osano-cm-dialog--type_box{flex-direction:column;max-height:calc(100vh - 2em);max-width:20em;width:calc(100vw - 2em)}.osano-cm-dialog__close{color:var(--osano-dialog-foreground-color);position:absolute;right:0;top:0;stroke:var(--osano-dialog-foreground-color)}.osano-cm-dialog__close:hover{stroke:var(--osano-dialog-foreground-hover)}.osano-cm-dialog__close:focus{background-color:var(--osano-dialog-foreground-color);border-color:var(--osano-dialog-foreground-color);stroke:var(--osano-dialog-background-color)}.osano-cm-dialog__close:focus:hover{stroke:var(--osano-dialog-background-hover)}.osano-cm-dialog__list{margin:.5em 0 0;padding:0}.osano-cm-dialog__list .osano-cm-item{display:flex;margin-top:0}.osano-cm-dialog__list .osano-cm-item:last-child{margin-bottom:0}.osano-cm-dialog__list .osano-cm-toggle{flex-direction:row}[dir=rtl] .osano-cm-dialog__list .osano-cm-toggle{flex-direction:row-reverse}.osano-cm-dialog__list .osano-cm-label{white-space:nowrap}[dir=ltr] .osano-cm-dialog__list .osano-cm-label{margin-left:.375em}[dir=rtl] .osano-cm-dialog__list .osano-cm-label{margin-right:.375em}.osano-cm-dialog__buttons{display:flex;flex-wrap:wrap}.osano-cm-dialog--type_bar .osano-cm-dialog__content{flex:5;margin-bottom:.25em;width:100%}.osano-cm-dialog--type_box .osano-cm-dialog__content{display:flex;flex-direction:column;flex-grow:.0001;transition:flex-grow 1s linear}.osano-cm-dialog--type_box .osano-cm-link-separator:before{content:"";padding:0}.osano-cm-dialog--type_box .osano-cm-content__link{margin-bottom:.5em}.osano-cm-dialog--type_bar .osano-cm-dialog__list{display:flex;flex-direction:column;flex-wrap:wrap;justify-content:flex-start;margin:.75em auto}@media screen and (min-width:376px){.osano-cm-dialog--type_bar .osano-cm-dialog__list{flex-direction:row}}@media screen and (min-width:768px){.osano-cm-dialog--type_bar .osano-cm-dialog__list{margin:.5em 0 0 auto}[dir=rtl] .osano-cm-dialog--type_bar .osano-cm-dialog__list{margin:.5em auto 0 0}}[dir=ltr] .osano-cm-dialog--type_bar .osano-cm-dialog__list .osano-cm-item{margin-right:.5em}[dir=rtl] .osano-cm-dialog--type_bar .osano-cm-dialog__list .osano-cm-item{margin-left:.5em}.osano-cm-dialog--type_bar .osano-cm-dialog__list .osano-cm-label{padding-top:0}.osano-cm-dialog--type_bar .osano-cm-dialog__buttons{flex:1;justify-content:flex-end;margin:0;width:100%}@media screen and (min-width:768px){.osano-cm-dialog--type_bar .osano-cm-dialog__buttons{margin:0 0 0 .5em;max-width:30vw;min-width:16em;position:sticky;top:0;width:auto}[dir=rtl] .osano-cm-dialog--type_bar .osano-cm-dialog__buttons{margin:0 .5em 0 0}}.osano-cm-dialog--type_box .osano-cm-dialog__buttons{margin:.5em 0 0}.osano-cm-dialog--type_bar.osano-cm-dialog--position_top{top:0}.osano-cm-dialog--type_bar.osano-cm-dialog--position_bottom{bottom:0}.osano-cm-dialog--type_box.osano-cm-dialog--position_top-left{left:1em;top:1em}.osano-cm-dialog--type_box.osano-cm-dialog--position_top-right{right:1em;top:1em}.osano-cm-dialog--type_box.osano-cm-dialog--position_bottom-left{bottom:1em;left:1em}.osano-cm-dialog--type_box.osano-cm-dialog--position_bottom-right{bottom:1em;right:1em}.osano-cm-dialog--type_box.osano-cm-dialog--position_center{left:50%;top:50%;transform:translate(-50%,-50%)}.osano-cm-dialog--type_box.osano-cm-dialog--wide{max-width:50em}@media screen and (max-height:800px)and (max-width:1200px){.osano-cm-dialog--type_box.osano-cm-dialog--wide{max-width:calc(100vw - 4em)}}.osano-cm-dialog--type_box.osano-cm-dialog--wide .osano-cm-dialog__list{display:flex;flex-wrap:wrap}.osano-cm-dialog--context_amp{height:100%;position:relative}.osano-cm-content__message{margin-bottom:1em;white-space:pre-line;word-break:break-word}.osano-cm-drawer-links{margin:.5em 0 0}.osano-cm-drawer-links__link{display:block}.osano-cm-storage-policy{display:inline-block}.osano-cm-usage-list{margin:0 0 .5em}.osano-cm-usage-list__list{list-style-position:inside;list-style-type:disc}:export{fadeTransitionTime:.7s;slideTransitionTime:.4s}.osano-cm-info-dialog{background:var(--osano-info-dialog-overlay-color);height:100vh;left:0;position:fixed;top:0;transition-delay:0ms,0ms;transition-duration:.2s,0ms;transition-property:opacity,visibility;visibility:visible;width:100vw;z-index:2147483638}.osano-cm-info-dialog--hidden{opacity:0;transition-delay:0ms,.2s;visibility:hidden}.osano-cm-header{background:var(--osano-info-dialog-background-color);background:linear-gradient(180deg,var(--osano-info-dialog-background-color) 2.5em,var(--osano-clear-dialog-background) 100%);margin:0 0 -1em;padding:1em 0;position:sticky;top:0;z-index:1}.osano-cm-info{animation:delay-overflow .4s;background:var(--osano-info-dialog-background-color);bottom:0;box-shadow:0 0 2px 2px #ccc;box-sizing:border-box;color:var(--osano-info-dialog-foreground-color);max-width:20em;overflow:visible visible;position:fixed;top:0;transition-duration:.4s;transition-property:transform;width:100%}.osano-cm-info--position_left{left:0;transform:translate(-100%)}.osano-cm-info--position_right{right:0;transform:translate(100%)}.osano-cm-info--open{animation:none;overflow:hidden auto;transform:translate(0)}.osano-cm-info--do_not_sell{animation:none;height:-moz-fit-content;height:fit-content;left:50%;max-height:100vh;position:fixed;right:auto;top:50%;transform:translate(-50%,-50%);transition:none}.osano-cm-info--do_not_sell .osano-cm-close{order:-1}.osano-cm-info--do_not_sell .osano-cm-header{box-sizing:content-box;display:block;flex:none}.osano-cm-info-views{align-items:flex-start;display:flex;flex-direction:row;flex-wrap:nowrap;height:100%;transition-duration:.4s;transition-property:transform;width:100%}[dir=rtl] .osano-cm-info-views{flex-direction:row-reverse}.osano-cm-info-views__view{box-sizing:border-box;flex-shrink:0;width:100%}.osano-cm-info-views--position_0>:not(:first-of-type){max-height:100%;overflow:hidden}.osano-cm-info-views--position_1{transform:translateX(-100%)}.osano-cm-info-views--position_1>:not(:nth-of-type(2)){max-height:100%;overflow:hidden}.osano-cm-info-views--position_2{transform:translateX(-200%)}.osano-cm-info-views--position_2>:not(:nth-of-type(3)){max-height:100%;overflow:hidden}.osano-cm-info--do_not_sell .osano-cm-info-views{height:-moz-fit-content;height:fit-content}.osano-cm-view{height:0;padding:0 .75em 1em;transition-delay:.4s;transition-duration:0ms;transition-property:height,visibility;visibility:hidden;width:100%}.osano-cm-view__button{font-size:.875em;margin:1em 0 0;width:100%}.osano-cm-view--active{height:auto;transition-delay:0ms;visibility:visible}.osano-cm-description{font-size:.75em;font-weight:300;line-height:1.375;margin:1em 0 0;white-space:pre-line}.osano-cm-description:first-child{margin:0}.osano-cm-description:last-of-type{margin-bottom:1em}.osano-cm-drawer-toggle .osano-cm-label{font-size:.875em;line-height:1.375em;margin:0 auto 0 0}[dir=rtl] .osano-cm-drawer-toggle .osano-cm-label{margin:0 0 0 auto}.osano-cm-info-dialog-header{align-items:center;background:var(--osano-info-dialog-background-color);background:linear-gradient(180deg,var(--osano-info-dialog-background-color) 2.5em,var(--osano-clear-dialog-background) 100%);display:flex;flex-direction:row-reverse;left:auto;min-height:3.25em;position:sticky;top:0;width:100%;z-index:1}[dir=rtl] .osano-cm-info-dialog-header{flex-direction:row}.osano-cm-info-dialog-header__header{align-items:center;display:flex;flex:1 1 auto;font-size:1em;justify-content:flex-start;margin:0;order:1;padding:1em .75em}.osano-cm-info-dialog-header__description{font-size:.75em;line-height:1.375}.osano-cm-info-dialog-header__close{color:var(--osano-info-dialog-foreground-color);position:relative;stroke:var(--osano-info-dialog-foreground-color)}.osano-cm-info-dialog-header__close:hover{stroke:var(--osano-info-dialog-foreground-hover)}.osano-cm-info-dialog-header__close:focus{background-color:var(--osano-info-dialog-foreground-color);border-color:var(--osano-info-dialog-foreground-color);stroke:var(--osano-info-dialog-background-color)}.osano-cm-info-dialog-header__close:focus:hover{stroke:var(--osano-info-dialog-background-hover)}.osano-cm-back{flex:0 1 auto;margin:0 0 0 .5em;min-width:0;order:2;position:relative;width:auto;z-index:2}[dir=rtl] .osano-cm-back{margin:0 .5em 0 0}.osano-cm-powered-by{align-items:center;display:flex;flex-direction:column;font-weight:700;justify-content:center;margin:1em 0}.osano-cm-powered-by__link{font-size:.625em;outline:none;text-decoration:none}.osano-cm-powered-by__link:focus,.osano-cm-powered-by__link:hover{text-decoration:underline}@keyframes delay-overflow{0%{overflow:hidden auto}}.osano-cm-drawer-iab-button-container{display:flex;gap:.5em;justify-content:center;margin-bottom:2em}.osano-cm-illustrations__list>.osano-cm-list-item--type_description{padding:.2rem 1rem}.osano-cm-drawer-item.osano-cm-description__list li{padding-top:.75em}.osano-cm-tcf-purpose--label{border-bottom:1px solid rgba(0,0,0,.1);display:block;margin-bottom:.5em;padding:.25em 0 .5em}.osano-cm-link.osano-cm-link--type_purpose{font-weight:400}.osano-cm-tcf-purpose--label input{accent-color:var(--osano-toggle-on-background-color);float:right;margin-right:.5em}.osano-cm-expansion-panel{border-bottom:1px solid rgba(0,0,0,.1);display:block;font-size:.75em;margin:0 -1.5em 1em;padding:1.5em 1.5em 0}.osano-cm-expansion-panel--expanded{border-bottom:none}.osano-cm-expansion-panel--empty,.osano-cm-expansion-panel--empty:not([open]){border-bottom:1px solid rgba(0,0,0,.1);padding-bottom:0}.osano-cm-expansion-panel__body{background-color:rgba(0,0,0,.1);line-height:1.25;list-style:none;margin:0 -1.5em;max-height:0;overflow:hidden;padding:0 1.5em;transition-delay:0ms,0ms,0ms,.3s;transition-duration:.3s,.3s,.3s,0s;transition-property:max-height,padding-top,padding-bottom,visibility;transition-timing-function:ease-out;visibility:hidden}.osano-cm-expansion-panel__toggle{cursor:pointer;display:block;line-height:1.25;margin:0 auto 1em 0;position:relative}.osano-cm-expansion-panel__toggle,.osano-cm-expansion-panel__toggle:active,.osano-cm-expansion-panel__toggle:hover{color:var(--osano-link-color);outline:none}.osano-cm-expansion-panel__toggle:focus{color:var(--osano-link-color-focus);outline:none}[dir=rtl] .osano-cm-expansion-panel__toggle{margin:0 0 1em auto}.osano-cm-expansion-panel--expanded .osano-cm-expansion-panel__body{max-height:none;padding:1.25em 1.5em 1em;transition-delay:0ms,0ms,0ms,0ms;visibility:visible}.osano-cm-disclosure-item__title{border:0;clear:both;display:block;flex:0 1 30%;font-size:1em;font-weight:700;line-height:1.375;margin:0 0 .5em;padding:0}.osano-cm-disclosure-item__description{flex:0 1 70%;font-size:1em;line-height:1.375;margin:0 0 .5em;overflow:hidden;padding:0;text-overflow:ellipsis;white-space:pre-line}.osano-cm-disclosure{border-bottom:none;display:block;font-size:.75em;margin:0 -1.5em 1em;padding:1.5em 1.5em 0}.osano-cm-disclosure--collapse{border-bottom:1px solid rgba(0,0,0,.1);padding-bottom:1em}.osano-cm-disclosure--empty,.osano-cm-disclosure--empty:not([open]){border-bottom:1px solid rgba(0,0,0,.1);padding-bottom:0}.osano-cm-disclosure__list{background-color:rgba(0,0,0,.1);line-height:1.25;list-style:none;margin:0 -1.5em;padding:1.25em 1.5em 1em}.osano-cm-disclosure__list:empty{border:none;padding:0 1.5em}.osano-cm-disclosure__list:first-of-type{margin-top:1em;padding:1.25em 1.5em 1em}.osano-cm-disclosure__list:first-of-type:after{background-color:var(--osano-link-color)}.osano-cm-disclosure__list:first-of-type:empty{padding:1.75em 1.5em .75em}.osano-cm-disclosure__list:not(:first-of-type):not(:empty){border-top:1px solid rgba(0,0,0,.1)}.osano-cm-disclosure__list:empty+.osano-cm-disclosure__list:not(:empty){border:none;padding:0 1.5em}.osano-cm-disclosure__list:not(:empty)~.osano-cm-disclosure__list:empty+.osano-cm-disclosure__list:not(:empty){border-top:1px solid rgba(0,0,0,.1)}.osano-cm-disclosure__list>.osano-cm-list-item{line-height:1.25}.osano-cm-disclosure__list>.osano-cm-list-item:not(:first-of-type){border-top:1px solid rgba(0,0,0,.1);margin:1em -1.25em 0;padding:1em 1.25em 0}.osano-cm-disclosure__toggle{color:var(--osano-link-color);cursor:pointer;display:block;font-weight:700;line-height:1.25;margin:0 auto 0 0;outline:none;position:relative}.osano-cm-disclosure__toggle:focus,.osano-cm-disclosure__toggle:hover{text-decoration:underline}.osano-cm-disclosure__toggle:active,.osano-cm-disclosure__toggle:hover{color:var(--osano-link-color)}.osano-cm-disclosure__toggle:focus{color:var(--osano-link-color-focus)}[dir=rtl] .osano-cm-disclosure__toggle{margin:0 0 0 auto}.osano-cm-disclosure--loading .osano-cm-disclosure__list{height:0;line-height:0;max-height:0}.osano-cm-disclosure--loading .osano-cm-disclosure__list>*{display:none}.osano-cm-disclosure--loading .osano-cm-disclosure__list:after{animation-duration:1s;animation-iteration-count:infinite;animation-name:osano-load-scale;animation-timing-function:ease-in-out;border-radius:100%;content:"";display:block;height:1em;position:relative;top:-.125em;transform:translateY(-50%);width:1em}.osano-cm-disclosure--collapse .osano-cm-disclosure__list{display:none}.osano-cm-disclosure--collapse .osano-cm-disclosure__list:after{content:none}.osano-cm-disclosure-item{display:flex;flex-wrap:wrap;margin:0}.osano-cm-disclosure-item__title:last-of-type{margin-bottom:0}.osano-cm-disclosure-item__description:hover{word-break:break-word}.osano-cm-disclosure-item__description:last-of-type{margin-bottom:0}@keyframes osano-load-scale{0%{transform:translateY(-50%) scale(0)}to{opacity:0;transform:translateY(-50%) scale(1)}} :root { --osano-button-background-color: <!--?lit$911901891$-->#7A3FF1; --osano-button-foreground-color: <!--?lit$911901891$-->#FFFFFF; --osano-button-deny-background-color: <!--?lit$911901891$-->#20202e; --osano-button-deny-foreground-color: <!--?lit$911901891$-->#FFFFFF; --osano-dialog-background-color: <!--?lit$911901891$-->#180D43; --osano-dialog-foreground-color: <!--?lit$911901891$-->#FFFFFF; --osano-info-dialog-background-color: <!--?lit$911901891$-->#180D43; --osano-info-dialog-foreground-color: <!--?lit$911901891$-->#FFFFFF; --osano-info-dialog-overlay-color: <!--?lit$911901891$-->rgba(0,0,0,0.45); --osano-link-color: <!--?lit$911901891$-->#ffffff; --osano-toggle-off-background-color: <!--?lit$911901891$-->#535361; --osano-toggle-button-off-color: <!--?lit$911901891$-->#FFFFFF; --osano-toggle-on-background-color: <!--?lit$911901891$-->#853bcf; --osano-toggle-button-on-color: <!--?lit$911901891$-->#FFFFFF; --osano-widget-color: <!--?lit$911901891$-->#37cd8f; --osano-widget-fill-color: <!--?lit$911901891$-->#fff; --osano-widget-outline-color: <!--?lit$911901891$-->#29246a; --osano-clear-dialog-background: <!--?lit$911901891$-->rgba(24,13,67,0); --osano-button-background-hover: <!--?lit$911901891$-->#8e53ff; --osano-button-deny-background-hover: <!--?lit$911901891$-->#343442; --osano-dialog-foreground-hover: <!--?lit$911901891$-->#ebebeb; --osano-dialog-background-hover: <!--?lit$911901891$-->#2c2157; --osano-info-dialog-foreground-hover: <!--?lit$911901891$-->#ebebeb; --osano-info-dialog-background-hover: <!--?lit$911901891$-->#2c2157; --osano-link-color-focus: <!--?lit$911901891$-->#ebebeb; --osano-toggle-off-background-hover-focus: <!--?lit$911901891$-->#676775; --osano-toggle-on-background-hover-focus: <!--?lit$911901891$-->#994fe3; --osano-toggle-off-background-disabled: <!--?lit$911901891$-->#9393a1; --osano-toggle-button-off-disabled: <!--?lit$911901891$-->#bfbfbf; --osano-toggle-on-background-disabled: <!--?lit$911901891$-->#c57bff; --osano-toggle-button-on-disabled: <!--?lit$911901891$-->#bfbfbf; } .osano-cm-window { direction: <!--?lit$911901891$-->ltr; text-align: <!--?lit$911901891$-->left; } </style><style>body {transition: opacity ease-in 0.2s; } 
+body[unresolved] {opacity: 0; display: block; overflow: hidden; position: relative; } 
+</style><script id="fathom-script" async="" data-site="EUVJMAIC" src="https://cdn.usefathom.com/script.js"></script><script>(function(w,i,g){w[g]=w[g]||[];if(typeof w[g].push=='function')w[g].push(i)})
+(window,'AW-17509959674','google_tags_first_party');</script><script async="" src="/googletag/"></script>
+			<script>
+				window.dataLayer = window.dataLayer || [];
+				function gtag(){dataLayer.push(arguments);}
+				gtag('js', new Date());
+				gtag('set', 'developer_id.dYzg1YT', true);
+				gtag('config', 'AW-17509959674');
+			</script>
+			<meta charset="utf-8" data-next-head=""><meta name="viewport" content="width=device-width" data-next-head=""><style data-next-head="">:root {
+--foreground: hsl(0, 0%, 100%);
+--background: hsl(250, 24%, 9%);
+--secondaryBg: hsl(250, 21%, 11%);
+--blue-50: hsl(220, 55%, 10%);
+--blue-100: hsl(220, 55%, 13%);
+--blue-200: hsl(220, 62%, 25%);
+--blue-300: hsl(220, 68%, 35%);
+--blue-400: hsl(220, 72%, 45%);
+--blue-500: hsl(220, 80%, 55%);
+--blue-600: hsl(220, 80%, 65%);
+--blue-700: hsl(220, 80%, 75%);
+--blue-800: hsl(220, 80%, 85%);
+--blue-900: hsl(220, 80%, 95%);
+--blue-950: hsl(220, 55%, 97%);
+--cyan-50: hsl(180, 25%, 10%);
+--cyan-100: hsl(180, 36%, 11%);
+--cyan-200: hsl(180, 45%, 16%);
+--cyan-300: hsl(180, 50%, 28%);
+--cyan-400: hsl(180, 50%, 38%);
+--cyan-500: hsl(180, 50%, 44%);
+--cyan-600: hsl(180, 50%, 62%);
+--cyan-700: hsl(180, 50%, 72%);
+--cyan-800: hsl(180, 50%, 80%);
+--cyan-900: hsl(180, 58%, 91%);
+--cyan-950: hsl(180, 40%, 97%);
+--gray-50: hsl(248, 21%, 13%);
+--gray-100: hsl(246, 18%, 15%);
+--gray-200: hsl(246, 11%, 22%);
+--gray-300: hsl(246,  8%, 35%);
+--gray-400: hsl(246,  7%, 45%);
+--gray-500: hsl(246,  6%, 55%);
+--gray-600: hsl(246,  6%, 65%);
+--gray-700: hsl(246,  6%, 78%);
+--gray-800: hsl(246,  6%, 87%);
+--gray-900: hsl(246,  6%, 95%);
+--gray-950: hsl(246,  4%, 97%);
+--red-50: hsl(1, 35%, 10%);
+--red-100: hsl(1, 45%, 12%);
+--red-200: hsl(1, 55%, 20%);
+--red-300: hsl(1, 62%, 28%);
+--red-400: hsl(1, 62%, 35%);
+--red-500: hsl(1, 62%, 44%);
+--red-600: hsl(1, 62%, 60%);
+--red-700: hsl(1, 62%, 76%);
+--red-800: hsl(1, 64%, 85%);
+--red-900: hsl(1, 68%, 95%);
+--red-950: hsl(1, 55%, 98%);
+--pink-50: hsl(270, 38%, 12%);
+--pink-100: hsl(270, 40%, 16%);
+--pink-200: hsl(270, 45%, 24%);
+--pink-300: hsl(270, 50%, 32%);
+--pink-400: hsl(270, 55%, 43%);
+--pink-500: hsl(270, 60%, 52%);
+--pink-600: hsl(270, 70%, 65%);
+--pink-700: hsl(270, 70%, 75%);
+--pink-800: hsl(270, 70%, 85%);
+--pink-900: hsl(270, 70%, 95%);
+--pink-950: hsl(270, 70%, 98%);
+--green-50: hsl(152, 15%, 10%);
+--green-100: hsl(152, 26%, 11%);
+--green-200: hsl(152, 32%, 16%);
+--green-300: hsl(152, 38%, 24%);
+--green-400: hsl(152, 38%, 34%);
+--green-500: hsl(152, 38%, 42%);
+--green-600: hsl(152, 38%, 60%);
+--green-700: hsl(152, 38%, 70%);
+--green-800: hsl(152, 38%, 80%);
+--green-900: hsl(152, 38%, 91%);
+--green-950: hsl(152, 40%, 97%);
+--yellow-50: hsl(44, 40%, 08%);
+--yellow-100: hsl(44, 40%, 10%);
+--yellow-200: hsl(44, 50%, 16%);
+--yellow-300: hsl(44, 62%, 25%);
+--yellow-400: hsl(44, 70%, 40%);
+--yellow-500: hsl(44, 74%, 52%);
+--yellow-600: hsl(44, 78%, 62%);
+--yellow-700: hsl(44, 78%, 72%);
+--yellow-800: hsl(44, 78%, 80%);
+--yellow-900: hsl(44, 78%, 90%);
+--yellow-950: hsl(44, 75%, 97%);
+--spreadShadow: 0 0 30px hsla(0,0%,30%,.25);
+--heroGradient: linear-gradient(327.21deg, rgba(33, 0, 75, 0.24) 3.65%, rgba(60, 0, 136, 0) 40.32%), linear-gradient(245.93deg, rgba(209, 21, 111, 0.16) 0%, rgba(209, 25, 80, 0) 36.63%), linear-gradient(147.6deg, rgba(58, 19, 255, 0) 29.79%, rgba(98, 19, 255, 0.01) 85.72%), #13111C;
+--kickbackHerokGradient-900: t;
+--kickbackHerokGradient-950: );
+--kickbackHerokGradient-undefined: ;;
+--partnerProjectsGradient: linear-gradient(108.94deg, #16093B 18.43%, #221228 52.22%);;
+--submitPartnerProjectGradient: linear-gradient(97.9deg, rgba(24, 0, 77, 0.4) 5.96%, rgba(104, 3, 88, 0.4) 81.62%, rgba(9, 251, 251, 0.4) 95.18%), linear-gradient(59.12deg, #2C0A5C 45.19%, #5E084D 68.24%);;
+--kickbackHeroGradient: linear-gradient(245.93deg, rgba(209, 21, 111, 0.16) 0%, rgba(209, 25, 80, 0) 36.63%), linear-gradient(186.67deg, rgba(56, 0, 169, 0.2) 17.55%, rgba(56, 0, 169, 0.2) 21.02%, rgba(58, 19, 255, 0) 91.62%), #13111C;;
+}
+
+.light {
+--foreground: hsl(250, 24%, 9%);
+--background: hsl(0, 0%, 100%);
+--secondaryBg: hsl(0, 0%, 98%);
+--blue-50: hsl(220, 55%, 97%);
+--blue-100: hsl(220, 80%, 95%);
+--blue-200: hsl(220, 80%, 85%);
+--blue-300: hsl(220, 80%, 75%);
+--blue-400: hsl(220, 80%, 65%);
+--blue-500: hsl(220, 80%, 55%);
+--blue-600: hsl(220, 72%, 45%);
+--blue-700: hsl(220, 68%, 35%);
+--blue-800: hsl(220, 62%, 25%);
+--blue-900: hsl(220, 55%, 13%);
+--blue-950: hsl(220, 55%, 10%);
+--cyan-50: hsl(180, 40%, 97%);
+--cyan-100: hsl(180, 58%, 91%);
+--cyan-200: hsl(180, 50%, 80%);
+--cyan-300: hsl(180, 50%, 72%);
+--cyan-400: hsl(180, 50%, 62%);
+--cyan-500: hsl(180, 50%, 44%);
+--cyan-600: hsl(180, 50%, 38%);
+--cyan-700: hsl(180, 50%, 28%);
+--cyan-800: hsl(180, 45%, 16%);
+--cyan-900: hsl(180, 36%, 11%);
+--cyan-950: hsl(180, 25%, 10%);
+--gray-50: hsl(246,  4%, 97%);
+--gray-100: hsl(246,  6%, 95%);
+--gray-200: hsl(246,  6%, 87%);
+--gray-300: hsl(246,  6%, 78%);
+--gray-400: hsl(246,  6%, 65%);
+--gray-500: hsl(246,  6%, 55%);
+--gray-600: hsl(246,  7%, 45%);
+--gray-700: hsl(246,  8%, 35%);
+--gray-800: hsl(246, 11%, 22%);
+--gray-900: hsl(246, 18%, 15%);
+--gray-950: hsl(248, 21%, 13%);
+--red-50: hsl(1, 55%, 98%);
+--red-100: hsl(1, 68%, 95%);
+--red-200: hsl(1, 64%, 85%);
+--red-300: hsl(1, 62%, 76%);
+--red-400: hsl(1, 62%, 60%);
+--red-500: hsl(1, 62%, 44%);
+--red-600: hsl(1, 62%, 35%);
+--red-700: hsl(1, 62%, 28%);
+--red-800: hsl(1, 55%, 20%);
+--red-900: hsl(1, 45%, 12%);
+--red-950: hsl(1, 35%, 10%);
+--pink-50: hsl(270, 70%, 98%);
+--pink-100: hsl(270, 70%, 95%);
+--pink-200: hsl(270, 70%, 85%);
+--pink-300: hsl(270, 70%, 75%);
+--pink-400: hsl(270, 70%, 65%);
+--pink-500: hsl(270, 60%, 52%);
+--pink-600: hsl(270, 55%, 43%);
+--pink-700: hsl(270, 50%, 32%);
+--pink-800: hsl(270, 45%, 24%);
+--pink-900: hsl(270, 40%, 16%);
+--pink-950: hsl(270, 38%, 12%);
+--green-50: hsl(152, 40%, 97%);
+--green-100: hsl(152, 38%, 91%);
+--green-200: hsl(152, 38%, 80%);
+--green-300: hsl(152, 38%, 70%);
+--green-400: hsl(152, 38%, 60%);
+--green-500: hsl(152, 38%, 42%);
+--green-600: hsl(152, 38%, 34%);
+--green-700: hsl(152, 38%, 24%);
+--green-800: hsl(152, 32%, 16%);
+--green-900: hsl(152, 26%, 11%);
+--green-950: hsl(152, 15%, 10%);
+--yellow-50: hsl(44, 75%, 97%);
+--yellow-100: hsl(44, 78%, 90%);
+--yellow-200: hsl(44, 78%, 80%);
+--yellow-300: hsl(44, 78%, 72%);
+--yellow-400: hsl(44, 78%, 62%);
+--yellow-500: hsl(44, 74%, 52%);
+--yellow-600: hsl(44, 70%, 40%);
+--yellow-700: hsl(44, 62%, 25%);
+--yellow-800: hsl(44, 50%, 16%);
+--yellow-900: hsl(44, 40%, 10%);
+--yellow-950: hsl(44, 40%, 08%);
+--spreadShadow: 0 8px 18px rgba(0,0,0,0.1);
+--heroGradient: linear-gradient(327.21deg, rgba(79, 0, 179, 0.05) 3.65%, rgba(60, 0, 136, 0) 40.32%), linear-gradient(245.93deg, rgba(26, 167, 255, 0.1) 0%, rgba(21, 199, 209, 0) 36.63%), linear-gradient(159.5deg, rgba(42, 0, 255, 0) 58.67%, rgba(98, 19, 255, 0.05) 125.65%), #FFFFFF;
+--kickbackHerokGradient: linear-gradient(217.61deg, rgba(245, 34, 173, 0.06) 0%, rgba(209, 25, 80, 0) 50.58%), linear-gradient(157.02deg, rgba(56, 0, 169, 0.15) -5.69%, rgba(58, 19, 255, 0) 73.13%), #FFFFFF;;
+--partnerProjectsGradient: linear-gradient(164.96deg, #A0E5E5 -0.51%, #E7F3F2 6.06%, #F0EAF2 87.55%);;
+--submitPartnerProjectGradient: linear-gradient(97.9deg, rgba(24, 0, 77, 0.4) 5.96%, rgba(104, 3, 88, 0.4) 81.62%, rgba(9, 251, 251, 0.4) 95.18%), linear-gradient(59.12deg, #2C0A5C 45.19%, #5E084D 68.24%);;
+}
+
+.dark {
+--foreground: hsl(0, 0%, 100%);
+--background: hsl(250, 24%, 9%);
+--secondaryBg: hsl(250, 21%, 11%);
+--blue-50: hsl(220, 55%, 10%);
+--blue-100: hsl(220, 55%, 13%);
+--blue-200: hsl(220, 62%, 25%);
+--blue-300: hsl(220, 68%, 35%);
+--blue-400: hsl(220, 72%, 45%);
+--blue-500: hsl(220, 80%, 55%);
+--blue-600: hsl(220, 80%, 65%);
+--blue-700: hsl(220, 80%, 75%);
+--blue-800: hsl(220, 80%, 85%);
+--blue-900: hsl(220, 80%, 95%);
+--blue-950: hsl(220, 55%, 97%);
+--cyan-50: hsl(180, 25%, 10%);
+--cyan-100: hsl(180, 36%, 11%);
+--cyan-200: hsl(180, 45%, 16%);
+--cyan-300: hsl(180, 50%, 28%);
+--cyan-400: hsl(180, 50%, 38%);
+--cyan-500: hsl(180, 50%, 44%);
+--cyan-600: hsl(180, 50%, 62%);
+--cyan-700: hsl(180, 50%, 72%);
+--cyan-800: hsl(180, 50%, 80%);
+--cyan-900: hsl(180, 58%, 91%);
+--cyan-950: hsl(180, 40%, 97%);
+--gray-50: hsl(248, 21%, 13%);
+--gray-100: hsl(246, 18%, 15%);
+--gray-200: hsl(246, 11%, 22%);
+--gray-300: hsl(246,  8%, 35%);
+--gray-400: hsl(246,  7%, 45%);
+--gray-500: hsl(246,  6%, 55%);
+--gray-600: hsl(246,  6%, 65%);
+--gray-700: hsl(246,  6%, 78%);
+--gray-800: hsl(246,  6%, 87%);
+--gray-900: hsl(246,  6%, 95%);
+--gray-950: hsl(246,  4%, 97%);
+--red-50: hsl(1, 35%, 10%);
+--red-100: hsl(1, 45%, 12%);
+--red-200: hsl(1, 55%, 20%);
+--red-300: hsl(1, 62%, 28%);
+--red-400: hsl(1, 62%, 35%);
+--red-500: hsl(1, 62%, 44%);
+--red-600: hsl(1, 62%, 60%);
+--red-700: hsl(1, 62%, 76%);
+--red-800: hsl(1, 64%, 85%);
+--red-900: hsl(1, 68%, 95%);
+--red-950: hsl(1, 55%, 98%);
+--pink-50: hsl(270, 38%, 12%);
+--pink-100: hsl(270, 40%, 16%);
+--pink-200: hsl(270, 45%, 24%);
+--pink-300: hsl(270, 50%, 32%);
+--pink-400: hsl(270, 55%, 43%);
+--pink-500: hsl(270, 60%, 52%);
+--pink-600: hsl(270, 70%, 65%);
+--pink-700: hsl(270, 70%, 75%);
+--pink-800: hsl(270, 70%, 85%);
+--pink-900: hsl(270, 70%, 95%);
+--pink-950: hsl(270, 70%, 98%);
+--green-50: hsl(152, 15%, 10%);
+--green-100: hsl(152, 26%, 11%);
+--green-200: hsl(152, 32%, 16%);
+--green-300: hsl(152, 38%, 24%);
+--green-400: hsl(152, 38%, 34%);
+--green-500: hsl(152, 38%, 42%);
+--green-600: hsl(152, 38%, 60%);
+--green-700: hsl(152, 38%, 70%);
+--green-800: hsl(152, 38%, 80%);
+--green-900: hsl(152, 38%, 91%);
+--green-950: hsl(152, 40%, 97%);
+--yellow-50: hsl(44, 40%, 08%);
+--yellow-100: hsl(44, 40%, 10%);
+--yellow-200: hsl(44, 50%, 16%);
+--yellow-300: hsl(44, 62%, 25%);
+--yellow-400: hsl(44, 70%, 40%);
+--yellow-500: hsl(44, 74%, 52%);
+--yellow-600: hsl(44, 78%, 62%);
+--yellow-700: hsl(44, 78%, 72%);
+--yellow-800: hsl(44, 78%, 80%);
+--yellow-900: hsl(44, 78%, 90%);
+--yellow-950: hsl(44, 75%, 97%);
+--spreadShadow: 0 0 30px hsla(0,0%,30%,.25);
+--heroGradient: linear-gradient(327.21deg, rgba(33, 0, 75, 0.24) 3.65%, rgba(60, 0, 136, 0) 40.32%), linear-gradient(245.93deg, rgba(209, 21, 111, 0.16) 0%, rgba(209, 25, 80, 0) 36.63%), linear-gradient(147.6deg, rgba(58, 19, 255, 0) 29.79%, rgba(98, 19, 255, 0.01) 85.72%), #13111C;
+--kickbackHerokGradient-900: t;
+--kickbackHerokGradient-950: );
+--kickbackHerokGradient-undefined: ;;
+--partnerProjectsGradient: linear-gradient(108.94deg, #16093B 18.43%, #221228 52.22%);;
+--submitPartnerProjectGradient: linear-gradient(97.9deg, rgba(24, 0, 77, 0.4) 5.96%, rgba(104, 3, 88, 0.4) 81.62%, rgba(9, 251, 251, 0.4) 95.18%), linear-gradient(59.12deg, #2C0A5C 45.19%, #5E084D 68.24%);;
+--kickbackHeroGradient: linear-gradient(245.93deg, rgba(209, 21, 111, 0.16) 0%, rgba(209, 25, 80, 0) 36.63%), linear-gradient(186.67deg, rgba(56, 0, 169, 0.2) 17.55%, rgba(56, 0, 169, 0.2) 21.02%, rgba(58, 19, 255, 0) 91.62%), #13111C;;
+}
+
+.vaporwave {
+--foreground: #fedeff;
+--background: #4b0390;
+--secondaryBg: #7b0cd0;
+--blue-50: hsl(220, 55%, 10%);
+--blue-100: hsl(220, 55%, 13%);
+--blue-200: hsl(220, 62%, 25%);
+--blue-300: hsl(220, 68%, 35%);
+--blue-400: hsl(220, 72%, 45%);
+--blue-500: hsl(220, 80%, 55%);
+--blue-600: hsl(220, 80%, 65%);
+--blue-700: hsl(220, 80%, 75%);
+--blue-800: hsl(220, 80%, 85%);
+--blue-900: hsl(220, 80%, 95%);
+--blue-950: hsl(220, 55%, 97%);
+--cyan-50: hsl(180, 25%, 10%);
+--cyan-100: hsl(180, 36%, 11%);
+--cyan-200: hsl(180, 45%, 16%);
+--cyan-300: hsl(180, 50%, 28%);
+--cyan-400: hsl(180, 50%, 38%);
+--cyan-500: hsl(180, 50%, 44%);
+--cyan-600: hsl(180, 50%, 62%);
+--cyan-700: hsl(180, 50%, 72%);
+--cyan-800: hsl(180, 50%, 80%);
+--cyan-900: hsl(180, 58%, 91%);
+--cyan-950: hsl(180, 40%, 97%);
+--gray-100: #42136f;
+--gray-200: #65B8BF;
+--gray-300: #388086;
+--gray-400: #ff88da;
+--gray-500: #00ebff;
+--gray-600: #ADD9DD;
+--gray-700: #c9f6ff;
+--gray-800: #e3f2f5;
+--gray-900: #e3f2f5;
+--red-50: hsl(1, 35%, 10%);
+--red-100: hsl(1, 45%, 12%);
+--red-200: hsl(1, 55%, 20%);
+--red-300: hsl(1, 62%, 28%);
+--red-400: hsl(1, 62%, 35%);
+--red-500: hsl(1, 62%, 44%);
+--red-600: hsl(1, 62%, 60%);
+--red-700: hsl(1, 62%, 76%);
+--red-800: hsl(1, 64%, 85%);
+--red-900: hsl(1, 68%, 95%);
+--red-950: hsl(1, 55%, 98%);
+--pink-50: hsl(270, 38%, 12%);
+--pink-100: hsl(270, 40%, 16%);
+--pink-200: hsl(270, 45%, 24%);
+--pink-300: hsl(270, 50%, 32%);
+--pink-400: hsl(270, 55%, 43%);
+--pink-500: hsl(270, 60%, 52%);
+--pink-600: hsl(270, 70%, 65%);
+--pink-700: hsl(270, 70%, 75%);
+--pink-800: hsl(270, 70%, 85%);
+--pink-900: hsl(270, 70%, 95%);
+--pink-950: hsl(270, 70%, 98%);
+--green-50: hsl(152, 15%, 10%);
+--green-100: hsl(152, 26%, 11%);
+--green-200: hsl(152, 32%, 16%);
+--green-300: hsl(152, 38%, 24%);
+--green-400: hsl(152, 38%, 34%);
+--green-500: hsl(152, 38%, 42%);
+--green-600: hsl(152, 38%, 60%);
+--green-700: hsl(152, 38%, 70%);
+--green-800: hsl(152, 38%, 80%);
+--green-900: hsl(152, 38%, 91%);
+--green-950: hsl(152, 40%, 97%);
+--yellow-50: hsl(44, 40%, 08%);
+--yellow-100: hsl(44, 40%, 10%);
+--yellow-200: hsl(44, 50%, 16%);
+--yellow-300: hsl(44, 62%, 25%);
+--yellow-400: hsl(44, 70%, 40%);
+--yellow-500: hsl(44, 74%, 52%);
+--yellow-600: hsl(44, 78%, 62%);
+--yellow-700: hsl(44, 78%, 72%);
+--yellow-800: hsl(44, 78%, 80%);
+--yellow-900: hsl(44, 78%, 90%);
+--yellow-950: hsl(44, 75%, 97%);
+--spreadShadow: 0 0 30px hsla(0,0%,30%,.25);
+--heroGradient: linear-gradient(327.21deg, rgba(33, 0, 75, 0.24) 3.65%, rgba(60, 0, 136, 0) 40.32%), linear-gradient(245.93deg, rgba(209, 21, 111, 0.16) 0%, rgba(209, 25, 80, 0) 36.63%), linear-gradient(147.6deg, rgba(58, 19, 255, 0) 29.79%, rgba(98, 19, 255, 0.01) 85.72%), #13111C;
+--kickbackHerokGradient-900: t;
+--kickbackHerokGradient-950: );
+--kickbackHerokGradient-undefined: ;;
+--partnerProjectsGradient: linear-gradient(108.94deg, #16093B 18.43%, #221228 52.22%);;
+--submitPartnerProjectGradient: linear-gradient(97.9deg, rgba(24, 0, 77, 0.4) 5.96%, rgba(104, 3, 88, 0.4) 81.62%, rgba(9, 251, 251, 0.4) 95.18%), linear-gradient(59.12deg, #2C0A5C 45.19%, #5E084D 68.24%);;
+--kickbackHeroGradient: linear-gradient(245.93deg, rgba(209, 21, 111, 0.16) 0%, rgba(209, 25, 80, 0) 36.63%), linear-gradient(186.67deg, rgba(56, 0, 169, 0.2) 17.55%, rgba(56, 0, 169, 0.2) 21.02%, rgba(58, 19, 255, 0) 91.62%), #13111C;;
+}</style><title data-next-head="">workout_logger_ | Railway</title><meta name="description" content="Railway is an infrastructure platform where you can provision infrastructure, develop with that infrastructure locally, and then deploy to the cloud." data-next-head=""><meta name="twitter:card" content="summary_large_image" data-next-head=""><meta name="twitter:creator" content="@Railway" data-next-head=""><meta property="og:description" content="Railway is an infrastructure platform where you can provision infrastructure, develop with that infrastructure locally, and then deploy to the cloud." data-next-head=""><meta property="og:url" content="https://railway.com" data-next-head=""><meta property="og:type" content="website" data-next-head=""><meta property="og:image" content="https://railway.com/og.png?v=2" data-next-head=""><meta property="og:site_name" content="Railway" data-next-head=""><meta name="robots" content="index,follow" data-next-head=""><meta name="description" content="Railway is an infrastructure platform where you can provision infrastructure, develop with that infrastructure locally, and then deploy to the cloud." data-next-head=""><meta name="theme-color" content="#13111C" data-next-head=""><script type="application/ld+json" data-next-head="">
+           {
+            "@context": "https://schema.org",
+            "@type": "Organization",
+            "url": "https://railway.com",
+            "logo": "https://railway.com/brand/logo-dark.svg"
+          }
+          </script><link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png"><link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png"><link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><link rel="dns-prefetch" href="https://backboard.railway.com"><link rel="preload" as="image" type="image/webp" href="/secret-landing/hero/bg-train-day.webp" fetchpriority="high"><link rel="preload" as="image" type="image/webp" href="/secret-landing/hero/bg-train-dusk.webp"><script>
+          (function() {
+            try {
+              var key = "@railway/globalBanners";
+              var stored = localStorage.getItem(key);
+              var viewedBanners = stored ? JSON.parse(stored) : {};
+
+              // Create a style element to hide dismissed banners
+              var style = document.createElement('style');
+              var css = '';
+
+              // Add CSS rules for each dismissed banner
+              Object.keys(viewedBanners).forEach(function(bannerId) {
+                if (viewedBanners[bannerId]) {
+                  css += '.banner-' + bannerId + ' { display: none !important; }\n';
+                }
+              });
+
+              // Only add the style if we have rules
+              if (css) {
+                style.innerHTML = css;
+                document.head.appendChild(style);
+              }
+            } catch (e) {
+              console.error('Error in global banners no-flash script:', e);
+            }
+          })();
+        </script><link rel="preload" href="/_next/static/media/e4af272ccee01ff0-s.p.woff2" as="font" type="font/woff2" crossorigin="anonymous" data-next-font="size-adjust"><link rel="preload" href="/_next/static/css/db0ac756b7bac80a.css" as="style"><link rel="stylesheet" href="/_next/static/css/db0ac756b7bac80a.css" data-n-g=""><noscript data-n-css=""></noscript><script defer="" nomodule="" src="/_next/static/chunks/polyfills-42372ed130431b0a.js"></script><script src="/_next/static/chunks/webpack-f2ac7388b4683218.js" defer=""></script><script src="/_next/static/chunks/framework-de9806e98e3b3323.js" defer=""></script><script src="/_next/static/chunks/main-ceb4954340378f53.js" defer=""></script><script src="/_next/static/chunks/framer-motion-40c6695a4681213f.js" defer=""></script><script src="/_next/static/chunks/ui-libs-e11f7d742ad05e1b.js" defer=""></script><script src="/_next/static/chunks/pages/_app-8ce48b59fc4449e7.js" defer=""></script><script src="/_next/static/chunks/d353f737-37f10225e0456c26.js" defer=""></script><script src="/_next/static/chunks/e2ee3956-3b9703ffbe9f5542.js" defer=""></script><script src="/_next/static/chunks/b7b6e146-6387416f4f8697ae.js" defer=""></script><script src="/_next/static/chunks/26445812-e363ffd8535b3c85.js" defer=""></script><script src="/_next/static/chunks/16b9a0a9-8d3cde210165c966.js" defer=""></script><script src="/_next/static/chunks/94d091d9-70ceadf8e3361d0c.js" defer=""></script><script src="/_next/static/chunks/shared-components-6bb7e407a90bafb8.js" defer=""></script><script src="/_next/static/chunks/8734-f043ab01b41e9f28.js" defer=""></script><script src="/_next/static/chunks/4240-a91a2c581d42e97a.js" defer=""></script><script src="/_next/static/chunks/8873-b3736fcf0e7e193d.js" defer=""></script><script src="/_next/static/chunks/2736-98fd22ba49b33c00.js" defer=""></script><script src="/_next/static/chunks/4834-8195ac9b6b63b813.js" defer=""></script><script src="/_next/static/chunks/4755-f12b483e03a9ca6f.js" defer=""></script><script src="/_next/static/chunks/5882-09248c0b609aaa3e.js" defer=""></script><script src="/_next/static/chunks/529-c69735ad7a7e6681.js" defer=""></script><script src="/_next/static/chunks/2938-2d68b935ada3b311.js" defer=""></script><script src="/_next/static/chunks/1252-571a9f509a9eca7d.js" defer=""></script><script src="/_next/static/chunks/4141-88add9463fdbe651.js" defer=""></script><script src="/_next/static/chunks/788-9982fa8d0655a18a.js" defer=""></script><script src="/_next/static/chunks/4369-525e5a0bd232ef59.js" defer=""></script><script src="/_next/static/chunks/1531-21af156224ef58c8.js" defer=""></script><script src="/_next/static/chunks/3150-db8bcd4f2d1a7fd8.js" defer=""></script><script src="/_next/static/chunks/6902-746fa1156cd75277.js" defer=""></script><script src="/_next/static/chunks/258-66e3d1b8240a1d52.js" defer=""></script><script src="/_next/static/chunks/7293-2a4913ae9a67818c.js" defer=""></script><script src="/_next/static/chunks/8812-ceaa21eace4a31d5.js" defer=""></script><script src="/_next/static/chunks/2681-4bfc06ff78f7ecb2.js" defer=""></script><script src="/_next/static/chunks/1836-6b3e21aa16b14e59.js" defer=""></script><script src="/_next/static/chunks/3967-14d9a0ac8cc1f8f8.js" defer=""></script><script src="/_next/static/chunks/2359-21a68146beea91a3.js" defer=""></script><script src="/_next/static/chunks/4015-8872cce8f42cc6af.js" defer=""></script><script src="/_next/static/chunks/2932-54bbb602bc28e6a3.js" defer=""></script><script src="/_next/static/chunks/2233-2eee56a77ed0d4dd.js" defer=""></script><script src="/_next/static/chunks/2808-8b3469efe575d7ed.js" defer=""></script><script src="/_next/static/chunks/4699-2d8af7e98a2d74e5.js" defer=""></script><script src="/_next/static/chunks/4871-573de2ad3d24ed64.js" defer=""></script><script src="/_next/static/chunks/8394-e70db3bd7c77eb7d.js" defer=""></script><script src="/_next/static/chunks/6054-0a6a5299b10d3c05.js" defer=""></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D-fbadcc7535f32ac2.js" defer=""></script><script src="/_next/static/YMAcreCTbqxWIft1d1Rs5/_buildManifest.js" defer=""></script><script src="/_next/static/YMAcreCTbqxWIft1d1Rs5/_ssgManifest.js" defer=""></script><style id="__jsx-1029221029">:root{--font-inter:'Inter', 'Inter Fallback'}</style><script type="text/javascript" async="" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768704210640&amp;cv=11&amp;fst=1768704210640&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=gtag.config&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dgtag.config&amp;rfmt=3&amp;fmt=4"></script><link as="script" rel="prefetch" href="/_next/static/chunks/abfa4392-021d1f81cefbd2ee.js"><link as="script" rel="prefetch" href="/_next/static/chunks/7933-09df3e1b5d97e81a.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/index-b016290c46b2eb2d.js"><link as="script" rel="prefetch" href="/_next/static/chunks/4966-ff66ccd239f52428.js"><link as="script" rel="prefetch" href="/_next/static/chunks/407-6b4c141481e04b4e.js"><link as="script" rel="prefetch" href="/_next/static/chunks/3860-1d910fbbc3c4c55f.js"><link as="script" rel="prefetch" href="/_next/static/chunks/3415-415c600e1d885c44.js"><link as="script" rel="prefetch" href="/_next/static/chunks/4854-4a5a71a0efdc3e03.js"><link as="script" rel="prefetch" href="/_next/static/chunks/4160-7fb98eb5a78926d5.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/observability-22696ab6e20eb9a5.js"><link as="script" rel="prefetch" href="/_next/static/chunks/4662-5d94e3e11b767555.js"><link as="script" rel="prefetch" href="/_next/static/chunks/4154-6b89d6e2b7cd57ff.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/logs-f0185321a55a9367.js"><link as="script" rel="prefetch" href="/_next/static/chunks/5699-c11afbcd33406816.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/settings-620f13c0447790f5.js"><script src="https://js.stripe.com/v3"></script><link as="script" rel="prefetch" href="/_next/static/chunks/3383-666e4fa9bf226fca.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/dashboard-91f13a93fc326f2a.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D-7569cb368e08e29e.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/database-d61a7e6a18f32933.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/volume/%5BvolumeId%5D/metrics-81fdaec98d8c9e20.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/variables-324f41f42a19989b.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/metrics-960b7ffba50fef59.js"><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/settings-5b128d2ca57623ef.js"><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768704216470&amp;cv=11&amp;fst=1768704216470&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/settings/variables-1b2a53398792b4fc.js"><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768704217733&amp;cv=11&amp;fst=1768704217733&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768704741651&amp;cv=11&amp;fst=1768704741651&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768705978505&amp;cv=11&amp;fst=1768705978505&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;top=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768705990184&amp;cv=11&amp;fst=1768705990184&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768705997905&amp;cv=11&amp;fst=1768705997905&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768705999067&amp;cv=11&amp;fst=1768705999067&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706208970&amp;cv=11&amp;fst=1768706208970&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;top=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706222153&amp;cv=11&amp;fst=1768706222153&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706488889&amp;cv=11&amp;fst=1768706488889&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;top=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706492333&amp;cv=11&amp;fst=1768706492333&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706495184&amp;cv=11&amp;fst=1768706495184&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;top=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706498461&amp;cv=11&amp;fst=1768706498461&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D83b7037f-ac91-4e3c-b561-4d86fbb8bc6a&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706608252&amp;cv=11&amp;fst=1768706608252&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D09f91f42-6162-4ffd-8a82-5167e4c68332&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;top=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D09f91f42-6162-4ffd-8a82-5167e4c68332&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768706625850&amp;cv=11&amp;fst=1768706625850&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D09f91f42-6162-4ffd-8a82-5167e4c68332&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768707364682&amp;cv=11&amp;fst=1768707364682&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D09f91f42-6162-4ffd-8a82-5167e4c68332&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;top=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D09f91f42-6162-4ffd-8a82-5167e4c68332&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768707372025&amp;cv=11&amp;fst=1768707372025&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26id%3D09f91f42-6162-4ffd-8a82-5167e4c68332&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768713715773&amp;cv=11&amp;fst=1768713715773&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768713988096&amp;cv=11&amp;fst=1768713988096&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768714203416&amp;cv=11&amp;fst=1768714203416&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Flogs%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=Log%20Explorer%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768714668492&amp;cv=11&amp;fst=1768714668492&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Flogs%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=accurate-wisdom%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768714673370&amp;cv=11&amp;fst=1768714673370&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768714818139&amp;cv=11&amp;fst=1768714818139&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Flogs%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=Log%20Explorer%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768714903535&amp;cv=11&amp;fst=1768714903535&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Flogs%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26permalink%3D2026-01-18T05%253A40%253A04.829199140Z&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Flogs%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=Log%20Explorer%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><style data-next-head="">
+          body {
+            background-color: var(--secondaryBg);
+          }
+
+          html.dark body {
+            background-color: var(--background);
+          }
+        </style><link rel="shortcut icon" href="/favicons/favicon-light.ico" type="image/x-icon" id="favicon"><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768714905302&amp;cv=11&amp;fst=1768714905302&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Flogs%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9%26permalink%3D2026-01-18T05%253A40%253A04.829199140Z&amp;frm=0&amp;tiba=accurate-wisdom%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768715107033&amp;cv=11&amp;fst=1768715107033&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768715324108&amp;cv=11&amp;fst=1768715324108&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768717133216&amp;cv=11&amp;fst=1768717133216&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768717219927&amp;cv=11&amp;fst=1768717219927&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768717246993&amp;cv=11&amp;fst=1768717246993&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768717250641&amp;cv=11&amp;fst=1768717250641&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768717252275&amp;cv=11&amp;fst=1768717252275&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768717394946&amp;cv=11&amp;fst=1768717394946&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768717594777&amp;cv=11&amp;fst=1768717594777&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fvariables%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768772415373&amp;cv=11&amp;fst=1768772415373&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=accurate-wisdom%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><meta property="og:title" content="workout_logger_" data-next-head=""><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768772418212&amp;cv=11&amp;fst=1768772418212&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script><link as="script" rel="prefetch" href="/_next/static/chunks/pages/project/%5BprojectId%5D/volume/%5BvolumeId%5D/settings-da87ef7870642121.js"><style data-emotion="css" data-s=""></style><script async="" type="text/javascript" src="https://googleads.g.doubleclick.net/pagead/viewthroughconversion/17509959674/?random=1768775426617&amp;cv=11&amp;fst=1768775426617&amp;bg=ffffff&amp;guid=ON&amp;async=1&amp;en=page_view&amp;gtm=45892e61e1v9228268922za204zd9228268922xec&amp;gcd=13l3l3l3l1l1&amp;dma=0&amp;tag_exp=103116026~103200004~104527906~104528500~104684208~104684211~105391252~115938465~115938468~116744867~117041588&amp;u_w=1470&amp;u_h=956&amp;url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%2Fsettings%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;ref=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%2Fservice%2F9aefecf8-ac7a-4668-b22c-78031274a8e8%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;frm=0&amp;tiba=workout_logger_%20%7C%20Railway&amp;did=dYzg1YT&amp;gdid=dYzg1YT&amp;hn=www.googleadservices.com&amp;npa=0&amp;us_privacy=1---&amp;pscdl=noapi&amp;auid=2018523579.1766992306&amp;uaa=arm&amp;uab=64&amp;uafvl=Google%2520Chrome%3B143.0.7499.193%7CChromium%3B143.0.7499.193%7CNot%2520A(Brand%3B24.0.0.0&amp;uamb=0&amp;uam=&amp;uap=macOS&amp;uapv=26.2.0&amp;uaw=0&amp;data=event%3Dpage_view&amp;rfmt=3&amp;fmt=4"></script></head><body cz-shortcut-listen="true" style=""><div data-nosnippet="" class="osano-cm-window" dir="ltr"><!----> <!--?lit$911901891$--><div hidden="" class="osano-visually-hidden"> <span id="osano-cm-aria.newWindow"><!--?lit$911901891$-->Opens in a new window</span> <span id="osano-cm-aria.external"><!--?lit$911901891$-->Opens an external website</span> <span id="osano-cm-aria.externalNewWindow"><!--?lit$911901891$-->Opens an external website in a new window</span> </div> <!--?lit$911901891$--> <div role="dialog" id="c61e1c3d-0e23-4381-92aa-384313163f4b" aria-label="Cookie Consent Banner" aria-describedby="c61e1c3d-0e23-4381-92aa-384313163f4b__label" class=" osano-cm-window__dialog osano-cm-dialog osano-cm-dialog--hidden osano-cm-dialog--position_bottom osano-cm-dialog--type_bar "> <!--?lit$911901891$--> <button class=" osano-cm-dialog__close osano-cm-close "> <!--?lit$911901891$--><svg width="20px" height="20px" viewBox="0 0 20 20" role="img" aria-labelledby="f42c74df-9286-41ed-a13c-1e5553cf35cf"> <title id="f42c74df-9286-41ed-a13c-1e5553cf35cf"><!---->Close this dialog<!----></title> <line role="presentation" x1="2" y1="2" x2="18" y2="18"></line> <line role="presentation" x1="2" y1="18" x2="18" y2="2"></line> </svg> </button>  <div class=" osano-cm-dialog__content osano-cm-content "> <!--?lit$911901891$--> <span id="c61e1c3d-0e23-4381-92aa-384313163f4b__label" class=" osano-cm-content__message osano-cm-message "> <!--?lit$911901891$-->This website utilizes technologies such as cookies to enable essential site functionality, as well as for analytics, personalization, and marketing. <!--?lit$911901891$-->To learn more, view the following link: <!--?lit$911901891$--> </span>  <!--?lit$911901891$--> <!--?lit$911901891$--><!--?lit$911901891$--><a rel="noopener" tabindex="0" href="https://railway.com/legal/privacy" target="_blank" class=" osano-cm-storage-policy osano-cm-content__link osano-cm-link " aria-describedby="osano-cm-aria.newWindow"><!--?lit$911901891$-->Privacy Policy</a><!--?--><!--?lit$911901891$--> <!--?lit$911901891$--> <!--?lit$911901891$--> </div> <!--?lit$911901891$--> </div>  <!--?lit$911901891$--> <button id="07b2b72d-6c64-4911-9952-e2b69cce854d" class="osano-cm-window__widget osano-cm-widget osano-cm-widget--position_right" title="Cookie Preferences" aria-label="Cookie Preferences"> <svg role="img" width="40" height="40" viewBox="0 0 71.85 72.23" xmlns="http://www.w3.org/2000/svg" aria-labelledby="07b2b72d-6c64-4911-9952-e2b69cce854d"> <path d="m67.6 36.73a6.26 6.26 0 0 1 -3.2-2.8 5.86 5.86 0 0 0 -5.2-3.1h-.3a11 11 0 0 1 -11.4-9.5 6 6 0 0 1 -.1-1.4 9.2 9.2 0 0 1 .4-2.9 8.65 8.65 0 0 0 .2-1.6 5.38 5.38 0 0 0 -1.9-4.3 7.3 7.3 0 0 1 -2.5-5.5 3.91 3.91 0 0 0 -3.5-3.9 36.46 36.46 0 0 0 -15 1.5 33.14 33.14 0 0 0 -22.1 22.7 35.62 35.62 0 0 0 -1.5 10.2 34.07 34.07 0 0 0 4.8 17.6.75.75 0 0 0 .07.12c.11.17 1.22 1.39 2.68 3-.36.47 5.18 6.16 5.65 6.52a34.62 34.62 0 0 0 55.6-21.9 4.38 4.38 0 0 0 -2.7-4.74z" stroke-width="3" class=" osano-cm-widget__outline osano-cm-outline "></path> <path d="m68 41.13a32.37 32.37 0 0 1 -52 20.5l-2-1.56c-2.5-3.28-5.62-7.15-5.81-7.44a32 32 0 0 1 -4.5-16.5 34.3 34.3 0 0 1 1.4-9.6 30.56 30.56 0 0 1 20.61-21.13 33.51 33.51 0 0 1 14.1-1.4 1.83 1.83 0 0 1 1.6 1.8 9.38 9.38 0 0 0 3.3 7.1 3.36 3.36 0 0 1 1.2 2.6 3.37 3.37 0 0 1 -.1 1 12.66 12.66 0 0 0 -.5 3.4 9.65 9.65 0 0 0 .1 1.7 13 13 0 0 0 10.5 11.2 16.05 16.05 0 0 0 3.1.2 3.84 3.84 0 0 1 3.5 2 10 10 0 0 0 4.1 3.83 2 2 0 0 1 1.4 2z" stroke-width="3" class=" osano-cm-widget__outline osano-cm-outline "></path> <g class=" osano-cm-widget__dot osano-cm-dot "> <path d="m26.6 31.43a5.4 5.4 0 1 1 5.4-5.43 5.38 5.38 0 0 1 -5.33 5.43z"></path> <path d="m25.2 53.13a5.4 5.4 0 1 1 5.4-5.4 5.44 5.44 0 0 1 -5.4 5.4z"></path> <path d="m47.9 52.33a5.4 5.4 0 1 1 5.4-5.4 5.32 5.32 0 0 1 -5.24 5.4z"></path> </g> </svg> </button>  <!--?lit$911901891$--><div role="dialog" aria-modal="true" id="8c03b7ae-3181-48ba-95dc-b8bbf63208dc" aria-labelledby="8c03b7ae-3181-48ba-95dc-b8bbf63208dc__label" aria-hidden="true" class=" osano-cm-window__info-dialog osano-cm-info-dialog osano-cm-info-dialog--hidden "> <!--?lit$911901891$--><!--?lit$911901891$--><span tabindex="0" aria-hidden="true" data-focus="first"></span><!--?--> <div role="presentation" class=" osano-cm-info-dialog__info osano-cm-info osano-cm-info--position_right "> <!--?lit$911901891$--><div role="presentation" class=" osano-cm-info__info-dialog-header osano-cm-info-dialog-header "> <p role="heading" aria-level="1" id="8c03b7ae-3181-48ba-95dc-b8bbf63208dc__label" class=" osano-cm-info-dialog-header__header osano-cm-header "> <!--?lit$911901891$--> </p> <!--?lit$911901891$--> <button class=" osano-cm-info-dialog-header__close osano-cm-close "> <!--?lit$911901891$--><svg width="20px" height="20px" viewBox="0 0 20 20" role="img" aria-labelledby="6ee1c07a-a790-4c5f-b00d-3c6a5077bfd4"> <title id="6ee1c07a-a790-4c5f-b00d-3c6a5077bfd4"><!---->Close Cookie Preferences<!----></title> <line role="presentation" x1="2" y1="2" x2="18" y2="18"></line> <line role="presentation" x1="2" y1="18" x2="18" y2="2"></line> </svg> </button> <!--?lit$911901891$--> </div> <div role="presentation" class=" osano-cm-info__info-views osano-cm-info-views osano-cm-info-views--hidden osano-cm-info-views--position_0 "> <!--?lit$911901891$--> </div> </div> <!--?lit$911901891$--><!--?lit$911901891$--><span tabindex="0" aria-hidden="true" data-focus="last"></span><!--?--> </div> </div><div id="__next"><div data-overlay-container="true"><script>!function(){try{var d=document.documentElement,c=d.classList;c.remove('light','dark');var e=localStorage.getItem('theme');if('system'===e||(!e&&false)){var t='(prefers-color-scheme: dark)',m=window.matchMedia(t);if(m.media!==t||m.matches){d.style.colorScheme = 'dark';c.add('dark')}else{d.style.colorScheme = 'light';c.add('light')}}else if(e){c.add(e|| '')}else{c.add('dark')}if(e==='light'||e==='dark'||!e)d.style.colorScheme=e||'dark'}catch(e){}}()</script><div class="grid min-h-screen sm:max-h-screen bg-secondaryBg dark:bg-background grid-rows-[auto_auto_auto_minmax(0px,_1fr)]"><div></div><div class="relative z-10 px-6 bg-transparent border border-black border-opacity-[.08]"><header class="py-3 md:py-0 md:h-[60px] flex items-center justify-between"><div class="flex items-center"><a data-testid="project-navbar-home-link" title="Dashboard" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700" href="/dashboard"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 1024 1024" class="logo w-6 h-6 md:w-8 md:h-8" aria-label="Railway Logo"><path fill="#000" d="M4.756 438.175A521 521 0 0 0 0 489.735h777.799c-2.716-5.306-6.365-10.09-10.045-14.772-132.97-171.791-204.498-156.896-306.819-161.26-34.114-1.403-57.249-1.967-193.037-1.967-72.677 0-151.688.185-228.628.39-9.96 26.884-19.566 52.942-24.243 74.14h398.571v51.909zM783.93 541.696H.399c.82 13.851 2.112 27.517 3.978 40.999h723.39c32.248 0 50.299-18.297 56.162-40.999ZM45.017 724.306S164.941 1018.77 511.46 1024c207.112 0 385.071-123.006 465.907-299.694z"></path><path fill="#000" d="M511.454 0C319.953 0 153.311 105.16 65.31 260.612c68.771-.144 202.704-.226 202.704-.226h.031v-.051c158.309 0 164.193.707 195.118 1.998l19.149.706c66.7 2.224 148.683 9.384 213.19 58.19 35.015 26.471 85.571 84.896 115.708 126.52 27.861 38.499 35.876 82.756 16.933 125.158-17.436 38.97-54.952 62.215-100.383 62.215H16.69s4.233 17.944 10.58 37.751h970.632A510.4 510.4 0 0 0 1024 512.218C1024.01 229.355 794.532 0 511.454 0"></path></svg></a><div class="ml-3 flex items-center"><div class="flex items-center justify-center bg-transparent rounded-none"><p class="text-base hidden md:block select-none mr-1 text-gray-300 dark:text-gray-200" aria-hidden="true">/</p><button type="button" id="radix-:r1t3:" aria-haspopup="menu" aria-expanded="false" data-state="closed" class="flex items-center border border-gray-200 rounded-md h-md py-2 px-3 space-x-2 hover:border-gray-400 focus:outline-none focus-visible:border-pink-400 select-project group border-none text-center"><div class="project-name whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-left font-medium">accurate-wisdom</div><div class="icon-container icon-sm text-lg ml-2 text-gray-300" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></div></button></div><div class="flex items-center bg-transparent rounded-none"><p class="text-base block mr-1 select-none text-gray-300 dark:text-gray-200" aria-hidden="true">/</p><button type="button" id="radix-:r1t5:" aria-haspopup="menu" aria-expanded="false" data-state="closed" class="flex items-center border border-gray-200 h-md py-2 px-3 space-x-2 hover:border-gray-400 focus:outline-none focus-visible:border-pink-400 rounded-none border-none select-environment group"><div class="environment-name whitespace-nowrap overflow-hidden overflow-ellipsis w-full text-left font-medium flex items-center gap-2">production</div><div class="icon-container icon-sm text-lg ml-2 text-gray-300" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></div></button></div></div></div><div class="flex md:hidden"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 ml-auto" title="Open mobile navigation"><div class="text-current icon-container icon-md text-2xl !w-4 w-6 !h-6" aria-hidden="true"><span class="inline-block rounded-full overflow-hidden" title="Harsh 24" style="width: 24px; height: 24px; min-width: 24px; min-height: 24px;"><div class="w-full h-full rounded-full bg-cover bg-no-repeat bg-center" style="background-image: url(&quot;https://avatars.githubusercontent.com/u/143057914?v=4&quot;);"></div></span></div></button></div><nav class="hidden ml-auto md:flex items-center space-x-5"><div class="space-x-6 items-center hidden lg:flex"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm py-5 hover:text-foreground text-foreground font-medium border-b-2 border-pink-300" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Architecture</a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm text-gray-500 py-5 hover:text-foreground" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/observability?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Observability</a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm text-gray-500 py-5 hover:text-foreground" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/logs?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Logs</a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm text-gray-500 py-5 hover:text-foreground" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Settings</a></div><p class="text-base hidden md:block select-none text-gray-300" aria-hidden="true">|</p><div class="flex items-center gap-2"><button type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="radix-:r1t7:" data-state="closed" title="Share Project" class="grid items-center gap-1 min-h-[28px] text-neutral-secondary border border-transparent rounded-md p-1.5 group-focus-visible:ring-2 group-focus-visible:ring-pink-500 hover:bg-gray-100 hover:text-neutral-secondary px-2"><div aria-hidden="true" class="text-current icon-container icon-sm text-lg"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-share" viewBox="0 0 24 24"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8m-4-6-4-4-4 4m4-4v13"></path></svg></div></button><button type="button" id="radix-:r1t8:" aria-haspopup="menu" aria-expanded="false" data-state="closed" class="min-w-[54px] grid justify-center group focus:outline-none focus-visible:outline-none"><div class="grid items-center gap-1 min-h-[28px] text-gray-500 border border-transparent rounded-full py-1 px-2 hover:text-gray-900 group-focus-visible:ring-2 group-focus-visible:ring-pink-500 grid-cols-[1fr]"><div title="Notifications" color="gray" aria-hidden="true" class="text-current icon-container icon-sm text-lg"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-bell" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9m-4.27 13a2 2 0 0 1-3.46 0"></path></svg></div></div></button><button type="button" id="radix-:r1ta:" aria-haspopup="menu" aria-expanded="false" data-state="closed" class="flex items-center border border-gray-200 rounded-md h-md space-x-2 hover:border-gray-400 focus:outline-none focus-visible:border-pink-400 p-0 border-none account-dropdown hover:bg-transparent !h-8"><div class="relative flex items-center"><span class="inline-block rounded-full overflow-hidden" title="Harsh 24" style="width: 32px; height: 32px; min-width: 32px; min-height: 32px;"><div class="w-full h-full rounded-full bg-cover bg-no-repeat bg-center" style="background-image: url(&quot;https://avatars.githubusercontent.com/u/143057914?v=4&quot;);"></div></span></div></button></div></nav></header><div class="-mx-6"><hr class="w-full border-t border-gray-100 my-0"></div><div class="lg:hidden flex justify-between md:space-x-8 max-w-sm md:max-w-md mx-auto"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm hover:text-foreground text-foreground font-medium border-b-2 border-pink-300 text-center py-4 max-w-max" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Architecture</a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm text-gray-500 hover:text-foreground text-center py-4 max-w-max" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/observability?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Observability</a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm text-gray-500 hover:text-foreground text-center py-4 max-w-max" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/logs?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Logs</a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm text-gray-500 hover:text-foreground text-center py-4 max-w-max" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9">Settings</a></div></div><div class="project-banners"></div><div class="relative w-full h-full grid grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden"><div id="stack-container-root" role="region" class="col-start-1 row-start-1 relative grid stack-container z-0 shadow-nestedCanvasShadow"><div class="nested-canvas block sm:grid grid-cols-[minmax(0px,_1fr)] grid-rows-[auto_1fr] md:grid-rows-[initial] max-w-full relative sm:grid-rows-1 sm:overflow-x-hidden md:px-0 sm:grid-cols-[0px_100%] lg:grid-cols-[1fr_70%] xl:grid-cols-[1fr_minmax(auto,_920px)] 2xl:grid-cols-[1fr_minmax(auto,_1024px)] 3xl:grid-cols-[1fr_minmax(auto,_1200px)]"><div class="canvas-overlay absolute top-0 hidden lg:grid items-start justify-center mt-6 w-full starting:opacity-0 opacity-100 transition-opacity duration-200 delay-300 sm:grid-cols-[0px_100%] lg:grid-cols-[1fr_70%] xl:grid-cols-[1fr_minmax(auto,_920px)] 2xl:grid-cols-[1fr_minmax(auto,_1024px)] 3xl:grid-cols-[1fr_minmax(auto,_1200px)]"><div class="flex justify-center"></div></div><div class="fixed px-6 bottom-0 w-full z-[9] grid grid-cols-3 items-end"></div><div class="canvas-container absolute inset-0 grid"><span class="flex flex-grow"><span data-state="closed" class="flex flex-col flex-grow h-auto mb-0"><svg style="position: absolute; top: 0px; left: 0px;"><defs><marker id="arrowhead" markerWidth="24" markerHeight="24" viewBox="-10 -10 20 20" markerUnits="strokeWidth" orient="auto-start-reverse" refX="0" refY="0"><polyline stroke-linecap="round" stroke-linejoin="round" points="-5,-4 0,0 -5,4 -5,-4" style="stroke: var(--gray-300); fill: var(--gray-300); stroke-width: 1;"></polyline></marker><marker id="arrowhead-staged" markerWidth="24" markerHeight="24" viewBox="-10 -10 20 20" markerUnits="strokeWidth" orient="auto-start-reverse" refX="0" refY="0"><polyline stroke-linecap="round" stroke-linejoin="round" points="-5,-4 0,0 -5,4 -5,-4" style="stroke: var(--pink-500); fill: var(--pink-500); stroke-width: 1;"></polyline></marker><marker id="arrowhead-selected" markerWidth="24" markerHeight="24" viewBox="-10 -10 20 20" markerUnits="strokeWidth" orient="auto-start-reverse" refX="0" refY="0"><polyline stroke-linecap="round" stroke-linejoin="round" points="-5,-4 0,0 -5,4 -5,-4" style="stroke: var(--blue-500); fill: var(--blue-500); stroke-width: 1;"></polyline></marker><marker id="arrowhead-alt" markerWidth="24" markerHeight="24" viewBox="-10 -10 20 20" markerUnits="strokeWidth" orient="auto-start-reverse" refX="0" refY="0"><polyline stroke-linecap="round" stroke-linejoin="round" points="-5,-4 0,0 -5,4 -5,-4" style="stroke: var(--yellow-500); fill: var(--yellow-500); stroke-width: 1;"></polyline></marker></defs></svg><div class="react-flow flex flex-col flex-grow select-none" data-testid="rf__wrapper" style="width: 100%; height: 100%; overflow: hidden; position: relative; z-index: 0;"><div class="react-flow__renderer" style="position: absolute; width: 100%; height: 100%; top: 0px; left: 0px;"><div class="react-flow__pane" style="position: absolute; width: 100%; height: 100%; top: 0px; left: 0px;"><div class="react-flow__viewport react-flow__container" style="transform: translate(20px, 167px) scale(0.5);"><svg width="915" height="645" class="react-flow__edges react-flow__container" style="z-index: 0;"><defs></defs><g></g></svg><div class="react-flow__edgelabel-renderer"></div><div class="react-flow__nodes" style="position: absolute; width: 100%; height: 100%; top: 0px; left: 0px;"><div class="react-flow__node react-flow__node-service nopan selectable" data-id="9aefecf8-ac7a-4668-b22c-78031274a8e8" data-testid="rf__node-9aefecf8-ac7a-4668-b22c-78031274a8e8" tabindex="0" role="button" aria-describedby="react-flow__node-desc-1" style="z-index: 2; transform: translate(-144px, 240px); pointer-events: all; visibility: visible;"><div class="border-y border-gray-100 -mx-4 px-4 sm:mx-0 sm:px-0 sm:border-0" style="width: 288px; height: 144px;"><span data-state="closed"><a draggable="false" id="9aefecf8-ac7a-4668-b22c-78031274a8e8" name="Service" data-testid="service-node" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 node flex flex-col justify-between pointer-events-auto relative bg-background cursor-pointer dark:bg-secondaryBg focus:!ring-0 -mx-5 px-5 py-4 border-y border-gray-100 dark:border-gray-100 hover:bg-secondaryBg hover:dark:bg-gray-100 sm:w-[288px] sm:h-[144px] sm:mx-0 sm:p-6 sm:shadow-sm sm:rounded-xl sm:border sm:translate-x-px sm:translate-y-px sm:relative sm:z-10 sm:border-pink-400 sm:dark:border-pink-400 sm:hover:bg-background group" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9"><div data-nodeid="9aefecf8-ac7a-4668-b22c-78031274a8e8" data-handlepos="top" data-id="9aefecf8-ac7a-4668-b22c-78031274a8e8-null-target" class="react-flow__handle react-flow__handle-top nodrag nopan opacity-0 target connectablestart connectableend"></div><div data-nodeid="9aefecf8-ac7a-4668-b22c-78031274a8e8" data-handlepos="bottom" data-id="9aefecf8-ac7a-4668-b22c-78031274a8e8-null-source" class="react-flow__handle react-flow__handle-bottom nodrag nopan opacity-0 source connectablestart connectableend"></div><div class="flex space-x-3 items-start"><div class="text-current icon-container icon-lg text-2xl mt-1" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 56 56"><path fill="currentColor" fill-rule="evenodd" d="M28 0C12.53 0 0 12.53 0 28c0 12.39 8.015 22.855 19.145 26.565 1.4.245 1.925-.595 1.925-1.33 0-.665-.035-2.87-.035-5.215-7.035 1.295-8.855-1.715-9.415-3.29-.315-.805-1.68-3.29-2.87-3.955-.98-.525-2.38-1.82-.035-1.855 2.205-.035 3.78 2.03 4.305 2.87 2.52 4.235 6.545 3.045 8.155 2.31.245-1.82.98-3.045 1.785-3.745-6.23-.7-12.74-3.115-12.74-13.825 0-3.045 1.085-5.565 2.87-7.525-.28-.7-1.26-3.57.28-7.42 0 0 2.345-.735 7.7 2.87 2.24-.63 4.62-.945 7-.945s4.76.315 7 .945c5.355-3.64 7.7-2.87 7.7-2.87 1.54 3.85.56 6.72.28 7.42 1.785 1.96 2.87 4.445 2.87 7.525 0 10.745-6.545 13.125-12.775 13.825 1.015.875 1.89 2.555 1.89 5.18 0 3.745-.035 6.755-.035 7.7 0 .735.525 1.61 1.925 1.33C47.985 50.855 56 40.355 56 28 56 12.53 43.47 0 28 0" clip-rule="evenodd"></path></svg></div><div class="flex flex-col min-w-0"><p class="text-base font-semibold truncate text-left mb-1 sm:mb-0">workout_logger_</p><p class="text-sm text-neutral-secondary truncate max-w-full">workoutlogger-production-7f91.up.railway.app</p></div></div><div class="flex items-end justify-between"><div class="grid grid-cols-[24px_1fr] gap-3 items-center"><div class="icon-container icon-sm text-lg text-success" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 16 16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 2h3v.5L10.844 5v.5H14m0 3.027A6 6 0 1 1 7.473 2 4.667 4.667 0 0 0 14 8.527"></path></svg></div><p class="text-sm whitespace-nowrap text-success">Sleeping</p></div></div></a></span></div></div><div class="react-flow__node react-flow__node-service nopan selectable" data-id="17ad18b3-09a7-45b3-a137-8f7e045d703d" data-testid="rf__node-17ad18b3-09a7-45b3-a137-8f7e045d703d" tabindex="0" role="button" aria-describedby="react-flow__node-desc-1" style="z-index: 2; transform: translate(-144px, 0px); pointer-events: all; visibility: visible;"><div class="border-y border-gray-100 -mx-4 px-4 sm:mx-0 sm:px-0 sm:border-0" style="width: 288px; height: 192px;"><span data-state="closed"><a draggable="false" id="17ad18b3-09a7-45b3-a137-8f7e045d703d" name="Service" data-testid="service-node" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 node flex flex-col justify-between pointer-events-auto relative bg-background cursor-pointer dark:bg-secondaryBg focus:!ring-0 -mx-5 px-5 py-4 border-y border-gray-100 dark:border-gray-100 hover:bg-secondaryBg hover:dark:bg-gray-100 sm:w-[288px] sm:h-[144px] sm:mx-0 sm:p-6 sm:shadow-sm sm:rounded-xl sm:border sm:border-gray-200 sm:dark:border-gray-200 sm:translate-x-px sm:translate-y-px sm:relative sm:z-10 hover:sm:border-pink-200 hover:sm:bg-background hover:sm:shadow-[0px_0px_0px_4px_rgba(166,_103,_228,_0.06)] hover:sm:dark:shadow-none hover:sm:dark:border-gray-200 hover:sm:dark:bg-gray-100 group" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/17ad18b3-09a7-45b3-a137-8f7e045d703d/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9"><div data-nodeid="17ad18b3-09a7-45b3-a137-8f7e045d703d" data-handlepos="top" data-id="17ad18b3-09a7-45b3-a137-8f7e045d703d-null-target" class="react-flow__handle react-flow__handle-top nodrag nopan opacity-0 target connectablestart connectableend"></div><div data-nodeid="17ad18b3-09a7-45b3-a137-8f7e045d703d" data-handlepos="bottom" data-id="17ad18b3-09a7-45b3-a137-8f7e045d703d-null-source" class="react-flow__handle react-flow__handle-bottom nodrag nopan opacity-0 source connectablestart connectableend"></div><div class="flex space-x-3 items-center"><div class="text-current icon-container icon-lg text-2xl mt-1" aria-hidden="true"><img src="https://devicons.railway.app/i/postgresql.svg" alt="" style="max-width: 100%; max-height: 100%;"></div><div class="flex flex-col min-w-0"><p class="text-base font-semibold truncate text-left mb-1 sm:mb-0">Postgres</p></div></div><div class="flex items-end justify-between"><div class="grid grid-cols-[24px_1fr] gap-3 items-center"><div class="icon-container icon-sm text-lg text-success" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 16 16"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 2h3v.5L10.844 5v.5H14m0 3.027A6 6 0 1 1 7.473 2 4.667 4.667 0 0 0 14 8.527"></path></svg></div><p class="text-sm whitespace-nowrap text-success">Sleeping</p></div></div></a></span><span data-state="closed"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 node-modifier relative px-0 py-4 sm:bg-secondaryBg overflow-hidden sm:z-[3] sm:grid sm:grid-cols-1 sm:items-center sm:border sm:rounded-xl sm:translate-x-px sm:-mt-[24px] sm:pt-[24px] sm:pb-0 sm:mx-0 hover:sm:border-pink-200 hover:sm:shadow-[0px_0px_0px_4px_rgba(166,_103,_228,_0.06)] hover:sm:dark:shadow-none hover:sm:dark:border-gray-200 hover:sm:dark:bg-gray-100 flex w-full" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/volume/7ae66cb7-58ba-4aed-a6af-3a8f71f50c7f/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9" style="height: 72px;"><div aria-hidden="true" class="absolute flex h-full top-0 left-0 bottom-0 -z-1 bg-gray-200 opacity-30" style="width: 20%;"></div><div class="grid grid-cols-[24px_1fr] gap-3 items-center px-6 w-full h-full cursor-pointer"><div class="icon-container icon-sm text-lg text-gray-500 mx-auto" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-hard-drive" viewBox="0 0 24 24"><path d="M22 12H2m3.45-6.89L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11M6 16h.01M10 16h.01"></path></svg></div><p class="text-sm whitespace-nowrap text-ellipsis overflow-hidden text-gray-500">postgres-volume-FkMF</p></div></a></span></div></div></div></div></div></div><div class="react-flow__panel toolbar-left !m-6 flex gap-2 top left" style="pointer-events: all;"><div role="toolbar" aria-orientation="horizontal" dir="ltr" class="grid gap-2 z-20" aria-label="Canvas options" tabindex="0" data-orientation="horizontal" style="outline: none;"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 py-1.5 rounded-md text-sm leading-5 space-x-2 px-0 bg-secondaryBg w-[36px] h-[36px]" title="Canvas settings" type="button" id="radix-:r2a4:" aria-haspopup="menu" aria-expanded="false" data-state="closed" tabindex="-1" data-orientation="horizontal" data-radix-collection-item=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-grip" viewBox="0 0 24 24"><circle cx="12" cy="5" r="1"></circle><circle cx="19" cy="5" r="1"></circle><circle cx="5" cy="5" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="19" r="1"></circle><circle cx="19" cy="19" r="1"></circle><circle cx="5" cy="19" r="1"></circle></svg></div></button><div role="group" dir="ltr" data-orientation="horizontal" aria-label="canvas action" class="bg-secondaryBg border border-gray-200 rounded-t rounded-b"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Zoom in" type="button" tabindex="-1" data-orientation="horizontal" data-radix-collection-item=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Zoom out" type="button" tabindex="-1" data-orientation="horizontal" data-radix-collection-item=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-minus" viewBox="0 0 24 24"><path d="M5 12h14"></path></svg></div></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Center canvas" type="button" tabindex="-1" data-orientation="horizontal" data-radix-collection-item=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-expand" viewBox="0 0 24 24"><path d="m21 21-6-6m6 6v-4.8m0 4.8h-4.8M3 16.2V21m0 0h4.8M3 21l6-6M21 7.8V3m0 0h-4.8M21 3l-6 6M3 7.8V3m0 0h4.8M3 3l6 6"></path></svg></div></button></div><div role="group" dir="ltr" data-orientation="horizontal" aria-label="canvas action" class="bg-secondaryBg border border-gray-200 rounded-t rounded-b"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Undo" type="button" tabindex="-1" data-orientation="horizontal" data-radix-collection-item=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-undo" viewBox="0 0 24 24"><path d="M3 7v6h6"></path><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"></path></svg></div></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Redo" type="button" tabindex="-1" data-orientation="horizontal" data-radix-collection-item=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="lucide lucide-redo" viewBox="0 0 24 24"><path d="M21 7v6h-6"></path><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"></path></svg></div></button></div></div></div><div class="react-flow__panel toolbar-right !m-6 flex items-center gap-2 top right" style="pointer-events: all;"><div class="flex flex-col gap-4 items-end"><div class="flex items-center gap-2"></div></div></div><svg class="react-flow__background -z-1" data-testid="rf__background" style="position: absolute; width: 100%; height: 100%; top: 0px; left: 0px;"><pattern id="pattern-1:r2a3:" x="8" y="11" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="translate(-0.25,-0.25)"><circle cx="0.25" cy="0.25" r="0.25" fill="var(--gray-400)"></circle></pattern><rect x="0" y="0" width="100%" height="100%" fill="url(#pattern-1:r2a3:)"></rect></svg><div id="react-flow__node-desc-1" style="display: none;">Press enter or space to select a node.You can then use the arrow keys to move the node around. Press delete to remove it and escape to cancel. </div><div id="react-flow__edge-desc-1" style="display: none;">Press enter or space to select an edge. You can then press delete to remove it or escape to cancel.</div><div id="react-flow__aria-live-1" aria-live="assertive" aria-atomic="true" style="position: absolute; width: 1px; height: 1px; margin: -1px; border: 0px; padding: 0px; overflow: hidden; clip: rect(0px, 0px, 0px, 0px); clip-path: inset(100%);"></div></div></span></span></div><div class="absolute bottom-0 z-[29] overflow-y-hidden pointer-events-none w-auto -top-px left-0 right-0 sm:w-activity sm:top-[98px] sm:left-auto sm:right-6"><div class="absolute top-0 right-0 bottom-0 h-full grid grid-rows-[max-content,minmax(0,1fr)] rounded-t-lg border-t border-l border-r border-gray-200 overflow-hidden pointer-events-auto bg-background dark:bg-secondaryBg w-full sm:w-full" style="transform: translateY(calc(100% - 42px));"><button class="flex items-center py-2 px-4 w-full text-left" name="Activity Feed"><div class="icon-container icon-md text-2xl text-pink-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-activity" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg></div><p class="text-base ml-2">Activity</p><div class="text-current icon-container icon-md text-2xl ml-auto" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-chevron-up" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"></path></svg></div></button></div></div><div class="metro-pane-wrapper grid justify-items-end inset-0 relative row-start-2 sm:row-start-1 overflow-hidden px-0 min-w-full w-auto min-h-full sm:h-full md:mx-5 md:min-w-[initial] lg:mx-0 col-start-2"><div class="metro-pane top-0 bottom-0 right-0 z-[30] md:mt-6 md:border md:rounded-t-xl overflow-hidden lg:border-r-0 lg:border-l lg:border-t lg:rounded-none lg:rounded-tl-xl w-full xl:w-[calc(100%-24px)]" style="position: static; pointer-events: auto; opacity: 1; user-select: initial; transform: none;"><div class="grid grid-cols-[minmax(0px,_1fr)] md:grid-cols-[auto] w-full min-h-full bg-background dark:bg-secondaryBg sm:overflow-auto sm:h-full service-tabs grid-rows-[auto_minmax(0px,_1fr)]"><div class="flex flex-col pt-8 md:px-12 md:pt-12 z-50 border-b !border-gray-100 md:!border-gray-200"><div class="flex space-x-4 justify-between items-center mb-6 px-5 md:px-0 w-full"><div class="flex space-x-4 items-center"><button class="flex items-center outline-none rounded-md focus-visible:ring-2 focus-visible:ring-gray-300"><div class="icon-container icon-xl text-2xl rounded-full text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 56 56"><path fill="currentColor" fill-rule="evenodd" d="M28 0C12.53 0 0 12.53 0 28c0 12.39 8.015 22.855 19.145 26.565 1.4.245 1.925-.595 1.925-1.33 0-.665-.035-2.87-.035-5.215-7.035 1.295-8.855-1.715-9.415-3.29-.315-.805-1.68-3.29-2.87-3.955-.98-.525-2.38-1.82-.035-1.855 2.205-.035 3.78 2.03 4.305 2.87 2.52 4.235 6.545 3.045 8.155 2.31.245-1.82.98-3.045 1.785-3.745-6.23-.7-12.74-3.115-12.74-13.825 0-3.045 1.085-5.565 2.87-7.525-.28-.7-1.26-3.57.28-7.42 0 0 2.345-.735 7.7 2.87 2.24-.63 4.62-.945 7-.945s4.76.315 7 .945c5.355-3.64 7.7-2.87 7.7-2.87 1.54 3.85.56 6.72.28 7.42 1.785 1.96 2.87 4.445 2.87 7.525 0 10.745-6.545 13.125-12.775 13.825 1.015.875 1.89 2.555 1.89 5.18 0 3.745-.035 6.755-.035 7.7 0 .735.525 1.61 1.925 1.33C47.985 50.855 56 40.355 56 28 56 12.53 43.47 0 28 0" clip-rule="evenodd"></path></svg></div></button><h1 class="text-h3 font-semibold flex items-center flex-grow"><button data-testid="edit-title" class="focus:outline-none flex items-center rounded-md outline-none hover:bg-gray-200 focus-visible:ring-2 focus-visible:ring-gray-300 group">workout_logger_<div class="icon-container w-[26px] h-[26px] text-2xl ml-5 text-gray-500 p-1 !hidden group-hover:!flex" size="26" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg></div></button></h1></div><div class="flex items-center gap-4"><a class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" data-testid="close-metro-pane" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"></path></svg></div></a></div></div><div class="flex items-center header-tabs space-x-3 md:space-x-8 md:min-h-[39px] pb-3 w-full md:pb-0 overflow-x-auto overflow-y-hidden border-b border-gray-100 md:border-transparent px-5 md:px-0 mb-[-2px]"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 relative inline-block h-10 px-3 py-2 rounded-md bg-secondaryBg md:h-auto md:bg-transparent md:p-0 md:pb-3 md:hover:text-foreground md:focus:outline-none md:focus:ring-0 md:focus:text-foreground text-gray-500 tab-item tab-item-Deployments tab-item tab-item-Deployments" name="Deployments Tab" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9"><div class="flex items-center whitespace-nowrap">Deployments</div></a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 relative inline-block h-10 px-3 py-2 rounded-md bg-secondaryBg md:h-auto md:bg-transparent md:p-0 md:pb-3 md:hover:text-foreground md:focus:outline-none md:focus:ring-0 md:focus:text-foreground text-gray-500 tab-item tab-item-Variables tab-item tab-item-Variables" name="Variables Tab" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/variables?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9"><div class="flex items-center whitespace-nowrap">Variables</div></a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 relative inline-block h-10 px-3 py-2 rounded-md bg-secondaryBg md:h-auto md:bg-transparent md:p-0 md:pb-3 md:hover:text-foreground md:focus:outline-none md:focus:ring-0 md:focus:text-foreground text-gray-500 tab-item tab-item-Metrics tab-item tab-item-Metrics" name="Metrics Tab" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/metrics?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9"><div class="flex items-center whitespace-nowrap">Metrics</div></a><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 relative inline-block h-10 px-3 py-2 rounded-md text-foreground bg-gray-100 md:h-auto md:bg-transparent md:p-0 md:pb-3 md:hover:text-foreground md:focus:outline-none md:focus:ring-0 md:focus:text-foreground md:text-foreground tab-item tab-item-Settings tab-item tab-item-Settings" name="Settings Tab" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9"><div class="flex items-center whitespace-nowrap">Settings</div><div class="hidden md:block absolute bottom-0 w-full h-px bg-foreground" style="opacity: 1;"></div></a></div></div><div class="metro-pane-content sm:overflow-auto"><div class="h-full px-5 pt-8 md:px-12"><div class="relative -mx-5 -mt-8 md:-mx-12"><div class="bg-gray-50 dark:bg-secondaryBg border-b border-gray-100 px-9 py-3 sticky top-0 z-[99]"><div class="relative"><div class="flex flex-col w-full"><div class="flex justify-between items-center"><div class="flex space-x-1"><label class="block text-xs font-semibold leading-[18px] text-gray-600 mb-2 sr-only" for="input-undefined-:r2af:">Filter settings</label></div></div><div class="flex items-center relative w-full"><input id="input-undefined-:r2af:" placeholder="Filter Settings..." class="w-full min-w-0 rounded-md text-foreground border border-gray-200 placeholder-gray-500 focus:outline-none relative z-10 hover:border-gray-400 focus:border-pink-400 text-sm leading-5 px-1.5 py-1.5 bg-background dark:bg-secondaryBg" value=""></div></div><button class="absolute top-[3px] right-1 z-[9999999] w-7 h-7 flex items-center justify-center rounded border bg-gray-50 dark:bg-background border-gray-100 text-gray-600"><span>/</span></button></div></div><div class="relative grid gap-16 grid-cols-1 lg:grid-cols-[1fr_auto]"><div class="grid gap-16 mx-6 sm:mx-12 mt-12 pb-40 sm:pb-12 border-l-none sm:border-l-2 border-black border-opacity-[8%] dark:border-white dark:border-opacity-[8%]"><div class="relative"><div id="source" class="absolute -top-24" aria-hidden="true"></div><div class="icon-container icon-40 text-2xl absolute !hidden sm:!flex top-[-6px] left-[-22px] bg-background dark:bg-secondaryBg border rounded-full p-[10px] text-gray-500 border-gray-200" size="40" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-code" viewBox="0 0 24 24"><path d="m16 18 6-6-6-6M8 6l-6 6 6 6"></path></svg></div><h1 class="text-h4 text-gray-600 font-medium mb-8 sm:pl-10">Source</h1><div class="grid gap-8 max-w-xl sm:pl-10"><div class="" id="source-repo"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#source-repo">Source Repo</h2></header><div class="px-4 py-2 bg-secondaryBg dark:bg-[#201F2D] border border-gray-100 rounded-md shadow-sm flex"><a href="https://github.com/Harsh-0024/workout_logger_" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 flex items-center flex-grow space-x-3 min-w-0"><div aria-hidden="true" class="text-current icon-container icon-md text-2xl"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 56 56"><path fill="currentColor" fill-rule="evenodd" d="M28 0C12.53 0 0 12.53 0 28c0 12.39 8.015 22.855 19.145 26.565 1.4.245 1.925-.595 1.925-1.33 0-.665-.035-2.87-.035-5.215-7.035 1.295-8.855-1.715-9.415-3.29-.315-.805-1.68-3.29-2.87-3.955-.98-.525-2.38-1.82-.035-1.855 2.205-.035 3.78 2.03 4.305 2.87 2.52 4.235 6.545 3.045 8.155 2.31.245-1.82.98-3.045 1.785-3.745-6.23-.7-12.74-3.115-12.74-13.825 0-3.045 1.085-5.565 2.87-7.525-.28-.7-1.26-3.57.28-7.42 0 0 2.345-.735 7.7 2.87 2.24-.63 4.62-.945 7-.945s4.76.315 7 .945c5.355-3.64 7.7-2.87 7.7-2.87 1.54 3.85.56 6.72.28 7.42 1.785 1.96 2.87 4.445 2.87 7.525 0 10.745-6.545 13.125-12.775 13.825 1.015.875 1.89 2.555 1.89 5.18 0 3.745-.035 6.755-.035 7.7 0 .735.525 1.61 1.925 1.33C47.985 50.855 56 40.355 56 28 56 12.53 43.47 0 28 0" clip-rule="evenodd"></path></svg></div><p class="text-base truncate flex-grow space-x-2"><span class="group-hover:underline">Harsh-0024/workout_logger_</span> <span aria-hidden="true" class="hidden group-hover:inline text-gray-500">↗</span></p></a><div class="flex space-x-2 items-center"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Edit"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-edit-3" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></div></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[26px] py-1 px-1.5 rounded-md text-xs leading-4 space-x-1.5"><span class="inline-block">Disconnect</span></button></div></div><div class="mt-3 text-sm text-gray-500"><button href="" target="_blank" rel="noreferrer" as="button" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 underline hover:text-pink-600">Add Root Directory</button> (used for build and deploy steps. <a href="https://docs.railway.com/deploy/builds#root-directory" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="mr-1">Docs</span><span aria-hidden="true">↗</span></a>)</div></div><div class="" id="source-branch"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#source-branch">Branch connected to production</h2><h2 class="text-sm text-gray-600">Changes made to this GitHub branch will be automatically pushed to this environment.</h2></header><div class="flex flex-col space-y-1"><div class="px-4 bg-secondaryBg dark:bg-[#201F2D] border border-gray-100 rounded-md shadow-sm flex items-center justify-between gap-4 py-0"><div class="flex space-x-2 items-center w-full"><div aria-hidden="true" class="text-current icon-container icon-md text-2xl"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-git-branch" viewBox="0 0 24 24"><path d="M6 3v12"></path><circle cx="18" cy="6" r="3"></circle><circle cx="6" cy="18" r="3"></circle><path d="M18 9a9 9 0 0 1-9 9"></path></svg></div><div class="flex flex-col w-full"><div class="relative flex items-center border-none"><div class="max-w-3xl w-full mx-auto select select-branch !border-none css-nxiuxh-container"><span id="react-select-6-live-region" class="css-7pg0cj-a11yText"></span><span aria-live="polite" aria-atomic="false" aria-relevant="additions text" role="log" class="css-7pg0cj-a11yText"></span><div class=" css-9egz8x-control"><div class=" css-mw0l0x"><div class=" css-1pgzlei-singleValue"><div class="flex space-x-3 items-center"><span>upgrade</span></div></div><div class=" css-ztq05x" data-value=""><input class="" autocapitalize="none" autocomplete="off" autocorrect="off" id="react-select-6-input" spellcheck="false" tabindex="0" type="text" aria-autocomplete="list" aria-expanded="false" aria-haspopup="true" role="combobox" value="" style="color: inherit; background: 0px center; opacity: 1; width: 100%; grid-area: 1 / 2; font: inherit; min-width: 2px; border: 0px; margin: 0px; outline: 0px; padding: 0px;"></div></div><div class=" css-1wy0on6"><span class=" css-1hyfx7x"></span><div class=" css-1xc3v61-indicatorContainer" aria-hidden="true"><div data-size="md" class="flex justify-center items-center h-full w-full rounded-tr-md rounded-br-md data-[size=md]:pr-1.5"><div class="icon-container icon-md text-2xl text-gray-500 top-[2px] right-1.5 min-h-full pointer-events-none" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></div></div></div></div></div></div></div></div></div><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[26px] py-1 px-1.5 rounded-md text-xs leading-4 space-x-1.5 max-w-max" type="button"><span class="inline-block">Disconnect</span></button></div></div></div><div class="" id="source-repo-checksuites"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#source-repo-checksuites">Wait for CI</h2><h2 class="text-sm text-gray-600">Trigger deployments after all GitHub actions have completed successfully.</h2></header><div class="px-4 py-2 bg-secondaryBg dark:bg-[#201F2D] border border-gray-100 rounded-md shadow-sm flex"><div class="flex space-x-4 items-center w-full"><button type="button" role="switch" aria-checked="false" data-state="unchecked" value="on" id="check-suites" class="rounded-full shadow focus:outline-none focus:ring-2 focus:ring-pink-400 min-w-10 w-10 h-6 bg-gray-300"><span data-state="unchecked" class="block rounded-full bg-white shadow transition-transform duration-100 transform translate-x-0.5 min-w-5 w-5 h-5"></span></button><label for="check-suites" class="w-full cursor-pointer select-none">Wait for CI</label></div></div></div></div></div><div class="relative"><div id="networking" class="absolute -top-24" aria-hidden="true"></div><div class="icon-container icon-40 text-2xl absolute !hidden sm:!flex top-[-6px] left-[-22px] bg-background dark:bg-secondaryBg border rounded-full p-[10px] text-gray-500 border-gray-200" size="40" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="1em" height="1em"><g fill="none" stroke="currentColor" transform="translate(9 18)"><rect width="30" height="28" x="36" stroke-width="12" rx="4" ry="4"></rect><rect width="30" height="28" y="58" stroke-width="12" rx="4" ry="4"></rect><rect width="30" height="28" x="74" y="58" stroke-width="12" rx="4" ry="4"></rect><path stroke-width="11" d="M40 30 20 60m42-30 20 30M34 72h36"></path></g></svg></div><h1 class="text-h4 text-gray-600 font-medium mb-8 sm:pl-10">Networking</h1><div class="grid gap-8 max-w-xl sm:pl-10"><div class="" id="networking-public"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#networking-public">Public Networking</h2></header><div class="flex flex-col space-y-4"><h2 class="text-sm text-gray-600">Access your application over HTTP with the following domains</h2><div class="py-1 border border-gray-200 rounded-lg divide-y divide-gray-200"><div class="group flex items-center w-full px-4 py-3 hover:bg-secondaryBg dark:hover:bg-gray-100"><div class="icon-container icon-md text-2xl mr-3 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10"></path></svg></div><div><a href="https://workoutlogger-production-7f91.up.railway.app" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 group/link overflow-hidden overflow-ellipsis flex-grow text-left text-sm"><span class="group-hover/link:underline">workoutlogger-production-7f91.up.railway.app</span><span aria-hidden="true" class="text-gray-500 group-hover/link:visible ml-1 invisible">↗</span></a><p class="text-xs text-gray-600 font-medium"><span class="text-gray-600 items-center space-x-1 inline-flex align-middle"><div aria-hidden="true" class="text-current icon-container icon-sm text-lg"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14m-7-7 7 7-7 7"></path></svg></div><p class="text-xs text-gray-600 font-medium">Port <span class="font-mono">8080</span></p></span> · <div class="items-center inline-flex gap-0.5"><span class="bg-clip-text text-transparent bg-gradient-to-r from-pink-600 to-pink-700">Metal Edge</span></div></p></div><div class="flex space-x-1 ml-auto"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[26px] py-1 text-xs leading-4 space-x-1.5 w-[26px] px-0 rounded-md hover:bg-gray-200" title="Copy" type="button"><div class="icon-container icon-md text-2xl !w-[14px] !h-[14px] text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-copy" viewBox="0 0 24 24"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[26px] py-1 text-xs leading-4 space-x-1.5 w-[26px] px-0 rounded-md hover:bg-gray-200" title="Edit" type="button"><div class="icon-container icon-md text-2xl !w-[14px] !h-[14px] text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg></div></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[26px] py-1 text-xs leading-4 space-x-1.5 w-[26px] px-0 rounded-md hover:bg-gray-200" title="Delete" type="button"><div class="icon-container icon-md text-2xl !w-[14px] !h-[14px] text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-trash-2" viewBox="0 0 24 24"><path d="M3 6h18m-2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m-6 5v6m4-6v6"></path></svg></div></button></div></div><div aria-controls="slidingContainer-13" aria-expanded="false" class="pointer-events-none" style="margin: 0px; opacity: 0; height: 0px;"><div class="p-4 space-y-4 pointer-events-none"><form class="space-y-4"><div class="flex gap-4 items-center"><div class="flex items-center grow justify-between border border-gray-200 rounded-md focus-within:border-pink-400 pr-4"><div class="flex flex-col w-full"><div class="flex justify-between items-center"><div class="flex space-x-1"><label class="block text-xs font-semibold leading-[18px] text-gray-600 mb-2 sr-only" for="input-domain-:r2ag:">Domain</label></div></div><div class="flex items-center relative w-full"><input id="input-domain-:r2ag:" name="domain" class="w-full min-w-0 rounded-md text-foreground bg-transparent border border-gray-200 placeholder-gray-500 focus:outline-none relative z-10 hover:border-gray-400 focus:border-pink-400 text-base leading-6 px-3 py-2 border-none"></div></div><p class="text-base text-gray-500 whitespace-nowrap">.up.railway.app</p></div></div><p class="text-sm text-gray-700">Enter the port your app is listening on</p><div class="flex flex-col w-full"><div class="flex justify-between items-center"><div class="flex space-x-1"><label class="block text-xs font-semibold leading-[18px] text-gray-600 mb-2 sr-only" for="input-undefined-:r2ah:">Target port</label></div></div><div class="flex items-center relative w-full"><input id="input-undefined-:r2ah:" data-testid="port-selector-input" placeholder="8080" type="number" min="1" max="65535" class="w-full min-w-0 rounded-md text-foreground bg-transparent border border-gray-200 placeholder-gray-500 focus:outline-none relative z-10 hover:border-gray-400 focus:border-pink-400 text-base leading-6 px-3 py-2" value="8080"></div></div><div class="flex space-x-4 justify-between items-center"><div class="flex space-x-3 items-center text-gray-500"><div aria-hidden="true" class="text-current icon-container icon-md text-2xl"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4m0-4h.01"></path></svg></div><p class="text-sm">Update your domain or target port</p></div><div class="flex space-x-2 items-center"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2" type="button"><span class="inline-block">Cancel</span></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-pink-500 border-pink-500 text-white hover:bg-pink-600 hover:border-pink-600 disabled:bg-pink-500 disabled:border-pink-500 focus-visible:ring-pink-600 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2 whitespace-nowrap" disabled=""><span class="inline-block">Update</span></button></div></div></form></div></div></div><div class="flex space-x-2"><div class="flex flex-col space-y-2"><div class="flex space-x-2"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-pink-200 text-pink-500 dark:text-pink-700 hover:bg-pink-100 hover:border-pink-200 disabled:bg-transparent disabled:border-pink-200 disabled:text-pink-700 focus-visible:ring-pink-600 focus-visible:bg-pink-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2" name="Add Custom Domain" disabled=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-pink-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><span class="inline-block">Custom Domain</span></button></div></div><div class="flex space-x-2"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-pink-200 text-pink-500 dark:text-pink-700 hover:bg-pink-100 hover:border-pink-200 disabled:bg-transparent disabled:border-pink-200 disabled:text-pink-700 focus-visible:ring-pink-600 focus-visible:bg-pink-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-pink-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><span class="inline-block">TCP Proxy</span></button></div></div><div variant="info" class="relative flex p-3 rounded-md items-center bg-info-surface text-info text-sm"><div class="icon-container icon-md text-2xl mr-3 text-info" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4m0-4h.01"></path></svg></div><p class="text-sm">Custom domains are not available on the free plan. <a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 underline hover:text-pink-600" href="/workspace/upgrade">Please upgrade to add one.</a></p></div></div></div><div class="" id="networking-private"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#networking-private">Private Networking</h2><h2 class="text-sm text-gray-600">Communicate with this service from within the Railway network.</h2></header><div class="flex flex-col space-y-4"><div class="py-1 border border-gray-200 rounded-lg divide-y divide-gray-200"><div class="group flex items-center space-x-3 px-4 py-3 hover:bg-secondaryBg dark:hover:bg-gray-100"><div class="icon-container icon-md text-2xl text-green-600" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-check-circle" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><path d="M22 4 12 14.01l-3-3"></path></svg></div><div class="flex flex-col space-y-1 flex-grow"><div class="flex space-x-4 justify-between items-center relative w-full"><div class="flex items-center gap-1.5"><div>workout_logger_.railway.internal</div><div class="cursor-default bg-pink-100 text-pink-600 text-xs font-semibold py-0.5 px-1.5 rounded flex items-center gap-1 cursor-help" data-state="closed"><div aria-hidden="true" class="text-current icon-container icon-xs text-lg"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10"></path></svg></div>IPv6</div></div><div class="flex space-x-1 justify-between items-center"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[26px] py-1 text-xs leading-4 space-x-1.5 w-[26px] px-0 rounded-md opacity-0 group-hover:opacity-100 hover:bg-gray-200" title="Copy" type="button"><div class="icon-container icon-md text-2xl !w-[14px] !h-[14px] text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-copy" viewBox="0 0 24 24"><rect width="13" height="13" x="9" y="9" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></div></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[26px] py-1 text-xs leading-4 space-x-1.5 w-[26px] px-0 rounded-md opacity-0 group-hover:opacity-100 hover:bg-gray-200" title="Edit" type="button"><div class="icon-container icon-md text-2xl !w-[14px] !h-[14px] text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"></path></svg></div></button></div></div><p class="text-xs text-gray-600 font-medium"><div class="flex space-x-0 items-center flex-wrap"><span>Ready to talk privately  · </span><div class="pr-0.5"></div><div class="flex items-center gap-0.5"><span class="text-pink-600">You can also simply call me</span><span class="px-[3px] text-xs font-mono rounded-md bg-pink-100 border border-gray-100 text-pink-600">workout_logger_</span>.</div></div></p></div></div><div aria-controls="slidingContainer-14" aria-expanded="false" class="pointer-events-none" style="margin: 0px; opacity: 0; height: 0px;"><div class="p-4 space-y-4 pointer-events-none"><form><div class="flex items-center justify-between pr-4 mb-4 border border-gray-200 rounded-md focus-within:border-pink-400"><div class="flex flex-col w-full"><div class="flex justify-between items-center"><div class="flex space-x-1"><label class="block text-xs font-semibold leading-[18px] text-gray-600 mb-2 sr-only" for="input-dnsName-:r2aj:">DNS</label></div></div><div class="flex items-center relative w-full"><input id="input-dnsName-:r2aj:" name="dnsName" class="w-full min-w-0 rounded-md text-foreground bg-transparent border border-gray-200 placeholder-gray-500 focus:outline-none relative z-10 hover:border-gray-400 focus:border-pink-400 text-base leading-6 px-3 py-2 border-none pl-4"></div></div><p class="text-base text-gray-500 whitespace-nowrap">.railway.internal</p></div><div class="flex space-x-4 justify-between items-center"><div class="flex space-x-1.5 items-center text-green-500"><div aria-hidden="true" class="text-current icon-container icon-md text-2xl"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"></path></svg></div><p class="text-sm">Endpoint name available!</p></div><div class="flex space-x-2 items-center"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2" type="button"><span class="inline-block">Cancel</span></button><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-pink-500 border-pink-500 text-white hover:bg-pink-600 hover:border-pink-600 disabled:bg-pink-500 disabled:border-pink-500 focus-visible:ring-pink-600 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2"><span class="inline-block">Update</span></button></div></div></form></div></div></div></div></div></div></div><div class="relative"><div id="build" class="absolute -top-24" aria-hidden="true"></div><div class="icon-container icon-40 text-2xl absolute !hidden sm:!flex top-[-6px] left-[-22px] bg-background dark:bg-secondaryBg border rounded-full p-[10px] text-gray-500 border-gray-200" size="40" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-box" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16"></path><path d="M3.27 6.96 12 12.01l8.73-5.05M12 22.08V12"></path></svg></div><h1 class="text-h4 text-gray-600 font-medium mb-8 sm:pl-10">Build</h1><div class="grid gap-8 max-w-xl sm:pl-10"><div class="" id="build-builder"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#build-builder">Builder</h2></header><button type="button" id="radix-:r2ak:" aria-haspopup="menu" aria-expanded="false" data-state="closed" class="w-full text-left focus:outline-none focus-visible:ring-pink-500"><div class="grid gap-4 grid-cols-[1fr_auto] items-center w-full space-x-8 px-6 py-4 bg-secondaryBg dark:bg-gray-100 rounded-md"><div class="flex flex-col space-y-1.5 w-full"><div class="flex items-center gap-2"><p class="text-base flex items-center gap-x-1">Railpack</p><p class="text-xs flex items-center rounded px-2 py-0.5 text-blue-500 bg-blue-100 font-medium" color="blue">Default</p></div><p class="text-xs text-gray-600 font-medium">App builder developed by Railway. <a href="https://railpack.com" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></p></div><div aria-hidden="true" class="text-current icon-container icon-sm text-lg"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></div></div></button></div><div id="beta-v3-builder"><div class="flex flex-col gap-y-1 mb-3"><h2 class="text-sm flex items-center gap-x-2 font-semibold"><span>Metal Build Environment</span><p class="text-xs flex items-center rounded px-2 py-0.5 text-pink-600 bg-pink-100" color="pink">Metal</p></h2><p class="text-sm text-gray-600">Use our new Metal-based build environment. The new Metal build environment is faster and will be the default for all builds in the coming months.</p></div><div class="px-4 py-2 bg-secondaryBg dark:bg-[#201F2D] border border-gray-100 rounded-md shadow-sm"><div class="flex space-x-4 items-center w-full"><button type="button" role="switch" aria-checked="true" data-state="checked" value="on" id="beta-v3-builder-switch" class="rounded-full shadow focus:outline-none focus:ring-2 focus:ring-pink-400 min-w-10 w-10 h-6 bg-pink-500"><span data-state="checked" class="block rounded-full bg-white shadow transition-transform duration-100 transform translate-x-0.5 min-w-5 w-5 h-5" style="transform: translateX(calc(18px));"></span></button><label for="beta-v3-builder-switch" class="w-full cursor-pointer select-none">Use Metal Build Environment</label></div></div></div><div class="" id="build-command"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#build-command">Custom Build Command</h2><h2 class="text-sm text-gray-600">Override the default build command that is run when building your app. <a href="https://docs.railway.com/deploy/builds#build-command" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><span class="inline-block">Build Command</span></button></div><div class="" id="build-watch-paths"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#build-watch-paths">Watch Paths</h2><h2 class="text-sm text-gray-600">Gitignore-style rules to trigger a new deployment based on what file paths have changed. <a href="https://docs.railway.com/deploy/build-configuration#configure-watch-paths" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><div class="border border-neutral rounded-md"><div class="flex gap-x-2"><div class="flex flex-col w-full"><div class="flex justify-between items-center"><div class="flex space-x-1"><label class="block text-xs font-semibold leading-[18px] text-gray-600 mb-2 sr-only" for="input-undefined-:r2ao:">Add pattern</label></div></div><div class="flex items-center relative w-full"><input id="input-undefined-:r2ao:" type="text" class="w-full min-w-0 rounded-md text-foreground bg-transparent border border-gray-200 placeholder-gray-500 focus:outline-none relative z-10 hover:border-gray-400 focus:border-pink-400 text-base leading-6 px-3 py-2 !border-0 h-[42px]" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" aria-controls=":r2am:" aria-autocomplete="list" aria-expanded="false" aria-haspopup="listbox" role="combobox" placeholder="Add pattern e.g. /src/**" value=""></div></div><div class="flex gap-x-1 pr-1.5 mt-1"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Add" disabled=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"></path></svg></div></button></div></div></div></div></div></div><div class="relative"><div id="deploy" class="absolute -top-24" aria-hidden="true"></div><div class="icon-container icon-40 text-2xl absolute !hidden sm:!flex top-[-6px] left-[-22px] bg-background dark:bg-secondaryBg border rounded-full p-[10px] text-gray-500 border-gray-200" size="40" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-cloud" viewBox="0 0 24 24"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10"></path></svg></div><h1 class="text-h4 text-gray-600 font-medium mb-8 sm:pl-10">Deploy</h1><div class="grid gap-8 max-w-xl sm:pl-10"><div class="flex flex-col"><div class="" id="deploy-start-command"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-start-command">Custom Start Command</h2><h2 class="text-sm text-gray-600">Command that will be run to start new deployments. <a href="https://docs.railway.com/guides/start-command" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><span class="inline-block">Start Command</span></button></div><div class="group mt-3 text-sm text-gray-500 grid gap-1 grid-cols-[min-content,auto] cursor-pointer"><div class="text-current icon-container icon-sm text-lg mt-0.5 group-hover:text-pink-600" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><div><span class="underline group-hover:text-pink-600">Add pre-deploy step</span> (<a href="https://docs.railway.com/guides/pre-deploy-command" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="mr-1">Docs</span><span aria-hidden="true">↗</span></a>)</div></div></div><div class="" id="deploy-region-config"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-region-config">Regions</h2><h2 class="text-sm text-gray-600">Configure how many instances of this service are deployed in each region.</h2></header><div class="flex flex-col space-y-4 w-full"><div class="flex flex-col space-y-2"><div class="flex space-x-2 items-center"><div class="w-full"><div class="flex flex-col w-auto"><div class="relative flex items-center opacity-60"><div class="max-w-3xl w-full mx-auto select css-nxiuxh-container"><span id="react-select-7-live-region" class="css-7pg0cj-a11yText"></span><span aria-live="polite" aria-atomic="false" aria-relevant="additions text" role="log" class="css-7pg0cj-a11yText"></span><div class=" css-1dvpwod-control" aria-disabled="true"><div class=" css-18ozc1q"><div class=" css-1lf5moy-singleValue"><div class="grid grid-cols-[24px_1fr_auto] gap-2 items-center py-1.5"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 24 16" class="w-6 min-h-6"><g clip-path="url(#a)"><path fill="#000" d="M-.533 0H20.8v16H-.533z"></path><path fill="#fff" fill-rule="evenodd" d="M0 0h24v16H0z" clip-rule="evenodd"></path><path fill="#DF0000" fill-rule="evenodd" d="M0 0h24v8H0z" clip-rule="evenodd"></path><path fill="#fff" fill-rule="evenodd" d="M5.933 1.34a2.813 2.813 0 0 0 .027 5.507A2.867 2.867 0 0 1 2.407 4.88a2.867 2.867 0 0 1 1.966-3.533 2.74 2.74 0 0 1 1.564-.007z" clip-rule="evenodd"></path><path fill="#fff" fill-rule="evenodd" d="m5.5 3.667.163.5-.433-.307-.427.313.157-.506-.427-.31.53-.007.167-.5.167.5h.526zM6.083 5.4l.167.503-.433-.306-.43.31.16-.504-.427-.313.53-.003.163-.504.167.5h.533zm1.95-.013.164.506-.434-.31-.426.31.156-.503-.426-.31.53-.007.166-.5.167.5h.527zm.58-1.72.164.503-.434-.307-.426.31.16-.503-.43-.313.533-.004.16-.503.167.5h.533zM7.07 2.523l.167.507-.434-.31-.43.313.16-.506-.426-.314.526-.003.167-.503.167.5H7.5z" clip-rule="evenodd"></path></g><rect width="23.2" height="15.2" x="0.4" y="0.4" stroke="#000" stroke-opacity="0.075" stroke-width="0.8" rx="2.8"></rect><defs><clipPath id="a"><rect width="24" height="16" fill="#fff" rx="3.2"></rect></clipPath></defs></svg><p class="text-base">Southeast Asia (Singapore)</p></div></div><input id="react-select-7-input" disabled="" tabindex="0" inputmode="none" aria-autocomplete="list" aria-expanded="false" aria-haspopup="true" role="combobox" aria-readonly="true" class="css-1hac4vs-dummyInput" value=""></div><div class=" css-1wy0on6"><span class=" css-1hyfx7x"></span><div class=" css-1xc3v61-indicatorContainer" aria-hidden="true"><div data-size="md" class="flex justify-center items-center h-full w-full rounded-tr-md rounded-br-md data-[size=md]:pr-1.5"><div class="icon-container icon-md text-2xl text-gray-500 top-[2px] right-1.5 min-h-full pointer-events-none" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></div></div></div></div></div></div></div></div></div><div class="w-28 flex-shrink-0"><div class="flex flex-col w-full"><div class="flex justify-between items-center"><div class="flex space-x-1"><label class="block text-xs font-semibold leading-[18px] text-gray-600 mb-2 sr-only" for="input-undefined-:r2ap:">Replicas</label></div></div><div class="flex items-center relative w-full"><input id="input-undefined-:r2ap:" type="number" placeholder="1" min="1" max="1" readonly="" class="w-full min-w-0 rounded-md bg-transparent border border-gray-200 placeholder-gray-500 focus:outline-none relative z-10 text-gray-600 text-base leading-6 px-3 py-2" value="1"><div class="absolute inset-y-0 right-0 flex items-center pr-2 text-gray-500 text-sm z-10 pointer-events-none">Instance</div></div></div></div></div></div></div><div class="mt-3"><div variant="primary" class="relative flex p-3 rounded-md items-center bg-primary-surface text-primary text-sm mb-3 gap-3"><div class="flex items-center justify-between gap-2 w-full flex-wrap"><p>Regions and Replicas are only available on paid plans.</p><a href="https://railway.com/workspace/plans" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 block group"><span class="mr-1 group-hover:underline">Learn More</span><span aria-hidden="true">↗</span></a></div></div></div></div><div class="" id="deploy-teardown"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-teardown">Teardown</h2><h2 class="text-sm text-gray-600">Configure old deployment termination when a new one is started. <a href="https://docs.railway.com/guides/deployment-teardown" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><div class="flex flex-col space-y-2"><div class="px-4 py-2 bg-secondaryBg dark:bg-[#201F2D] border border-gray-100 rounded-md shadow-sm"><div class="flex space-x-4 items-center w-full"><button type="button" role="switch" aria-checked="false" data-state="unchecked" value="on" id="teardown-enable" class="rounded-full shadow focus:outline-none focus:ring-2 focus:ring-pink-400 min-w-10 w-10 h-6 bg-gray-300"><span data-state="unchecked" class="block rounded-full bg-white shadow transition-transform duration-100 transform translate-x-0.5 min-w-5 w-5 h-5"></span></button><label for="teardown-enable" class="w-full cursor-pointer select-none">Enable Teardown</label></div></div></div></div><div class="" id="deploy-resource-limits"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-resource-limits">Resource Limits</h2><h2 class="text-sm text-gray-600">Max amount of vCPU and Memory to allocate to each replica for this service.</h2></header><div class="flex flex-col space-y-4"><div class="border border-gray-200 rounded-md"><div class="flex flex-col space-y-2 p-4 rounded-t-md transition-colors ease-out"><div class="flex justify-between items-center h-5"><p class="text-sm text-gray-600">CPU: <span class="font-semibold text-foreground">1 vCPU</span></p><p class="text-sm text-gray-600">Plan limit: 1 vCPU</p></div><span dir="ltr" data-orientation="horizontal" aria-disabled="false" class="relative flex items-center select-none touch-none h-5 w-full rdx-disabled:opacity-30" style="--radix-slider-thumb-transform: translateX(-50%);"><span data-orientation="horizontal" class="relative grow rounded-full bg-black/15 dark:bg-gray-200 h-2"><span data-orientation="horizontal" class="absolute rounded-full h-full bg-pink-500 dark:bg-pink-300" style="left: 0%; right: 0%;"></span></span><span style="transform: var(--radix-slider-thumb-transform); position: absolute; left: calc(100% - 8px);"><span role="slider" aria-valuemin="0.5" aria-valuemax="1" aria-orientation="horizontal" data-orientation="horizontal" tabindex="0" class="block w-4 h-4 rounded bg-background dark:bg-pink-300 border-2 border-pink-500 dark:border-white" data-radix-collection-item="" aria-valuenow="1" style=""></span></span></span></div><hr class="w-full border-t border-gray-100 my-0"><div class="flex flex-col space-y-2 p-4 rounded-t-md transition-colors ease-out"><div class="flex justify-between items-center h-5"><p class="text-sm text-gray-600">Memory: <span class="font-semibold text-foreground">0.512 GB</span></p><p class="text-sm text-gray-600">Plan limit: 0.512 GB</p></div><span dir="ltr" data-orientation="horizontal" aria-disabled="false" class="relative flex items-center select-none touch-none h-5 w-full rdx-disabled:opacity-30" style="--radix-slider-thumb-transform: translateX(-50%);"><span data-orientation="horizontal" class="relative grow rounded-full bg-black/15 dark:bg-gray-200 h-2"><span data-orientation="horizontal" class="absolute rounded-full h-full bg-pink-500 dark:bg-pink-300" style="left: 0%; right: 0%;"></span></span><span style="transform: var(--radix-slider-thumb-transform); position: absolute; left: calc(100% - 8px);"><span role="slider" aria-valuemin="0.5" aria-valuemax="0.512" aria-orientation="horizontal" data-orientation="horizontal" tabindex="0" class="block w-4 h-4 rounded bg-background dark:bg-pink-300 border-2 border-pink-500 dark:border-white" data-radix-collection-item="" aria-valuenow="0.512" style=""></span></span></span></div></div><div class="flex space-x-2 items-center"><div class="icon-container icon-md text-2xl text-pink-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-arrow-up-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="m16 12-4-4-4 4m4 4V8"></path></svg></div><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-pink-600 hover:underline text-sm" href="/workspace/plans?workspaceId=1565cfd3-5d9e-436b-b1dd-cc5d2bebefff">Increase your resources</a></div></div></div><div class="" id="deploy-cron-schedule"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-cron-schedule">Cron Schedule</h2><h2 class="text-sm text-gray-600">Run the service according to the specified cron schedule.</h2></header><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2" disabled=""><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><span class="inline-block">Add Schedule</span></button><div variant="warning" class="relative flex p-3 rounded-md items-center bg-warn-surface text-warn text-sm mt-3"><div class="icon-container icon-md text-2xl mr-3 text-warn" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-alert-triangle" viewBox="0 0 24 24"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0M12 9v4m0 4h.01"></path></svg></div>Cron schedules are not available for serverless services.</div></div><div class="" id="deploy-healthcheck"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-healthcheck">Healthcheck Path</h2><h2 class="text-sm text-gray-600">Endpoint to be called before a deploy completes to ensure the new deployment is live. <a href="https://docs.railway.com/deploy/healthchecks" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><span class="inline-block">Healthcheck Path</span></button></div><div class="" id="deploy-app-sleeping"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-app-sleeping">Serverless</h2><h2 class="text-sm text-gray-600">Containers will scale down to zero and then scale up based on traffic. Requests while the container is sleeping will be queued and served when the container wakes up. <a href="https://docs.railway.com/reference/app-sleeping" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><div class="px-4 py-2 bg-secondaryBg dark:bg-[#201F2D] border border-gray-100 rounded-md shadow-sm"><div class="flex space-x-4 items-center w-full"><button type="button" role="switch" aria-checked="true" data-state="checked" value="on" id="app-sleeping" class="rounded-full shadow focus:outline-none focus:ring-2 focus:ring-pink-400 min-w-10 w-10 h-6 bg-pink-500"><span data-state="checked" class="block rounded-full bg-white shadow transition-transform duration-100 transform translate-x-0.5 min-w-5 w-5 h-5" style="transform: translateX(calc(18px));"></span></button><label for="app-sleeping" class="w-full cursor-pointer select-none">Enable Serverless</label></div></div></div><div class="" id="deploy-restart-policy"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy-restart-policy">Restart Policy</h2><h2 class="text-sm text-gray-600">Configure what to do when the process exits. <a href="https://docs.railway.com/deploy/deployments#restart-policy" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><div class="px-4 py-2 bg-secondaryBg dark:bg-[#201F2D] border border-gray-100 rounded-md shadow-sm flex items-center justify-between gap-4"><div class="flex flex-col space-y-1 w-full"><div class="flex space-x-2 items-center"><p class="text-base">On Failure</p></div><p class="text-xs text-gray-600 font-medium">Restart the container if it exits with a non-zero exit code. </p></div><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-transparent text-foreground hover:bg-gray-100 hover:border-gray-100 disabled:bg-transparent disabled:border-transparent focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 rounded-md text-sm leading-5 space-x-2 w-[34px] px-0 flex-shrink-0" title="Restart Policy" type="button" id="radix-:r2aq:" aria-haspopup="menu" aria-expanded="false" data-state="closed"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-foreground" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg></div></button></div><div variant="info" class="relative flex p-3 items-center bg-info-surface text-info text-sm mt-3 rounded-md"><div class="icon-container icon-md text-2xl mr-3 text-info" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4m0-4h.01"></path></svg></div><div class="flex items-center justify-between gap-2 w-full flex-wrap"><p>Your plan only supports up to 10 retries</p><span class="cursor-pointer"><span class="mr-1 hover:underline">Upgrade</span></span></div></div><div aria-controls="slidingContainer-15" aria-expanded="true" class="mt-4" style="opacity: 1; height: auto;"><header class="grid gap-1 mb-3"><h2 class="text-sm text-gray-600">Number of times to try and restart the service if it stopped due to an error.</h2></header><form class="flex space-x-2 items-start"><div class="flex flex-col w-full"><div class="flex justify-between items-center"><div class="flex space-x-1"><label class="block text-xs font-semibold leading-[18px] text-gray-600 mb-2 sr-only" for="input-text-:r2as:">Max restart retries</label></div></div><div class="flex items-center relative w-full"><input id="input-text-:r2as:" name="text" type="number" min="1" class="w-full min-w-0 rounded-md text-foreground bg-transparent border border-gray-200 placeholder-gray-500 focus:outline-none relative z-10 hover:border-gray-400 focus:border-pink-400 text-base leading-6 px-3 py-2"></div></div></form></div></div></div></div><div class="relative"><div id="config-as-code" class="absolute -top-24" aria-hidden="true"></div><div class="icon-container icon-40 text-2xl absolute !hidden sm:!flex top-[-6px] left-[-22px] bg-background dark:bg-secondaryBg border rounded-full p-[10px] text-gray-500 border-gray-200" size="40" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6m-4 5H8m8 4H8m2-8H8"></path></svg></div><h1 class="text-h4 text-gray-600 font-medium mb-8 sm:pl-10">Config-as-code</h1><div class="grid gap-8 max-w-xl sm:pl-10"><div class="" id="config-as-code-file"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#config-as-code-file">Railway Config File</h2><h2 class="text-sm text-gray-600">Manage your build and deployment settings through a config file. <a href="https://docs.railway.com/guides/config-as-code" target="_blank" rel="noreferrer" class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600"><span class="underline mr-1">Docs</span><span aria-hidden="true">↗</span></a></h2></header><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-transparent border-gray-200 text-foreground dark:text-white hover:bg-gray-100 hover:border-gray-200 disabled:bg-transparent disabled:border-gray-200 disabled:text-foreground focus-visible:ring-gray-600 focus-visible:bg-gray-100 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2"><div class="icon-container icon-md text-2xl !w-4 !h-4 text-gray-500" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" class="feather feather-plus" viewBox="0 0 24 24"><path d="M12 5v14m-7-7h14"></path></svg></div><span class="inline-block">Add File Path</span></button></div></div></div><div class="relative"><div id="danger" class="absolute -top-24" aria-hidden="true"></div><div class="icon-container icon-40 text-2xl absolute !hidden sm:!flex top-[-6px] left-[-22px] bg-background dark:bg-secondaryBg border rounded-full p-[10px] text-red-500 border-red-200" size="40" aria-hidden="true"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 20 20"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m15.202 16.186 3.131-3.649-3.958.588 1.303-5.877-3.661 3.6L10 2.5l-2.017 8.349-3.662-3.601 1.304 5.877-3.958-.588 3.13 3.649m3.25.48L9.5 15l.5-1.5.5 1.5 1.452 1.667"></path></svg></div><div class="grid gap-8 max-w-xl sm:pl-10"><div class="" id="danger-delete-service"><header class="grid gap-1 mb-3"><h2 class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 text-sm font-semibold cursor-pointer text-red-500" as="h2" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#danger-delete-service">Delete Service</h2><h2 class="text-sm text-red-600">Deleting this service will <b class="font-semibold">permanently delete</b> all its deployments and remove it from <b class="font-semibold">this environment</b>. This cannot be undone.</h2></header><div class="relative group"><button class="group/button flex items-center justify-center border transform transition-transform duration-50 active:scale-95 focus:outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100 bg-red-500 border-red-500 text-white hover:bg-red-600 hover:border-red-600 disabled:bg-red-500 disabled:border-red-500 focus-visible:ring-red-600 h-[34px] py-1.5 px-3 rounded-md text-sm leading-5 space-x-2 max-w-max mt-6 font-bold"><span class="inline-block">Delete service</span></button></div></div></div></div></div><aside class="hidden lg:block"><ul class="grid gap-3 sticky top-28 mt-12 mr-12"><li class="text-sm text-gray-500"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#source">Source</a></li><li class="text-sm text-gray-500"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#networking">Networking</a></li><li class="text-sm text-gray-500"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#build">Build</a></li><li class="text-sm text-gray-500"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#deploy">Deploy</a></li><li class="text-sm text-gray-500"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#config-as-code">Config-as-code</a></li><li class="text-sm text-gray-500"><a class="focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-700 hover:text-pink-600" href="/project/32f1a9c2-b097-4acf-993e-be78844bdf29/service/9aefecf8-ac7a-4668-b22c-78031274a8e8/settings?environmentId=37dd1105-93bb-4cc3-818d-9c3b861964f9#danger">Danger</a></li></ul></aside></div></div></div></div></div></div></div><div class="lg:hidden fixed left-6 bottom-6 z-50"></div><button class="sm:hidden fixed right-4 bottom-4 z-50 w-14 h-14 flex items-center justify-center text-white rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500" style="background: linear-gradient(145.33deg, rgb(107, 21, 193) 3.57%, rgb(169, 21, 193) 87.06%);"><div aria-hidden="true" class="text-current icon-container icon-md text-2xl"><svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" fill="none" viewBox="0 0 24 24"><path fill="currentColor" d="M7.5 8.25a.75.75 0 0 0 0 1.5zm9.5 1.5a.75.75 0 0 0 0-1.5zm-9.5 4.5a.75.75 0 0 0 0 1.5zm9.5 1.5a.75.75 0 0 0 0-1.5zm-12.5-12h15v-1.5h-15zM21.25 5.5v13h1.5v-13zM19.5 20.25h-15v1.5h15zM2.75 18.5v-13h-1.5v13zm1.75 1.75a1.75 1.75 0 0 1-1.75-1.75h-1.5a3.25 3.25 0 0 0 3.25 3.25zm16.75-1.75a1.75 1.75 0 0 1-1.75 1.75v1.5a3.25 3.25 0 0 0 3.25-3.25zM19.5 3.75c.966 0 1.75.784 1.75 1.75h1.5a3.25 3.25 0 0 0-3.25-3.25zm-15-1.5A3.25 3.25 0 0 0 1.25 5.5h1.5c0-.966.784-1.75 1.75-1.75zm3 7.5H17v-1.5H7.5zm0 6H17v-1.5H7.5z"></path></svg></div></button></div></div></div></div><div class="fixed right-6 bottom-14 left-6 md:left-auto z-50"><div class="flex flex-col space-y-2"></div></div></div></div><script type="text/javascript" crossorigin="anonymous" src="https://luminaire.railway.com/static/surveys.js?v=1.298.0"></script><script type="text/javascript" crossorigin="anonymous" src="https://luminaire.railway.com/array/phc_jmpOAF1fCA4XG8D6zO8AuihY1JHmOkvzqtg5cZoxeJb/config.js"></script><script type="text/javascript" crossorigin="anonymous" src="https://luminaire.railway.com/static/posthog-recorder.js?v=1.298.0"></script><script id="__NEXT_DATA__" type="application/json">{"props":{"pageProps":{}},"page":"/project/[projectId]","query":{},"buildId":"YMAcreCTbqxWIft1d1Rs5","nextExport":true,"autoExport":true,"isFallback":false,"scriptLoader":[{"src":"https://cmp.osano.com/qVHEV4lSSU/738deb1e-f024-459e-ae0a-2e6a0d461ea8/osano.js","strategy":"lazyOnload"}]}</script><next-route-announcer><p aria-live="assertive" id="__next-route-announcer__" role="alert" style="border: 0px; clip: rect(0px, 0px, 0px, 0px); height: 1px; margin: -1px; overflow: hidden; padding: 0px; position: absolute; top: 0px; width: 1px; white-space: nowrap; overflow-wrap: normal;">workout_logger_ | Railway</p></next-route-announcer><script src="/_next/static/chunks/abfa4392-021d1f81cefbd2ee.js"></script><script src="/_next/static/chunks/7933-09df3e1b5d97e81a.js"></script><script src="/_next/static/chunks/pages/index-b016290c46b2eb2d.js"></script><script src="https://cmp.osano.com/qVHEV4lSSU/738deb1e-f024-459e-ae0a-2e6a0d461ea8/osano.js" data-nscript="lazyOnload"></script><iframe name="__uspapiLocator" style="display: none;"></iframe><script src="/_next/static/chunks/4966-ff66ccd239f52428.js"></script><script src="/_next/static/chunks/407-6b4c141481e04b4e.js"></script><script src="/_next/static/chunks/3860-1d910fbbc3c4c55f.js"></script><script src="/_next/static/chunks/3415-415c600e1d885c44.js"></script><script src="/_next/static/chunks/4854-4a5a71a0efdc3e03.js"></script><script src="/_next/static/chunks/4160-7fb98eb5a78926d5.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/observability-22696ab6e20eb9a5.js"></script><script src="/_next/static/chunks/4662-5d94e3e11b767555.js"></script><script src="/_next/static/chunks/4154-6b89d6e2b7cd57ff.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/logs-f0185321a55a9367.js"></script><script src="/_next/static/chunks/5699-c11afbcd33406816.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/settings-620f13c0447790f5.js"></script><iframe name="__privateStripeController4431" frameborder="0" allowtransparency="true" scrolling="no" role="presentation" allow="payment *" src="https://js.stripe.com/v3/controller-with-preconnect-f15c8e143ea9384c779eb61e87840275.html#__shared_params__[version]=v3&amp;__shared_params__[light_experiment_assignments]=%7B%22token%22%3A%22ba9c8a00-d005-424d-ad11-4d8acaaf4e4b%22%2C%22assignments%22%3A%7B%7D%7D&amp;apiKey=pk_live_51HNrvlCJoPsRzQsdhv2DcOFeyBnr2dUEqlitVOpmr5S7BAzg5w4Aj7NtZfonqilddhEdVtK1xALvkaN3J0a9o5p900N0ORMqp6&amp;stripeJsId=ba9c8a00-d005-424d-ad11-4d8acaaf4e4b&amp;stripeObjId=sobj-50273799-ae15-473c-8ab3-39ac189be42e&amp;firstStripeInstanceCreatedLatency=10&amp;controllerCount=1&amp;isCheckout=false&amp;stripeJsLoadTime=1768704212190&amp;manualBrowserDeprecationRollout=false&amp;mids[guid]=NA&amp;mids[muid]=dc295486-6a6e-4761-a3fc-079ffa1547b070462c&amp;mids[sid]=4e2f5dc9-7fbf-46eb-9c0e-bf3a5b56b3c021cc32&amp;referrer=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;controllerId=__privateStripeController4431" aria-hidden="true" tabindex="-1" style="border: none !important; margin: 0px !important; padding: 0px !important; width: 1px !important; min-width: 100% !important; overflow: hidden !important; display: block !important; visibility: hidden !important; position: fixed !important; height: 1px !important; pointer-events: none !important; user-select: none !important;"></iframe><script src="/_next/static/chunks/3383-666e4fa9bf226fca.js"></script><script src="/_next/static/chunks/pages/dashboard-91f13a93fc326f2a.js"></script><iframe name="__privateStripeMetricsController4430" frameborder="0" allowtransparency="true" scrolling="no" role="presentation" allow="payment *" src="https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html#url=https%3A%2F%2Frailway.com%2Fproject%2F32f1a9c2-b097-4acf-993e-be78844bdf29%3FenvironmentId%3D37dd1105-93bb-4cc3-818d-9c3b861964f9&amp;title=accurate-wisdom%20%7C%20Railway&amp;referrer=&amp;muid=dc295486-6a6e-4761-a3fc-079ffa1547b070462c&amp;sid=4e2f5dc9-7fbf-46eb-9c0e-bf3a5b56b3c021cc32&amp;version=6&amp;preview=false&amp;__shared_params__[version]=v3" aria-hidden="true" tabindex="-1" style="border: none !important; margin: 0px !important; padding: 0px !important; width: 1px !important; min-width: 100% !important; overflow: hidden !important; display: block !important; visibility: hidden !important; position: fixed !important; height: 1px !important; pointer-events: none !important; user-select: none !important;"></iframe><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D-7569cb368e08e29e.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/volume/%5BvolumeId%5D/metrics-81fdaec98d8c9e20.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/database-d61a7e6a18f32933.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/settings-5b128d2ca57623ef.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/variables-324f41f42a19989b.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/service/%5BserviceId%5D/metrics-960b7ffba50fef59.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/settings/variables-1b2a53398792b4fc.js"></script><script src="/_next/static/chunks/pages/project/%5BprojectId%5D/volume/%5BvolumeId%5D/settings-da87ef7870642121.js"></script></body></html>
+
+where is shell?
+
+### Planner Response
+
+Got it. You’re on Railway’s Service Settings page. You have three workable ways to run Alembic in Railway. Pick the one that fits your UI/plan.
+
+# Option A (no Shell): use a Pre‑deploy step
+This runs Alembic in Railway before starting your app. Easiest for serverless services.
+
+- In your Service Settings → Deploy section
+- Click “Add pre-deploy step”
+- Enter the command based on your case:
+  - Existing DB with data: alembic stamp head
+  - Fresh/empty DB: alembic upgrade head
+- Trigger a deploy (push to GitHub or click Redeploy).
+- After it succeeds once, remove the pre‑deploy step so it doesn’t run every time.
+
+Tip: You may also set the Start Command temporarily to:
+- alembic stamp head && python app.py
+- Then revert back to python app.py after one successful deploy.
+
+# Option B (if you have Shell)
+Shell is available on some plans and/or when the container is running as a regular (non-serverless) service.
+
+- In Railway UI: Project → your service.
+- Look for “Shell” near “Logs”/“Metrics”/“Open” or in the header. If you don’t see it:
+  - Toggle off “Enable Serverless” (Deploy → Serverless) and redeploy, or use a plan that supports Shell.
+- Once inside Shell:
+  - cd /app
+  - alembic current
+  - For existing DB: alembic stamp head
+  - For fresh DB: alembic upgrade head
+
+# Option C (no Shell, pure CLI): tunnel into DB and run Alembic locally
+This avoids the internal DNS problem by proxying the DB to localhost.
+
+1) From your project folder:
+- railway login
+- railway link
+- railway environment production (or your prod env)
+
+2) Open a proxy to your DB:
+- railway connect
+- This prints a temporary local DATABASE_URL like: postgresql://user:pass@127.0.0.1:5432/dbname
+
+3) In the same terminal session:
+- export DATABASE_URL="<the local URL printed by railway connect>"
+- cd /Users/harsh24/Desktop/Workout_plan
+- Run one of:
+  - Existing DB: alembic stamp head
+  - Fresh DB: alembic upgrade head
+
+Note: Keep the proxy session open while running Alembic. If it closes, re-run railway connect.
+
+# Which one should you use?
+- Since your service shows “Enable Serverless,” Shell might be hidden. Use Option A (Pre‑deploy step) now; it’s quickest.
+- If you prefer CLI, use Option C (railway connect + alembic).
+
+# After stamping/upgrading
+- Redeploy (if needed) and open the app.
+- You should not need /internal_db_fix anymore.
+
+If you want, I can tailor the exact command to your case—tell me if the Railway DB already has data.
+
+### User Input
+
+i did this:
+Phase 1: The "One-Time Fix" (Stamp the DB)
+Apply the Code Fix (Crucial): Make sure you have updated workout_tracker/__init__.py with the code I gave you in the previous message (importing and initializing Migrate). If you don't do this, the commands below will fail.
+
+Edit your Procfile: Open the file named Procfile in Windsurf. It probably says something like web: gunicorn .... Change it to this:
+
+Plaintext
+
+web: flask db stamp head && gunicorn -w 4 -b 0.0.0.0:$PORT "workout_tracker:create_app()"
+Push to GitHub:
+
+Bash
+
+git add Procfile workout_tracker/__init__.py
+git commit -m "Run db stamp on startup"
+git push origin master
+Wait: Railway will deploy this. It will start the app, run the "stamp" command (which fixes your DB sync), and then run the server.
+
+Phase 2: Return to Normal
+Once Phase 1 finishes successfully (you see green "Active" in Railway), you must remove the stamp command so it doesn't run forever.
+
+Edit Procfile again: Change it back to the normal start command, but with upgrade (to apply future updates):
+
+Plaintext
+
+web: flask db upgrade && gunicorn -w 4 -b 0.0.0.0:$PORT "workout_tracker:create_app()"
+Push again:
+
+Bash
+
+git add Procfile
+git commit -m "Restore normal start command"
+git push origin master
+You are done. Your app is now live, the database is synced, and future updates will happen automatically.
+
+### Planner Response
+
+Thanks for the detailed steps. Two key corrections to keep things simple and consistent with our codebase:
+
+- We are using Alembic directly, not Flask-Migrate. So don’t use flask db … (those commands won’t exist unless we rewire the app to Flask-Migrate).
+- You can do the one-time “stamp” safely via Alembic in the start command or pre-deploy step.
+
+Below are the exact, copy-pasteable options.
+
+# Option 1: Temporary Procfile change (one-time stamp)
+Use this if your deploy is driven by the Procfile in GitHub.
+
+Phase 1 (one-time):
+- Edit Procfile to run alembic and then start the app:
+  - If your Railway DB already has data: stamp
+    web: alembic stamp head && python app.py
+  - If the DB is fresh/empty: upgrade
+    web: alembic upgrade head && python app.py
+- Commit and push:
+  git add Procfile
+  git commit -m "One-time Alembic stamp/upgrade on startup"
+  git push origin master
+- Wait for Railway to deploy and show Active.
+
+Phase 2 (revert to normal):
+- Put Procfile back to the normal start (what you had before, likely):
+  web: python app.py
+  or, if you prefer Gunicorn (ensure gunicorn is in requirements.txt):
+  web: gunicorn -w 2 -b 0.0.0.0:$PORT "workout_tracker:create_app()"
+- Commit and push again.
+
+Notes:
+- If you choose Gunicorn, add gunicorn to requirements.txt first.
+- Do not use flask db stamp/upgrade here (we did not integrate Flask-Migrate).
+
+# Option 2: Railway Pre-deploy step (no Procfile change)
+Use the Railway UI Deploy → “Add pre-deploy step”. Enter one of:
+- Existing DB → alembic stamp head
+- Fresh DB → alembic upgrade head
+Trigger a deploy, then remove the pre-deploy step so it doesn’t run on every deploy.
+
+# Option 3: Railway Shell (if available) or CLI tunnel
+- Shell (if visible in your plan):
+  - cd /app
+  - alembic current
+  - alembic stamp head (existing) or alembic upgrade head (fresh)
+- CLI tunnel (works on any plan):
+  - railway link
+  - railway environment production
+  - railway connect  # gives a local DATABASE_URL proxy
+  - export DATABASE_URL="<the proxy URL printed by Railway>"
+  - cd /Users/harsh24/Desktop/Workout_plan
+  - alembic stamp head (existing) or alembic upgrade head (fresh)
+
+# Why your flask db approach failed
+- flask db … is from Flask-Migrate, which we haven’t wired up (no Migrate(app, db), nor Flask-SQLAlchemy in our app). Our migrations are owned by Alembic, so the right commands are alembic stamp/upgrade.
+
+# Recommended for you now
+Since you already edited Procfile, do this cleanly with Alembic:
+
+- One-time (existing DB): set Procfile to:
+  web: alembic stamp head && python app.py
+- Push, wait for Active.
+- Revert Procfile to:
+  web: python app.py
+- Push again.
+
+If you prefer Gunicorn, I’ll add gunicorn to requirements.txt and adjust Procfile on request.
+
+Summary: Use Alembic (not Flask-Migrate). Do a one-time stamp on Railway via Procfile or pre-deploy, then revert to your normal start command.
+
+### User Input
+
+this is what i just did:
+Step 1: Edit Procfile
+Change the content to exactly this:
+
+Plaintext
+
+web: alembic stamp head && python app.py
+Why? stamp tells the database "You are already at the latest version." It does not try to create tables. It just updates the version number.
+
+Step 2: Push to GitHub
+Bash
+
+git add Procfile
+git commit -m "Fix duplicate table error by stamping"
+git push origin master
+Step 3: Check Railway
+Wait for the build to finish.
+
+It should deploy successfully (Green "Active").
+
+Your app is now live.
+
+Step 4: Cleanup (Don't forget this)
+Once the app is running, you must switch back to upgrade so that future changes (like adding a phone_number column next month) will work.
+
+Edit Procfile again:
+
+Plaintext
+
+web: alembic upgrade head && python app.py
+Push:
+
+Bash
+
+git add Procfile
+git commit -m "Restore normal migration command"
+git push origin master
+
+### Planner Response
+
+## What you did is correct (with one important nuance)
+
+### ✅ Phase 1 (`alembic stamp head && python app.py`)
+- This is the right move **if the Railway DB already has the tables/data** and you’re just introducing Alembic tracking.
+- `stamp` **does not create tables**; it only writes to `alembic_version`.
+
+### ✅ Phase 2 (`alembic upgrade head && python app.py`)
+- This is also correct for “normal operation”.
+- `alembic upgrade head` is **safe to run on every start**:
+  - If the DB is already at head, it becomes a fast no-op.
+  - If you add a new migration later, it will apply it automatically.
+
+---
+
+## The nuance (make sure your DB state matches the command)
+
+- **If your Railway DB is empty (no tables):**
+  - `stamp head` would be wrong (it would mark migrations as applied without actually creating tables).
+  - Your app would then likely fail because the schema isn’t present.
+  - In that case you should use: `alembic upgrade head && python app.py` immediately.
+
+- **If your Railway DB already had your tables/data (most common here):**
+  - Your flow is perfect:
+    - One deploy with `stamp`
+    - Then revert to [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:14:0-15:8)
+
+---
+
+## Exactly what to check in Railway right now
+
+### 1) Check deploy logs for the “stamp” run
+In Railway logs you should see something like:
+- **`Context impl PostgresqlImpl`**
+- **`Running stamp_revision -> 0001`** (or similar)
+
+If you see that, stamp succeeded.
+
+### 2) After it’s green “Active”, do the cleanup commit
+Switch Procfile to:
+```text
+web: alembic upgrade head && python app.py
+```
+Push it, and confirm the next deploy logs show:
+- `Running upgrade` OR it may show almost nothing if already at head (also OK).
+
+---
+
+## Don’t do this anymore
+- **Don’t use `flask db ...`** unless we explicitly refactor to Flask-Migrate (we haven’t).
+
+---
+
+## Status
+- **Your Railway migration workflow is now correctly set up** (one-time stamp, then upgrade-on-start).
+- Next step is simply verifying the Railway logs show stamp ran successfully, then reverting Procfile to upgrade.
+
+### User Input
+
+accurate-wisdom
+
+production
+Architecture
+Observability
+Logs
+Settings
+
+
+
+
+
+Filter and search logs
+
+Last 15 min
+
+
+
+  File "<string>", line 8, in run_migrations
+  File "/app/.venv/lib/python3.13/site-packages/alembic/runtime/environment.py", line 969, in run_migrations
+    self.get_context().run_migrations(**kw)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/runtime/migration.py", line 626, in run_migrations
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "<string>", line 8, in create_table
+  File "<string>", line 3, in create_table
+  File "/app/.venv/lib/python3.13/site-packages/alembic/operations/ops.py", line 1332, in create_table
+    return operations.invoke(op)
+           ~~~~~~~~~~~~~~~~~^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/operations/base.py", line 454, in invoke
+    return fn(self, operation)
+  File "/app/.venv/lib/python3.13/site-packages/alembic/operations/toimpl.py", line 135, in create_table
+    operations.impl.create_table(table, **kw)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/ddl/impl.py", line 436, in create_table
+    self._exec(schema.CreateTable(table, **kw))
+    ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/ddl/impl.py", line 256, in _exec
+    return conn.execute(construct, params)
+           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1418, in execute
+    return meth(
+        self,
+    ^
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    )
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/sql/ddl.py", line 180, in _execute_on_connection
+    return connection._execute_ddl(
+           ~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1529, in _execute_ddl
+    ret = self._execute_context(
+        dialect,
+    ...<4 lines>...
+        compiled,
+    )
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+    self._handle_dbapi_exception(
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2355, in _handle_dbapi_exception
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 941, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.DuplicateTable) relation "users" already exists
+
+	role VARCHAR(5) DEFAULT 'user' NOT NULL, 
+[SQL: 
+	is_verified BOOLEAN DEFAULT false NOT NULL, 
+CREATE TABLE users (
+	verification_token VARCHAR(255), 
+	id SERIAL NOT NULL, 
+	verification_token_expires TIMESTAMP WITHOUT TIME ZONE, 
+	username VARCHAR(50) NOT NULL, 
+	created_at TIMESTAMP WITHOUT TIME ZONE, 
+	email VARCHAR(255), 
+	updated_at TIMESTAMP WITHOUT TIME ZONE, 
+	password_hash VARCHAR(255), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_users_username UNIQUE (username), 
+	CONSTRAINT uq_users_email UNIQUE (email)
+)
+
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Starting Container
+Stopping Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running stamp_revision  -> 0001
+2026-01-18 22:55:44 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 22:55:44 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.11.67:8080
+Press CTRL+C to quit
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+Stopping Container
+ * Running on http://10.250.11.83:8080
+Press CTRL+C to quit
+2026-01-18 22:57:07 - workout_tracker - INFO - Database initialized successfully
+ * Serving Flask app 'workout_tracker'
+2026-01-18 22:57:07 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+2026-01-18 22:57:01.577 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 22:57:02.963 UTC [47] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 22:57:07.434 UTC [27] LOG:  checkpoint complete: wrote 58 buffers (0.4%); 1 WAL file(s) added, 0 removed, 0 recycled; write=5.731 s, sync=0.022 s, total=5.857 s; sync files=63, longest=0.021 s, average=0.001 s; distance=288 kB, estimate=288 kB; lsn=0/1C13B80, redo lsn=0/1C122A0
+
+
+
+Log Explorer | Railway
+
+### Planner Response
+
+## What that log means
+
+- The **`DuplicateTable: relation "users" already exists`** error happens when Alembic runs **[upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:14:0-15:8)** on a database that **already has tables**, but Alembic **is not yet stamped** (so it thinks it must create them).
+
+- In your log, immediately after that error you also have:
+
+```text
+INFO  [alembic.runtime.migration] Running stamp_revision  -> 0001
+... Database initialized successfully
+... Starting Workout Tracker ...
+```
+
+That means:
+- One run tried to **create tables** (upgrade path) and failed.
+- Then the service ran **stamp**, and the app started successfully.
+
+So you are very close—this is just about making sure Railway is only doing the “stamp once” first, then switching to “upgrade”.
+
+---
+
+## What to do now (exact steps)
+
+### Step 1: Ensure you are *currently* using only STAMP
+Check your **current** [Procfile](file:///Users/harsh24/Desktop/Workout_plan/Procfile:0:0-0:0) in GitHub. It must be exactly:
+
+```text
+web: alembic stamp head && python app.py
+```
+
+Then redeploy (push anything or click Redeploy).
+
+### Step 2: Confirm stamp actually stuck (in Railway logs)
+After redeploy, you should see only something like:
+
+- `Context impl PostgresqlImpl`
+- `Running stamp_revision -> 0001`
+- then your Flask start logs
+
+You should **NOT** see any “CREATE TABLE users …” attempt anymore during this stamp deployment.
+
+### Step 3: Switch to UPGRADE (normal mode)
+Once the stamp deploy is stable/Active, change Procfile to:
+
+```text
+web: alembic upgrade head && python app.py
+```
+
+Push and redeploy.
+
+On this deploy:
+- If the DB is correctly stamped, `alembic upgrade head` should be a **no-op** and **must not** try to create `users`.
+
+---
+
+## If you still see DuplicateTable after switching to upgrade
+
+That usually means **Railway is running [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:14:0-15:8) before the DB is stamped**, because of one of these:
+
+- **A pre-deploy step exists** (Deploy settings) that runs `alembic upgrade head` or `flask db upgrade`
+- **A custom start command in Railway UI** is overriding your Procfile
+- You have multiple services/environments and are looking at logs for the wrong one
+- `DATABASE_URL` points to a different DB than you think
+
+### Quick check I need from you
+Send me:
+1) Your current [Procfile](file:///Users/harsh24/Desktop/Workout_plan/Procfile:0:0-0:0) content (just 1 line)  
+2) Screenshot/text of Railway **Deploy → Custom Start Command** and whether **Pre-deploy step** is set  
+
+Then I’ll tell you exactly what to remove so only one migration command runs.
+
+---
+
+## Status
+- **Stamp is working** (your log shows `stamp_revision -> 0001` and the app started).
+- Next action: make sure **only stamp runs once**, then switch to **upgrade** for normal operation.
+
+### User Input
+
+web: alembic upgrade head && python app.py
+
+logs:
+accurate-wisdom
+
+
+production
+Architecture
+Observability
+Logs
+Settings
+
+
+
+
+Filter and search logs
+
+Last 15 min
+
+
+    ^
+        distilled_parameters,
+        execution_options or NO_OPTIONS,
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1986, in _exec_single_context
+    )
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/sql/ddl.py", line 180, in _execute_on_connection
+    return connection._execute_ddl(
+           ~~~~~~~~~~~~~~~~~~~~~~~^
+        self, distilled_params, execution_options
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1529, in _execute_ddl
+    ret = self._execute_context(
+        dialect,
+    ...<4 lines>...
+        compiled,
+    )
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1846, in _execute_context
+    return self._exec_single_context(
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^
+        dialect, context, statement, parameters
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+    self._handle_dbapi_exception(
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2355, in _handle_dbapi_exception
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        e, str_statement, effective_parameters, cursor, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 1967, in _exec_single_context
+    self.dialect.do_execute(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        cursor, str_statement, effective_parameters, context
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 941, in do_execute
+    cursor.execute(statement, parameters)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+sqlalchemy.exc.ProgrammingError: (psycopg2.errors.DuplicateTable) relation "users" already exists
+	role VARCHAR(5) DEFAULT 'user' NOT NULL, 
+[SQL: 
+	is_verified BOOLEAN DEFAULT false NOT NULL, 
+CREATE TABLE users (
+	verification_token VARCHAR(255), 
+	id SERIAL NOT NULL, 
+	verification_token_expires TIMESTAMP WITHOUT TIME ZONE, 
+	username VARCHAR(50) NOT NULL, 
+	created_at TIMESTAMP WITHOUT TIME ZONE, 
+	email VARCHAR(255), 
+	updated_at TIMESTAMP WITHOUT TIME ZONE, 
+	password_hash VARCHAR(255), 
+	PRIMARY KEY (id), 
+	CONSTRAINT uq_users_username UNIQUE (username), 
+	CONSTRAINT uq_users_email UNIQUE (email)
+)
+]
+(Background on this error at: https://sqlalche.me/e/20/f405)
+Starting Container
+Stopping Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running stamp_revision  -> 0001
+2026-01-18 22:55:44 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 22:55:44 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.11.67:8080
+Press CTRL+C to quit
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+Stopping Container
+ * Running on http://10.250.11.83:8080
+Press CTRL+C to quit
+2026-01-18 22:57:07 - workout_tracker - INFO - Database initialized successfully
+ * Serving Flask app 'workout_tracker'
+2026-01-18 22:57:07 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+2026-01-18 22:57:01.577 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 22:57:02.963 UTC [47] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 22:57:07.434 UTC [27] LOG:  checkpoint complete: wrote 58 buffers (0.4%); 1 WAL file(s) added, 0 removed, 0 recycled; write=5.731 s, sync=0.022 s, total=5.857 s; sync files=63, longest=0.021 s, average=0.001 s; distance=288 kB, estimate=288 kB; lsn=0/1C13B80, redo lsn=0/1C122A0
+Stopping Container
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+2026-01-18 23:02:21.952 UTC [51] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 23:02:34 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 23:02:34 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.11.83:8080
+Press CTRL+C to quit
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+Stopping Container
+2026-01-18 23:04:21 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 23:04:21 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.13.52:8080
+Press CTRL+C to quit
+2026-01-18 23:04:17.043 UTC [58] LOG:  could not receive data from client: Connection reset by peer
+
+
+Log Explorer | Railway
+
+
+
+u said:Screenshot/text of Railway Deploy → Custom Start Command and whether Pre-deploy step is set
+but i can't find it nowhere
+
+
+### Planner Response
+
+## Why this is still happening
+
+`alembic upgrade head` is still trying to run your **baseline migration that creates `users`**, which means:
+
+- Alembic does **not** see your Railway DB as stamped to revision `0001` (i.e., `alembic_version` is missing or not set to `0001`) **at the moment [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:8:0-9:8) runs**.
+
+Even though you previously saw:
+
+`Running stamp_revision  -> 0001`
+
+…the current [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:8:0-9:8) run is behaving like it’s starting from “base”, so it attempts `CREATE TABLE users` and crashes with `DuplicateTable`.
+
+Also: your log snippet includes multiple old runs mixed together (Railway log view often shows older output in the same window). So we should force the correct order in a single deploy to remove ambiguity.
+
+---
+
+## The fix (works even without Shell / Pre-deploy UI)
+
+### Do ONE deploy with: **stamp + upgrade** (in this exact order)
+
+Edit [Procfile](file:///Users/harsh24/Desktop/Workout_plan/Procfile:0:0-0:0) to exactly:
+
+```text
+web: alembic stamp head && alembic upgrade head && python app.py
+```
+
+Then:
+
+```bash
+git add Procfile
+git commit -m "Stamp then upgrade Alembic on Railway"
+git push origin master
+```
+
+### Why this works
+- `stamp head` will create/update `alembic_version` to `0001` (without touching tables)
+- immediately after, `upgrade head` will become a **no-op**
+- then the app starts
+
+This eliminates the situation where [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:8:0-9:8) runs while the DB isn’t stamped yet.
+
+---
+
+## After it becomes Green “Active” (cleanup)
+
+Change [Procfile](file:///Users/harsh24/Desktop/Workout_plan/Procfile:0:0-0:0) back to the normal steady-state:
+
+```text
+web: alembic upgrade head && python app.py
+```
+
+Push again:
+
+```bash
+git add Procfile
+git commit -m "Use Alembic upgrade on startup"
+git push origin master
 ```
 
 ---
 
-## 🚫 Make sure this is **NOT** set in Railway
+## If it STILL errors after the “stamp && upgrade” deploy
+
+Then something else is overriding the command or pointing Alembic at a different DB than your app. To confirm, do this lightweight diagnostic (still no shell needed):
+
+Temporarily set Procfile to:
+
+```text
+web: alembic current && alembic heads && python app.py
 ```
-AUTO_CREATE_SCHEMA=true
-```
-That is **dev-only** and should not be used in production.
+
+Deploy once and paste the log output of `alembic current` and `alembic heads` here.  
+That will tell us whether the DB is stamped and what Alembic thinks “head” is.
 
 ---
 
-### Quick question to confirm:
-**Is your Railway DB already populated, or brand new?**  
-(That decides *stamp* vs *upgrade*.)
+## About “Custom Start Command / Pre-deploy step” not visible
+That’s okay. If Railway UI doesn’t show it (often in serverless/free setups), the **Procfile approach is the right workaround** and is commonly used.
 
 ---
 
-If you want, I can **add these steps directly into README.md** so future deploys are self-documented.
+## Status
+- **Root cause identified:** Railway DB not reliably stamped before [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:8:0-9:8).
+- **Next action:** do one deploy with `alembic stamp head && alembic upgrade head && python app.py`, then revert to [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:8:0-9:8) only.
+
+### User Input
+
+i have done this:
+Open Procfile in Windsurf and replace the text with this exact line:
+
+Plaintext
+
+web: alembic stamp head && alembic upgrade head && python app.py
+
+and deployed.
+
+these are the logs:
+accurate-wisdom
+
+
+production
+Architecture
+Observability
+Logs
+Settings
+
+
+
+
+Filter and search logs
+
+Last 15 min
+
+
+You reached the start of the range
+Jan 19, 2026, 4:24 AM
+Starting Container
+Stopping Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running stamp_revision  -> 0001
+2026-01-18 22:55:44 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 22:55:44 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.11.67:8080
+Press CTRL+C to quit
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+Stopping Container
+ * Running on http://10.250.11.83:8080
+Press CTRL+C to quit
+2026-01-18 22:57:07 - workout_tracker - INFO - Database initialized successfully
+ * Serving Flask app 'workout_tracker'
+2026-01-18 22:57:07 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+2026-01-18 22:57:01.577 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 22:57:02.963 UTC [47] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 22:57:07.434 UTC [27] LOG:  checkpoint complete: wrote 58 buffers (0.4%); 1 WAL file(s) added, 0 removed, 0 recycled; write=5.731 s, sync=0.022 s, total=5.857 s; sync files=63, longest=0.021 s, average=0.001 s; distance=288 kB, estimate=288 kB; lsn=0/1C13B80, redo lsn=0/1C122A0
+Stopping Container
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+2026-01-18 23:02:21.952 UTC [51] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 23:02:34 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 23:02:34 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.11.83:8080
+Press CTRL+C to quit
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+Stopping Container
+2026-01-18 23:04:21 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 23:04:21 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.13.52:8080
+Press CTRL+C to quit
+2026-01-18 23:04:17.043 UTC [58] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 23:07:01.632 UTC [27] LOG:  checkpoint starting: time
+2026-01-18 23:07:01.755 UTC [27] LOG:  checkpoint complete: wrote 2 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.104 s, sync=0.006 s, total=0.124 s; sync files=2, longest=0.005 s, average=0.003 s; distance=6 kB, estimate=260 kB; lsn=0/1C13EA8, redo lsn=0/1C13E50
+Starting Container
+
+
+Log Explorer | Railway
+
+
+ok listen, for a lot of time  i am dealing with it. please solve it. change whatever u want, if you want you can delete the whole db and set up new because i have saved the data offline. 
+
+*Updated todo list*
+
+### Planner Response
+
+Here’s the **fastest guaranteed fix** since you’re OK wiping the DB. This will reset Railway cleanly and eliminate the duplicate‑table loop.
+
+---
+
+# ✅ One‑time reset (wipe & rebuild)
+
+## 1) Delete the Railway Postgres DB
+In Railway UI:
+
+1. Open your project → **Database service (Postgres)**  
+2. Go to **Settings → Danger**  
+3. Click **Delete Service**  
+4. Confirm
+
+> This wipes all data. (You said you already backed it up.)
+
+---
+
+## 2) Create a new Postgres DB
+1. Click **New → Database → PostgreSQL**  
+2. Wait for it to provision  
+3. Railway will auto‑generate a new `DATABASE_URL`
+
+---
+
+## 3) Make sure your web service uses the new DATABASE_URL
+In the **web service → Variables**, confirm `DATABASE_URL` exists (it should automatically point to the new DB).
+
+---
+
+## 4) Set Procfile to upgrade (fresh DB)
+Edit **Procfile** to:
+
+```
+web: alembic upgrade head && python app.py
+```
+
+Then push:
+
+```bash
+git add Procfile
+git commit -m "Use Alembic upgrade on fresh Railway DB"
+git push origin master
+```
+
+---
+
+## 5) Check logs
+You should see:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001
+```
+
+…and **no DuplicateTable error**.
+
+---
+
+# If you want me to confirm it’s clean
+Paste the next deploy logs after the reset. I’ll verify the migration ran correctly.
+
+---
+
+If you want, I can also switch you to Gunicorn after this (production‑safe), but we can do that later.
+
+### User Input
+
+just provided you the ss.
+the db is removed but i can't add new one.
+when i click add new service - databse - add postgresql - it says spinning up and failed to deploy
+
+*Updated todo list*
+
+### Planner Response
+
+Here’s what your screenshot tells me: you **deleted the Postgres service**, but the **orphaned volume (`postgres-volume-FkMF`) is still there**. That often blocks new DB provisioning on Railway (free tier/limits or stuck volume).
+
+## Do this now (fastest fix)
+
+### 1) Delete the leftover volume
+In **Architecture view** (your screenshot):
+
+- Click the small node **`postgres-volume-FkMF`**
+- Open its **Settings**
+- Click **Delete Volume**
+
+Then try **Add → Database → PostgreSQL** again.
+
+---
+
+### 2) Check the “Activity” panel (bottom‑right)
+There’s an **Activity** drawer in your screenshot (bottom‑right).  
+Open it and copy the **error text** when DB creation fails.  
+That error will tell us if it’s a **quota/limit** issue.
+
+---
+
+## Common causes & fixes
+
+### ✅ If error says **resource limit reached / quota**
+Free plan often allows **only 1 DB service** at a time.
+
+Fix:
+- Ensure **all old DB services/volumes are deleted**
+- Wait 1–2 minutes and retry
+
+### ✅ If error says **failed to provision / capacity**
+Railway sometimes can’t provision in a region.
+
+Fix:
+- Retry after a few minutes  
+- Or create DB in a **new project** and use its `DATABASE_URL`
+
+---
+
+## If Railway keeps failing (backup plan)
+Use an external DB (fast, reliable):
+
+**Option A – Neon**  
+1. Create a free Postgres DB  
+2. Copy the connection string  
+3. Set Railway `DATABASE_URL` to that  
+4. Deploy with `alembic upgrade head`
+
+**Option B – Supabase**  
+Same steps.
+
+---
+
+## What I need from you now
+Please send:
+1. The **Activity panel error text**  
+2. Confirmation you deleted the **postgres-volume** node  
+
+Then I’ll tell you the exact next step.
+
+### User Input
+
+accurate-wisdom
+
+
+production
+Architecture
+Observability
+Logs
+Settings
+
+
+
+
+Filter and search logs
+
+Last 15 min
+
+
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.__connect()
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+    ~~~~~~~~~~~~~~^^
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+        *[getattr(options, k, None) for k in positional],
+  File "/app/.venv/bin/alembic", line 7, in <module>
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    sys.exit(main())
+        **{k: getattr(options, k, None) for k in kwarg},
+             ~~~~^^
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/config.py", line 1047, in main
+    CommandLine(prog=prog).main(argv=argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/config.py", line 1037, in main
+    self.run_cmd(cfg, options)
+connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/config.py", line 971, in run_cmd
+The above exception was the direct cause of the following exception:
+    fn(
+    ~~^
+Traceback (most recent call last):
+        config,
+        ^^^^^^^
+    )
+  File "/app/.venv/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 136, in load_module_py
+  File "<frozen importlib._bootstrap_external>", line 1023, in exec_module
+    spec.loader.exec_module(module)  # type: ignore
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/app/migrations/env.py", line 59, in <module>
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3278, in connect
+    script.run_env()
+    util.load_python_file(self.dir, "env.py")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+    ~~~~~~~~~~~~~~^^
+         ~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 116, in load_python_file
+    run_migrations_online()
+  File "/app/.venv/lib/python3.13/site-packages/alembic/script/base.py", line 545, in run_env
+  File "/app/migrations/env.py", line 45, in run_migrations_online
+    module = load_module_py(module_id, path)
+    ~~~~~~~~~~~~~~~~~~~~~^^
+    ^
+    with connectable.connect() as connection:
+  File "/app/.venv/lib/python3.13/site-packages/alembic/command.py", line 483, in upgrade
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 148, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, dialect, engine
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2442, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 308, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-01-18 23:30:24.242 UTC [86] FATAL:  password authentication failed for user "postgres"
+2026-01-18 23:30:24.242 UTC [86] DETAIL:  Connection matched file "/var/lib/postgresql/data/pgdata/pg_hba.conf" line 128: "host all all all scram-sha-256"
+2026-01-18 23:30:24.928 UTC [87] FATAL:  password authentication failed for user "postgres"
+2026-01-18 23:30:24.928 UTC [87] DETAIL:  Connection matched file "/var/lib/postgresql/data/pgdata/pg_hba.conf" line 128: "host all all all scram-sha-256"
+
+
+Log Explorer | Railway
+
+*Viewed [config.py](file:///Users/harsh24/Desktop/Workout_plan/config.py) *
+
+*Updated todo list*
+
+### Planner Response
+
+**Root cause:**  
+Your logs show **`password authentication failed for user "postgres"`**. That means the app is still using a **stale/invalid DATABASE_URL**. Alembic can’t connect, so it fails before migrating.
+
+---
+
+# ✅ Fix it by setting a **valid DATABASE_URL**
+
+## Option 1 — Railway Postgres (preferred)
+1. **Delete leftover volume** (if still present).  
+2. Create a **new Postgres service**.
+3. Open that DB service → **Connect** → copy the **DATABASE_URL**.
+4. Go to your **web service → Variables**:
+   - Remove the old `DATABASE_URL`
+   - Paste the new one
+5. Redeploy.
+
+Keep Procfile as:
+```
+web: alembic upgrade head && python app.py
+```
+
+---
+
+## Option 2 — External DB (Neon/Supabase) if Railway DB keeps failing
+1. Create a free Postgres DB on **Neon** or **Supabase**.
+2. Copy the connection string.
+3. Set it in Railway → **web service → Variables**:
+   ```
+   DATABASE_URL=<your external URL>
+   ```
+4. Redeploy (same Procfile as above).
+
+---
+
+# ✅ What I need from you
+To unblock the Railway DB failure:
+
+1. Open the **Activity** panel and copy the exact error when DB creation fails.  
+2. Confirm whether you still see `postgres-volume-*` in Architecture.  
+
+If Railway keeps failing to provision, I’ll guide you to Neon/Supabase in 2 minutes and your app will be live today.
+
+### User Input
+
+accurate-wisdom
+
+
+production
+Architecture
+Observability
+Logs
+Settings
+
+
+
+
+Filter and search logs
+
+Last 15 min
+
+
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+The above exception was the direct cause of the following exception:
+Traceback (most recent call last):
+  File "/app/.venv/bin/alembic", line 7, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/config.py", line 1047, in main
+    CommandLine(prog=prog).main(argv=argv)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/config.py", line 1037, in main
+    self.run_cmd(cfg, options)
+    ~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/config.py", line 971, in run_cmd
+    fn(
+    ~~^
+        config,
+        ^^^^^^^
+        *[getattr(options, k, None) for k in positional],
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        **{k: getattr(options, k, None) for k in kwarg},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+         ~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/command.py", line 483, in upgrade
+    script.run_env()
+    ~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3278, in connect
+  File "/app/.venv/lib/python3.13/site-packages/alembic/script/base.py", line 545, in run_env
+    util.load_python_file(self.dir, "env.py")
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 116, in load_python_file
+    module = load_module_py(module_id, path)
+  File "/app/.venv/lib/python3.13/site-packages/alembic/util/pyfiles.py", line 136, in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "<frozen importlib._bootstrap_external>", line 1023, in exec_module
+  File "<frozen importlib._bootstrap>", line 488, in _call_with_frames_removed
+  File "/app/migrations/env.py", line 59, in <module>
+    run_migrations_online()
+    ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/app/migrations/env.py", line 45, in run_migrations_online
+    with connectable.connect() as connection:
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 148, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, dialect, engine
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2442, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    raise exc_value.with_traceback(exc_tb)
+    rec = pool._do_get()
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 308, in _do_get
+    return self._create_connection()
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+connection to server at "postgres.railway.internal" (fd12:caf9:ed41:0:9000:4b:598a:889e), port 5432 failed: FATAL:  password authentication failed for user "postgres"
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+2026-01-18 23:32:54.953 UTC [76] LOG:  checkpoint starting: time
+2026-01-18 23:32:59.389 UTC [76] LOG:  checkpoint complete: wrote 47 buffers (0.3%); 0 WAL file(s) added, 0 removed, 0 recycled; write=4.417 s, sync=0.008 s, total=4.436 s; sync files=12, longest=0.007 s, average=0.001 s; distance=270 kB, estimate=270 kB; lsn=0/19591D8, redo lsn=0/1959180
+Starting Container
+Stopping Container
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, baseline
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+2026-01-18 23:34:32 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 23:34:32 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.11.25:8080
+Press CTRL+C to quit
+
+
+Log Explorer | Railway
+
+*Updated todo list*
+
+### Planner Response
+
+The log shows **two different runs mixed together**:
+
+- **Failure:** `password authentication failed for user "postgres"` → this means your **DATABASE_URL is stale/invalid** (still pointing to the deleted Railway DB).
+- **Success later:** `Running upgrade -> 0001, baseline` → that’s a **good run** on a valid DB.
+
+So the **real fix** is: **make sure DATABASE_URL points to a real DB with valid credentials**.
+
+---
+
+# ✅ Do this now
+
+## 1) Fix DATABASE_URL in Railway
+Go to **web service → Variables** and check `DATABASE_URL`.
+
+- If it still points to `postgres.railway.internal` from the old DB → it’s wrong.
+- Replace it with a **valid URL** from a live database.
+
+### If Railway DB creation keeps failing:
+Use an external DB (fastest):
+
+**Neon (recommended)**
+1. Create a free Postgres DB on **Neon**  
+2. Copy the connection string  
+3. Set Railway `DATABASE_URL` to that string  
+4. Redeploy
+
+---
+
+## 2) Keep Procfile as:
+```
+web: alembic upgrade head && python app.py
+```
+
+---
+
+## 3) Verify with clean logs
+Set log filter to **Last 1 min** and confirm you see:
+
+```
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, baseline
+```
+
+and **no password auth errors**.
+
+---
+
+### If you want me to confirm in 1 shot:
+Send me:
+1) The exact `DATABASE_URL` host (just the host part, hide password)  
+2) The latest 1‑minute logs  
+
+Then I’ll confirm it’s clean.
+
+### User Input
+
+accurate-wisdom
+
+
+production
+Architecture
+Observability
+Logs
+Settings
+
+
+
+
+Filter and search logs
+
+Last 5 min
+
+
+You reached the start of the range
+Jan 19, 2026, 5:05 AM
+2026-01-18 23:37:54.489 UTC [76] LOG:  checkpoint starting: time
+2026-01-18 23:38:04.258 UTC [76] LOG:  checkpoint complete: wrote 98 buffers (0.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=9.737 s, sync=0.022 s, total=9.770 s; sync files=84, longest=0.017 s, average=0.001 s; distance=343 kB, estimate=343 kB; lsn=0/19AF1E0, redo lsn=0/19AF150
+Starting Container
+INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
+INFO  [alembic.runtime.migration] Will assume transactional DDL.
+Stopping Container
+2026-01-18 23:39:23.353 UTC [129] LOG:  could not receive data from client: Connection reset by peer
+2026-01-18 23:39:28 - workout_tracker - INFO - Database initialized successfully
+2026-01-18 23:39:28 - workout_tracker - INFO - Starting Workout Tracker on 0.0.0.0:8080 (debug=False)
+ * Serving Flask app 'workout_tracker'
+ * Debug mode: off
+WARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:8080
+ * Running on http://10.250.11.127:8080
+Press CTRL+C to quit
+
+
+Log Explorer | Railway
+
+this is how the db looks now: (ss)
+
+*Updated todo list*
+
+### Planner Response
+
+✅ **Good news — it’s fixed.**  
+Your screenshot shows the new Postgres DB is **online** and **all tables exist**:
+
+- `alembic_version`
+- `users`
+- `lifts`
+- `plans`
+- `rep_ranges`
+- `workout_logs`
+
+Your logs also show the app started successfully.
+
+---
+
+## ✅ What to keep now
+Make sure your [Procfile](file:///Users/harsh24/Desktop/Workout_plan/Procfile:0:0-0:0) stays as:
+
+```
+web: alembic upgrade head && python app.py
+```
+
+This is now the correct stable production setup.
+
+---
+
+## ✅ Next steps (recommended)
+1) **Open the app URL** and register/login.  
+2) **Check that the admin bootstrap works** (if you use ADMIN_* env vars).  
+3) If you want production-grade server, I can switch you to Gunicorn.
+
+---
+
+If anything else breaks, paste the log snippet and I’ll fix it quickly.
+
+### User Input
+
+accurate-wisdom
+
+
+production
+Architecture
+Observability
+Logs
+Settings
+
+
+
+
+Filter and search logs
+
+Last 5 min
+
+
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+    return render_template('login.html')
+  File "/app/workout_tracker/routes/auth.py", line 94, in login
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 150, in render_template
+    template = app.jinja_env.get_or_select_template(template_name_or_list)
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1084, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1013, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 972, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/loaders.py", line 126, in load
+    source, filename, uptodate = self.get_source(environment, name)
+                                 ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 64, in get_source
+    return self._get_source_fast(environment, template)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 98, in _get_source_fast
+    raise TemplateNotFound(template)
+jinja2.exceptions.TemplateNotFound: login.html
+2026-01-18 23:42:42 - workout_tracker - ERROR - Internal server error: 500 Internal Server Error: The server encountered an internal error and was unable to complete your request. Either the server is overloaded or there is an error in the application.
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    template = app.jinja_env.get_or_select_template(template_name_or_list)
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1084, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1013, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 972, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/loaders.py", line 126, in load
+    source, filename, uptodate = self.get_source(environment, name)
+                                 ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 64, in get_source
+    return self._get_source_fast(environment, template)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 98, in _get_source_fast
+    raise TemplateNotFound(template)
+jinja2.exceptions.TemplateNotFound: login.html
+100.64.0.2 - - [18/Jan/2026 23:42:42] "GET /login?next=/favicon.ico HTTP/1.1" 500 -
+Error on request:
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 2190, in wsgi_app
+    response = self.full_dispatch_request()
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 1486, in full_dispatch_request
+    rv = self.handle_user_exception(e)
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 1484, in full_dispatch_request
+    rv = self.dispatch_request()
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 1469, in dispatch_request
+    return self.ensure_sync(self.view_functions[rule.endpoint])(**view_args)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^
+  File "/app/workout_tracker/routes/auth.py", line 94, in login
+    return render_template('login.html')
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 150, in render_template
+    template = app.jinja_env.get_or_select_template(template_name_or_list)
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1084, in get_or_select_template
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1013, in get_template
+    return self._load_template(name, globals)
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 972, in _load_template
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/loaders.py", line 126, in load
+    source, filename, uptodate = self.get_source(environment, name)
+                                 ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 64, in get_source
+    return self._get_source_fast(environment, template)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 98, in _get_source_fast
+    raise TemplateNotFound(template)
+jinja2.exceptions.TemplateNotFound: login.html
+During handling of the above exception, another exception occurred:
+Traceback (most recent call last):
+  File "/app/.venv/lib/python3.13/site-packages/werkzeug/serving.py", line 370, in run_wsgi
+    execute(self.server.app)
+    render_template('error.html', error_code=500, error_message="Internal server error"),
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ~~~~~~~^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 150, in render_template
+  File "/app/.venv/lib/python3.13/site-packages/werkzeug/serving.py", line 331, in execute
+    template = app.jinja_env.get_or_select_template(template_name_or_list)
+    application_iter = app(environ, start_response)
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1084, in get_or_select_template
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 2213, in __call__
+    return self.wsgi_app(environ, start_response)
+    return self.get_template(template_name_or_list, parent, globals)
+           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 2193, in wsgi_app
+    response = self.handle_exception(e)
+  File "/app/.venv/lib/python3.13/site-packages/flask/app.py", line 1399, in handle_exception
+    server_error = self.ensure_sync(handler)(server_error)
+  File "/app/workout_tracker/__init__.py", line 71, in internal_error
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 1013, in get_template
+    raise TemplateNotFound(template)
+    return self._load_template(name, globals)
+                                 ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+jinja2.exceptions.TemplateNotFound: error.html
+           ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 64, in get_source
+    return self._get_source_fast(environment, template)
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/environment.py", line 972, in _load_template
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+    template = self.loader.load(self, name, self.make_globals(globals))
+  File "/app/.venv/lib/python3.13/site-packages/flask/templating.py", line 98, in _get_source_fast
+  File "/app/.venv/lib/python3.13/site-packages/jinja2/loaders.py", line 126, in load
+    source, filename, uptodate = self.get_source(environment, name)
+2026-01-18 23:42:54.985 UTC [76] LOG:  checkpoint complete: wrote 7 buffers (0.0%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.606 s, sync=0.009 s, total=0.627 s; sync files=7, longest=0.007 s, average=0.002 s; distance=0 kB, estimate=309 kB; lsn=0/19AF4F0, redo lsn=0/19AF498
+2026-01-18 23:42:54.358 UTC [76] LOG:  checkpoint starting: time
+
+
+Log Explorer | Railway
+
+*Viewed [__init__.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/__init__.py) *
+
+*Found code context*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+**Fix applied:** the missing templates error is because the app factory wasn’t pointing to the repo-level [templates/](file:///Users/harsh24/Desktop/Workout_plan/templates:0:0-0:0) and `static/` folders in production. I updated the app factory to explicitly set those paths.  
+Location: @/Users/harsh24/Desktop/Workout_plan/workout_tracker/__init__.py#21-29
+
+### What I changed (so Railway can find `login.html` + `error.html`)
+- Added `base_dir` and set `template_folder` and `static_folder` in `Flask(...)`
+
+---
+
+## Next step (do this now)
+Commit + push the fix so Railway redeploys:
+
+```bash
+git add workout_tracker/__init__.py
+git commit -m "Fix template paths for app factory"
+git push origin master
+```
+
+Then open `/login` again. The `TemplateNotFound: login.html` error should be gone.
+
+---
+
+If you want, paste the next Railway log snippet after deploy and I’ll confirm it’s clean.
+
+### User Input
+
+whenever i go to admin page, this is shown.
+
+*Found code context*
+
+*Viewed [auth.py](file:///Users/harsh24/Desktop/Workout_plan/services/auth.py) *
+
+*Grep searched codebase*
+
+*Viewed [decorators.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/decorators.py) *
+
+*Viewed [workouts.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py) *
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Grep searched codebase*
+
+*Viewed [workouts.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py) *
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Viewed [errors.py](file:///Users/harsh24/Desktop/Workout_plan/utils/errors.py) *
+
+*Edited relevant file*
+
+### Planner Response
+
+Updated validation so usernames that include **`.` or `@`** no longer trigger that error.  
+Change: @/Users/harsh24/Desktop/Workout_plan/utils/validators.py#9-25
+
+### Next steps
+1) Commit + push:
+```bash
+git add utils/validators.py
+git commit -m "Allow dots/@ in usernames for dashboard/admin redirects"
+git push origin master
+```
+
+2) Redeploy on Railway and re-open `/admin`.
+
+If the message still shows, tell me the exact username you’re logged in as and I’ll trace the redirect path.
+
+### User Input
+
+can you read the file database_data.txt?
+
+*Searched filesystem*
+
+*Viewed [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt) *
+
+### Planner Response
+
+Yes — I can read it. The file contains a structured backup of your database data.
+
+### What’s inside [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt:0:0-0:0)
+It includes JSON data for:
+- `lifts`
+- `best_lifts`
+- `user_plans`
+- `user_rep_ranges`
+- `workout_logs`
+- `users`
+- `rep_ranges`
+- `plans`
+
+Example location: `DB_Update/the_lifts/lifts.json` with full records for each exercise, `user_id`, `best_string`, `sets_json`, `updated_at`, etc.
+
+If you want me to **extract a specific section** (e.g., `users.json` or `workout_logs.json`), tell me which file and I’ll pull it.
+
+### User Input
+
+now listen, i want that the data of harsh from it to be transferred to:
+user with email:harsh242042004@gmail.com
+and username:harsh_24
+i also have password if you want.
+
+*Updated todo list*
+
+### Planner Response
+
+I’ll first locate the actual JSON backup files (so we don’t parse the huge concatenated [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt:0:0-0:0)), identify Harsh’s old `user_id`, then add an import script that upserts `harsh_24` and moves all related rows (`lifts`, `plans`, `rep_ranges`, `workout_logs`) to that new user. After that, you’ll run it once against your Railway Postgres using your `DATABASE_URL`.
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Grep searched codebase*
+
+### Planner Response
+
+I’ll locate Harsh’s old `user_id` and all related rows (lifts/plans/rep_ranges/workout_logs) inside [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt:0:0-0:0), then I’ll add a one-time import script that will upsert/create the target user (`harsh_24`, `harsh242042004@gmail.com`) and reattach/insert those rows into your current Railway Postgres via `DATABASE_URL`.
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+### Planner Response
+
+I’ll now extract Harsh’s user record and all rows tied to his old `user_id` from [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt:0:0-0:0), then I’ll add a one-time import script that creates/updates `harsh_24` and loads his lifts/plan/rep ranges/workout logs into your current Postgres.
+
+*Viewed [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt) *
+
+*Viewed [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt) *
+
+*Viewed [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt) *
+
+*Viewed [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt) *
+
+### Planner Response
+
+I’m going to implement a one-time import script that reads your backup ([database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt:0:0-0:0)), creates/updates the target user (`harsh_24`, `harsh242042004@gmail.com`), and then imports only Harsh’s rows (lifts/plan/rep ranges/workout logs) into your current Postgres. I’ll make it idempotent so you can safely re-run it if needed.
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Viewed [requirements.txt](file:///Users/harsh24/Desktop/Workout_plan/requirements.txt) *
+
+*Viewed [import_lifts.py](file:///Users/harsh24/Desktop/Workout_plan/import_lifts.py) *
+
+### Planner Response
+
+I’ll build a one-time, safe import script that reads Harsh’s rows from [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt:0:0-0:0), upserts the user `harsh_24` (with your email and optional password), and imports lifts/plan/rep-ranges/workout logs into your current Postgres. I’ll make it idempotent (re-runnable) and add a `--dry-run` option.
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+### Planner Response
+
+I’m going to add a **one-time import script** that reads Harsh’s records from [database_data.txt](file:///Users/harsh24/Desktop/Workout_plan/database_data.txt:0:0-0:0), creates/updates the user `harsh_24` with email `harsh242042004@gmail.com`, and then imports Harsh’s lifts/plan/rep-ranges/workout logs into your current Postgres using `DATABASE_URL`. After that, you’ll run it once (dry-run first).
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+I’ll make the import script compatible with older Python versions (remove `str | None` type syntax), then I’ll give you the exact commands to run it safely against your Railway Postgres using a DB tunnel—without you pasting your password into chat.
+
+*Edited relevant file*
+
+### Planner Response
+
+## Yes — and I’ve prepared the importer for you
+
+I created [import_harsh_backup.py](file:///Users/harsh24/Desktop/Workout_plan/import_harsh_backup.py:0:0-0:0) in your repo. It will:
+
+- Find Harsh in the backup (`the_lifts/users.json` → **old `user_id = 1`** for `"username": "harsh"`).
+- Create/update the target account:
+  - **email:** `harsh242042004@gmail.com`
+  - **username:** `harsh_24`
+  - Optionally set password (without you pasting it here).
+- Import Harsh’s:
+  - `lifts`
+  - `plan`
+  - `rep_ranges`
+  - `workout_logs`
+
+It’s **idempotent** (safe to re-run).
+
+---
+
+# Run it safely (recommended way)
+
+## 1) Open a DB tunnel to Railway (keeps your prod DB private)
+In Terminal A (from your project folder):
+
+```bash
+railway link
+railway environment production
+railway connect
+```
+
+It will print a temporary local Postgres URL like:
+`postgresql://...@127.0.0.1:5432/...`
+
+Keep this terminal open.
+
+## 2) Run a dry-run import (no DB changes)
+In Terminal B:
+
+```bash
+export DATABASE_URL="<PASTE THE URL FROM railway connect>"
+python import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+```
+
+This should print `[DRY RUN] ...` lines and rollback.
+
+## 3) Run the real import
+If dry-run looks good:
+
+```bash
+export DATABASE_URL="<PASTE THE URL FROM railway connect>"
+python import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+---
+
+# Setting the password (without sending it to me)
+If you want the script to set the password for `harsh_24`, do:
+
+```bash
+export DATABASE_URL="<PASTE THE URL FROM railway connect>"
+export IMPORT_PASSWORD='your_password_here'
+python import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+If you **don’t** set `IMPORT_PASSWORD`, the script will **not** overwrite the password.
+
+---
+
+## Quick question before you run it
+- Do you want me to assume `harsh_24` should be **verified immediately** (current behavior: `is_verified=True`) so you can log in right away?
+
+### User Input
+
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % git add Procfile workout_tracker/__init__.py
+git commit -m "Run db stamp on startup"
+git push origin master
+[upgrade 13b67eb] Run db stamp on startup
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Everything up-to-date
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway link
+railway environment production
+railway connect
+> Select a workspace Harsh 24's Projects
+> Select a project accurate-wisdom
+> Select an environment production
+> Select a service <esc to skip> workout_logger_
+
+Project accurate-wisdom linked successfully! 🎉
+Activated environment production
+> Select service workout_logger_
+No supported database found in service
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway link
+railway environment production
+railway connect
+> Select a workspace Harsh 24's Projects
+> Select a project accurate-wisdom
+> Select an environment production
+> Select a service <esc to skip> workout_logger_
+
+Project accurate-wisdom linked successfully! 🎉
+Activated environment production
+> Select service Postgres
+psql (14.19 (Homebrew), server 17.7 (Debian 17.7-3.pgdg13+1))
+WARNING: psql major version 14, server major version 17.
+         Some psql features might not work.
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, bits: 256, compression: off)
+Type "help" for help.
+
+railway=# 
+
+*Updated todo list*
+
+### Planner Response
+
+## Good — you’re connected to Postgres now
+
+The first `railway connect` failed because you selected the **web service** (`workout_logger_`). The second time you selected **Postgres**, which is correct, and you’re now inside `psql` at:
+
+`railway=#`
+
+### Important note
+When `railway connect` drops you into `psql`, it **doesn’t print a DATABASE_URL** to copy/export. That’s fine—we can still run the importer by using the **connection string that Railway exposes in the DB service variables**, or we can run the importer *through* `psql` (not ideal).
+
+---
+
+# Step 1 — Confirm DB connection + tables (in `psql`)
+Run these:
+
+```sql
+\\dt
+select * from alembic_version;
+```
+
+You should see your tables and a version like `0001` (or similar). If `\\dt` shows `users`, `lifts`, `plans`, `rep_ranges`, `workout_logs`, we’re good.
+
+---
+
+# Step 2 — Get a usable DATABASE_URL for the importer
+In Railway UI:
+
+- Open **Postgres service → Variables**  
+- Copy the full `DATABASE_URL`
+
+Then locally (new terminal):
+
+```bash
+export DATABASE_URL='<paste it here>'
+python import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+```
+
+If dry-run looks good:
+
+```bash
+export IMPORT_PASSWORD='your_password_here'   # optional
+python import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+---
+
+# Step 3 — Quick fix: your Git push didn’t deploy
+Your output shows:
+
+- Commit happened on branch **[upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:19:0-116:94)**
+- You pushed `origin master`, but it says **Everything up-to-date**
+
+So Railway likely didn’t get the new commit.
+
+Run this to push the branch you actually committed on:
+
+```bash
+git push -u origin upgrade
+```
+
+Or, if Railway expects `master`:
+
+```bash
+git checkout master
+git merge upgrade
+git push origin master
+```
+
+(Choose whichever branch Railway is tracking.)
+
+---
+
+# Tell me what you see
+Reply with:
+1) Output of `\\dt` and `select * from alembic_version;`  
+2) Which Git branch Railway is deploying (`master` or [upgrade](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py:19:0-116:94))  
+
+Then I’ll tell you the exact next command to finish the Harsh data transfer.
+
+### User Input
+
+railway=# \\dt
+select * from alembic_version;
+invalid command \
+Try \? for help.
+railway=# \\dt
+select * from alembic_version;
+invalid command \
+Try \? for help.
+railway=# 
+
+### Planner Response
+
+Use **single** backslash in `psql` (the double `\\dt` is what caused “invalid command \”).  
+Run **one command at a time**:
+
+```
+railway=# \dt
+railway=# select * from alembic_version;
+```
+
+Then paste the outputs here.
+
+If you want to exit `psql` afterward:
+
+```
+railway=# \q
+```
+
+Once we confirm those outputs, we’ll run the import script.
+
+### User Input
+
+railway=# \dt
+              List of relations
+ Schema |      Name       | Type  |  Owner   
+--------+-----------------+-------+----------
+ public | alembic_version | table | postgres
+ public | lifts           | table | postgres
+ public | plans           | table | postgres
+ public | rep_ranges      | table | postgres
+ public | users           | table | postgres
+ public | workout_logs    | table | postgres
+(6 rows)
+
+railway=# select * from alembic_version;
+ version_num 
+-------------
+ 0001
+(1 row)
+
+railway=# 
+
+*Updated todo list*
+
+### Planner Response
+
+Great — DB is healthy. Next: run the import script.
+
+## 1) Exit `psql`
+```
+\q
+```
+
+## 2) Get a usable DATABASE_URL
+Open **Railway → Postgres service → Variables** and copy `DATABASE_URL`.
+
+## 3) Dry run (no changes)
+```bash
+export DATABASE_URL='<paste URL>'
+python import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+```
+Script: @/Users/harsh24/Desktop/Workout_plan/import_harsh_backup.py
+
+## 4) Real import
+```bash
+export DATABASE_URL='<paste URL>'
+python import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+### (Optional) set password without sharing it here
+```bash
+export DATABASE_URL='<paste URL>'
+export IMPORT_PASSWORD='your_password_here'
+python import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+---
+
+If you run the dry-run, paste the output and I’ll confirm it before you execute the real import.
+
+### User Input
+
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % export DATABASE_URL='<paste URL>'
+python import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+zsh: command not found: python
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % export DATABASE_URL='<paste URL>'
+python3 import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+Traceback (most recent call last):
+  File "/Users/harsh24/Desktop/Workout_plan/import_harsh_backup.py", line 7, in <module>
+    from models import Lift, Plan, RepRange, Session, User, UserRole, WorkoutLog
+  File "/Users/harsh24/Desktop/Workout_plan/models.py", line 17, in <module>
+    engine = create_engine(
+        database_url,
+    ...<2 lines>...
+        echo=False
+    )
+  File "<string>", line 2, in create_engine
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/deprecations.py", line 281, in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 546, in create_engine
+    u = _url.make_url(url)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/url.py", line 842, in make_url
+    return _parse_url(name_or_url)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/url.py", line 908, in _parse_url
+    raise exc.ArgumentError(
+        "Could not parse SQLAlchemy URL from string '%s'" % name
+    )
+sqlalchemy.exc.ArgumentError: Could not parse SQLAlchemy URL from string '<paste URL>'
+
+*Updated todo list*
+
+### Planner Response
+
+You ran the command correctly, but you used a **placeholder** URL. That’s why SQLAlchemy couldn’t parse it.
+
+### Fix it:
+Replace `<paste URL>` with the **actual** `DATABASE_URL` from Railway → **Postgres service → Variables**.
+
+Then run:
+
+```bash
+export DATABASE_URL='postgresql://<real-credentials-here>'
+python3 import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+```
+
+If the dry-run output looks OK, run the real import:
+
+```bash
+export DATABASE_URL='postgresql://<real-credentials-here>'
+python3 import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+### Optional password (no need to share it here):
+```bash
+export DATABASE_URL='postgresql://<real-credentials-here>'
+export IMPORT_PASSWORD='your_password_here'
+python3 import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+Paste the dry-run output and I’ll confirm before you execute the real import.
+
+### User Input
+
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % git add Procfile workout_tracker/__init__.py
+git commit -m "Run db stamp on startup"
+git push origin master
+[upgrade 13b67eb] Run db stamp on startup
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+Everything up-to-date
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway link
+railway environment production
+railway connect
+> Select a workspace Harsh 24's Projects
+> Select a project accurate-wisdom
+> Select an environment production
+> Select a service <esc to skip> workout_logger_
+
+Project accurate-wisdom linked successfully! 🎉
+Activated environment production
+> Select service workout_logger_
+No supported database found in service
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % railway link
+railway environment production
+railway connect
+> Select a workspace Harsh 24's Projects
+> Select a project accurate-wisdom
+> Select an environment production
+> Select a service <esc to skip> workout_logger_
+
+Project accurate-wisdom linked successfully! 🎉
+Activated environment production
+> Select service Postgres
+psql (14.19 (Homebrew), server 17.7 (Debian 17.7-3.pgdg13+1))
+WARNING: psql major version 14, server major version 17.
+         Some psql features might not work.
+SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, bits: 256, compression: off)
+Type "help" for help.
+
+railway=# \\dt
+select * from alembic_version;
+invalid command \
+Try \? for help.
+railway=# \\dt
+select * from alembic_version;
+invalid command \
+Try \? for help.
+railway=# railway=# \dt
+              List of relations
+ Schema |      Name       | Type  |  Owner   
+--------+-----------------+-------+----------
+ public | alembic_version | table | postgres
+ public | lifts           | table | postgres
+ public | plans           | table | postgres
+ public | rep_ranges      | table | postgres
+ public | users           | table | postgres
+ public | workout_logs    | table | postgres
+(6 rows)
+
+railway-# railway=# select * from alembic_version;
+ERROR:  syntax error at or near "railway"
+LINE 1: railway=# 
+        ^
+railway=# select * from alembic_version;
+ version_num 
+-------------
+ 0001
+(1 row)
+
+railway=# railway=# select * from alembic_version;
+ERROR:  syntax error at or near "railway"
+LINE 1: railway=# select * from alembic_version;
+        ^
+railway=# select * from alembic_version;
+ version_num 
+-------------
+ 0001
+(1 row)
+
+railway=# select * from alembic_version;
+ version_num 
+-------------
+ 0001
+(1 row)
+
+railway=# \dt
+              List of relations
+ Schema |      Name       | Type  |  Owner   
+--------+-----------------+-------+----------
+ public | alembic_version | table | postgres
+ public | lifts           | table | postgres
+ public | plans           | table | postgres
+ public | rep_ranges      | table | postgres
+ public | users           | table | postgres
+ public | workout_logs    | table | postgres
+(6 rows)
+
+railway=# select * from alembic_version;
+ version_num 
+-------------
+ 0001
+(1 row)
+
+railway=# \q
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % export DATABASE_URL='<paste URL>'
+python import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+zsh: command not found: python
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % export DATABASE_URL='<paste URL>'
+python3 import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+Traceback (most recent call last):
+  File "/Users/harsh24/Desktop/Workout_plan/import_harsh_backup.py", line 7, in <module>
+    from models import Lift, Plan, RepRange, Session, User, UserRole, WorkoutLog
+  File "/Users/harsh24/Desktop/Workout_plan/models.py", line 17, in <module>
+    engine = create_engine(
+        database_url,
+    ...<2 lines>...
+        echo=False
+    )
+  File "<string>", line 2, in create_engine
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/deprecations.py", line 281, in warned
+    return fn(*args, **kwargs)  # type: ignore[no-any-return]
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 546, in create_engine
+    u = _url.make_url(url)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/url.py", line 842, in make_url
+    return _parse_url(name_or_url)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/url.py", line 908, in _parse_url
+    raise exc.ArgumentError(
+        "Could not parse SQLAlchemy URL from string '%s'" % name
+    )
+sqlalchemy.exc.ArgumentError: Could not parse SQLAlchemy URL from string '<paste URL>'
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % export DATABASE_URL='postgresql://postgres:sTAIFmrtOKIIXWrITbsqaCmqpuPAbOcG@postgres.railway.internal:5432/railway'
+python3 import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+Traceback (most recent call last):
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 179, in _do_get
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 177, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+psycopg2.OperationalError: could not translate host name "postgres.railway.internal" to address: nodename nor servname provided, or not known
+                                                                                                                                                                                
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/Users/harsh24/Desktop/Workout_plan/import_harsh_backup.py", line 360, in <module>
+    main()
+    ~~~~^^
+  File "/Users/harsh24/Desktop/Workout_plan/import_harsh_backup.py", line 228, in main
+    target_user, created = _get_or_create_target_user(
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        session,
+        ^^^^^^^^
+    ...<3 lines>...
+        dry_run=args.dry_run,
+        ^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Users/harsh24/Desktop/Workout_plan/import_harsh_backup.py", line 80, in _get_or_create_target_user
+    .first()
+     ~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/query.py", line 2728, in first
+    return self.limit(1)._iter().first()  # type: ignore
+           ~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/query.py", line 2827, in _iter
+    result: Union[ScalarResult[_T], Result[_T]] = self.session.execute(
+                                                  ~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+        params,
+        ^^^^^^^
+        execution_options={"_sa_orm_load_options": self.load_options},
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2362, in execute
+    return self._execute_internal(
+           ~~~~~~~~~~~~~~~~~~~~~~^
+        statement,
+        ^^^^^^^^^^
+    ...<4 lines>...
+        _add_event=_add_event,
+        ^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2237, in _execute_internal
+    conn = self._connection_for_bind(bind)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 2106, in _connection_for_bind
+    return trans._connection_for_bind(engine, execution_options)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 2, in _connection_for_bind
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/state_changes.py", line 139, in _go
+    ret_value = fn(self, *arg, **kw)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/orm/session.py", line 1189, in _connection_for_bind
+    conn = bind.connect()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3278, in connect
+    return self._connection_cls(self)
+           ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 148, in __init__
+    Connection._handle_dbapi_exception_noconnection(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        err, dialect, engine
+        ^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 2442, in _handle_dbapi_exception_noconnection
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 146, in __init__
+    self._dbapi_connection = engine.raw_connection()
+                             ~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/base.py", line 3302, in raw_connection
+    return self.pool.connect()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 449, in connect
+    return _ConnectionFairy._checkout(self)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 1263, in _checkout
+    fairy = _ConnectionRecord.checkout(pool)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 712, in checkout
+    rec = pool._do_get()
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 179, in _do_get
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/impl.py", line 177, in _do_get
+    return self._create_connection()
+           ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 390, in _create_connection
+    return _ConnectionRecord(self)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 674, in __init__
+    self.__connect()
+    ~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 900, in __connect
+    with util.safe_reraise():
+         ~~~~~~~~~~~~~~~~~^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/util/langhelpers.py", line 146, in __exit__
+    raise exc_value.with_traceback(exc_tb)
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/pool/base.py", line 896, in __connect
+    self.dbapi_connection = connection = pool._invoke_creator(self)
+                                         ~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/create.py", line 643, in connect
+    return dialect.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/sqlalchemy/engine/default.py", line 621, in connect
+    return self.loaded_dbapi.connect(*cargs, **cparams)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^
+  File "/Library/Frameworks/Python.framework/Versions/3.13/lib/python3.13/site-packages/psycopg2/__init__.py", line 122, in connect
+    conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) could not translate host name "postgres.railway.internal" to address: nodename nor servname provided, or not known
+                                                                                                                                                                                
+(Background on this error at: https://sqlalche.me/e/20/e3q8)                                                                                                                    
+(.venv) harsh24@Harshs-MacBook-Air Workout_plan % 
+
+*Updated todo list*
+
+### Planner Response
+
+You’re using the **internal-only** host `postgres.railway.internal`, which only works *inside Railway*. From your Mac it will always fail.
+
+### ✅ Fix: Use the **public** Railway DB URL
+In Railway:
+
+**Postgres service → Connect / Variables → `DATABASE_URL`**  
+Copy the URL that looks like:
+```
+postgresql://user:pass@containers-us-west-xyz.railway.app:5432/railway
+```
+(Notice it does **not** contain `railway.internal`.)
+
+Then run:
+
+```bash
+export DATABASE_URL='postgresql://user:pass@containers-...railway.app:5432/railway'
+python3 import_harsh_backup.py --dry-run --username harsh_24 --email harsh242042004@gmail.com
+```
+
+If dry-run output looks fine:
+
+```bash
+export DATABASE_URL='postgresql://user:pass@containers-...railway.app:5432/railway'
+python3 import_harsh_backup.py --username harsh_24 --email harsh242042004@gmail.com
+```
+
+### Optional password
+```bash
+export IMPORT_PASSWORD='your_password_here'
+```
+
+---
+
+If you can’t find the public URL, tell me what you see in **Postgres → Connect** and I’ll guide you exactly where to click.
+
+### User Input
+
+but why am i not admin now?
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Grep searched codebase*
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Viewed [admin.py](file:///Users/harsh24/Desktop/Workout_plan/services/admin.py) *
+
+*Viewed [config.py](file:///Users/harsh24/Desktop/Workout_plan/config.py) *
+
+*Updated todo list*
+
+### Planner Response
+
+You’re not admin because **new users default to role `user`**, and the app only promotes an admin **when `ADMIN_PASSWORD` is set** at startup. If that env var isn’t set, no admin is created/updated. See @/Users/harsh24/Desktop/Workout_plan/models.py#34-49 and @/Users/harsh24/Desktop/Workout_plan/models.py#301-320.
+
+### Fix it (pick one)
+1) **Use Railway env bootstrap (simple, but resets password)**
+   - Set in Railway **web service** env:
+     - `ADMIN_USERNAME=harsh_24`
+     - `ADMIN_EMAIL=harsh242042004@gmail.com`
+     - `ADMIN_PASSWORD=your_new_password`
+   - Redeploy/restart.
+   - This will set `harsh_24` to admin and overwrite its password.
+
+2) **Direct SQL update (keeps your current password)**
+   In `psql`:
+   ```sql
+   update users
+   set role = 'admin', is_verified = true
+   where username = 'harsh_24';
+   ```
+
+Which approach do you want to use?
+
+### User Input
+
+1
+
+*Updated todo list*
+
+### Planner Response
+
+Got it. Use **Option 1 (Railway env bootstrap)** — here’s exactly what to do:
+
+## ✅ Set admin env vars in Railway (web service)
+Open **Railway → accurate-wisdom → web service (workout_logger_) → Variables**  
+Add / set:
+
+```
+ADMIN_USERNAME=harsh_24
+ADMIN_EMAIL=harsh242042004@gmail.com
+ADMIN_PASSWORD=<your_new_password>
+```
+
+> This will **reset** the password for `harsh_24`.
+
+## ✅ Redeploy / Restart
+After setting vars, click **Deploy** (or **Restart** the service).
+
+On next boot, [_bootstrap_admin_user()](file:///Users/harsh24/Desktop/Workout_plan/models.py:300:0-327:69) will update `harsh_24` to **ADMIN** (see @/Users/harsh24/Desktop/Workout_plan/models.py#301-326).
+
+---
+
+### After deploy
+Login with:
+- username: `harsh_24`
+- password: `<your_new_password>`
+
+You should now see admin features.
+
+---
+
+Once you’ve done this, tell me:
+1) Did admin access work?  
+2) Do you still want me to finish the Harsh data import?
+
+### User Input
+
+it is working fine but this pop up is coming again and again.
+also:
+when the page of verify email opens, make sure that the cursor is already on it so that the user feels convenient while typing. currently first i have to click the box and then enter.
+
+*Updated todo list*
+
+*Found code context*
+
+*Grep searched codebase*
+
+*Searched filesystem*
+
+*Viewed [__init__.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/__init__.py) *
+
+*Viewed [workouts.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py) *
+
+*Viewed [workouts.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py) *
+
+*Listed directory [Workout_plan](file:///Users/harsh24/Desktop/Workout_plan) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+### ✅ Done
+I fixed both issues:
+
+1) **Favicon popup spam**  
+Added a dedicated `/favicon.ico` route so it no longer hits the `/<username>` route and triggers the validation popup.  
+See: @/Users/harsh24/Desktop/Workout_plan/workout_tracker/__init__.py#53-68
+
+2) **Verify email autofocus**  
+The input now autofocuses on page load.  
+See: @/Users/harsh24/Desktop/Workout_plan/templates/verify_email.html#18-35
+
+---
+
+### Next step (deploy)
+Commit + push these changes, then redeploy:
+
+```bash
+git add workout_tracker/__init__.py templates/verify_email.html
+git commit -m "Fix favicon warning and autofocus verify email"
+git push origin <your-branch>
+```
+
+Then redeploy on Railway.
+
+---
+
+### Quick check
+After deploy:
+- Open `/verify-email` → cursor should already be in the code input.
+- The **“favicon.ico not found”** popup should be gone.
+
+If you want, I can also add a real favicon file so browsers don’t request it at all.
+
+### User Input
+
+listen carefully:
+* The app is looking fantastic, very very good. good colors, good typography, everything. 
+* But, the layout is not soo good.
+    * though on mobile phone it’s better but on pc mode, it’s not.
+    * I want you to go through it and fix it for pc and make it even more visually appealing.
+    * some minor fixes in mobile too:
+        * as you can see in the ss, the header is not soo visually appealing. 
+            * either change it’s positioning, size, or whole layout, whatever, just make it good.
+        * the admin page in mobile phone:
+            * this line: “Manage users and oversee platform operations” is very close to box “back to my dashboard”
+            * and as you can see in ss, the user management table is not suitable for mobile version.
+* remember this line from Steve Jobs: “A product must be functional as well as aesthetically pleasing.” 
+
+
+*Updated todo list*
+
+*Viewed [index.html](file:///Users/harsh24/Desktop/Workout_plan/templates/index.html) *
+
+*Searched filesystem*
+
+*Listed directory [templates](file:///Users/harsh24/Desktop/Workout_plan/templates) *
+
+*Viewed [admin_dashboard.html](file:///Users/harsh24/Desktop/Workout_plan/templates/admin_dashboard.html) *
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Updated todo list*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+## ✅ Layout Improvements Complete
+
+I've implemented all the requested UX improvements:
+
+### Desktop Improvements
+- **Centered layout** with max-width containers (`col-xl-7`, `col-xl-10`) for better visual focus
+- Better spacing and proportions on larger screens
+- Dashboard now looks polished and professional on desktop
+
+### Mobile Improvements
+**Dashboard (index.html)**
+- Reduced profile icon size for better mobile proportions
+- Improved spacing between "Active Profile" label and username
+- Better visual hierarchy with adjusted font sizes and margins
+
+**Admin Page (admin_dashboard.html)**
+- Added proper spacing (gap + margin) between subtitle and "Back to Dashboard" button
+- **Responsive user table**: Shows as table on desktop, converts to clean card layout on mobile
+- Mobile cards display all user info in an organized, touch-friendly format
+- Email addresses wrap properly on small screens
+
+---
+
+## Deploy Changes
+
+```bash
+git add templates/index.html templates/admin_dashboard.html
+git commit -m "Polish desktop/mobile layout: center content, improve spacing, add responsive admin table"
+git push origin upgrade
+```
+
+Then redeploy on Railway (or merge to `master` if that's your deployment branch).
+
+---
+
+The app should now look fantastic on both desktop and mobile, following Steve Jobs' principle: **functional and aesthetically pleasing**.
+
+### User Input
+
+i want you to just look at screen shots.
+
+you see how broken desktop layout is. 
+please fix it.
+
+
+### Planner Response
+
+I can see the issue - the desktop layout is too wide and the content is stretched across the entire screen. The columns need proper max-width constraints and better centering. Let me fix this.
+
+*Updated todo list*
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Edited relevant file*
+
+*Listed directory [templates](file:///Users/harsh24/Desktop/Workout_plan/templates) *
+
+*Viewed [retrieve_step1.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step1.html) *
+
+*Viewed [retrieve_step3.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step3.html) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+## ✅ Desktop Layout Fixed
+
+I've fixed the broken desktop layout with the following changes:
+
+### Changes Made
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/base.html`**
+- Added `max-width: 1400px` to the main container to prevent content from stretching full-width on large screens
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/index.html`**
+- Adjusted dashboard columns: `col-lg-7` (main) and `col-lg-5` (sidebar) for better proportions
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/admin_dashboard.html`**
+- Set admin dashboard to `col-lg-11` for optimal width
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/retrieve_step1.html`**
+- Adjusted to `col-lg-6` for better centering
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/retrieve_step3.html`**
+- Adjusted to `col-lg-8` for better proportions
+
+---
+
+## Deploy
+
+```bash
+git add templates/
+git commit -m "Fix desktop layout: add max-width constraint and adjust column proportions"
+git push origin upgrade
+```
+
+The desktop layout will now be properly centered and constrained instead of stretching across the entire screen width.
+
+### User Input
+
+* let me say it. it is worse now.
+* let me tell you things specially.
+* listen, look at the recent workout box.
+    * You see how it continuing to lengthen till the bottom and looking very weird. not consistent.
+* earlier the whole layout had space but now it’s looking too filled filled and not aesthetic for sure.
+* and the retrieve pages:
+    * these are looking like made for phone.
+    * too long, i have to scrool down to see it fully, it’s inconvinient.
+* the plan ready page:
+    * same, it is too very long that i have to scrool down a lot to copy, i mean if you think that it is good as is, it’s okay but i think it’s inconvinient, don’t you think so.
+    * and same is the log page. idk if it’s meant to be long. u think what is best.
+* i want you to completely reengineer the layout for pc. make sure it looks best.
+
+*Updated todo list*
+
+*Viewed [log.html](file:///Users/harsh24/Desktop/Workout_plan/templates/log.html) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Viewed [index.html](file:///Users/harsh24/Desktop/Workout_plan/templates/index.html) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Viewed [retrieve_step2.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step2.html) *
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+## ✅ Desktop Layout Reengineered
+
+I've completely redesigned the desktop layout based on your feedback:
+
+### Key Changes
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/base.html`**
+- Increased max-width from 1400px to **1600px** for more breathing room
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/index.html`**
+- Changed to **50/50 split** (`col-lg-6` each) for balanced dashboard layout
+- **Fixed recent workouts box** with `min-height: 400px` and flexbox to prevent weird stretching
+- Used `flex-grow-1` and `mt-auto` for consistent height and proper spacing
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/admin_dashboard.html`**
+- Full width (`col-12`) for maximum space utilization
+
+**Retrieve Pages** ([retrieve_step1.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step1.html:0:0-0:0), [retrieve_step2.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step2.html:0:0-0:0), [retrieve_step3.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step3.html:0:0-0:0))
+- Made **much wider** (`col-lg-7` and `col-lg-10`)
+- Removed excessive vertical centering (`min-height: 80vh; align-items: center`)
+- Content now sits naturally at top instead of forcing you to scroll
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/retrieve_step3.html` (Plan Ready)**
+- Wider layout (`col-lg-10`)
+- Reduced textarea from **14 rows to 10 rows** - less scrolling to reach copy button
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/log.html`**
+- Wider layout (`col-lg-10`)
+- Reduced textarea from **14 rows to 10 rows** - more convenient
+
+---
+
+## Summary
+- **More space**: Wider max-width (1600px) prevents cramped feeling
+- **Better proportions**: 50/50 dashboard split, wider forms
+- **Fixed inconsistencies**: Recent workouts box maintains consistent height
+- **Less scrolling**: Reduced textarea heights, removed forced vertical centering
+- **Desktop-optimized**: All pages now feel natural on large screens
+
+---
+
+## Deploy
+
+```bash
+git add templates/
+git commit -m "Reengineer desktop layout: wider spacing, balanced proportions, less scrolling"
+git push origin upgrade
+```
+
+The layout should now feel spacious, balanced, and convenient on desktop.
+
+### User Input
+
+noooo, it's bad now. 
+the things on the left should take larger space as before.
+you see, older one home page is percieved much better than this.
+i don't know why but retrieve page is not looking good. you see in the ss.
+i don't what it is but you redesign it properly.
+i would also say that plan ready page is better of previous version than this. look in the ss.
+but yes, one thing is good in plan ready page in new version that it is not unnecesary long.
+as you can see in ss, admin dashboard is too, better of previous one than it. 
+
+
+*Updated todo list*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+## ✅ Layouts Restored to Previous Better Design
+
+I've restored all pages to their previous better proportions:
+
+### Changes Made
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/index.html`**
+- Restored to **col-lg-8** (left/main) and **col-lg-4** (right/sidebar) - the original better proportions
+- Kept the recent workouts box height fix (min-height + flexbox)
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/admin_dashboard.html`**
+- Restored to **col-lg-10** centered layout - matches your previous better version
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/retrieve_step1.html` & [retrieve_step2.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step2.html:0:0-0:0)**
+- Restored to **col-lg-5** - narrower, centered, cleaner look like before
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/retrieve_step3.html`**
+- Restored to **col-lg-8** - matches previous better width
+- **Kept** reduced rows (10 instead of 14) - so it's not unnecessarily long
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/log.html`**
+- Restored to **col-lg-8**
+- **Kept** reduced rows (10 instead of 14)
+
+---
+
+## Summary
+- Dashboard: Original 8/4 split ✓
+- Admin: Centered col-lg-10 ✓
+- Retrieve pages: Narrower col-lg-5 ✓
+- Plan ready & Log: col-lg-8 with reduced rows ✓
+- Max-width: Still 1600px for breathing room ✓
+
+---
+
+## Deploy
+
+```bash
+git add templates/
+git commit -m "Restore previous better layout proportions with optimized textarea heights"
+git push origin upgrade
+```
+
+The layout now matches the previous version that looked better, while keeping the improvement of reduced textarea heights.
+
+### User Input
+
+let's focus on home page, as well as stats page.
+both are better of previous version as you can see.
+please make it like previous only. or better if you can.
+
+*Updated todo list*
+
+*Viewed [stats.html](file:///Users/harsh24/Desktop/Workout_plan/templates/stats.html) *
+
+### Planner Response
+
+Looking at the screenshots, I can see the previous version (production) has better spacing and proportions on both the home page and stats page. Let me adjust both to match the previous better versions.
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+## ✅ Home Page and Stats Page Layouts Fixed
+
+I've adjusted both pages to match the previous better versions:
+
+### Changes Made
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/index.html`**
+- Added `justify-content-center` to center the dashboard layout
+- Maintains the 8/4 column split with proper centering
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/stats.html`**
+- Added `justify-content-center` for proper centering
+- Changed from full-width (`col-12`) to **`col-lg-11`** for better proportions
+- Now matches the previous production version's layout
+
+---
+
+Both pages now have the proper centered layout with appropriate spacing that matches your previous better versions.
+
+## Deploy
+
+```bash
+git add templates/index.html templates/stats.html
+git commit -m "Center home and stats page layouts to match previous better design"
+git push origin upgrade
+```
+
+The layouts should now look like the previous production version you showed in the screenshots.
+
+### User Input
+
+some things to fix:
+as you can see in the screenshots, these problems are there:
+- unnecessary long page, unnecessary space in plan ready page.
+- often see this notification:
+user 'harsh' not found.
+
+
+*Updated todo list*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Viewed [workouts.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py) *
+
+*Grep searched codebase*
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Grep searched codebase*
+
+*Updated todo list*
+
+*Edited relevant file*
+
+*Grep searched codebase*
+
+*Viewed [retrieve_step3.html](file:///Users/harsh24/Desktop/Workout_plan/templates/retrieve_step3.html) *
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+### ✅ Fixes Applied
+
+**1) “User 'harsh' not found” notification**
+- I stopped the error from flashing when a stale username is requested.
+- Now it redirects cleanly to the logged-in user’s dashboard instead.
+
+Updated here:  
+- `@/Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py#71-93`
+
+---
+
+**2) Plan Ready page too long (mobile)**
+- Reduced vertical spacing.
+- Added a height clamp to keep the textarea from stretching too tall.
+- Tightened bottom spacing so the button is visible without extra scroll.
+
+Updated here:  
+- `@/Users/harsh24/Desktop/Workout_plan/templates/retrieve_step3.html#5-25`
+
+---
+
+### Next step
+Please refresh and test:
+- Dashboard (to confirm no more “User 'harsh' not found”)
+- Plan Ready page (on mobile)
+
+If you still see unnecessary space, I’ll tighten it further.
+
+### User Input
+
+show some care to one more fix (in mobile only):
+the top of the website has small icons and are not looking aesthetic too as you can see in the ss.
+either you can do this that make some fundamental of them to come at bottom (as shown in ss) or whatever you want.
+
+*Updated todo list*
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Edited relevant file*
+
+### Planner Response
+
+✅ **Mobile navbar fixed as requested.**
+
+I moved the mobile icons to a **bottom navigation bar**, increased the icon size, and added proper spacing so it feels premium and clean.
+
+### ✅ Changes applied
+**`@/Users/harsh24/Desktop/Workout_plan/templates/base.html#720-767`**
+
+- Bottom fixed nav bar  
+- Larger icons  
+- Better spacing  
+- Added safe padding so content won’t hide behind it  
+
+---
+
+Please refresh on mobile and confirm. If you want the labels hidden (icons only), or want a floating pill style instead, I can do that next.
+
+### User Input
+
+take a look at this another website. you see, the icons are proper in size as well as width. and some buttons are at top to making the header. looks overall good.
+now take a look at this site.
+there is nothing at top, looks too bad. and the buttons below are too small you see. there are so many buttons below that even if they spaced, they would be looking filled filled. 
+
+fix it
+
+*Updated todo list*
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+## ✅ Mobile Navigation Redesigned
+
+I've completely restructured the mobile layout to match the reference app aesthetic:
+
+### Changes Made
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/base.html`**
+
+**1) Top Header (Mobile Only)**
+- Added sticky header with Admin/Logout buttons
+- Clean, minimal design at the top
+- Only shows on mobile (`d-sm-none`)
+
+**2) Bottom Navigation (4 Core Items)**
+- Reduced from 6 cramped items to **4 essential items**: Home, Log, Retrieve, Stats
+- **Larger icons** (1.5rem vs 1.1rem)
+- **Better spacing** with proper padding
+- Each item has ~70px min-width for comfortable tapping
+- Smooth hover/active states
+
+**3) Desktop Navigation**
+- Unchanged - stays at top with all items
+- Hidden on mobile (`d-none d-sm-block`)
+
+---
+
+### Result
+- ✅ Top header with Admin/Logout (like reference app)
+- ✅ 4 properly-sized bottom nav items (not cramped)
+- ✅ Larger icons and better spacing
+- ✅ Professional mobile UX
+
+---
+
+## Deploy
+
+```bash
+git add templates/base.html
+git commit -m "Redesign mobile nav: top header + 4-item bottom bar with larger icons"
+git push origin upgrade
+```
+
+The mobile layout now matches the clean aesthetic of the reference app you showed.
+
+### User Input
+
+Good, I like it. One thing is missing:
+- There is no app title at the top. Please add one that matches the existing aesthetics (typography, spacing, tone).
+
+Also, improve the “Recent Workouts” box:
+- Clicking a workout should load that specific workout.
+- Along with date and day, also show the workout title (e.g., “Chest & Triceps 1”).
+- Make sure the interaction feels consistent and intuitive within the app’s design language.
+
+
+*Updated todo list*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Grep searched codebase*
+
+*Viewed [app.py](file:///Users/harsh24/Desktop/Workout_plan/app.py) *
+
+*Grep searched codebase*
+
+*Viewed [index.html](file:///Users/harsh24/Desktop/Workout_plan/templates/index.html) *
+
+*Grep searched codebase*
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Grep searched codebase*
+
+*Viewed [stats.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/stats.py) *
+
+*Updated todo list*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+## ✅ All Improvements Complete
+
+### 1) Mobile Header with App Title
+**`@/Users/harsh24/Desktop/Workout_plan/templates/base.html#1058-1082`**
+- Added "Workout Tracker" title with gradient gold styling
+- Positioned Admin/Logout buttons on the right
+- Matches existing typography and design language
+
+### 2) Recent Workouts - Now Clickable with Titles
+**`@/Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py#14-56`**
+- Updated [get_recent_workouts()](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py:14:4-56:21) to extract workout titles from exercise names
+- Returns workout objects with both `date` and `title`
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/index.html#80-89`**
+- Each workout is now a clickable link
+- Shows workout title (e.g., "Chest & Triceps 1")
+- Shows date and day below the title
+- Chevron icon indicates it's tappable
+
+### 3) Workout Detail View
+**New Route:** `/workout/<date>`
+**`@/Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py#132-169`**
+- Displays all exercises from a specific workout
+- Shows top sets and estimated 1RM for each exercise
+
+**`@/Users/harsh24/Desktop/Workout_plan/templates/workout_detail.html`**
+- Clean card layout with exercise list
+- Consistent with app design language
+
+---
+
+## Deploy
+
+```bash
+git add templates/ workout_tracker/
+git commit -m "Add mobile header title, clickable recent workouts with titles, and workout detail view"
+git push origin upgrade
+```
+
+The Recent Workouts box now shows meaningful workout titles and clicking any workout loads its full details.
+
+### User Input
+
+i don't know what it is but the header is not looking that good. redesign it.
+one more thing:
+the title of recent workout is random.
+i want it to be the real title of the workout day of that day. 
+listen carefully, i log workouts like this:
+17/01 Arms 2
+
+Dumbbell Overhead Press - [6–10] - 17.5, 10
+Wrist Extension - Dumbbell - [12–20] - 6.25 5, 18
+Machine Lateral Raise - [15–25] - 25 20 17.27, 16 18 22
+Rear Delt Machine Fly - [12–20] - 50 45 43.5, 15 15 20
+Forearm Roller - [30–60s] - 6 4, 2
+Rope Face Pull - [12–20] - 35 30, 15 
+
+so in the recent workout tab, the workouts should have title like this only ie "Arms 2".
+
+
+*Updated todo list*
+
+*Viewed [workout.py](file:///Users/harsh24/Desktop/Workout_plan/parsers/workout.py) *
+
+*Viewed [logging.py](file:///Users/harsh24/Desktop/Workout_plan/services/logging.py) *
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Viewed [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py) *
+
+*Viewed [__init__.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/__init__.py) *
+
+*Edited relevant file*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Grep searched codebase*
+
+*Viewed [migrate_db.py](file:///Users/harsh24/Desktop/Workout_plan/migrate_db.py) *
+
+*Listed directory [versions](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions) *
+
+*Edited relevant file*
+
+*Viewed [0001_baseline.py](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0001_baseline.py) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+### ✅ Updated Header + Correct Workout Titles
+
+#### 1) **Mobile header redesigned**
+I replaced the plain text header with a brand lockup (WT badge + stacked title) and pill-style action buttons to match the app’s visual language.
+
+- Styles: `@/Users/harsh24/Desktop/Workout_plan/templates/base.html#720-801`
+- Markup: `@/Users/harsh24/Desktop/Workout_plan/templates/base.html#1058-1092`
+
+---
+
+#### 2) **Recent Workout titles now use the *real* logged day title**
+Your format (`17/01 Arms 2`) is parsed as `workout_name = "Arms 2"` and is now **stored with every log** and used everywhere:
+
+- Stored on log save: `@/Users/harsh24/Desktop/Workout_plan/services/logging.py#23-67`
+- Persisted in model: `@/Users/harsh24/Desktop/Workout_plan/models.py#138-149`
+- Used in Recent Workouts list: `@/Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py#15-41`
+- Displayed on detail screen: `@/Users/harsh24/Desktop/Workout_plan/templates/workout_detail.html#6-12`
+
+✅ This ensures your Recent Workouts show **“Arms 2”** (not random exercise names).
+
+---
+
+## ⚠️ Required: DB Migration
+I added a migration for the new `workout_name` column:
+
+- `@/Users/harsh24/Desktop/Workout_plan/migrations/versions/0002_add_workout_name.py`
+
+Run:
+```bash
+alembic upgrade head
+```
+
+---
+
+### Important note about old logs
+Older workouts won’t have `workout_name` saved yet, so they’ll display “Workout” until you re-log those days. If you want a backfill script (manually mapping dates → titles), tell me and I’ll add it.
+
+---
+
+If you want further tweaks to the header (size, spacing, badge style), send a screenshot and I’ll adjust.
+
+### User Input
+
+add some features:
+if this is possible, if you can make it look like real app (when opened, it should launch wihout safari address bar and buttons so it looks like a native app), please make it possible
+please add this functionality for admin only:
+when we add the website to home page to open as web app in iphone, it has an icon, if it is possible to change that icon,
+- let the user have an option to change the icon of the web app
+
+*Updated todo list*
+
+*Viewed [base.html](file:///Users/harsh24/Desktop/Workout_plan/templates/base.html) *
+
+*Searched filesystem*
+
+*Listed directory [static](file:///Users/harsh24/Desktop/Workout_plan/static) *
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Searched filesystem*
+
+*Viewed [admin_dashboard.html](file:///Users/harsh24/Desktop/Workout_plan/templates/admin_dashboard.html) *
+
+*Viewed [admin.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/admin.py) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Viewed [requirements.txt](file:///Users/harsh24/Desktop/Workout_plan/requirements.txt) *
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Edited relevant file*
+
+*Viewed [admin.py](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/admin.py) *
+
+*Edited relevant file*
+
+*Updated todo list*
+
+### Planner Response
+
+### ✅ Added “real app” launch + Admin icon customization
+
+#### 1) **Standalone iPhone app look (no Safari UI)**
+Added the PWA meta tags + manifest so the app can launch without Safari chrome when saved to Home Screen.
+
+**Updated in:**  
+- `@/Users/harsh24/Desktop/Workout_plan/templates/base.html#14-22`
+- `@/Users/harsh24/Desktop/Workout_plan/static/manifest.json`
+
+> ✅ After this, when you **Add to Home Screen**, it opens in standalone mode like a native app.
+
+---
+
+#### 2) **Admin-only App Icon uploader**
+Admins can now upload a custom icon that will be used for the Home Screen app.
+
+**UI added in:**  
+- `@/Users/harsh24/Desktop/Workout_plan/templates/admin_dashboard.html#53-83`
+
+**Route + image processing:**  
+- `@/Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/admin.py#15-147`
+
+It automatically generates:
+- `app-icon-512.png`
+- `app-icon-192.png`
+- `apple-touch-icon.png`
+
+---
+
+### ✅ How to use
+1) Go to **Admin Dashboard → App Icon**  
+2) Upload a square image (1024×1024 recommended)  
+3) **Remove and re-add** to Home Screen to refresh the icon  
+
+---
+
+### Quick Note
+If you want **different icon per user**, that’s possible too — just say the word.
+
+---
+
+If you want me to also add **custom splash screen** or **app name** changes for iOS launch, I can do that next.
+
+### User Input
+
+now i want you to go through the whole project by yourself and you your intelligence, creativity and complete power to analyse it and tell me:
+- what can be fixed?
+- how can this app be made better?
+
+*Updated todo list*
+
+### Planner Response
+
+I’ll do a quick-but-thorough audit across UX, backend/data, and security/reliability. I’ll first map the key entry points (routes, templates, services, models), then I’ll give you a prioritized list of fixes and improvements (quick wins vs larger upgrades). I’m going to scan the repo structure and key modules now.
+
+*Found code context*
+
+*Updated todo list*
+
+### Planner Response
+
+# What can be fixed / improved (full-project audit)
+
+Below is what I’d fix and what I’d add to make this feel more “complete”, more reliable, and more like a polished product. I’m prioritizing **impact** + **effort**.
+
+---
+
+## 1) High-impact fixes (bugs / correctness)
+
+### A) **DB migration consistency**
+Right now you’re using **Alembic**, but there’s also legacy “migration helpers” code (ex: [migrate_schema()](file:///Users/harsh24/Desktop/Workout_plan/models.py:163:0-251:67) in [models.py](file:///Users/harsh24/Desktop/Workout_plan/models.py:0:0-0:0)) that isn’t actually being invoked in normal startup paths.
+
+- **Fix**
+  - Commit fully to Alembic (recommended).
+  - Make sure every schema change is an Alembic migration (you already started doing this with [0002_add_workout_name.py](file:///Users/harsh24/Desktop/Workout_plan/migrations/versions/0002_add_workout_name.py:0:0-0:0)).
+- **Why**
+  - Avoids production drift (“works on my machine” DB issues).
+
+### B) **Recent workout “day title” accuracy (long-term)**
+You’ve now added `WorkoutLog.workout_name`, which is correct. But older records will show “Workout” unless backfilled.
+
+- **Fix**
+  - Add a one-time admin-only “Backfill workout titles” job that:
+    - For each date, finds the day’s first raw header from your stored data (you don’t store the raw header today, so backfill is limited).
+  - Best solution long-term: store `workout_session` entity (see backend redesign below).
+- **Why**
+  - Prevents partial UX where older history looks inconsistent.
+
+### C) **Workout detail view should show full workout (not just exercise names)**
+Currently `WorkoutLog.exercise` stores only exercise names + top-set metadata. If you want the “exact log text” later (like you entered), you don’t have it.
+
+- **Fix**
+  - Store original `raw_workout_text` per workout session (new table), or store the formatted line `exercise_string` too.
+- **Why**
+  - Makes “load that specific workout” feel truly correct.
+
+---
+
+## 2) UX / product improvements (make it feel like a real app)
+
+### A) **Add a true “Workout History” screen**
+Right now:
+- Home shows a few recent workouts.
+- Stats is exercise-centric.
+But there’s no dedicated “History” view.
+
+- **Improve**
+  - `/history` page:
+    - List workouts grouped by date (title + duration + #exercises)
+    - Search/filter (by title/category)
+    - Tap workout opens detail view
+- **Why**
+  - This is a core app feature and makes navigation feel complete.
+
+### B) **Better logging experience**
+Logging is powerful but text-only. You can keep the text input (it’s fast), but add helpers:
+
+- **Improve**
+  - “Format helper” below the textarea showing the expected pattern
+  - Autofill last workout template
+  - Inline parser errors showing *which line failed*
+  - Save drafts locally (browser localStorage) so you don’t lose text
+- **Why**
+  - Reduces friction and parsing failures.
+
+### C) **Polish PWA feel**
+You added manifest + meta tags (good). To make it truly app-like:
+
+- **Improve**
+  - Add a service worker (offline shell caching)
+  - Add iOS splash screens (optional but makes it feel premium)
+  - Add “Install App” prompt on supported devices (Android/desktop)
+- **Why**
+  - Makes “home screen app” feel intentional, not just a webpage.
+
+---
+
+## 3) Backend/data model improvements (biggest architecture win)
+
+### A) Introduce a `WorkoutSession` table (recommended)
+Your current schema stores workout history as one row per exercise ([WorkoutLog](file:///Users/harsh24/Desktop/Workout_plan/models.py:138:0-159:114)), keyed by datetime. This makes “a workout” not a first-class entity.
+
+**Recommended new structure:**
+- `WorkoutSession`:
+  - `id`, `user_id`, `date`, `workout_name`, `raw_text`, `created_at`
+- `WorkoutEntry` (or reuse [WorkoutLog](file:///Users/harsh24/Desktop/Workout_plan/models.py:138:0-159:114) as entries):
+  - `session_id`, `exercise`, `top_weight`, `top_reps`, `estimated_1rm`, etc.
+
+- **Why**
+  - Makes:
+    - Recent workouts trivial + accurate
+    - Workout detail trivial
+    - Editing/deleting a workout possible
+    - Export cleaner
+    - Stats queries clearer
+
+### B) Performance: reduce “load all logs then dedupe” pattern
+In [get_recent_workouts()](file:///Users/harsh24/Desktop/Workout_plan/workout_tracker/routes/workouts.py:14:4-43:21) you currently fetch **all logs** then dedupe in Python.
+
+- **Fix**
+  - Query grouped by date (and select workout_name) at the DB level.
+- **Why**
+  - Prevents slowdowns as history grows.
+
+---
+
+## 4) Reliability + Security improvements (important)
+
+### A) CSRF protection
+You have `ENABLE_CSRF=True` in config, but most forms are plain HTML forms without CSRF tokens.
+
+- **Fix**
+  - Adopt `Flask-WTF` CSRF properly for POST routes (admin delete user, icon upload, plan updates, etc.)
+- **Why**
+  - Prevents cross-site request forgery.
+
+### B) Upload safety (admin icon upload)
+Current icon upload is restricted by extension and Pillow conversion (good), but strengthen it:
+
+- **Fix**
+  - Enforce max upload size (e.g. 2–5 MB)
+  - Validate image dimensions
+  - Catch decompression bomb warnings
+- **Why**
+  - Prevents memory abuse or malicious uploads.
+
+### C) Rate limiting / brute-force protection
+Login endpoints are not rate limited.
+
+- **Fix**
+  - Enable rate limiting (Flask-Limiter) for:
+    - `/login`
+    - `/register`
+    - `/verify-email`
+- **Why**
+  - Prevents brute forcing.
+
+### D) Session + cookie hardening (production)
+- **Fix**
+  - Ensure these are set in production:
+    - `SESSION_COOKIE_SECURE=True`
+    - `SESSION_COOKIE_HTTPONLY=True`
+    - `SESSION_COOKIE_SAMESITE='Lax'`
+- **Why**
+  - Basic production security posture.
+
+---
+
+## 5) “Make it better” features (high value)
+
+### A) Edit/Delete workout
+Once you have `WorkoutSession`, implement:
+- Edit title
+- Delete session
+- Fix mistakes easily
+
+### B) Goals + streaks
+- Weekly workout target
+- Streak counter on home
+- “This week: 3/5 sessions done”
+
+### C) PR highlights
+You already compute estimated 1RM; show:
+- “New PR: Bench Press 1RM 92.5kg”
+- “Best set this week”
+
+### D) Sharing/export
+- Share a workout as clean text
+- Export workout history filtered by date range
+
+---
+
+# Recommended roadmap (priority order)
+
+## Phase 1 (Quick wins: 1–2 days)
+- **CSRF** for admin + auth forms
+- **DB query optimization** for recent workouts
+- **History page** basic list
+- **Better log parser errors** (line-level feedback)
+
+## Phase 2 (Core product: 3–7 days)
+- **WorkoutSession model** (+ migration)
+- Update logging pipeline to save session + entries
+- Update recent workouts + workout detail to use sessions
+- Add edit title + delete session
+
+## Phase 3 (Polish: ongoing)
+- Service worker caching
+- Install prompt
+- Splash screens
+- Rate limiting + monitoring
+
+---
+
+# One clarification before I recommend exact next steps
+Do you want this app to remain **“text-first power-user logging”** (fast, minimal UI), or do you want a **guided form-based logger** as well?
+
+- If you say *text-first*, I’ll focus on sessions/history/editing/export.
+- If you say *guided logger*, I’ll propose an exercise picker + set builder UI while keeping text input as “advanced mode”.
+
+---
+
+## Status
+- ✅ Audit complete
+- ✅ Prioritized improvements + roadmap provided

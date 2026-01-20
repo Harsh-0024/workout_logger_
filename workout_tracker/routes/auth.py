@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import login_required, login_user, logout_user, current_user
@@ -6,7 +6,9 @@ from flask_login import login_required, login_user, logout_user, current_user
 from config import Config
 from models import Session, User
 from services.auth import AuthService, AuthenticationError
+from utils.errors import ValidationError
 from utils.logger import logger
+from utils.validators import sanitize_text_input, validate_username
 
 from .decorators import dev_only, require_admin
 
@@ -189,6 +191,81 @@ def register_auth_routes(app, email_service):
         flash("Logged out successfully.", "info")
         return redirect(url_for('login'))
 
+    @login_required
+    def user_settings():
+        user = current_user
+
+        if request.method == 'POST':
+            form_type = request.form.get('form_type')
+
+            try:
+                if form_type == 'profile':
+                    username = sanitize_text_input(request.form.get('username', ''), max_length=30)
+                    email = sanitize_text_input(request.form.get('email', ''), max_length=255)
+
+                    if not username or not email:
+                        flash("Username and email are required.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    username = validate_username(username)
+
+                    existing_username = (
+                        Session.query(User)
+                        .filter(User.username == username, User.id != user.id)
+                        .first()
+                    )
+                    if existing_username:
+                        flash("That username is already taken.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    existing_email = (
+                        Session.query(User)
+                        .filter(User.email == email.lower(), User.id != user.id)
+                        .first()
+                    )
+                    if existing_email:
+                        flash("That email is already in use.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    user.username = username
+                    user.email = email.lower()
+                    user.updated_at = datetime.now()
+                    Session.commit()
+
+                    flash("Profile updated successfully!", "success")
+                    return redirect(url_for('user_settings'))
+
+                if form_type == 'password':
+                    current_password = request.form.get('current_password', '')
+                    new_password = request.form.get('new_password', '')
+                    confirm_password = request.form.get('confirm_password', '')
+
+                    if not current_password or not new_password:
+                        flash("Please fill in all password fields.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    if new_password != confirm_password:
+                        flash("New password and confirmation do not match.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    AuthService.change_password(user.id, current_password, new_password)
+                    flash("Password updated successfully!", "success")
+                    return redirect(url_for('user_settings'))
+
+                flash("Invalid settings request.", "error")
+                return redirect(url_for('user_settings'))
+            except (AuthenticationError, ValidationError) as e:
+                Session.rollback()
+                flash(str(e), "error")
+                return redirect(url_for('user_settings'))
+            except Exception as e:
+                Session.rollback()
+                logger.error(f"Settings update error: {e}", exc_info=True)
+                flash("Failed to update settings. Please try again.", "error")
+                return redirect(url_for('user_settings'))
+
+        return render_template('settings.html', user=user)
+
     @dev_only
     @require_admin
     def internal_db_fix():
@@ -204,4 +281,5 @@ def register_auth_routes(app, email_service):
     app.add_url_rule('/verify-email', endpoint='verify_email', view_func=verify_email, methods=['GET', 'POST'])
     app.add_url_rule('/resend-verification', endpoint='resend_verification', view_func=resend_verification, methods=['POST'])
     app.add_url_rule('/logout', endpoint='logout', view_func=logout, methods=['GET'])
+    app.add_url_rule('/settings', endpoint='user_settings', view_func=user_settings, methods=['GET', 'POST'])
     app.add_url_rule('/internal_db_fix', endpoint='internal_db_fix', view_func=internal_db_fix, methods=['GET'])

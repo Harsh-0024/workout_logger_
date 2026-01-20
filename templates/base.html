@@ -1201,6 +1201,10 @@
                             <span class="d-none d-sm-inline ms-2">Admin</span>
                         </a>
                     {% endif %}
+                    <a class="nav-link" href="{{ url_for('user_settings') }}">
+                        <i class="bi bi-gear"></i>
+                        <span class="d-none d-sm-inline ms-2">Settings</span>
+                    </a>
                     <a class="nav-link" href="{{ url_for('logout') }}">
                         <i class="bi bi-box-arrow-right"></i>
                         <span class="d-none d-sm-inline ms-2">Logout</span>
