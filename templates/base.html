@@ -717,37 +717,61 @@
                 margin-bottom: var(--space-sm);
             }
 
-            /* Mobile Navigation */
-            .navbar {
-                padding: var(--space-md) 0;
+            /* Mobile Header */
+            .mobile-header {
+                background: rgba(0, 0, 0, 0.95);
+                border-bottom: 1px solid var(--border-subtle);
+                position: sticky;
+                top: 0;
+                z-index: 100;
             }
 
-            .navbar-nav {
-                flex-direction: row;
-                justify-content: space-around;
-                width: 100%;
-                gap: 0;
+            /* Mobile Bottom Navigation */
+            body {
+                padding-bottom: 80px;
             }
 
-            .nav-link {
-                font-size: 0.75rem;
-                padding: 10px 8px !important;
-                flex: 1;
-                text-align: center;
-                min-height: 44px;
+            .mobile-bottom-nav {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                background: rgba(0, 0, 0, 0.95);
+                border-top: 1px solid var(--border-subtle);
+                padding: 8px 0 calc(8px + env(safe-area-inset-bottom));
+                box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
+                z-index: 100;
+            }
+
+            .mobile-nav-item {
                 display: flex;
                 flex-direction: column;
                 align-items: center;
                 justify-content: center;
                 gap: 4px;
+                padding: 8px 12px;
+                color: var(--text-muted);
+                text-decoration: none;
+                transition: all var(--transition-base);
+                border-radius: 12px;
+                min-width: 70px;
             }
 
-            .nav-link i {
-                font-size: 1.1rem;
+            .mobile-nav-item i {
+                font-size: 1.5rem;
             }
 
-            .nav-link::after {
-                display: none; /* Hide underline on mobile */
+            .mobile-nav-item span {
+                font-size: 0.7rem;
+                font-weight: 500;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+            }
+
+            .mobile-nav-item:hover,
+            .mobile-nav-item:active {
+                color: var(--gold-primary);
+                background: rgba(212, 175, 55, 0.1);
             }
 
             /* Mobile Stat Cards */
@@ -1031,7 +1055,34 @@
     </style>
 </head>
 <body>
-    <nav class="navbar navbar-expand">
+    <!-- Mobile Top Header -->
+    <div class="mobile-header d-sm-none">
+        <div class="container d-flex justify-content-between align-items-center gap-2" style="padding: 16px;">
+            <h1 class="mb-0" style="font-size: 1.25rem; font-weight: 700; background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-bright) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.5px;">Workout Tracker</h1>
+            <div class="d-flex gap-2">
+            {% if current_user.is_authenticated %}
+                {% if current_user.is_admin() %}
+                    <a href="{{ url_for('admin_dashboard') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
+                        <i class="bi bi-shield-lock me-1"></i>Admin
+                    </a>
+                {% endif %}
+                <a href="{{ url_for('logout') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
+                    <i class="bi bi-box-arrow-right me-1"></i>Logout
+                </a>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
+                    <i class="bi bi-person me-1"></i>Login
+                </a>
+                <a href="{{ url_for('register') }}" class="btn btn-sm" style="padding: 8px 16px; font-size: 0.8rem; background: rgba(212, 175, 55, 0.1); border: 1px solid var(--border-gold); color: var(--gold-primary);">
+                    <i class="bi bi-person-plus me-1"></i>Register
+                </a>
+            {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Desktop Navigation -->
+    <nav class="navbar navbar-expand d-none d-sm-block">
         <div class="container">
             <div class="navbar-nav mx-auto gap-2 gap-md-4">
                 <a class="nav-link" href="/">
@@ -1073,6 +1124,30 @@
                         <span class="d-none d-sm-inline ms-2">Register</span>
                     </a>
                 {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <!-- Mobile Bottom Navigation -->
+    <nav class="mobile-bottom-nav d-sm-none">
+        <div class="container">
+            <div class="d-flex justify-content-around align-items-center">
+                <a class="mobile-nav-item" href="/">
+                    <i class="bi bi-house-door"></i>
+                    <span>Home</span>
+                </a>
+                <a class="mobile-nav-item" href="/log">
+                    <i class="bi bi-plus-circle"></i>
+                    <span>Log</span>
+                </a>
+                <a class="mobile-nav-item" href="/retrieve/categories">
+                    <i class="bi bi-list-ul"></i>
+                    <span>Retrieve</span>
+                </a>
+                <a class="mobile-nav-item" href="/stats">
+                    <i class="bi bi-graph-up-arrow"></i>
+                    <span>Stats</span>
+                </a>
             </div>
         </div>
     </nav>
