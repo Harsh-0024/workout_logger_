@@ -1,9 +1,9 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="row g-3 g-md-4 align-items-stretch">
+<div class="row g-3 g-md-4 align-items-start">
     <!-- Main Dashboard -->
-    <div class="col-12 col-lg-8 d-flex">
-        <div class="card w-100 h-100 dashboard-main-card">
+    <div class="col-12 col-lg-8">
+        <div class="card w-100 dashboard-main-card">
             <div class="text-center mb-4 mb-md-5">
                 <div class="mb-2 mb-md-3">
                     <i class="bi bi-person-circle" style="font-size: clamp(3rem, 8vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
@@ -41,9 +41,9 @@
     </div>
 
     <!-- Recent Workouts Panel -->
-    <div class="col-12 col-lg-4 d-flex">
+    <div class="col-12 col-lg-4">
         {% if recent_workouts %}
-        <div class="card w-100 h-100 d-flex flex-column recent-workouts-card">
+        <div class="card w-100 d-flex flex-column recent-workouts-card">
             <div class="d-flex align-items-center mb-3 mb-md-4">
                 <i class="bi bi-clock-history me-2 text-gold" style="font-size: clamp(1.25rem, 4vw, 1.5rem);"></i>
                 <h5 class="mb-0 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">Recent Workouts</h5>
@@ -118,6 +118,34 @@
 
         input.addEventListener('input', applyFilter);
         applyFilter();
+    })();
+</script>
+
+<script>
+    (function() {
+        const mainCard = document.querySelector('.dashboard-main-card');
+        const recentCard = document.querySelector('.recent-workouts-card');
+        if (!mainCard || !recentCard) return;
+
+        const syncHeight = () => {
+            if (window.innerWidth >= 992) {
+                const height = mainCard.offsetHeight;
+                if (height) {
+                    recentCard.style.height = `${height}px`;
+                }
+            } else {
+                recentCard.style.height = 'auto';
+            }
+        };
+
+        if ('ResizeObserver' in window) {
+            const observer = new ResizeObserver(syncHeight);
+            observer.observe(mainCard);
+        }
+        
+        window.addEventListener('resize', syncHeight);
+        window.addEventListener('load', syncHeight);
+        setTimeout(syncHeight, 100);
     })();
 </script>
 {% endblock %}
