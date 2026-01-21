@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+
+{% block title %}Workout History - Workout Tracker{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-8">
+        <div class="card">
+            <div class="text-center mb-4 mb-md-5">
+                <div class="mb-3">
+                    <i class="bi bi-journal-text" style="font-size: clamp(2.5rem, 8vw, 3.25rem); color: var(--gold-primary); opacity: 0.6;"></i>
+                </div>
+                <h2 class="fw-bold mb-2">Workout History</h2>
+                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">
+                    All logged sessions for {{ user }}
+                </p>
+            </div>
+
+            <div class="mb-3">
+                <input id="historySearch" type="text" class="form-control" placeholder="Search by date, workout name, exercise (comma-separated)" style="font-size: var(--fs-sm);">
+            </div>
+
+            <div id="historyEmpty" class="text-muted text-center py-4" style="display: none; font-size: var(--fs-sm);">No results.</div>
+
+            <div id="historyList">
+                {% for workout in workouts %}
+                <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="recent-workout-item text-decoration-none history-item" style="display: block; transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d/%m/%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <span class="text-white fw-semibold d-block" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ workout.title }}</span>
+                            <small class="text-muted" style="font-size: var(--fs-xs);">{{ workout.date | format_date }} • {{ workout.date.strftime('%A') }}</small>
+                        </div>
+                        <i class="bi bi-chevron-right text-muted"></i>
+                    </div>
+                    {% if workout.exercises %}
+                    <div class="mt-2 text-muted" style="font-size: var(--fs-xs);">
+                        {{ workout.exercises }}
+                    </div>
+                    {% endif %}
+                </a>
+                {% endfor %}
+            </div>
+
+            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
+                <a href="{{ url_for('user_dashboard', username=current_user.username) }}" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const input = document.getElementById('historySearch');
+        const list = document.getElementById('historyList');
+        const empty = document.getElementById('historyEmpty');
+        if (!input || !list) return;
+
+        const items = Array.from(list.querySelectorAll('.history-item'));
+
+        const applyFilter = () => {
+            const q = (input.value || '').toLowerCase().trim();
+            const terms = q
+                ? q.split(',').map(t => t.trim()).filter(Boolean)
+                : [];
+
+            let shown = 0;
+            for (const el of items) {
+                const hay = (el.getAttribute('data-search') || '');
+                const match = terms.length === 0 || terms.some(t => hay.includes(t));
+                el.style.display = match ? 'block' : 'none';
+                if (match) shown++;
+            }
+
+            if (empty) empty.style.display = shown === 0 ? 'block' : 'none';
+        };
+
+        input.addEventListener('input', applyFilter);
+        applyFilter();
+    })();
+</script>
+{% endblock %}

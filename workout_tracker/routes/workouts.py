@@ -56,7 +56,7 @@ def register_workout_routes(app):
                     'title': item['title'],
                     'exercises': ", ".join(sorted(item['exercises'])),
                 })
-                if len(workouts) >= limit:
+                if limit is not None and len(workouts) >= limit:
                     break
 
             return workouts
@@ -171,6 +171,22 @@ def register_workout_routes(app):
         except Exception as e:
             logger.error(f"Error viewing workout: {e}", exc_info=True)
             flash("Error loading workout.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+
+    @login_required
+    def workout_history():
+        user = current_user
+
+        try:
+            workouts = get_recent_workouts(user, limit=None)
+            return render_template(
+                'workout_history.html',
+                user=user.username.title(),
+                workouts=workouts,
+            )
+        except Exception as e:
+            logger.error(f"Error loading workout history: {e}", exc_info=True)
+            flash("Error loading workout history.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
 
     @login_required
@@ -352,6 +368,7 @@ def register_workout_routes(app):
             return redirect(url_for('log_workout'))
 
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
+    app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])
     app.add_url_rule(
         '/<username>',
         endpoint='user_dashboard',
