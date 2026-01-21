@@ -4,6 +4,8 @@ __pycache__/
 *$py.class
 *.so
 .Python
+workout_logger_ _ Railway_files
+DB_Update
 build/
 develop-eggs/
 dist/

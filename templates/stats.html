@@ -32,8 +32,13 @@
                 </div>
             </div>
 
+            <!-- Chart Container -->
+            <div class="chart-container" style="position: relative; height: clamp(300px, 50vh, 500px); width:100%; min-height: 300px;">
+                <canvas id="progressChart"></canvas>
+            </div>
+
             <!-- Stats Summary -->
-            <div id="statsSummary" class="row g-2 g-md-3 mb-3 mb-md-4" style="display: none;">
+            <div id="statsSummary" class="row g-2 g-md-3 mt-4 mt-md-5 mb-3 mb-md-4" style="display: none;">
                 <div class="col-6 col-md-3">
                     <div class="stat-card">
                         <div class="stat-value" id="current1RM">-</div>
@@ -58,11 +63,6 @@
                         <div class="stat-label">% Change</div>
                     </div>
                 </div>
-            </div>
-
-            <!-- Chart Container -->
-            <div class="chart-container" style="position: relative; height: clamp(300px, 50vh, 500px); width:100%; min-height: 300px;">
-                <canvas id="progressChart"></canvas>
             </div>
 
             <div class="text-center mt-5 pt-4 border-top" style="border-color: var(--border-subtle) !important;">
