@@ -641,6 +641,29 @@
             border-radius: 999px;
         }
 
+        /* --- WORKOUT HISTORY PAGE --- */
+        .workout-history-card {
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .workout-history-list {
+            overflow-y: auto;
+            padding-right: 4px;
+            flex: 1;
+        }
+
+        .workout-history-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .workout-history-list::-webkit-scrollbar-thumb {
+            background: rgba(212, 175, 55, 0.35);
+            border-radius: 999px;
+        }
+
         .recent-workout-item {
             padding: var(--space-md) var(--space-lg);
             background: rgba(255, 255, 255, 0.02);
