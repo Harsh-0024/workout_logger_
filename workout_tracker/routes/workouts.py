@@ -27,7 +27,7 @@ def register_workout_routes(app):
                 lines.append(log.exercise)
         return "\n".join(lines)
 
-    def get_recent_workouts(user, limit=5):
+    def get_recent_workouts(user, limit=50):
         try:
             logs = (
                 Session.query(WorkoutLog)
@@ -37,19 +37,25 @@ def register_workout_routes(app):
             )
 
             workouts = []
-            seen_dates = set()
+            by_date = {}
             for log in logs:
                 date_key = log.date.date() if isinstance(log.date, datetime) else log.date
-                if date_key in seen_dates:
-                    continue
 
-                title = log.workout_name or "Workout"
+                if date_key not in by_date:
+                    by_date[date_key] = {
+                        'date': log.date,
+                        'title': log.workout_name or "Workout",
+                        'exercises': set(),
+                    }
+                by_date[date_key]['exercises'].add(log.exercise)
+
+            for date_key in sorted(by_date.keys(), reverse=True):
+                item = by_date[date_key]
                 workouts.append({
-                    'date': log.date,
-                    'title': title
+                    'date': item['date'],
+                    'title': item['title'],
+                    'exercises': ", ".join(sorted(item['exercises'])),
                 })
-                seen_dates.add(date_key)
-
                 if len(workouts) >= limit:
                     break
 
@@ -114,14 +120,12 @@ def register_workout_routes(app):
                     return redirect(url_for('user_dashboard', username=current_user.username))
                 raise UserNotFoundError("User not found")
 
-            recent_workouts = get_recent_workouts(user, limit=5)
-            stats = get_workout_stats(user)
+            recent_workouts = get_recent_workouts(user, limit=250)
 
             return render_template(
                 'index.html',
                 user=user.username.title(),
                 recent_workouts=recent_workouts,
-                stats=stats,
             )
         except (ValidationError, UserNotFoundError) as e:
             flash(str(e), "error")
@@ -270,6 +274,39 @@ def register_workout_routes(app):
             return redirect(url_for('edit_workout', date_str=date_str))
 
     @login_required
+    def delete_workout(date_str):
+        user = current_user
+
+        try:
+            workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            start_dt = datetime.combine(workout_date, datetime.min.time())
+            end_dt = start_dt + timedelta(days=1)
+
+            deleted = (
+                Session.query(WorkoutLog)
+                .filter_by(user_id=user.id)
+                .filter(WorkoutLog.date >= start_dt)
+                .filter(WorkoutLog.date < end_dt)
+                .delete(synchronize_session=False)
+            )
+            Session.commit()
+
+            if deleted:
+                flash("Workout day deleted successfully.", "success")
+            else:
+                flash("Workout not found.", "error")
+
+            return redirect(url_for('user_dashboard', username=user.username))
+        except ValueError:
+            flash("Invalid date format.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Error deleting workout: {e}", exc_info=True)
+            flash("Error deleting workout.", "error")
+            return redirect(url_for('edit_workout', date_str=date_str))
+
+    @login_required
     def log_workout():
         user = current_user
 
@@ -323,4 +360,5 @@ def register_workout_routes(app):
     )
     app.add_url_rule('/workout/<date_str>', endpoint='view_workout', view_func=view_workout, methods=['GET'])
     app.add_url_rule('/workout/<date_str>/edit', endpoint='edit_workout', view_func=edit_workout, methods=['GET', 'POST'])
+    app.add_url_rule('/workout/<date_str>/delete', endpoint='delete_workout', view_func=delete_workout, methods=['POST'])
     app.add_url_rule('/log', endpoint='log_workout', view_func=log_workout, methods=['GET', 'POST'])

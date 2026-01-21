@@ -96,13 +96,15 @@ def register_auth_routes(app, email_service):
         return render_template('login.html')
 
     def verify_email():
+        redirect_username = None
         if current_user.is_authenticated:
-            return redirect(url_for('user_dashboard', username=current_user.username))
-
-        user_id = session.get('pending_verification_user_id')
-        if not user_id:
-            flash("No pending verification found. Please register first.", "error")
-            return redirect(url_for('register'))
+            user_id = current_user.id
+            redirect_username = current_user.username
+        else:
+            user_id = session.get('pending_verification_user_id')
+            if not user_id:
+                flash("No pending verification found.", "error")
+                return redirect(url_for('login'))
 
         user = Session.query(User).get(user_id)
         if not user:
@@ -113,7 +115,9 @@ def register_auth_routes(app, email_service):
         user_username = user.username
 
         if user.is_verified:
-            flash("Email already verified. Please log in.", "info")
+            flash("Email already verified.", "info")
+            if current_user.is_authenticated:
+                return redirect(url_for('user_dashboard', username=current_user.username))
             return redirect(url_for('login'))
 
         if request.method == 'POST':
@@ -121,11 +125,18 @@ def register_auth_routes(app, email_service):
                 verification_code = request.form.get('verification_code', '').strip()
 
                 if AuthService.verify_email(user_id, verification_code):
-                    email_service.send_welcome_email(user_email, user_username)
+                    if not current_user.is_authenticated:
+                        try:
+                            email_service.send_welcome_email(user_email, user_username)
+                        except Exception as exc:
+                            logger.error(f"Welcome email failed: {exc}", exc_info=True)
 
                     session.pop('pending_verification_user_id', None)
 
-                    Session.remove()
+                    if current_user.is_authenticated:
+                        flash("Email verified successfully!", "success")
+                        return redirect(url_for('user_dashboard', username=redirect_username))
+
                     verified_user = Session.query(User).get(user_id)
                     if verified_user:
                         login_user(
@@ -150,10 +161,13 @@ def register_auth_routes(app, email_service):
         return render_template('verify_email.html', email=user_email)
 
     def resend_verification():
-        user_id = session.get('pending_verification_user_id')
-        if not user_id:
-            flash("No pending verification found.", "error")
-            return redirect(url_for('register'))
+        if current_user.is_authenticated:
+            user_id = current_user.id
+        else:
+            user_id = session.get('pending_verification_user_id')
+            if not user_id:
+                flash("No pending verification found.", "error")
+                return redirect(url_for('login'))
 
         try:
             user = Session.query(User).get(user_id)
@@ -235,10 +249,33 @@ def register_auth_routes(app, email_service):
                         flash("That email is already in use.", "error")
                         return redirect(url_for('user_settings'))
 
+                    email = email.lower()
+                    email_changed = email != (user.email or '').lower()
+
                     user.username = username
-                    user.email = email.lower()
+                    user.email = email
                     user.updated_at = datetime.now()
+
+                    if email_changed:
+                        verification_code = AuthService.generate_verification_code()
+                        user.is_verified = False
+                        user.verification_token = verification_code
+                        user.verification_token_expires = datetime.now() + timedelta(hours=Config.VERIFICATION_TOKEN_EXPIRY)
+
                     Session.commit()
+
+                    if email_changed:
+                        session['pending_verification_user_id'] = user.id
+                        email_sent = email_service.send_verification_email(
+                            email=user.email,
+                            username=user.username,
+                            verification_code=verification_code,
+                        )
+                        if email_sent:
+                            flash("Email updated. Please verify your new email address.", "warning")
+                        else:
+                            flash("Email updated, but verification email could not be sent.", "warning")
+                        return redirect(url_for('verify_email'))
 
                     flash("Profile updated successfully!", "success")
                     return redirect(url_for('user_settings'))
