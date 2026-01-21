@@ -56,11 +56,20 @@ class Config:
     # Authentication
     REMEMBER_COOKIE_DURATION = 30  # days
     VERIFICATION_TOKEN_EXPIRY = 24  # hours
+    OTP_TOKEN_EXPIRY_MINUTES = int(os.environ.get('OTP_TOKEN_EXPIRY_MINUTES', 10))
 
     # Admin bootstrap (create/update admin user on startup if password is provided)
     ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
     ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD')
     ADMIN_EMAIL = os.environ.get('ADMIN_EMAIL', 'admin@workouttracker.local')
+    ADMIN_EMAILS = os.environ.get('ADMIN_EMAILS', '')
+    ADMIN_EMAIL_ALLOWLIST = {
+        email.strip().lower()
+        for email in ADMIN_EMAILS.split(',')
+        if email.strip()
+    }
+    if ADMIN_EMAIL:
+        ADMIN_EMAIL_ALLOWLIST.add(ADMIN_EMAIL.lower())
     
     @staticmethod
     def get_database_url() -> str:

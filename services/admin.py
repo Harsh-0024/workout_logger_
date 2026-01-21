@@ -53,6 +53,132 @@ class AdminService:
             return []
         finally:
             session.close()
+
+    @staticmethod
+    def cleanup_duplicate_users(admin_user_id: int) -> Dict:
+        """Merge duplicate users by email, keeping the account with logs."""
+        session = Session()
+        try:
+            admin = session.query(User).get(admin_user_id)
+            if not admin or not admin.is_admin():
+                raise AdminError("Unauthorized: Only admins can clean up users")
+
+            users = session.query(User).filter(User.email.isnot(None)).all()
+            grouped = {}
+            for user in users:
+                key = (user.email or '').strip().lower()
+                if not key:
+                    continue
+                grouped.setdefault(key, []).append(user)
+
+            summary = {
+                'groups': 0,
+                'kept': 0,
+                'deleted': 0,
+                'logs_moved': 0,
+            }
+
+            for _, group in grouped.items():
+                if len(group) < 2:
+                    continue
+
+                summary['groups'] += 1
+                log_counts = {
+                    user.id: session.query(WorkoutLog).filter_by(user_id=user.id).count()
+                    for user in group
+                }
+
+                users_with_logs = [u for u in group if log_counts.get(u.id, 0) > 0]
+                if users_with_logs:
+                    keep_user = max(
+                        users_with_logs,
+                        key=lambda u: (log_counts.get(u.id, 0), u.updated_at or u.created_at or datetime.min),
+                    )
+                else:
+                    keep_user = max(
+                        group,
+                        key=lambda u: (u.updated_at or u.created_at or datetime.min),
+                    )
+
+                summary['kept'] += 1
+
+                for dup in group:
+                    if dup.id == keep_user.id:
+                        continue
+
+                    moved = log_counts.get(dup.id, 0)
+                    if moved:
+                        session.query(WorkoutLog).filter_by(user_id=dup.id).update(
+                            {WorkoutLog.user_id: keep_user.id},
+                            synchronize_session=False,
+                        )
+                        summary['logs_moved'] += moved
+
+                    keep_plan = session.query(Plan).filter_by(user_id=keep_user.id).first()
+                    if not keep_plan:
+                        plan = session.query(Plan).filter_by(user_id=dup.id).first()
+                        if plan:
+                            plan.user_id = keep_user.id
+
+                    keep_rep = session.query(RepRange).filter_by(user_id=keep_user.id).first()
+                    if not keep_rep:
+                        rep_range = session.query(RepRange).filter_by(user_id=dup.id).first()
+                        if rep_range:
+                            rep_range.user_id = keep_user.id
+
+                    dup_lifts = session.query(Lift).filter(
+                        Lift.user_id == dup.id,
+                        Lift.best_string.isnot(None),
+                        Lift.best_string != '',
+                    ).all()
+                    for lift in dup_lifts:
+                        keep_lift = session.query(Lift).filter_by(
+                            user_id=keep_user.id,
+                            exercise=lift.exercise,
+                        ).first()
+                        if not keep_lift:
+                            lift.user_id = keep_user.id
+                            continue
+
+                        if not keep_lift.best_string or not keep_lift.best_string.strip():
+                            keep_lift.best_string = lift.best_string
+                            keep_lift.sets_json = lift.sets_json
+                            keep_lift.updated_at = lift.updated_at or datetime.now()
+                            continue
+
+                        keep_updated = keep_lift.updated_at or datetime.min
+                        dup_updated = lift.updated_at or datetime.min
+                        if dup_updated > keep_updated:
+                            keep_lift.best_string = lift.best_string
+                            keep_lift.sets_json = lift.sets_json
+                            keep_lift.updated_at = dup_updated
+
+                    session.query(WorkoutLog).filter_by(user_id=dup.id).delete(synchronize_session=False)
+                    session.query(Lift).filter(Lift.user_id == dup.id).delete(synchronize_session=False)
+                    session.query(Plan).filter(Plan.user_id == dup.id).delete(synchronize_session=False)
+                    session.query(RepRange).filter(RepRange.user_id == dup.id).delete(synchronize_session=False)
+                    session.query(User).filter(User.id == dup.id).delete(synchronize_session=False)
+                    summary['deleted'] += 1
+
+            session.commit()
+            logger.info(
+                "Duplicate cleanup finished: groups=%s kept=%s deleted=%s logs_moved=%s",
+                summary['groups'],
+                summary['kept'],
+                summary['deleted'],
+                summary['logs_moved'],
+            )
+            return summary
+
+        except AdminError:
+            session.rollback()
+            raise
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Duplicate cleanup failed: {e}", exc_info=True)
+            raise AdminError(f"Cleanup failed: {str(e)}")
+        finally:
+            session.close()
     
     @staticmethod
     def get_user_count() -> Dict[str, int]:

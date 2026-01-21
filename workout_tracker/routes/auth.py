@@ -4,7 +4,7 @@ from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import login_required, login_user, logout_user, current_user
 
 from config import Config
-from models import Session, User
+from models import Session, User, UserRole
 from services.auth import AuthService, AuthenticationError
 from utils.errors import ValidationError
 from utils.logger import logger
@@ -76,6 +76,14 @@ def register_auth_routes(app, email_service):
                     flash("Invalid username/email or password.", "error")
                     return render_template('login.html')
 
+                if user.email and user.email.lower() in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
+                    db_user = Session.query(User).get(user.id)
+                    if db_user and not db_user.is_admin():
+                        db_user.role = UserRole.ADMIN
+                        db_user.updated_at = datetime.now()
+                        Session.commit()
+                    user.role = UserRole.ADMIN
+
                 login_user(user, remember=remember_me, duration=timedelta(days=Config.REMEMBER_COOKIE_DURATION))
 
                 flash(f"Welcome back, {user.username.title()}!", "success")
@@ -94,6 +102,128 @@ def register_auth_routes(app, email_service):
                 return render_template('login.html')
 
         return render_template('login.html')
+
+    def login_otp_request():
+        if current_user.is_authenticated:
+            return redirect(url_for('user_dashboard', username=current_user.username))
+
+        if request.method == 'POST':
+            try:
+                identifier = request.form.get('username_or_email', '').strip()
+                otp_payload = AuthService.request_login_otp(identifier)
+
+                email_sent = email_service.send_otp_email(
+                    email=otp_payload['email'],
+                    username=otp_payload['username'],
+                    otp_code=otp_payload['otp_code'],
+                    purpose='login',
+                )
+
+                if not email_sent:
+                    flash("Unable to send login code. Please try again later.", "error")
+                    return render_template('request_otp.html')
+
+                session['pending_otp_user_id'] = otp_payload['id']
+                session['pending_otp_identifier'] = identifier
+                session['pending_otp_purpose'] = 'login'
+
+                flash("Login code sent! Check your email.", "success")
+                return redirect(url_for('verify_login_otp'))
+
+            except AuthenticationError as e:
+                flash(str(e), "error")
+            except Exception as e:
+                logger.error(f"OTP login request error: {e}", exc_info=True)
+                flash("An error occurred. Please try again.", "error")
+
+        return render_template('request_otp.html')
+
+    def verify_login_otp():
+        if current_user.is_authenticated:
+            return redirect(url_for('user_dashboard', username=current_user.username))
+
+        user_id = session.get('pending_otp_user_id')
+        if not user_id:
+            flash("No login code requested. Please request a new code.", "error")
+            return redirect(url_for('login_otp_request'))
+
+        user = Session.query(User).get(user_id)
+        if not user:
+            flash("User not found.", "error")
+            return redirect(url_for('login'))
+
+        if request.method == 'POST':
+            try:
+                otp_code = request.form.get('otp_code', '').strip()
+
+                if AuthService.verify_otp(user_id, otp_code, 'login', mark_verified=True):
+                    session.pop('pending_otp_user_id', None)
+                    session.pop('pending_otp_identifier', None)
+                    session.pop('pending_otp_purpose', None)
+
+                    verified_user = Session.query(User).get(user_id)
+                    if verified_user and verified_user.email:
+                        if verified_user.email.lower() in Config.ADMIN_EMAIL_ALLOWLIST and not verified_user.is_admin():
+                            verified_user.role = UserRole.ADMIN
+                            verified_user.updated_at = datetime.now()
+                            Session.commit()
+
+                    if verified_user:
+                        login_user(
+                            verified_user,
+                            remember=True,
+                            duration=timedelta(days=Config.REMEMBER_COOKIE_DURATION),
+                        )
+                        flash("Signed in with a one-time code. Consider updating your password.", "success")
+                        return redirect(url_for('user_dashboard', username=verified_user.username))
+
+                    flash("Login successful. Please sign in again.", "success")
+                    return redirect(url_for('login'))
+
+                flash("Invalid code. Please try again.", "error")
+            except AuthenticationError as e:
+                flash(str(e), "error")
+            except Exception as e:
+                logger.error(f"OTP login verification error: {e}", exc_info=True)
+                flash("An error occurred. Please try again.", "error")
+
+        return render_template(
+            'verify_otp.html',
+            email=user.email,
+            purpose_label='Login',
+            resend_url=url_for('resend_login_otp'),
+            action_url=url_for('verify_login_otp'),
+        )
+
+    def resend_login_otp():
+        identifier = session.get('pending_otp_identifier')
+        if not identifier:
+            flash("Please request a new login code.", "error")
+            return redirect(url_for('login_otp_request'))
+
+        try:
+            otp_payload = AuthService.request_login_otp(identifier)
+            email_sent = email_service.send_otp_email(
+                email=otp_payload['email'],
+                username=otp_payload['username'],
+                otp_code=otp_payload['otp_code'],
+                purpose='login',
+            )
+
+            if not email_sent:
+                flash("Unable to resend code. Please try again.", "error")
+                return redirect(url_for('verify_login_otp'))
+
+            session['pending_otp_user_id'] = otp_payload['id']
+            session['pending_otp_purpose'] = 'login'
+            flash("A new login code has been sent.", "success")
+        except AuthenticationError as e:
+            flash(str(e), "error")
+        except Exception as e:
+            logger.error(f"OTP resend error: {e}", exc_info=True)
+            flash("An error occurred. Please try again.", "error")
+
+        return redirect(url_for('verify_login_otp'))
 
     def verify_email():
         redirect_username = None
@@ -213,7 +343,7 @@ def register_auth_routes(app, email_service):
             form_type = request.form.get('form_type')
 
             try:
-                if form_type == 'profile':
+                if form_type in {'profile', 'profile_otp'}:
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
                     current_password = request.form.get('current_password', '')
@@ -222,12 +352,13 @@ def register_auth_routes(app, email_service):
                         flash("Username and email are required.", "error")
                         return redirect(url_for('user_settings'))
 
-                    if not current_password:
-                        flash("Please enter your current password to update profile details.", "error")
-                        return redirect(url_for('user_settings'))
+                    if form_type == 'profile':
+                        if not current_password:
+                            flash("Please enter your current password to update profile details.", "error")
+                            return redirect(url_for('user_settings'))
 
-                    if not AuthService.verify_password(current_password, user.password_hash):
-                        raise AuthenticationError("Current password is incorrect")
+                        if not AuthService.verify_password(current_password, user.password_hash):
+                            raise AuthenticationError("Current password is incorrect")
 
                     username = validate_username(username)
 
@@ -252,9 +383,29 @@ def register_auth_routes(app, email_service):
                     email = email.lower()
                     email_changed = email != (user.email or '').lower()
 
+                    if form_type == 'profile_otp':
+                        session['pending_profile_update'] = {
+                            'username': username,
+                            'email': email,
+                        }
+                        otp_payload = AuthService.request_profile_update_otp(user.id)
+                        email_sent = email_service.send_otp_email(
+                            email=otp_payload['email'],
+                            username=otp_payload['username'],
+                            otp_code=otp_payload['otp_code'],
+                            purpose='profile_update',
+                        )
+                        if email_sent:
+                            flash("One-time code sent to your email.", "info")
+                            return redirect(url_for('verify_profile_update_otp'))
+                        flash("Unable to send OTP. Please try again.", "error")
+                        return redirect(url_for('user_settings'))
+
                     user.username = username
                     user.email = email
                     user.updated_at = datetime.now()
+                    if email in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
+                        user.role = UserRole.ADMIN
 
                     if email_changed:
                         verification_code = AuthService.generate_verification_code()
@@ -311,6 +462,127 @@ def register_auth_routes(app, email_service):
 
         return render_template('settings.html', user=user)
 
+    @login_required
+    def verify_profile_update_otp():
+        pending_update = session.get('pending_profile_update')
+        if not pending_update:
+            flash("No pending profile update found.", "error")
+            return redirect(url_for('user_settings'))
+
+        user = Session.query(User).get(current_user.id)
+        if not user:
+            flash("User not found.", "error")
+            return redirect(url_for('login'))
+
+        if request.method == 'POST':
+            try:
+                otp_code = request.form.get('otp_code', '').strip()
+
+                if AuthService.verify_otp(user.id, otp_code, 'profile_update'):
+                    username = pending_update.get('username')
+                    email = pending_update.get('email')
+
+                    if not username or not email:
+                        flash("Missing profile update details.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    username = validate_username(username)
+                    existing_username = (
+                        Session.query(User)
+                        .filter(User.username == username, User.id != user.id)
+                        .first()
+                    )
+                    if existing_username:
+                        flash("That username is already taken.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    existing_email = (
+                        Session.query(User)
+                        .filter(User.email == email.lower(), User.id != user.id)
+                        .first()
+                    )
+                    if existing_email:
+                        flash("That email is already in use.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    email = email.lower()
+                    email_changed = email != (user.email or '').lower()
+
+                    user.username = username
+                    user.email = email
+                    user.updated_at = datetime.now()
+                    if email in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
+                        user.role = UserRole.ADMIN
+
+                    if email_changed:
+                        verification_code = AuthService.generate_verification_code()
+                        user.is_verified = False
+                        user.verification_token = verification_code
+                        user.verification_token_expires = datetime.now() + timedelta(hours=Config.VERIFICATION_TOKEN_EXPIRY)
+
+                    Session.commit()
+                    session.pop('pending_profile_update', None)
+
+                    if email_changed:
+                        session['pending_verification_user_id'] = user.id
+                        email_sent = email_service.send_verification_email(
+                            email=user.email,
+                            username=user.username,
+                            verification_code=verification_code,
+                        )
+                        if email_sent:
+                            flash("Email updated. Please verify your new email address.", "warning")
+                        else:
+                            flash("Email updated, but verification email could not be sent.", "warning")
+                        return redirect(url_for('verify_email'))
+
+                    flash("Profile updated successfully!", "success")
+                    return redirect(url_for('user_settings'))
+
+                flash("Invalid code. Please try again.", "error")
+            except AuthenticationError as e:
+                flash(str(e), "error")
+            except Exception as e:
+                Session.rollback()
+                logger.error(f"Profile OTP verification error: {e}", exc_info=True)
+                flash("Failed to verify code. Please try again.", "error")
+
+        return render_template(
+            'verify_otp.html',
+            email=user.email,
+            purpose_label='Profile Update',
+            resend_url=url_for('resend_profile_update_otp'),
+            action_url=url_for('verify_profile_update_otp'),
+        )
+
+    @login_required
+    def resend_profile_update_otp():
+        pending_update = session.get('pending_profile_update')
+        if not pending_update:
+            flash("No pending profile update found.", "error")
+            return redirect(url_for('user_settings'))
+
+        try:
+            otp_payload = AuthService.request_profile_update_otp(current_user.id)
+            email_sent = email_service.send_otp_email(
+                email=otp_payload['email'],
+                username=otp_payload['username'],
+                otp_code=otp_payload['otp_code'],
+                purpose='profile_update',
+            )
+
+            if email_sent:
+                flash("A new code has been sent to your email.", "success")
+            else:
+                flash("Unable to resend code. Please try again.", "error")
+        except AuthenticationError as e:
+            flash(str(e), "error")
+        except Exception as e:
+            logger.error(f"Profile OTP resend error: {e}", exc_info=True)
+            flash("An error occurred. Please try again.", "error")
+
+        return redirect(url_for('verify_profile_update_otp'))
+
     @dev_only
     @require_admin
     def internal_db_fix():
@@ -323,8 +595,23 @@ def register_auth_routes(app, email_service):
 
     app.add_url_rule('/register', endpoint='register', view_func=register, methods=['GET', 'POST'])
     app.add_url_rule('/login', endpoint='login', view_func=login, methods=['GET', 'POST'])
+    app.add_url_rule('/login/otp', endpoint='login_otp_request', view_func=login_otp_request, methods=['GET', 'POST'])
+    app.add_url_rule('/login/otp/verify', endpoint='verify_login_otp', view_func=verify_login_otp, methods=['GET', 'POST'])
+    app.add_url_rule('/login/otp/resend', endpoint='resend_login_otp', view_func=resend_login_otp, methods=['POST'])
     app.add_url_rule('/verify-email', endpoint='verify_email', view_func=verify_email, methods=['GET', 'POST'])
     app.add_url_rule('/resend-verification', endpoint='resend_verification', view_func=resend_verification, methods=['POST'])
     app.add_url_rule('/logout', endpoint='logout', view_func=logout, methods=['GET'])
     app.add_url_rule('/settings', endpoint='user_settings', view_func=user_settings, methods=['GET', 'POST'])
+    app.add_url_rule(
+        '/settings/verify-otp',
+        endpoint='verify_profile_update_otp',
+        view_func=verify_profile_update_otp,
+        methods=['GET', 'POST'],
+    )
+    app.add_url_rule(
+        '/settings/otp/resend',
+        endpoint='resend_profile_update_otp',
+        view_func=resend_profile_update_otp,
+        methods=['POST'],
+    )
     app.add_url_rule('/internal_db_fix', endpoint='internal_db_fix', view_func=internal_db_fix, methods=['GET'])

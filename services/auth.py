@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from models import User, UserRole, Session, _seed_user_data
+from utils.logger import logger
 from config import Config
 
 
@@ -85,11 +86,13 @@ class AuthService:
             token_expiry = datetime.now() + timedelta(hours=Config.VERIFICATION_TOKEN_EXPIRY)
             
             # Create user
+            email_lower = email.lower()
+            role = UserRole.ADMIN if is_admin or email_lower in Config.ADMIN_EMAIL_ALLOWLIST else UserRole.USER
             user = User(
                 username=username.lower(),
-                email=email.lower(),
+                email=email_lower,
                 password_hash=AuthService.hash_password(password),
-                role=UserRole.ADMIN if is_admin else UserRole.USER,
+                role=role,
                 is_verified=False,
                 verification_token=verification_code,
                 verification_token_expires=token_expiry,
@@ -111,6 +114,125 @@ class AuthService:
         except Exception as e:
             session.rollback()
             raise AuthenticationError(f"Registration failed: {str(e)}")
+        finally:
+            session.close()
+
+    @staticmethod
+    def request_login_otp(username_or_email: str) -> dict:
+        """Generate and store a one-time code for login."""
+        session = Session()
+        try:
+            identifier = (username_or_email or '').strip().lower()
+            if not identifier:
+                raise AuthenticationError("Username is required")
+
+            if '@' in identifier:
+                raise AuthenticationError("Enter your username. We'll send the code to your email on file.")
+
+            user = session.query(User).filter(User.username == identifier).first()
+
+            if not user:
+                raise AuthenticationError("Account not found for that username")
+
+            if not user.email:
+                raise AuthenticationError("This account has no email on file")
+
+            otp_code = AuthService.generate_verification_code()
+            user.otp_code = otp_code
+            user.otp_purpose = 'login'
+            user.otp_expires = datetime.now() + timedelta(minutes=Config.OTP_TOKEN_EXPIRY_MINUTES)
+            user.updated_at = datetime.now()
+            session.commit()
+
+            return {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'otp_code': otp_code,
+            }
+
+        except AuthenticationError:
+            session.rollback()
+            raise
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to request login OTP: {e}", exc_info=True)
+            raise AuthenticationError("Unable to send a login code right now. Please try again.")
+        finally:
+            session.close()
+
+    @staticmethod
+    def request_profile_update_otp(user_id: int) -> dict:
+        """Generate and store a one-time code for profile updates."""
+        session = Session()
+        try:
+            user = session.query(User).get(user_id)
+            if not user:
+                raise AuthenticationError("User not found")
+
+            if not user.email:
+                raise AuthenticationError("This account has no email on file")
+
+            otp_code = AuthService.generate_verification_code()
+            user.otp_code = otp_code
+            user.otp_purpose = 'profile_update'
+            user.otp_expires = datetime.now() + timedelta(minutes=Config.OTP_TOKEN_EXPIRY_MINUTES)
+            user.updated_at = datetime.now()
+            session.commit()
+
+            return {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'otp_code': otp_code,
+            }
+
+        except AuthenticationError:
+            session.rollback()
+            raise
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to request profile OTP: {e}", exc_info=True)
+            raise AuthenticationError("Unable to send a verification code right now. Please try again.")
+        finally:
+            session.close()
+
+    @staticmethod
+    def verify_otp(user_id: int, otp_code: str, purpose: str, mark_verified: bool = False) -> bool:
+        """Verify a one-time code for a given purpose."""
+        session = Session()
+        try:
+            user = session.query(User).get(user_id)
+            if not user:
+                return False
+
+            if not user.otp_code or not user.otp_purpose:
+                return False
+
+            if user.otp_purpose != purpose:
+                return False
+
+            if user.otp_expires and user.otp_expires < datetime.now():
+                raise AuthenticationError("One-time code has expired")
+
+            if user.otp_code != otp_code:
+                return False
+
+            user.otp_code = None
+            user.otp_purpose = None
+            user.otp_expires = None
+            if mark_verified and not user.is_verified:
+                user.is_verified = True
+            user.updated_at = datetime.now()
+            session.commit()
+            return True
+
+        except AuthenticationError:
+            session.rollback()
+            raise
+        except Exception:
+            session.rollback()
+            return False
         finally:
             session.close()
     

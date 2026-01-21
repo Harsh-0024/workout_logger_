@@ -7,7 +7,7 @@ from flask_login import LoginManager
 from flask_mail import Mail
 
 from config import Config
-from models import Session, User
+from models import Session, User, initialize_database
 from services.email_service import EmailService
 from utils.logger import logger
 
@@ -27,6 +27,12 @@ def create_app(config_object=Config):
     )
     app.secret_key = config_object.SECRET_KEY
     app.config.from_object(config_object)
+
+    try:
+        initialize_database()
+    except Exception as exc:
+        logger.critical(f"Database initialization failed: {exc}", exc_info=True)
+        raise
 
     login_manager = LoginManager()
     login_manager.init_app(app)

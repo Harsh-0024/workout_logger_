@@ -83,8 +83,16 @@
             </div>
 
             <!-- User Management -->
-            <div class="d-flex align-items-center justify-content-between mb-3 mb-md-4">
-                <h4 class="mb-0 fw-bold">User Management</h4>
+            <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3 mb-md-4">
+                <div>
+                    <h4 class="mb-1 fw-bold">User Management</h4>
+                    <p class="text-muted mb-0 small">Clean up duplicate accounts by email. Accounts with logs are preserved.</p>
+                </div>
+                <form method="POST" action="{{ url_for('admin_cleanup_duplicates') }}" onsubmit="return confirm('This will merge duplicate accounts by email and delete older duplicates. Continue?');">
+                    <button type="submit" class="btn btn-gold-outline btn-sm">
+                        <i class="bi bi-shuffle me-2"></i>Cleanup Duplicates
+                    </button>
+                </form>
             </div>
 
             <!-- Desktop Table View -->

@@ -6,6 +6,7 @@ from flask_mail import Mail, Message
 from flask import current_app
 from typing import Optional
 from utils.logger import logger
+from config import Config
 
 
 class EmailService:
@@ -67,6 +68,148 @@ class EmailService:
             return True
         except Exception as e:
             logger.error(f"Failed to send email to {', '.join(recipients)}: {e}", exc_info=True)
+            return False
+
+    def send_otp_email(self, email: str, username: str, otp_code: str, purpose: str = 'login') -> bool:
+        """Send a one-time passcode email for login or profile updates."""
+        try:
+            expiry_minutes = Config.OTP_TOKEN_EXPIRY_MINUTES
+            purpose_label = "Login" if purpose == 'login' else "Profile Update"
+            subject = f"{purpose_label} Code - Workout Tracker"
+
+            body = f"""
+Hello {username.title()},
+
+Use the code below to complete your {purpose_label.lower()}:
+
+Your one-time code is: {otp_code}
+
+This code will expire in {expiry_minutes} minutes.
+
+If you didn't request this, you can ignore this email.
+
+Best regards,
+Workout Tracker Team
+            """
+
+            html_body = f"""
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
+            padding: 40px 20px;
+            line-height: 1.6;
+        }}
+        .container {{
+            max-width: 600px;
+            margin: 0 auto;
+            background: rgba(20, 20, 20, 0.95);
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.1);
+        }}
+        .header {{
+            background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
+            padding: 40px 30px;
+            text-align: center;
+            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
+        }}
+        .header h1 {{
+            color: #D4AF37;
+            font-size: 28px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
+        }}
+        .header p {{
+            color: rgba(212, 175, 55, 0.7);
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }}
+        .content {{
+            padding: 40px 30px;
+            color: rgba(255, 255, 255, 0.9);
+        }}
+        .content h2 {{
+            color: #D4AF37;
+            font-size: 22px;
+            margin-bottom: 20px;
+            font-weight: 500;
+        }}
+        .content p {{
+            color: rgba(255, 255, 255, 0.7);
+            margin-bottom: 16px;
+            font-size: 15px;
+        }}
+        .code-box {{
+            background: rgba(212, 175, 55, 0.05);
+            border: 2px solid rgba(212, 175, 55, 0.3);
+            padding: 30px;
+            margin: 30px 0;
+            text-align: center;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.1);
+        }}
+        .code {{
+            font-size: 36px;
+            font-weight: 700;
+            color: #D4AF37;
+            letter-spacing: 8px;
+            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
+            font-family: 'Courier New', monospace;
+        }}
+        .highlight {{
+            color: #D4AF37;
+            font-weight: 600;
+        }}
+        .footer {{
+            text-align: center;
+            padding: 30px;
+            color: rgba(255, 255, 255, 0.4);
+            font-size: 12px;
+            border-top: 1px solid rgba(212, 175, 55, 0.1);
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏋️ WORKOUT TRACKER</h1>
+            <p>{purpose_label} Code</p>
+        </div>
+        <div class="content">
+            <h2>Hello {username.title()},</h2>
+            <p>Use the code below to complete your <span class="highlight">{purpose_label.lower()}</span>:</p>
+
+            <div class="code-box">
+                <div class="code">{otp_code}</div>
+            </div>
+
+            <p><span class="highlight">This code will expire in {expiry_minutes} minutes.</span></p>
+
+            <p>If you didn't request this, you can ignore this email.</p>
+
+            <p style="margin-top: 30px;">Best regards,<br><span class="highlight">Workout Tracker Team</span></p>
+        </div>
+        <div class="footer">
+            <p>This is an automated message, please do not reply.</p>
+        </div>
+    </div>
+</body>
+</html>
+            """
+
+            return self._send_message(subject=subject, recipients=[email], body=body, html=html_body)
+
+        except Exception as e:
+            logger.error(f"Failed to send OTP email to {email}: {e}", exc_info=True)
             return False
     
     def send_verification_email(self, email: str, username: str, verification_code: str) -> bool:

@@ -110,6 +110,30 @@ def register_admin_routes(app, email_service):
         return redirect(url_for('admin_dashboard'))
 
     @require_admin
+    def admin_cleanup_duplicates():
+        try:
+            summary = AdminService.cleanup_duplicate_users(current_user.id)
+            if summary['groups'] == 0:
+                flash("No duplicate accounts found to clean up.", "info")
+            else:
+                flash(
+                    (
+                        "Cleanup complete: "
+                        f"{summary['groups']} group(s) processed, "
+                        f"{summary['deleted']} duplicate(s) removed, "
+                        f"{summary['logs_moved']} log(s) merged."
+                    ),
+                    "success",
+                )
+        except AdminError as e:
+            flash(str(e), "error")
+        except Exception as e:
+            logger.error(f"Duplicate cleanup error: {e}", exc_info=True)
+            flash("Failed to clean up duplicate accounts.", "error")
+
+        return redirect(url_for('admin_dashboard'))
+
+    @require_admin
     def admin_update_app_icon():
         icon_file = request.files.get('app_icon')
 
@@ -138,6 +162,12 @@ def register_admin_routes(app, email_service):
         '/admin/delete-user',
         endpoint='admin_delete_user',
         view_func=admin_delete_user,
+        methods=['POST'],
+    )
+    app.add_url_rule(
+        '/admin/cleanup-duplicates',
+        endpoint='admin_cleanup_duplicates',
+        view_func=admin_cleanup_duplicates,
         methods=['POST'],
     )
     app.add_url_rule(

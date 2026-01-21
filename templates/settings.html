@@ -27,7 +27,6 @@
             </div>
 
             <form method="POST" action="{{ url_for('user_settings') }}" class="mb-4 mb-md-5">
-                <input type="hidden" name="form_type" value="profile">
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Username
@@ -44,14 +43,19 @@
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Current Password
                     </label>
-                    <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                    <input type="password" name="current_password" class="form-control" autocomplete="current-password">
                     <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                        <i class="bi bi-shield-check me-1"></i>Required to update username or email
+                        <i class="bi bi-shield-check me-1"></i>Required if you use password verification
                     </small>
                 </div>
-                <button type="submit" class="btn btn-gold-solid w-100">
-                    <i class="bi bi-check-circle-fill me-2"></i>Update Profile
-                </button>
+                <div class="d-grid gap-2">
+                    <button type="submit" name="form_type" value="profile" class="btn btn-gold-solid w-100">
+                        <i class="bi bi-check-circle-fill me-2"></i>Update Profile
+                    </button>
+                    <button type="submit" name="form_type" value="profile_otp" class="btn btn-gold-outline w-100">
+                        <i class="bi bi-shield-lock me-2"></i>Update with One-Time Code
+                    </button>
+                </div>
             </form>
 
             <div class="border-top pt-4 pt-md-5" style="border-color: var(--border-subtle) !important;">

@@ -50,6 +50,9 @@ class User(Base):
     is_verified = Column(Boolean, default=False, nullable=False)
     verification_token = Column(String(255), nullable=True)
     verification_token_expires = Column(DateTime, nullable=True)
+    otp_code = Column(String(10), nullable=True)
+    otp_purpose = Column(String(32), nullable=True)
+    otp_expires = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=True)
 
@@ -247,6 +250,9 @@ def migrate_schema():
                 conn.execute(text("UPDATE users SET is_verified = FALSE WHERE is_verified IS NULL"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_token_expires {ts_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code {str_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_purpose {str_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires {ts_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at {ts_type}"))
                 conn.execute(text(f"UPDATE users SET created_at = {now_func} WHERE created_at IS NULL"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at {ts_type}"))
@@ -277,6 +283,18 @@ def migrate_schema():
                 if 'verification_token_expires' not in users_columns:
                     logger.info("Adding verification_token_expires column to users table")
                     conn.execute(text(f"ALTER TABLE users ADD COLUMN verification_token_expires {ts_type}"))
+
+                if 'otp_code' not in users_columns:
+                    logger.info("Adding otp_code column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN otp_code {str_type}"))
+
+                if 'otp_purpose' not in users_columns:
+                    logger.info("Adding otp_purpose column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN otp_purpose {str_type}"))
+
+                if 'otp_expires' not in users_columns:
+                    logger.info("Adding otp_expires column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN otp_expires {ts_type}"))
                 
                 if 'created_at' not in users_columns:
                     logger.info("Adding created_at column to users table")
@@ -329,6 +347,8 @@ def initialize_database():
             )
 
         Base.metadata.create_all(engine)
+
+    migrate_schema()
     
     session = Session()
     try:

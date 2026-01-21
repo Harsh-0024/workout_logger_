@@ -15,7 +15,58 @@
                 </div>
             </div>
 
-            <div class="table-responsive">
+            <div class="d-md-none">
+                {% for row in summary %}
+                <div class="card mb-3" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle);">
+                    <div class="d-flex align-items-start justify-content-between gap-3 mb-3">
+                        <div>
+                            <div class="fw-semibold {{ 'text-danger' if not row.valid else 'text-white' }}" style="font-size: 1rem;">
+                                <i class="bi bi-activity me-2 text-gold"></i>{{ row.name }}
+                            </div>
+                            {% if not row.valid %}
+                                <span class="badge bg-danger mt-2">Parsing failed</span>
+                            {% endif %}
+                        </div>
+                        <div>
+                            {% if not row.valid %}
+                                <span class="text-danger fw-bold small tracking-wide">CHECK FORMAT</span>
+                            {% elif 'PEAK' in row.status %}
+                                <span class="badge bg-success">
+                                    <i class="bi bi-trophy-fill me-1"></i>PEAK
+                                </span>
+                            {% elif 'CONSISTENCY' in row.status %}
+                                <span class="badge bg-info">
+                                    <i class="bi bi-check-circle-fill me-1"></i>CONSISTENCY
+                                </span>
+                            {% elif 'NEW' in row.status %}
+                                <span class="badge bg-primary">
+                                    <i class="bi bi-star-fill me-1"></i>NEW
+                                </span>
+                            {% else %}
+                                <span class="text-muted" style="opacity: 0.3;">—</span>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <div class="text-muted small mb-1">Previous Best</div>
+                            <div class="text-white mono" style="font-size: 0.95rem;">
+                                {{ row.old if row.old != '-' else '—' }}
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="text-muted small mb-1">Today's Performance</div>
+                            <div class="{{ 'text-danger' if not row.valid else 'text-white' }} mono fw-semibold" style="font-size: 0.95rem;">
+                                {{ row.new }}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="table-responsive d-none d-md-block">
                 <table class="table">
                     <thead>
                         <tr>
