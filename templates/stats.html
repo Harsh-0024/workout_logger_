@@ -184,5 +184,19 @@
                 console.error('Error loading chart:', error);
             });
     }
+
+    // Auto-select exercise from URL parameter
+    window.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const exerciseParam = urlParams.get('exercise');
+        if (exerciseParam) {
+            const select = document.getElementById('exerciseSelect');
+            const option = Array.from(select.options).find(opt => opt.value === exerciseParam);
+            if (option) {
+                select.value = exerciseParam;
+                loadChart();
+            }
+        }
+    });
 </script>
 {% endblock %}

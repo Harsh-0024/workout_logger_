@@ -159,6 +159,23 @@ def register_workout_routes(app):
 
             workout_name = logs[0].workout_name or "Workout"
             
+            # Calculate volume for each exercise
+            for log in logs:
+                total_volume = 0
+                if log.sets_display:
+                    # Parse sets_display to calculate volume
+                    sets = log.sets_display.split(', ')
+                    for s in sets:
+                        try:
+                            parts = s.split(' × ')
+                            if len(parts) == 2:
+                                weight = float(parts[0])
+                                reps = int(parts[1])
+                                total_volume += weight * reps
+                        except (ValueError, IndexError):
+                            continue
+                log.total_volume = total_volume if total_volume > 0 else None
+            
             return render_template(
                 'workout_detail.html',
                 date=date_str,
@@ -175,19 +192,7 @@ def register_workout_routes(app):
 
     @login_required
     def workout_history():
-        user = current_user
-
-        try:
-            workouts = get_recent_workouts(user, limit=None)
-            return render_template(
-                'workout_history.html',
-                user=user.username.title(),
-                workouts=workouts,
-            )
-        except Exception as e:
-            logger.error(f"Error loading workout history: {e}", exc_info=True)
-            flash("Error loading workout history.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
+        return redirect(url_for('user_dashboard', username=current_user.username))
 
     @login_required
     def edit_workout(date_str):

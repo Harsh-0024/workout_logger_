@@ -627,6 +627,12 @@
             overflow: hidden;
         }
 
+        @media (max-width: 991px) {
+            .recent-workouts-card {
+                max-height: 60vh;
+            }
+        }
+
         .recent-workouts-list {
             overflow-y: auto;
             padding-right: 4px;
@@ -653,6 +659,13 @@
             overflow-y: auto;
             padding-right: 4px;
             flex: 1;
+            min-height: 0;
+        }
+
+        @media (min-width: 992px) {
+            .workout-history-card {
+                max-height: 92vh;
+            }
         }
 
         .workout-history-list::-webkit-scrollbar {
@@ -940,6 +953,10 @@
             .stat-card {
                 padding: var(--space-lg);
                 border-radius: 16px;
+                min-height: 148px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
             }
 
             .stat-value {
@@ -949,6 +966,24 @@
 
             .stat-label {
                 font-size: 0.7rem;
+                line-height: 1.2;
+            }
+
+            .settings-action-btn {
+                min-height: 68px;
+                padding: 14px 16px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                text-align: center;
+                line-height: 1.2;
+                gap: 10px;
+                flex-wrap: wrap;
+            }
+
+            .settings-action-btn--stack {
+                flex-direction: column;
+                gap: 6px;
             }
 
             /* Mobile Forms */
