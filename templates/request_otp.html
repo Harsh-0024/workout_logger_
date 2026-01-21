@@ -11,13 +11,13 @@
                     <i class="bi bi-shield-lock text-gold" style="font-size: clamp(2.5rem, 6vw, 3rem); opacity: 0.7;"></i>
                 </div>
                 <h2 class="fw-bold mb-2">One-Time Login Code</h2>
-                <p class="text-muted mb-0">Enter your username to receive a 6-digit code</p>
+                <p class="text-muted mb-0">Enter your username or email to receive a 6-digit code</p>
             </div>
 
             <form method="POST" action="{{ url_for('login_otp_request') }}">
                 <div class="mb-4">
                     <label for="username_or_email" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Username
+                        Username or Email
                     </label>
                     <input
                         type="text"
@@ -25,9 +25,13 @@
                         name="username_or_email"
                         required
                         class="form-control"
-                        placeholder="Enter your username"
+                        placeholder="Enter your username or email"
                         autocomplete="username"
+                        value="{{ identifier or '' }}"
                     >
+                    <div class="form-text text-muted" style="font-size: var(--fs-xs);">
+                        We'll send the code to the email saved on your account.
+                    </div>
                 </div>
 
                 <button

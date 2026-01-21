@@ -107,9 +107,10 @@ def register_auth_routes(app, email_service):
         if current_user.is_authenticated:
             return redirect(url_for('user_dashboard', username=current_user.username))
 
+        identifier = ''
         if request.method == 'POST':
+            identifier = request.form.get('username_or_email', '').strip()
             try:
-                identifier = request.form.get('username_or_email', '').strip()
                 otp_payload = AuthService.request_login_otp(identifier)
 
                 email_sent = email_service.send_otp_email(
@@ -121,7 +122,7 @@ def register_auth_routes(app, email_service):
 
                 if not email_sent:
                     flash("Unable to send login code. Please try again later.", "error")
-                    return render_template('request_otp.html')
+                    return render_template('request_otp.html', identifier=identifier)
 
                 session['pending_otp_user_id'] = otp_payload['id']
                 session['pending_otp_identifier'] = identifier
@@ -136,7 +137,10 @@ def register_auth_routes(app, email_service):
                 logger.error(f"OTP login request error: {e}", exc_info=True)
                 flash("An error occurred. Please try again.", "error")
 
-        return render_template('request_otp.html')
+        if request.method != 'POST':
+            identifier = request.args.get('identifier', '').strip() or session.get('pending_otp_identifier', '')
+
+        return render_template('request_otp.html', identifier=identifier)
 
     def verify_login_otp():
         if current_user.is_authenticated:

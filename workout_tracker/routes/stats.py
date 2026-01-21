@@ -1,4 +1,5 @@
 from datetime import datetime
+import json
 
 from flask import Response, flash, jsonify, redirect, render_template, url_for
 from flask_login import login_required, current_user
@@ -99,7 +100,7 @@ def register_stats_routes(app):
             )
 
             return Response(
-                jsonify(data),
+                json.dumps(data, ensure_ascii=False, indent=2),
                 mimetype='application/json',
                 headers={'Content-disposition': f"attachment; filename={filename}"},
             )

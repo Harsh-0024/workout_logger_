@@ -56,7 +56,11 @@
                 </div>
 
                 <div class="d-flex justify-content-between align-items-center mb-4">
-                    <a href="{{ url_for('login_otp_request') }}" class="text-gold text-decoration-none small hover-gold">
+                    <a
+                        href="{{ url_for('login_otp_request') }}"
+                        id="otpLoginLink"
+                        class="text-gold text-decoration-none small hover-gold"
+                    >
                         Forgot password? Use a one-time code
                     </a>
                 </div>
@@ -78,4 +82,26 @@
         </div>
     </div>
 </div>
+
+<form id="otpLoginForm" method="POST" action="{{ url_for('login_otp_request') }}" class="d-none">
+    <input type="hidden" name="username_or_email" id="otpLoginIdentifier">
+</form>
+
+<script>
+    (function() {
+        const link = document.getElementById('otpLoginLink');
+        const input = document.getElementById('username_or_email');
+        const form = document.getElementById('otpLoginForm');
+        const hidden = document.getElementById('otpLoginIdentifier');
+        if (!link || !input || !form || !hidden) return;
+
+        link.addEventListener('click', (event) => {
+            const value = (input.value || '').trim();
+            if (!value) return;
+            event.preventDefault();
+            hidden.value = value;
+            form.submit();
+        });
+    })();
+</script>
 {% endblock %}

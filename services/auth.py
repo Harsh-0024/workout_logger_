@@ -124,15 +124,14 @@ class AuthService:
         try:
             identifier = (username_or_email or '').strip().lower()
             if not identifier:
-                raise AuthenticationError("Username is required")
+                raise AuthenticationError("Username or email is required")
 
-            if '@' in identifier:
-                raise AuthenticationError("Enter your username. We'll send the code to your email on file.")
-
-            user = session.query(User).filter(User.username == identifier).first()
+            user = session.query(User).filter(
+                (User.username == identifier) | (User.email == identifier)
+            ).first()
 
             if not user:
-                raise AuthenticationError("Account not found for that username")
+                raise AuthenticationError("Account not found for that username or email")
 
             if not user.email:
                 raise AuthenticationError("This account has no email on file")

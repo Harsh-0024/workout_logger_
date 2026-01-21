@@ -619,6 +619,25 @@
         }
 
         /* --- PREMIUM RECENT WORKOUTS --- */
+        .recent-workouts-card {
+            max-height: clamp(420px, 70vh, 640px);
+            overflow: hidden;
+        }
+
+        .recent-workouts-list {
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+
+        .recent-workouts-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .recent-workouts-list::-webkit-scrollbar-thumb {
+            background: rgba(212, 175, 55, 0.35);
+            border-radius: 999px;
+        }
+
         .recent-workout-item {
             padding: var(--space-md) var(--space-lg);
             background: rgba(255, 255, 255, 0.02);
