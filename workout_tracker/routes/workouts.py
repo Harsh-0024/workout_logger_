@@ -162,12 +162,21 @@ def register_workout_routes(app):
             # Calculate volume for each exercise
             for log in logs:
                 total_volume = 0
-                if log.sets_display:
-                    # Parse sets_display to calculate volume
+                if log.sets_json and isinstance(log.sets_json, dict):
+                    weights = log.sets_json.get('weights') or []
+                    reps_list = log.sets_json.get('reps') or []
+                    for weight, reps in zip(weights, reps_list):
+                        try:
+                            total_volume += float(weight) * int(reps)
+                        except (TypeError, ValueError):
+                            continue
+                elif log.sets_display:
+                    # Parse sets_display to calculate volume (supports x/×)
                     sets = log.sets_display.split(', ')
                     for s in sets:
                         try:
-                            parts = s.split(' × ')
+                            normalized = s.replace('×', 'x')
+                            parts = [p.strip() for p in normalized.split('x')]
                             if len(parts) == 2:
                                 weight = float(parts[0])
                                 reps = int(parts[1])

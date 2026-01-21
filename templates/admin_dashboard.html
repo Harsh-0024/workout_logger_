@@ -6,12 +6,12 @@
 <div class="row justify-content-center">
     <div class="col-12 col-lg-10">
         <div class="card">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 pb-3 pb-md-4 border-bottom" style="border-color: var(--border-subtle) !important; gap: 1rem;">
+            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 pb-3 pb-md-4 border-bottom admin-dashboard-header" style="border-color: var(--border-subtle) !important; gap: 1rem;">
                 <div class="mb-3 mb-md-0">
                     <h2 class="fw-bold mb-2">Admin Dashboard</h2>
                     <p class="text-muted mb-0">Manage users and oversee platform operations</p>
                 </div>
-                <a href="{{ url_for('user_dashboard', username=current_user.username) }}" class="btn btn-gold-outline btn-sm flex-shrink-0">
+                <a href="{{ url_for('user_dashboard', username=current_user.username) }}" class="btn btn-gold-outline btn-sm flex-shrink-0 admin-back-btn">
                     <i class="bi bi-arrow-left me-2"></i>Back to My Dashboard
                 </a>
             </div>
@@ -68,12 +68,25 @@
                                 >
                                 <div
                                     id="iconPlaceholder"
-                                    class="admin-app-icon-image d-flex align-items-center justify-content-center"
-                                    style="display: none; border: 1px dashed var(--border-subtle); color: var(--text-muted); font-weight: 700;"
+                                    class="admin-app-icon-image admin-app-icon-placeholder d-flex align-items-center justify-content-center"
+                                    style="display: none;"
                                 >WT</div>
                             </div>
                             <div class="flex-grow-1 admin-app-icon-field">
-                                <input type="file" name="app_icon" accept="image/png,image/jpeg,image/webp" class="form-control form-control-sm mb-2">
+                                <div class="admin-file-control mb-2">
+                                    <input
+                                        id="appIconInput"
+                                        type="file"
+                                        name="app_icon"
+                                        accept="image/png,image/jpeg,image/webp"
+                                        class="admin-file-input"
+                                        onchange="document.getElementById('appIconName').textContent = this.files && this.files.length ? this.files[0].name : 'No file chosen';"
+                                    >
+                                    <label for="appIconInput" class="admin-file-label">
+                                        <span class="admin-file-button">Choose file</span>
+                                        <span class="admin-file-name" id="appIconName">No file chosen</span>
+                                    </label>
+                                </div>
                                 <div class="text-muted small">Square image recommended (1024×1024). Remove + re-add to Home Screen after upload.</div>
                             </div>
                             <button type="submit" class="btn btn-gold-solid btn-sm admin-app-icon-btn">Update Icon</button>
@@ -83,7 +96,7 @@
             </div>
 
             <!-- User Management -->
-            <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3 mb-md-4">
+            <div class="d-flex flex-column flex-md-row align-items-start align-items-md-center justify-content-between gap-3 mb-3 mb-md-4 admin-user-management">
                 <div>
                     <h4 class="mb-1 fw-bold">User Management</h4>
                     <p class="text-muted mb-0 small">Clean up duplicate accounts by email. Accounts with logs are preserved.</p>
