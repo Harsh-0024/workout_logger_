@@ -169,11 +169,23 @@
             padding: 16px 32px;
             font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            font-size: 0.875rem;
+            letter-spacing: 1px;
             transition: all var(--transition-base);
             position: relative;
             overflow: hidden;
+        }
+
+        .settings-action-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            gap: 10px;
+            line-height: 1.2;
+        }
+
+
+        .btn {
             border: none;
             cursor: pointer;
             font-family: 'Inter', sans-serif;
@@ -594,6 +606,61 @@
             opacity: 1;
         }
 
+        .admin-stat-card {
+            min-height: 140px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+        }
+
+        .admin-stat-card .stat-label {
+            min-height: 2.4em;
+        }
+
+        .admin-app-icon-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-subtle);
+        }
+
+        .admin-app-icon-header {
+            display: flex;
+            flex-direction: column;
+            gap: var(--space-sm);
+        }
+
+        .admin-app-icon-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            align-items: center;
+            gap: var(--space-md);
+        }
+
+        .admin-app-icon-preview {
+            width: 88px;
+            height: 88px;
+            border-radius: 22px;
+            border: 1px solid var(--border-subtle);
+            background: rgba(255, 255, 255, 0.03);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+        }
+
+        .admin-app-icon-image {
+            width: 100%;
+            height: 100%;
+            border-radius: 18px;
+            object-fit: cover;
+            display: block;
+            background: #0f0f11;
+        }
+
+        .admin-app-icon-field {
+            max-width: 360px;
+        }
+
         .stat-value {
             font-size: var(--fs-5xl);
             font-weight: 700;
@@ -630,6 +697,39 @@
         @media (max-width: 991px) {
             .recent-workouts-card {
                 max-height: 60vh;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .recent-workouts-card {
+                --recent-item-height: 78px;
+                --recent-item-gap: 12px;
+                height: auto;
+                max-height: none;
+            }
+
+            .recent-workouts-list {
+                height: calc((var(--recent-item-height) * 4) + (var(--recent-item-gap) * 3));
+                display: grid;
+                grid-auto-rows: var(--recent-item-height);
+                row-gap: var(--recent-item-gap);
+            }
+
+            .recent-workout-item {
+                height: var(--recent-item-height);
+                margin-bottom: 0;
+                display: flex;
+                align-items: center;
+            }
+
+            .recent-workout-item span {
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            .recent-workout-item > div {
+                width: 100%;
             }
         }
 
@@ -969,6 +1069,69 @@
                 line-height: 1.2;
             }
 
+            .admin-stat-card {
+                padding: var(--space-md);
+                min-height: 110px;
+            }
+
+            .admin-stat-card .stat-value {
+                font-size: var(--fs-3xl);
+            }
+
+            .admin-stat-card .stat-label {
+                min-height: 2.2em;
+                font-size: 0.65rem;
+            }
+
+            .admin-app-icon-header {
+                align-items: flex-start;
+            }
+
+            .admin-app-icon-row {
+                grid-template-columns: 1fr;
+                justify-items: center;
+                text-align: center;
+            }
+
+            .admin-app-icon-field {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            .admin-app-icon-btn {
+                width: 100%;
+            }
+
+            .admin-app-icon-preview {
+                width: 80px;
+                height: 80px;
+                border-radius: 20px;
+            }
+
+            .admin-app-icon-image {
+                border-radius: 16px;
+            }
+
+            .admin-user-management {
+                align-items: center !important;
+                text-align: center;
+            }
+
+            .admin-user-management p {
+                margin-left: auto;
+                margin-right: auto;
+                max-width: 320px;
+            }
+
+            .admin-user-management form {
+                width: 100%;
+            }
+
+            .admin-user-management .btn {
+                width: 100%;
+                justify-content: center;
+            }
+
             .settings-action-btn {
                 min-height: 68px;
                 padding: 14px 16px;
@@ -977,13 +1140,8 @@
                 justify-content: center;
                 text-align: center;
                 line-height: 1.2;
-                gap: 10px;
-                flex-wrap: wrap;
-            }
-
-            .settings-action-btn--stack {
-                flex-direction: column;
                 gap: 6px;
+                flex-direction: column;
             }
 
             /* Mobile Forms */
