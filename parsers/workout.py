@@ -7,10 +7,31 @@ from typing import Optional, Dict, List, Tuple
 
 
 def normalize(values):
-    if not values: return [0, 0, 0]
-    if len(values) == 1: return [values[0], values[0], values[0]]
-    if len(values) == 2: return [values[0], values[1], values[1]]
-    return values[:3]
+    if not values:
+        return []
+    return list(values)
+
+
+def align_sets(weights, reps):
+    if not weights and not reps:
+        return [], []
+
+    if not reps and weights:
+        reps = [1] * len(weights)
+    if not weights and reps:
+        weights = [1.0] * len(reps)
+
+    if len(weights) == 1 and len(reps) > 1:
+        weights = weights * len(reps)
+    elif len(reps) == 1 and len(weights) > 1:
+        reps = reps * len(weights)
+    elif len(weights) < len(reps) and weights:
+        weights = weights + [weights[-1]] * (len(reps) - len(weights))
+    elif len(reps) < len(weights) and reps:
+        reps = reps + [reps[-1]] * (len(weights) - len(reps))
+
+    reps = [int(r) for r in reps]
+    return weights, reps
 
 
 def parse_weight_x_reps(segment):
@@ -125,14 +146,14 @@ def workout_parser(workout_day_received: str) -> Optional[Dict]:
 
         if not name: name = "Unknown Exercise"
 
-        final_weights = normalize(weights)
-        is_valid = any(w != 0 for w in final_weights)
+        weights, reps = align_sets(weights, reps)
+        is_valid = any(w != 0 for w in weights)
 
         workout_day["exercises"].append({
             "name": name.title(),
             "exercise_string": clean_line,
-            "weights": final_weights,
-            "reps": normalize(reps),
+            "weights": weights,
+            "reps": reps,
             "valid": is_valid
         })
 

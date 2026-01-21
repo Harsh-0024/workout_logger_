@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Workout Tracker | Elite Performance</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,6 +24,7 @@
     <style>
         /* --- LUXURY PREMIUM THEME --- */
         :root {
+            color-scheme: dark;
             /* Premium Spacing System */
             --space-xs: 8px;
             --space-sm: 12px;
@@ -92,6 +93,10 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+        }
+
+        html, body {
+            background-color: #000000;
         }
 
         body {
@@ -686,6 +691,18 @@
                 font-size: 15px;
             }
 
+            body::after {
+                content: '';
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                height: env(safe-area-inset-top);
+                background: #000000;
+                z-index: 101;
+                pointer-events: none;
+            }
+
             .container {
                 padding-left: 16px;
                 padding-right: 16px;
@@ -734,12 +751,13 @@
 
             /* Mobile Header */
             .mobile-header {
-                background: rgba(6, 6, 6, 0.95);
+                background: #000000;
                 border-bottom: 1px solid var(--border-subtle);
                 position: sticky;
                 top: 0;
                 z-index: 100;
                 backdrop-filter: blur(12px);
+                padding-top: env(safe-area-inset-top);
             }
 
             .mobile-header-inner {

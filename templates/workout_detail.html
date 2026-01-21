@@ -29,7 +29,9 @@
                             <div>
                                 <h6 class="mb-1 text-white" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ log.exercise }}</h6>
                                 <small class="text-muted">
-                                    {% if log.top_weight and log.top_reps %}
+                                    {% if log.sets_display %}
+                                        Sets: {{ log.sets_display }}
+                                    {% elif log.top_weight and log.top_reps %}
                                         Top Set: {{ log.top_weight }}kg × {{ log.top_reps }} reps
                                     {% endif %}
                                     {% if log.estimated_1rm %}

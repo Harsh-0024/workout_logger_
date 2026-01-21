@@ -144,6 +144,8 @@ class WorkoutLog(Base):
     date = Column(DateTime, default=datetime.now, nullable=False, index=True)
     workout_name = Column(String(100), nullable=True, index=True)
     exercise = Column(String(100), nullable=False, index=True)
+    exercise_string = Column(Text)
+    sets_json = Column(JSONType)
     top_weight = Column(Float)  # Heaviest weight moved that day
     top_reps = Column(Integer)  # Reps at that top weight
     estimated_1rm = Column(Float, index=True)  # Calculated strength metric
@@ -158,6 +160,41 @@ class WorkoutLog(Base):
     
     def __repr__(self):
         return f"<WorkoutLog(id={self.id}, user_id={self.user_id}, exercise='{self.exercise}', date={self.date})>"
+
+    @staticmethod
+    def _format_value(value):
+        if value is None:
+            return ""
+        try:
+            if isinstance(value, float) and value.is_integer():
+                return str(int(value))
+        except Exception:
+            pass
+        return f"{value:g}" if isinstance(value, float) else str(value)
+
+    @property
+    def sets_display(self):
+        if self.sets_json and isinstance(self.sets_json, dict):
+            weights = self.sets_json.get('weights') or []
+            reps = self.sets_json.get('reps') or []
+            pairs = [
+                f"{self._format_value(w)} x {int(r)}" for w, r in zip(weights, reps)
+                if w is not None and r is not None
+            ]
+            if pairs:
+                return ", ".join(pairs)
+
+        if self.exercise_string:
+            trimmed = self.exercise_string.strip()
+            if trimmed.lower().startswith(self.exercise.lower()):
+                trimmed = trimmed[len(self.exercise):].strip()
+                trimmed = trimmed.lstrip("-:").strip()
+            return trimmed or None
+
+        if self.top_weight and self.top_reps:
+            return f"{self._format_value(self.top_weight)} x {self.top_reps}"
+
+        return None
 
 
 # --- MIGRATION HELPERS ---
@@ -183,17 +220,20 @@ def migrate_schema():
                 ts_type = 'DATETIME'
                 str_type = 'VARCHAR(255)'
                 bool_type = 'TINYINT(1)'
+                json_type = 'JSON'
                 now_func = 'CURRENT_TIMESTAMP'
             elif dialect == 'postgresql':
                 ts_type = 'TIMESTAMP'
                 str_type = 'VARCHAR(255)'
                 bool_type = 'BOOLEAN'
+                json_type = 'JSONB'
                 now_func = 'CURRENT_TIMESTAMP'
             else:
                 # SQLite (and others)
                 ts_type = 'TIMESTAMP'
                 str_type = 'VARCHAR(255)'
                 bool_type = 'BOOLEAN'
+                json_type = 'TEXT'
                 now_func = 'CURRENT_TIMESTAMP'
 
             # --- Auth columns ---
@@ -247,6 +287,26 @@ def migrate_schema():
                     logger.info("Adding updated_at column to users table")
                     conn.execute(text(f"ALTER TABLE users ADD COLUMN updated_at {ts_type}"))
                     conn.execute(text(f"UPDATE users SET updated_at = {now_func} WHERE updated_at IS NULL"))
+
+            # --- Workout log columns ---
+            if 'workout_logs' in inspector.get_table_names():
+                logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
+
+                if dialect == 'postgresql':
+                    conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS workout_name {str_type}"))
+                    conn.execute(text("UPDATE workout_logs SET workout_name = '' WHERE workout_name IS NULL"))
+                    conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS exercise_string TEXT"))
+                    conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS sets_json {json_type}"))
+                else:
+                    if 'workout_name' not in logs_columns:
+                        logger.info("Adding workout_name column to workout_logs table")
+                        conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN workout_name {str_type}"))
+                    if 'exercise_string' not in logs_columns:
+                        logger.info("Adding exercise_string column to workout_logs table")
+                        conn.execute(text("ALTER TABLE workout_logs ADD COLUMN exercise_string TEXT"))
+                    if 'sets_json' not in logs_columns:
+                        logger.info("Adding sets_json column to workout_logs table")
+                        conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN sets_json {json_type}"))
                 
     except Exception as e:
         logger.warning(f"Migration warning (may be expected): {e}")

@@ -6,11 +6,11 @@ from parsers.workout import workout_parser, parse_weight_x_reps, normalize
 class TestWorkoutParser(unittest.TestCase):
 
     def test_normalize_logic(self):
-        """Test that single sets expand to 3 sets."""
-        self.assertEqual(normalize([100]), [100, 100, 100])
-        self.assertEqual(normalize([100, 110]), [100, 110, 110])
+        """Test that normalize preserves full set data."""
+        self.assertEqual(normalize([100]), [100])
+        self.assertEqual(normalize([100, 110]), [100, 110])
         self.assertEqual(normalize([10, 20, 30]), [10, 20, 30])
-        self.assertEqual(normalize([]), [0, 0, 0])
+        self.assertEqual(normalize([]), [])
 
     def test_strict_x_parser(self):
         """Test the specific 'Weight x Reps' logic."""
@@ -46,7 +46,7 @@ class TestWorkoutParser(unittest.TestCase):
 
         # Exercise 1: Bench Press (Standard X)
         self.assertEqual(exs[0]['name'], "Bench Press")
-        self.assertEqual(exs[0]['weights'], [100.0, 100.0, 100.0])
+        self.assertEqual(exs[0]['weights'], [100.0])
         self.assertEqual(exs[0]['valid'], True)
 
         # Exercise 2: Incline DB (Comma separated)
@@ -56,12 +56,12 @@ class TestWorkoutParser(unittest.TestCase):
 
         # Exercise 3: Pec Fly (Implicit Reps)
         self.assertEqual(exs[2]['name'], "Pec Fly")
-        self.assertEqual(exs[2]['weights'], [15.0, 15.0, 15.0])
+        self.assertEqual(exs[2]['weights'], [15.0, 15.0])
         self.assertEqual(exs[2]['valid'], True)
 
         # Exercise 4: Pull Ups (Negative)
         self.assertEqual(exs[3]['name'], "Pull Ups")
-        self.assertEqual(exs[3]['weights'], [-35.0, -35.0, -35.0])
+        self.assertEqual(exs[3]['weights'], [-35.0])
         self.assertEqual(exs[3]['valid'], True)
 
     def test_fail_loudly_case(self):
@@ -77,7 +77,7 @@ class TestWorkoutParser(unittest.TestCase):
 
         # Exercise 1: Stretching (No numbers)
         self.assertEqual(exs[0]['name'], "Stretching")
-        self.assertEqual(exs[0]['weights'], [0, 0, 0])
+        self.assertEqual(exs[0]['weights'], [])
         self.assertEqual(exs[0]['valid'], False)  # Should be invalid
 
         # Exercise 2: Cardio

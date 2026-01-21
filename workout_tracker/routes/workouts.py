@@ -15,7 +15,13 @@ def register_workout_routes(app):
     def build_exercise_text(logs):
         lines = []
         for log in logs:
-            if log.top_weight and log.top_reps:
+            if getattr(log, 'exercise_string', None):
+                lines.append(log.exercise_string.strip())
+                continue
+
+            if getattr(log, 'sets_display', None):
+                lines.append(f"{log.exercise} {log.sets_display}")
+            elif log.top_weight and log.top_reps:
                 lines.append(f"{log.exercise} {log.top_weight} x {log.top_reps}")
             else:
                 lines.append(log.exercise)
