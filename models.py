@@ -7,7 +7,7 @@ from sqlalchemy_utils import JSONType
 from datetime import datetime
 import os
 from config import Config
-from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, DEFAULT_PLAN
+from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, DEFAULT_PLAN, BW_EXERCISES
 import enum
 
 # --- DATABASE CONNECTION ---
@@ -440,29 +440,40 @@ def _bootstrap_admin_user(session):
 
 
 def _seed_user_data(session, user):
-    default_sets = {"weights": [1, 1, 1], "reps": [1, 1, 1]}
+    def default_for_exercise(exercise: str):
+        if exercise in BW_EXERCISES:
+            return {"weights": [1], "reps": [1]}, "Bw/4, 1"
+        return {"weights": [1, 1, 1], "reps": [1, 1, 1]}, "1 1 1, 1 1 1"
+
+    def is_default_sets(exercise: str, weights, reps) -> bool:
+        if exercise in BW_EXERCISES:
+            return weights == [1] and reps == [1]
+        return weights == [1, 1, 1] and reps == [1, 1, 1]
+
     existing_lifts = session.query(Lift).filter(Lift.user_id == user.id).all()
     existing_by_exercise = {lift.exercise: lift for lift in existing_lifts}
     if not existing_lifts:
         for ex in list_of_exercises:
+            sets_json, best_string = default_for_exercise(ex)
             session.add(
                 Lift(
                     user_id=user.id,
                     exercise=ex,
-                    best_string="",
-                    sets_json={"weights": [1, 1, 1], "reps": [1, 1, 1]},
+                    best_string=best_string,
+                    sets_json=sets_json,
                 )
             )
     else:
         for ex in list_of_exercises:
             lift = existing_by_exercise.get(ex)
             if not lift:
+                sets_json, best_string = default_for_exercise(ex)
                 session.add(
                     Lift(
                         user_id=user.id,
                         exercise=ex,
-                        best_string="",
-                        sets_json={"weights": [1, 1, 1], "reps": [1, 1, 1]},
+                        best_string=best_string,
+                        sets_json=sets_json,
                     )
                 )
                 continue
@@ -471,8 +482,13 @@ def _seed_user_data(session, user):
             weights = sets_json.get("weights") if isinstance(sets_json, dict) else None
             reps = sets_json.get("reps") if isinstance(sets_json, dict) else None
             has_default_best = not (lift.best_string and lift.best_string.strip())
-            if not weights and not reps and has_default_best:
-                lift.sets_json = {"weights": [1, 1, 1], "reps": [1, 1, 1]}
+            if has_default_best:
+                default_sets, default_best = default_for_exercise(ex)
+                if not weights and not reps:
+                    lift.sets_json = default_sets
+                    lift.best_string = default_best
+                elif is_default_sets(ex, weights, reps):
+                    lift.best_string = default_best
 
     existing_plan = session.query(Plan).filter(Plan.user_id == user.id).first()
     if not existing_plan:

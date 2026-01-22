@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
+import re
+
 from models import Plan, RepRange
-from list_of_exercise import get_workout_days
+from list_of_exercise import BW_EXERCISES, get_workout_days
 from services.helpers import find_best_match
 
 
@@ -21,7 +23,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
 
     ist_offset = timedelta(hours=5, minutes=30)
     today_str = (datetime.utcnow() + ist_offset).strftime("%d/%m")
-    output = f"{today_str} {key}\n"
+    output_lines = [f"{today_str} {key}", ""]
 
     try:
         exercises = all_plans["workout"][category][key]
@@ -30,16 +32,67 @@ def generate_retrieve_output(db_session, user, category, day_id):
             fmt_rng = f" - [{rng}]" if rng else ""
 
             rec = find_best_match(db_session, user.id, ex)
-
+            sets_line = ""
             if rec and rec.best_string:
-                if " - [" in rec.best_string:
-                    output += "\n" + rec.best_string
-                else:
-                    data = rec.best_string[len(ex):].strip()
-                    if data.startswith("-"): data = data[1:].strip()
-                    output += f"\n{ex}{fmt_rng} - {data}"
-            else:
-                output += f"\n{ex}{fmt_rng}"
-        return output
+                sets_line = _extract_sets_line(rec.best_string, ex)
+                if sets_line and ex in BW_EXERCISES:
+                    sets_line = _normalize_bw(sets_line)
+
+            if not sets_line and rec and rec.sets_json:
+                sets_line = _format_sets_json(rec.sets_json)
+
+            output_lines.append(f"{ex}{fmt_rng}")
+            if sets_line:
+                output_lines.append(sets_line)
+            output_lines.append("")
+
+        return "\n".join(output_lines).rstrip()
     except KeyError:
         return f"Day '{key}' not found in plan."
+
+
+def _format_value(value):
+    if isinstance(value, float):
+        return f"{value:g}"
+    return str(value)
+
+
+def _format_sets_json(sets_json):
+    if not sets_json or not isinstance(sets_json, dict):
+        return ""
+    weights = sets_json.get("weights") or []
+    reps = sets_json.get("reps") or []
+    if not weights and not reps:
+        return ""
+    weights_line = " ".join(_format_value(w) for w in weights) if weights else ""
+    reps_line = " ".join(str(int(r)) if isinstance(r, (int, float)) else str(r) for r in reps) if reps else ""
+    if weights_line and reps_line:
+        return f"{weights_line}, {reps_line}"
+    return weights_line or reps_line
+
+
+def _extract_sets_line(best_string: str, exercise: str) -> str:
+    trimmed = (best_string or "").strip()
+    if not trimmed:
+        return ""
+    lines = [line.strip() for line in trimmed.splitlines() if line.strip()]
+    if len(lines) >= 2:
+        return lines[-1]
+    if " - [" in trimmed and "]" in trimmed:
+        tail = trimmed.split("]", 1)[1].strip()
+        tail = tail.lstrip("-:").strip()
+        if tail:
+            return tail
+    if trimmed.lower().startswith(exercise.lower()):
+        tail = trimmed[len(exercise):].strip()
+        tail = tail.lstrip("-:").strip()
+        if tail:
+            return tail
+    return trimmed
+
+
+def _normalize_bw(value: str) -> str:
+    value = re.sub(r"\bbw/", "Bw/", value, flags=re.IGNORECASE)
+    value = re.sub(r"\bbw(?=[+-])", "Bw", value, flags=re.IGNORECASE)
+    value = re.sub(r"\bbw\b", "Bw", value, flags=re.IGNORECASE)
+    return value

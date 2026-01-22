@@ -90,6 +90,18 @@ DEFAULT_REP_RANGES = {
     "Crunches B": "12–20"
 }
 
+# --- BODYWEIGHT EXERCISES ---
+BW_EXERCISES = {
+    "Dips",
+    "Pull Ups",
+    "Neutral-Grip Pull-Ups",
+    "Lower Abs",
+    "V Tucks",
+    "Crunches A",
+    "Crunches B",
+    "Hyper Extension",
+}
+
 # --- DEFAULT PLANS ---
 HARSH_DEFAULT_PLAN = """
 Chest & Triceps 1
