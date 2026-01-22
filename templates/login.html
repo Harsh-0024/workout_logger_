@@ -27,11 +27,11 @@
                         class="form-control"
                         placeholder="Enter your username or email"
                     >
-                    <div class="d-flex flex-wrap gap-2 mt-2">
-                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="gmail.com">@gmail.com</button>
-                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="icloud.com">@icloud.com</button>
-                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="outlook.com">@outlook.com</button>
-                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="yahoo.com">@yahoo.com</button>
+                    <div class="email-domain-grid mt-2">
+                        <button type="button" class="email-domain-chip" data-email-domain="gmail.com">@gmail.com</button>
+                        <button type="button" class="email-domain-chip" data-email-domain="icloud.com">@icloud.com</button>
+                        <button type="button" class="email-domain-chip" data-email-domain="outlook.com">@outlook.com</button>
+                        <button type="button" class="email-domain-chip" data-email-domain="yahoo.com">@yahoo.com</button>
                     </div>
                 </div>
 
@@ -94,6 +94,38 @@
 </form>
 
 <script>
+    (function() {
+        const style = document.createElement('style');
+        style.textContent = `
+            .email-domain-grid {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.45rem;
+                align-items: center;
+            }
+            .email-domain-chip {
+                border: 1px solid rgba(212, 175, 55, 0.35);
+                background: transparent;
+                color: rgba(212, 175, 55, 0.95);
+                font-size: 0.68rem;
+                font-weight: 600;
+                letter-spacing: 0.02em;
+                text-transform: none;
+                padding: 0.3rem 0.65rem;
+                border-radius: 999px;
+                line-height: 1.2;
+                white-space: nowrap;
+                transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+            }
+            .email-domain-chip:hover {
+                background: rgba(212, 175, 55, 0.12);
+                border-color: rgba(212, 175, 55, 0.65);
+                transform: translateY(-1px);
+            }
+        `;
+        document.head.appendChild(style);
+    })();
+
     (function() {
         const link = document.getElementById('otpLoginLink');
         const input = document.getElementById('username_or_email');
