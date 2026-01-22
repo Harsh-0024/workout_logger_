@@ -27,6 +27,12 @@
                         class="form-control"
                         placeholder="Enter your username or email"
                     >
+                    <div class="d-flex flex-wrap gap-2 mt-2">
+                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="gmail.com">@gmail.com</button>
+                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="icloud.com">@icloud.com</button>
+                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="outlook.com">@outlook.com</button>
+                        <button type="button" class="btn btn-gold-outline btn-sm rounded-pill px-3" data-email-domain="yahoo.com">@yahoo.com</button>
+                    </div>
                 </div>
 
                 <div class="mb-3">
@@ -101,6 +107,24 @@
             event.preventDefault();
             hidden.value = value;
             form.submit();
+        });
+    })();
+
+    (function() {
+        const input = document.getElementById('username_or_email');
+        if (!input) return;
+        document.querySelectorAll('[data-email-domain]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const domain = button.getAttribute('data-email-domain');
+                const value = (input.value || '').trim();
+                const localPart = value.split('@')[0].trim();
+                if (!localPart) {
+                    input.focus();
+                    return;
+                }
+                input.value = `${localPart}@${domain}`;
+                input.focus();
+            });
         });
     })();
 </script>

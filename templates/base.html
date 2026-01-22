@@ -1749,10 +1749,59 @@
 
     <footer class="footer">
         <div class="container">
-            © 2025 Workout Tracker
+            2025 Workout Tracker
         </div>
     </footer>
 
+    <datalist id="email-domain-options"></datalist>
+    <script>
+        (function() {
+            const domains = [
+                'gmail.com',
+                'icloud.com',
+                'outlook.com',
+                'hotmail.com',
+                'yahoo.com'
+            ];
+            const datalist = document.getElementById('email-domain-options');
+            if (!datalist) return;
+
+            const buildOptions = (localPart) => {
+                if (!localPart) {
+                    datalist.innerHTML = '';
+                    return;
+                }
+                datalist.innerHTML = domains
+                    .map(domain => `<option value="${localPart}@${domain}"></option>`)
+                    .join('');
+            };
+
+            const applyDefaultDomain = (input) => {
+                const value = (input.value || '').trim();
+                if (!value) return;
+                if (value.endsWith('@')) {
+                    input.value = `${value}gmail.com`;
+                    return;
+                }
+                if (value.includes('@')) {
+                    const parts = value.split('@');
+                    if (parts[0] && !parts[1]) {
+                        input.value = `${parts[0]}@gmail.com`;
+                    }
+                }
+            };
+
+            document.querySelectorAll('[data-email-assist="true"]').forEach((input) => {
+                input.setAttribute('list', 'email-domain-options');
+                buildOptions((input.value || '').split('@')[0].trim());
+                input.addEventListener('input', () => {
+                    const localPart = (input.value || '').split('@')[0].trim();
+                    buildOptions(localPart);
+                });
+                input.addEventListener('blur', () => applyDefaultDomain(input));
+            });
+        })();
+    </script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

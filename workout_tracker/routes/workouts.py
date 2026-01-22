@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import re
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import desc
@@ -265,6 +266,16 @@ def register_workout_routes(app):
                 header_date = new_date.strftime('%d/%m')
                 raw_text = f"{header_date} {title}\n{exercises_input}"
 
+                if re.search(r'\bbw[+-]?\d*\b', raw_text, re.IGNORECASE) and user.bodyweight is None:
+                    flash("Set your bodyweight in Settings before logging BW exercises.", "error")
+                    return render_template(
+                        'workout_edit.html',
+                        workout_date=new_date.strftime('%Y-%m-%d'),
+                        workout_name=title,
+                        workout_text=exercises_input,
+                        date=date_str,
+                    )
+
                 parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
                 if not parsed:
                     raise ParsingError("Could not parse workout data. Please check the format.")
@@ -348,6 +359,10 @@ def register_workout_routes(app):
         if not raw_text:
             flash("Please enter workout data.", "error")
             return redirect(url_for('log_workout'))
+
+        if re.search(r'\bbw[+-]?\d*\b', raw_text, re.IGNORECASE) and user.bodyweight is None:
+            flash("Set your bodyweight in Settings before logging BW exercises.", "error")
+            return render_template('log.html', workout_text=raw_text)
 
         try:
             parsed = workout_parser(raw_text, bodyweight=user.bodyweight)

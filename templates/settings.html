@@ -37,7 +37,7 @@
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Email
                     </label>
-                    <input type="email" name="email" class="form-control" value="{{ user.email }}" maxlength="255" autocomplete="email" required>
+                    <input type="email" name="email" class="form-control" value="{{ user.email }}" maxlength="255" autocomplete="email" required data-email-assist="true">
                 </div>
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
@@ -170,12 +170,18 @@
 </div>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        if (window.location.hash && window.location.hash.includes('change-password')) {
+        const scrollToChangePassword = () => {
+            if (!window.location.hash || !window.location.hash.includes('change-password')) return;
             const target = document.getElementById('change-password');
-            if (target) {
-                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
-        }
+            if (!target) return;
+            const offset = 110;
+            const y = target.getBoundingClientRect().top + window.scrollY - offset;
+            window.scrollTo({ top: y, behavior: 'smooth' });
+        };
+
+        setTimeout(scrollToChangePassword, 120);
+        window.addEventListener('hashchange', scrollToChangePassword);
+        window.addEventListener('load', scrollToChangePassword);
     });
 </script>
 {% endblock %}

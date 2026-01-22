@@ -373,7 +373,7 @@ def register_auth_routes(app, email_service):
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
                     current_password = request.form.get('current_password', '')
                     bodyweight_raw = request.form.get('bodyweight', '').strip()
-                    bodyweight = None
+                    bodyweight = user.bodyweight
 
                     if bodyweight_raw:
                         try:
@@ -486,7 +486,8 @@ def register_auth_routes(app, email_service):
 
                     user.username = username
                     user.email = email
-                    user.bodyweight = bodyweight
+                    if bodyweight is not None:
+                        user.bodyweight = bodyweight
                     user.updated_at = datetime.now()
                     if email in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
                         user.role = UserRole.ADMIN
@@ -698,7 +699,8 @@ def register_auth_routes(app, email_service):
 
                     user.username = username
                     user.email = email
-                    user.bodyweight = bodyweight
+                    if bodyweight is not None:
+                        user.bodyweight = bodyweight
                     user.updated_at = datetime.now()
                     if email in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
                         user.role = UserRole.ADMIN
@@ -840,8 +842,9 @@ def register_auth_routes(app, email_service):
 
                     user.username = username
                     user.email = email.lower()
-                    if 'bodyweight' in pending_change:
-                        user.bodyweight = pending_change.get('bodyweight')
+                    bodyweight = pending_change.get('bodyweight')
+                    if bodyweight is not None:
+                        user.bodyweight = bodyweight
                     user.is_verified = True
                     user.updated_at = datetime.now()
                     if user.email in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
