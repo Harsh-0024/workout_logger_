@@ -26,7 +26,7 @@ def register_workout_routes(app):
                 lines.append(f"{log.exercise} {log.top_weight} x {log.top_reps}")
             else:
                 lines.append(log.exercise)
-        return "\n".join(lines)
+        return "\n\n".join(lines)
 
     def get_recent_workouts(user, limit=50):
         try:
@@ -159,6 +159,9 @@ def register_workout_routes(app):
                 return redirect(url_for('user_dashboard', username=user.username))
 
             workout_name = logs[0].workout_name or "Workout"
+            header_date = workout_date.strftime('%d/%m')
+            workout_text = build_exercise_text(logs)
+            workout_text = f"{header_date} {workout_name}\n\n{workout_text}".strip()
             
             # Calculate volume for each exercise
             for log in logs:
@@ -190,7 +193,8 @@ def register_workout_routes(app):
                 'workout_detail.html',
                 date=date_str,
                 workout_name=workout_name,
-                logs=logs
+                logs=logs,
+                workout_text=workout_text,
             )
         except ValueError:
             flash("Invalid date format.", "error")

@@ -440,10 +440,39 @@ def _bootstrap_admin_user(session):
 
 
 def _seed_user_data(session, user):
-    existing_lift = session.query(Lift).filter(Lift.user_id == user.id).first()
-    if not existing_lift:
+    default_sets = {"weights": [1, 1, 1], "reps": [1, 1, 1]}
+    existing_lifts = session.query(Lift).filter(Lift.user_id == user.id).all()
+    existing_by_exercise = {lift.exercise: lift for lift in existing_lifts}
+    if not existing_lifts:
         for ex in list_of_exercises:
-            session.add(Lift(user_id=user.id, exercise=ex, best_string="", sets_json={"weights": [], "reps": []}))
+            session.add(
+                Lift(
+                    user_id=user.id,
+                    exercise=ex,
+                    best_string="",
+                    sets_json={"weights": [1, 1, 1], "reps": [1, 1, 1]},
+                )
+            )
+    else:
+        for ex in list_of_exercises:
+            lift = existing_by_exercise.get(ex)
+            if not lift:
+                session.add(
+                    Lift(
+                        user_id=user.id,
+                        exercise=ex,
+                        best_string="",
+                        sets_json={"weights": [1, 1, 1], "reps": [1, 1, 1]},
+                    )
+                )
+                continue
+
+            sets_json = lift.sets_json if isinstance(lift.sets_json, dict) else {}
+            weights = sets_json.get("weights") if isinstance(sets_json, dict) else None
+            reps = sets_json.get("reps") if isinstance(sets_json, dict) else None
+            has_default_best = not (lift.best_string and lift.best_string.strip())
+            if not weights and not reps and has_default_best:
+                lift.sets_json = {"weights": [1, 1, 1], "reps": [1, 1, 1]}
 
     existing_plan = session.query(Plan).filter(Plan.user_id == user.id).first()
     if not existing_plan:
