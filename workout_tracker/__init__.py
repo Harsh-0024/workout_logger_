@@ -18,7 +18,7 @@ from .routes.stats import register_stats_routes
 from .routes.workouts import register_workout_routes
 
 
-def create_app(config_object=Config):
+def create_app(config_object=Config, init_db: bool = True):
     base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     app = Flask(
         __name__,
@@ -28,11 +28,12 @@ def create_app(config_object=Config):
     app.secret_key = config_object.SECRET_KEY
     app.config.from_object(config_object)
 
-    try:
-        initialize_database()
-    except Exception as exc:
-        logger.critical(f"Database initialization failed: {exc}", exc_info=True)
-        raise
+    if init_db:
+        try:
+            initialize_database()
+        except Exception as exc:
+            logger.critical(f"Database initialization failed: {exc}", exc_info=True)
+            raise
 
     login_manager = LoginManager()
     login_manager.init_app(app)

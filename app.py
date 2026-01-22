@@ -14,7 +14,7 @@ from wait_for_db import wait_for_db
 from workout_tracker import create_app
 
 
-app = create_app()
+app = create_app(init_db=False)
 
 
 # Application entry point
