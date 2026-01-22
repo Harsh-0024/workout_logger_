@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 from config import Config
 
 
-def wait_for_db(timeout_seconds: int = 60, interval_seconds: float = 2.0) -> None:
+def wait_for_db(timeout_seconds: int = 120, interval_seconds: float = 2.0) -> None:
     database_url = Config.get_database_url()
     if database_url.startswith("sqlite"):
         return
@@ -32,6 +32,6 @@ def wait_for_db(timeout_seconds: int = 60, interval_seconds: float = 2.0) -> Non
 
 
 if __name__ == "__main__":
-    timeout = int(os.environ.get("DB_WAIT_TIMEOUT", "60"))
+    timeout = int(os.environ.get("DB_WAIT_TIMEOUT", "120"))
     interval = float(os.environ.get("DB_WAIT_INTERVAL", "2"))
     wait_for_db(timeout, interval)

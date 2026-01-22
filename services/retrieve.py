@@ -41,6 +41,11 @@ def generate_retrieve_output(db_session, user, category, day_id):
             if not sets_line and rec and rec.sets_json:
                 sets_line = _format_sets_json(rec.sets_json)
 
+            if ex in BW_EXERCISES:
+                if not sets_line or _is_default_numeric_sets(sets_line):
+                    sets_line = "bw/4, 1"
+                sets_line = _normalize_bw(sets_line)
+
             output_lines.append(f"{ex}{fmt_rng}")
             if sets_line:
                 output_lines.append(sets_line)
@@ -71,6 +76,11 @@ def _format_sets_json(sets_json):
     return weights_line or reps_line
 
 
+def _is_default_numeric_sets(value: str) -> bool:
+    normalized = (value or "").strip().lower().replace("  ", " ")
+    return normalized in {"1 1 1, 1 1 1", "1, 1"}
+
+
 def _extract_sets_line(best_string: str, exercise: str) -> str:
     trimmed = (best_string or "").strip()
     if not trimmed:
@@ -92,7 +102,7 @@ def _extract_sets_line(best_string: str, exercise: str) -> str:
 
 
 def _normalize_bw(value: str) -> str:
-    value = re.sub(r"\bbw/", "Bw/", value, flags=re.IGNORECASE)
-    value = re.sub(r"\bbw(?=[+-])", "Bw", value, flags=re.IGNORECASE)
-    value = re.sub(r"\bbw\b", "Bw", value, flags=re.IGNORECASE)
+    value = re.sub(r"\bbw/", "bw/", value, flags=re.IGNORECASE)
+    value = re.sub(r"\bbw(?=[+-])", "bw", value, flags=re.IGNORECASE)
+    value = re.sub(r"\bbw\b", "bw", value, flags=re.IGNORECASE)
     return value

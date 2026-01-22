@@ -22,7 +22,7 @@ if __name__ == '__main__':
     try:
         init_retries = int(os.environ.get("DB_INIT_RETRIES", "5"))
         init_delay = float(os.environ.get("DB_INIT_DELAY", "3"))
-        wait_timeout = int(os.environ.get("DB_WAIT_TIMEOUT", "60"))
+        wait_timeout = int(os.environ.get("DB_WAIT_TIMEOUT", "120"))
         wait_interval = float(os.environ.get("DB_WAIT_INTERVAL", "2"))
 
         for attempt in range(1, init_retries + 1):

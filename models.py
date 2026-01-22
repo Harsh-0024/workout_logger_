@@ -3,6 +3,7 @@ Database models for the Workout Tracker application.
 """
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index, Boolean, Enum
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session, relationship
+from sqlalchemy.exc import OperationalError
 from sqlalchemy_utils import JSONType
 from datetime import datetime
 import os
@@ -358,6 +359,8 @@ def migrate_schema():
                 
     except Exception as e:
         logger.warning(f"Migration warning (may be expected): {e}")
+        if isinstance(e, OperationalError):
+            raise
 
 
 # --- INITIALIZATION ---
@@ -440,9 +443,12 @@ def _bootstrap_admin_user(session):
 
 
 def _seed_user_data(session, user):
+    def is_all_ones(values) -> bool:
+        return bool(values) and all(v == 1 or v == 1.0 for v in values)
+
     def default_for_exercise(exercise: str):
         if exercise in BW_EXERCISES:
-            return {"weights": [1], "reps": [1]}, "Bw/4, 1"
+            return {"weights": [1], "reps": [1]}, "bw/4, 1"
         return {"weights": [1, 1, 1], "reps": [1, 1, 1]}, "1 1 1, 1 1 1"
 
     def is_default_sets(exercise: str, weights, reps) -> bool:
@@ -481,9 +487,18 @@ def _seed_user_data(session, user):
             sets_json = lift.sets_json if isinstance(lift.sets_json, dict) else {}
             weights = sets_json.get("weights") if isinstance(sets_json, dict) else None
             reps = sets_json.get("reps") if isinstance(sets_json, dict) else None
-            has_default_best = not (lift.best_string and lift.best_string.strip())
+            best_string_value = (lift.best_string or "").strip()
+            has_default_best = not best_string_value or best_string_value.lower() in {
+                "1 1 1, 1 1 1",
+                "bw/4, 1",
+                "bw, 1",
+            }
             if has_default_best:
                 default_sets, default_best = default_for_exercise(ex)
+                if ex in BW_EXERCISES and is_all_ones(weights) and is_all_ones(reps):
+                    lift.sets_json = default_sets
+                    lift.best_string = default_best
+                    continue
                 if not weights and not reps:
                     lift.sets_json = default_sets
                     lift.best_string = default_best
