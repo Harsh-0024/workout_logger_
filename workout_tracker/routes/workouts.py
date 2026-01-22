@@ -265,7 +265,7 @@ def register_workout_routes(app):
                 header_date = new_date.strftime('%d/%m')
                 raw_text = f"{header_date} {title}\n{exercises_input}"
 
-                parsed = workout_parser(raw_text)
+                parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
                 if not parsed:
                     raise ParsingError("Could not parse workout data. Please check the format.")
 
@@ -350,7 +350,7 @@ def register_workout_routes(app):
             return redirect(url_for('log_workout'))
 
         try:
-            parsed = workout_parser(raw_text)
+            parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
             if not parsed:
                 raise ParsingError(
                     "Could not parse workout data. Please check the format."

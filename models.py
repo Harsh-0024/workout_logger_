@@ -53,6 +53,7 @@ class User(Base):
     otp_code = Column(String(10), nullable=True)
     otp_purpose = Column(String(32), nullable=True)
     otp_expires = Column(DateTime, nullable=True)
+    bodyweight = Column(Float, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=True)
 
@@ -86,6 +87,19 @@ class User(Base):
     
     def __repr__(self):
         return f"<User(id={self.id}, username='{self.username}', role={self.role.value})>"
+
+
+# --- EMAIL VERIFICATIONS TABLE ---
+class EmailVerification(Base):
+    __tablename__ = 'email_verifications'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    email = Column(String(255), nullable=False, index=True)
+    purpose = Column(String(32), nullable=False, index=True)
+    code = Column(String(10), nullable=False)
+    expires_at = Column(DateTime, nullable=False)
+    verified_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
 
 
 # --- 2. LIFTS TABLE (PR Tracker) ---
@@ -177,6 +191,15 @@ class WorkoutLog(Base):
 
     @property
     def sets_display(self):
+        trimmed = None
+        if self.exercise_string:
+            trimmed = self.exercise_string.strip()
+            if trimmed.lower().startswith(self.exercise.lower()):
+                trimmed = trimmed[len(self.exercise):].strip()
+                trimmed = trimmed.lstrip("-:").strip()
+            if trimmed and 'bw' in trimmed.lower():
+                return trimmed
+
         if self.sets_json and isinstance(self.sets_json, dict):
             weights = self.sets_json.get('weights') or []
             reps = self.sets_json.get('reps') or []
@@ -187,11 +210,7 @@ class WorkoutLog(Base):
             if pairs:
                 return ", ".join(pairs)
 
-        if self.exercise_string:
-            trimmed = self.exercise_string.strip()
-            if trimmed.lower().startswith(self.exercise.lower()):
-                trimmed = trimmed[len(self.exercise):].strip()
-                trimmed = trimmed.lstrip("-:").strip()
+        if trimmed:
             return trimmed or None
 
         if self.top_weight and self.top_reps:
@@ -224,12 +243,14 @@ def migrate_schema():
                 str_type = 'VARCHAR(255)'
                 bool_type = 'TINYINT(1)'
                 json_type = 'JSON'
+                float_type = 'DOUBLE'
                 now_func = 'CURRENT_TIMESTAMP'
             elif dialect == 'postgresql':
                 ts_type = 'TIMESTAMP'
                 str_type = 'VARCHAR(255)'
                 bool_type = 'BOOLEAN'
                 json_type = 'JSONB'
+                float_type = 'DOUBLE PRECISION'
                 now_func = 'CURRENT_TIMESTAMP'
             else:
                 # SQLite (and others)
@@ -237,6 +258,7 @@ def migrate_schema():
                 str_type = 'VARCHAR(255)'
                 bool_type = 'BOOLEAN'
                 json_type = 'TEXT'
+                float_type = 'FLOAT'
                 now_func = 'CURRENT_TIMESTAMP'
 
             # --- Auth columns ---
@@ -253,6 +275,7 @@ def migrate_schema():
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_code {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_purpose {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires {ts_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS bodyweight {float_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at {ts_type}"))
                 conn.execute(text(f"UPDATE users SET created_at = {now_func} WHERE created_at IS NULL"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at {ts_type}"))
@@ -295,6 +318,10 @@ def migrate_schema():
                 if 'otp_expires' not in users_columns:
                     logger.info("Adding otp_expires column to users table")
                     conn.execute(text(f"ALTER TABLE users ADD COLUMN otp_expires {ts_type}"))
+
+                if 'bodyweight' not in users_columns:
+                    logger.info("Adding bodyweight column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN bodyweight {float_type}"))
                 
                 if 'created_at' not in users_columns:
                     logger.info("Adding created_at column to users table")
@@ -307,6 +334,9 @@ def migrate_schema():
                     conn.execute(text(f"UPDATE users SET updated_at = {now_func} WHERE updated_at IS NULL"))
 
             # --- Workout log columns ---
+            if 'email_verifications' not in inspector.get_table_names():
+                EmailVerification.__table__.create(bind=engine, checkfirst=True)
+
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
 

@@ -71,20 +71,83 @@ class EmailService:
             return False
 
     def send_otp_email(self, email: str, username: str, otp_code: str, purpose: str = 'login') -> bool:
-        """Send a one-time passcode email for login or profile updates."""
+        """Send a one-time passcode email for verification flows."""
         try:
-            expiry_minutes = Config.OTP_TOKEN_EXPIRY_MINUTES
-            purpose_label = "Login" if purpose == 'login' else "Profile Update"
-            subject = f"{purpose_label} Code - Workout Tracker"
+            purpose_aliases = {
+                'login': 'login_otp',
+            }
+            normalized_purpose = purpose_aliases.get(purpose, purpose)
+            purpose_details = {
+                'login_otp': {
+                    'label': 'Login',
+                    'subject': 'Login Code - Workout Tracker',
+                    'action': 'sign in',
+                },
+                'forgot_password': {
+                    'label': 'Password Reset',
+                    'subject': 'Password Reset Code - Workout Tracker',
+                    'action': 'reset your password',
+                },
+                'change_password': {
+                    'label': 'Change Password',
+                    'subject': 'Password Change Code - Workout Tracker',
+                    'action': 'change your password',
+                },
+                'verify_email': {
+                    'label': 'Email Verification',
+                    'subject': 'Verify Your Email - Workout Tracker',
+                    'action': 'verify your email address',
+                },
+                'change_email_old': {
+                    'label': 'Confirm Email Change',
+                    'subject': 'Confirm Email Change - Workout Tracker',
+                    'action': 'confirm your current email address',
+                },
+                'change_email_new': {
+                    'label': 'Confirm New Email',
+                    'subject': 'Confirm New Email - Workout Tracker',
+                    'action': 'confirm your new email address',
+                },
+                'profile_update': {
+                    'label': 'Profile Update',
+                    'subject': 'Profile Update Code - Workout Tracker',
+                    'action': 'update your profile',
+                },
+            }
+
+            details = purpose_details.get(
+                normalized_purpose,
+                {
+                    'label': 'Verification',
+                    'subject': 'Verification Code - Workout Tracker',
+                    'action': 'complete your request',
+                },
+            )
+
+            if normalized_purpose == 'verify_email':
+                expiry_value = Config.VERIFICATION_TOKEN_EXPIRY
+                expiry_unit = 'hours'
+            else:
+                expiry_value = Config.OTP_TOKEN_EXPIRY_MINUTES
+                expiry_unit = 'minutes'
+
+            extra_note = ""
+            if normalized_purpose in {'change_email_old', 'change_email_new'}:
+                extra_note = (
+                    "You'll need to enter both codes (current and new email) to complete the email change."
+                )
+
+            subject = details['subject']
 
             body = f"""
 Hello {username.title()},
 
-Use the code below to complete your {purpose_label.lower()}:
+Use the code below to {details['action']}:
 
 Your one-time code is: {otp_code}
 
-This code will expire in {expiry_minutes} minutes.
+This code will expire in {expiry_value} {expiry_unit}.
+{extra_note}
 
 If you didn't request this, you can ignore this email.
 
@@ -182,17 +245,19 @@ Workout Tracker Team
     <div class="container">
         <div class="header">
             <h1>🏋️ WORKOUT TRACKER</h1>
-            <p>{purpose_label} Code</p>
+            <p>{details['label']} Code</p>
         </div>
         <div class="content">
             <h2>Hello {username.title()},</h2>
-            <p>Use the code below to complete your <span class="highlight">{purpose_label.lower()}</span>:</p>
+            <p>Use the code below to <span class="highlight">{details['action']}</span>:</p>
 
             <div class="code-box">
                 <div class="code">{otp_code}</div>
             </div>
 
-            <p><span class="highlight">This code will expire in {expiry_minutes} minutes.</span></p>
+            <p><span class="highlight">This code will expire in {expiry_value} {expiry_unit}.</span></p>
+
+            {'<p>' + extra_note + '</p>' if extra_note else ''}
 
             <p>If you didn't request this, you can ignore this email.</p>
 

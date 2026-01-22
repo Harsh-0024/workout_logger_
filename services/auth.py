@@ -5,7 +5,7 @@ import bcrypt
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
-from models import User, UserRole, Session, _seed_user_data
+from models import User, UserRole, EmailVerification, Session, _seed_user_data, session_factory
 from utils.logger import logger
 from config import Config
 
@@ -40,6 +40,48 @@ class AuthService:
     def generate_verification_code() -> str:
         """Generate a 6-digit verification code."""
         return str(secrets.randbelow(900000) + 100000)
+
+    @staticmethod
+    def _get_email_verification_expiry(purpose: str) -> datetime:
+        if purpose == 'verify_email':
+            return datetime.now() + timedelta(hours=Config.VERIFICATION_TOKEN_EXPIRY)
+        return datetime.now() + timedelta(minutes=Config.OTP_TOKEN_EXPIRY_MINUTES)
+
+    @staticmethod
+    def _create_email_verification(session, user_id: int, email: str, purpose: str) -> str:
+        if not email:
+            raise AuthenticationError("This account has no email on file")
+
+        session.query(EmailVerification).filter(
+            EmailVerification.user_id == user_id,
+            EmailVerification.email == email,
+            EmailVerification.purpose == purpose,
+            EmailVerification.verified_at.is_(None),
+        ).delete(synchronize_session=False)
+
+        otp_code = AuthService.generate_verification_code()
+        expires_at = AuthService._get_email_verification_expiry(purpose)
+        verification = EmailVerification(
+            user_id=user_id,
+            email=email,
+            purpose=purpose,
+            code=otp_code,
+            expires_at=expires_at,
+            created_at=datetime.now(),
+        )
+        session.add(verification)
+        return otp_code
+
+    @staticmethod
+    def _get_latest_email_verification(session, user_id: int, purpose: str, email: Optional[str] = None):
+        query = session.query(EmailVerification).filter(
+            EmailVerification.user_id == user_id,
+            EmailVerification.purpose == purpose,
+            EmailVerification.verified_at.is_(None),
+        )
+        if email:
+            query = query.filter(EmailVerification.email == email)
+        return query.order_by(EmailVerification.created_at.desc()).first()
     
     @staticmethod
     def register_user(
@@ -81,10 +123,6 @@ class AuthService:
                 else:
                     raise AuthenticationError("Email already registered")
             
-            # Generate verification code
-            verification_code = AuthService.generate_verification_code()
-            token_expiry = datetime.now() + timedelta(hours=Config.VERIFICATION_TOKEN_EXPIRY)
-            
             # Create user
             email_lower = email.lower()
             role = UserRole.ADMIN if is_admin or email_lower in Config.ADMIN_EMAIL_ALLOWLIST else UserRole.USER
@@ -94,14 +132,18 @@ class AuthService:
                 password_hash=AuthService.hash_password(password),
                 role=role,
                 is_verified=False,
-                verification_token=verification_code,
-                verification_token_expires=token_expiry,
                 created_at=datetime.now(),
                 updated_at=datetime.now()
             )
-            
+
             session.add(user)
             session.flush()
+            verification_code = AuthService._create_email_verification(
+                session,
+                user_id=user.id,
+                email=user.email,
+                purpose='verify_email',
+            )
             _seed_user_data(session, user)
             session.commit()
             session.refresh(user)
@@ -114,6 +156,115 @@ class AuthService:
         except Exception as e:
             session.rollback()
             raise AuthenticationError(f"Registration failed: {str(e)}")
+        finally:
+            session.close()
+
+    @staticmethod
+    def request_password_change_otp(user_id: int) -> dict:
+        """Generate and store a one-time code for password changes."""
+        session = Session()
+        try:
+            user = session.query(User).get(user_id)
+            if not user:
+                raise AuthenticationError("User not found")
+
+            if not user.email:
+                raise AuthenticationError("This account has no email on file")
+
+            otp_code = AuthService._create_email_verification(
+                session,
+                user_id=user.id,
+                email=user.email,
+                purpose='change_password',
+            )
+            session.commit()
+
+            return {
+                'id': user.id,
+                'email': user.email,
+                'username': user.username,
+                'otp_code': otp_code,
+            }
+
+        except AuthenticationError:
+            session.rollback()
+            raise
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to request password change OTP: {e}", exc_info=True)
+            raise AuthenticationError("Unable to send a password change code right now. Please try again.")
+        finally:
+            session.close()
+
+    @staticmethod
+    def request_email_change_otps(user_id: int, current_email: str, new_email: str) -> dict:
+        """Generate OTPs for confirming an email change on both old and new addresses."""
+        session = Session()
+        try:
+            user = session.query(User).get(user_id)
+            if not user:
+                raise AuthenticationError("User not found")
+
+            if not current_email or not new_email:
+                raise AuthenticationError("Both current and new email addresses are required")
+
+            otp_old = AuthService._create_email_verification(
+                session,
+                user_id=user.id,
+                email=current_email,
+                purpose='change_email_old',
+            )
+            otp_new = AuthService._create_email_verification(
+                session,
+                user_id=user.id,
+                email=new_email,
+                purpose='change_email_new',
+            )
+            session.commit()
+
+            return {
+                'id': user.id,
+                'username': user.username,
+                'current_email': current_email,
+                'new_email': new_email,
+                'otp_old': otp_old,
+                'otp_new': otp_new,
+            }
+
+        except AuthenticationError:
+            session.rollback()
+            raise
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to request email change OTPs: {e}", exc_info=True)
+            raise AuthenticationError("Unable to send email change codes right now. Please try again.")
+        finally:
+            session.close()
+
+    @staticmethod
+    def set_password(user_id: int, new_password: str) -> bool:
+        """Set a user's password without verifying the current password."""
+        session = Session()
+        try:
+            user = session.query(User).get(user_id)
+
+            if not user:
+                return False
+
+            if len(new_password) < 8:
+                raise AuthenticationError("New password must be at least 8 characters")
+
+            user.password_hash = AuthService.hash_password(new_password)
+            user.updated_at = datetime.now()
+            session.commit()
+            return True
+
+        except AuthenticationError:
+            session.rollback()
+            raise
+        except Exception:
+            session.rollback()
+            return False
         finally:
             session.close()
 
@@ -136,11 +287,12 @@ class AuthService:
             if not user.email:
                 raise AuthenticationError("This account has no email on file")
 
-            otp_code = AuthService.generate_verification_code()
-            user.otp_code = otp_code
-            user.otp_purpose = 'login'
-            user.otp_expires = datetime.now() + timedelta(minutes=Config.OTP_TOKEN_EXPIRY_MINUTES)
-            user.updated_at = datetime.now()
+            otp_code = AuthService._create_email_verification(
+                session,
+                user_id=user.id,
+                email=user.email,
+                purpose='login_otp',
+            )
             session.commit()
 
             return {
@@ -172,11 +324,12 @@ class AuthService:
             if not user.email:
                 raise AuthenticationError("This account has no email on file")
 
-            otp_code = AuthService.generate_verification_code()
-            user.otp_code = otp_code
-            user.otp_purpose = 'profile_update'
-            user.otp_expires = datetime.now() + timedelta(minutes=Config.OTP_TOKEN_EXPIRY_MINUTES)
-            user.updated_at = datetime.now()
+            otp_code = AuthService._create_email_verification(
+                session,
+                user_id=user.id,
+                email=user.email,
+                purpose='profile_update',
+            )
             session.commit()
 
             return {
@@ -199,27 +352,23 @@ class AuthService:
     @staticmethod
     def verify_otp(user_id: int, otp_code: str, purpose: str, mark_verified: bool = False) -> bool:
         """Verify a one-time code for a given purpose."""
-        session = Session()
+        session = session_factory()
         try:
             user = session.query(User).get(user_id)
             if not user:
                 return False
 
-            if not user.otp_code or not user.otp_purpose:
+            verification = AuthService._get_latest_email_verification(session, user.id, purpose)
+            if not verification:
                 return False
 
-            if user.otp_purpose != purpose:
-                return False
-
-            if user.otp_expires and user.otp_expires < datetime.now():
+            if verification.expires_at and verification.expires_at < datetime.now():
                 raise AuthenticationError("One-time code has expired")
 
-            if user.otp_code != otp_code:
+            if verification.code != otp_code:
                 return False
 
-            user.otp_code = None
-            user.otp_purpose = None
-            user.otp_expires = None
+            verification.verified_at = datetime.now()
             if mark_verified and not user.is_verified:
                 user.is_verified = True
             user.updated_at = datetime.now()
@@ -250,24 +399,24 @@ class AuthService:
             if not user:
                 return False
             
-            # Check if already verified
             if user.is_verified:
                 return True
-            
-            # Check token expiry
-            if user.verification_token_expires and user.verification_token_expires < datetime.now():
+
+            verification = AuthService._get_latest_email_verification(session, user.id, 'verify_email', user.email)
+            if not verification:
+                return False
+
+            if verification.expires_at and verification.expires_at < datetime.now():
                 raise AuthenticationError("Verification code has expired")
-            
-            # Verify code
-            if user.verification_token == verification_code:
-                user.is_verified = True
-                user.verification_token = None
-                user.verification_token_expires = None
-                user.updated_at = datetime.now()
-                session.commit()
-                return True
-            
-            return False
+
+            if verification.code != verification_code:
+                return False
+
+            verification.verified_at = datetime.now()
+            user.is_verified = True
+            user.updated_at = datetime.now()
+            session.commit()
+            return True
             
         except AuthenticationError:
             session.rollback()
@@ -299,16 +448,14 @@ class AuthService:
             if user.is_verified:
                 raise AuthenticationError("Email already verified")
             
-            # Generate new code
-            verification_code = AuthService.generate_verification_code()
-            token_expiry = datetime.now() + timedelta(hours=Config.VERIFICATION_TOKEN_EXPIRY)
-            
-            user.verification_token = verification_code
-            user.verification_token_expires = token_expiry
+            verification_code = AuthService._create_email_verification(
+                session,
+                user_id=user.id,
+                email=user.email,
+                purpose='verify_email',
+            )
             user.updated_at = datetime.now()
-            
             session.commit()
-            
             return verification_code
             
         except AuthenticationError:

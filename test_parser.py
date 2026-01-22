@@ -96,6 +96,44 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[0]['name'], "Just Text No Numbers")
         self.assertEqual(exs[0]['valid'], False)
 
+    def test_multiline_and_bw_parsing(self):
+        raw_text = """
+        22/01 Chest & Triceps 3
+        Incline Dumbbell Press - [6-10]
+        25 22.5 20, 7 9 10
+        Triceps Rod Pushdown - [10-15]
+        45 40
+        10 15 10
+        Dips - [6-12]
+        Bw, 6
+        Dips - [6-12] - Bw-20, 6
+        Dips - [6-12] - Bw+10, 6
+        Lower Abs - [12-20] :
+        ,16
+        """
+        result = workout_parser(raw_text, bodyweight=70)
+        exs = result['exercises']
+
+        self.assertEqual(exs[0]['name'], "Incline Dumbbell Press")
+        self.assertEqual(exs[0]['weights'], [25.0, 22.5, 20.0])
+        self.assertEqual(exs[0]['reps'], [7, 9, 10])
+
+        self.assertEqual(exs[1]['name'], "Triceps Rod Pushdown")
+        self.assertEqual(exs[1]['weights'], [45.0, 40.0, 40.0])
+        self.assertEqual(exs[1]['reps'], [10, 15, 10])
+
+        self.assertEqual(exs[2]['weights'], [70.0])
+        self.assertEqual(exs[2]['reps'], [6])
+
+        self.assertEqual(exs[3]['weights'], [50.0])
+        self.assertEqual(exs[3]['reps'], [6])
+
+        self.assertEqual(exs[4]['weights'], [80.0])
+        self.assertEqual(exs[4]['reps'], [6])
+
+        self.assertEqual(exs[5]['weights'], [1.0])
+        self.assertEqual(exs[5]['reps'], [16])
+
 
 if __name__ == '__main__':
     unittest.main()

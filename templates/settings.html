@@ -41,12 +41,35 @@
                 </div>
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        Bodyweight
+                    </label>
+                    <input
+                        type="number"
+                        name="bodyweight"
+                        class="form-control"
+                        value="{% if user.bodyweight is not none %}{{ user.bodyweight }}{% endif %}"
+                        min="1"
+                        step="0.1"
+                        placeholder="e.g. 72.5"
+                    >
+                    <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                        <i class="bi bi-person-check me-1"></i>Used for bodyweight (BW) exercises
+                    </small>
+                </div>
+                <div class="mb-3 mb-md-4">
+                    <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Current Password
                     </label>
                     <input type="password" name="current_password" class="form-control" autocomplete="current-password">
-                    <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                        <i class="bi bi-shield-check me-1"></i>Required if you use password verification
-                    </small>
+                    {% if otp_login_verified or password_change_verified %}
+                        <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                            <i class="bi bi-shield-check me-1"></i>Use this to change username or email. Bodyweight can be updated without it.
+                        </small>
+                    {% else %}
+                        <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                            <i class="bi bi-shield-check me-1"></i>Required to update profile details
+                        </small>
+                    {% endif %}
                 </div>
                 <div class="d-grid gap-2 gap-md-3">
                     <button type="submit" name="form_type" value="profile" class="btn btn-gold-solid w-100 settings-action-btn">
@@ -60,35 +83,81 @@
                 </div>
             </form>
 
-            <div class="border-top pt-4 pt-md-5" style="border-color: var(--border-subtle) !important;">
+            <div class="border-top pt-4 pt-md-5" id="change-password" style="border-color: var(--border-subtle) !important;">
                 <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
                     <i class="bi bi-shield-lock text-gold"></i>
                     <h5 class="mb-0 fw-bold">Change Password</h5>
                 </div>
-                <form method="POST" action="{{ url_for('user_settings') }}">
-                    <input type="hidden" name="form_type" value="password">
-                    <div class="mb-3 mb-md-4">
-                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                            Current Password
-                        </label>
-                        <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
-                    </div>
-                    <div class="mb-3 mb-md-4">
-                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                            New Password
-                        </label>
-                        <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
-                    </div>
-                    <div class="mb-3 mb-md-4">
-                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                            Confirm New Password
-                        </label>
-                        <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
-                    </div>
-                    <button type="submit" class="btn btn-gold-solid w-100">
-                        <i class="bi bi-key-fill me-2"></i>Update Password
-                    </button>
-                </form>
+                {% if pending_password_change %}
+                    <form method="POST" action="{{ url_for('user_settings') }}" class="mb-3">
+                        <input type="hidden" name="form_type" value="password_otp">
+                        <div class="mb-3 mb-md-4">
+                            <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                                One-Time Code
+                            </label>
+                            <input type="text" name="otp_code" class="form-control" maxlength="6" pattern="[0-9]{6}" autocomplete="one-time-code" required>
+                        </div>
+                        <div class="mb-3 mb-md-4">
+                            <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                                New Password
+                            </label>
+                            <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                        </div>
+                        <div class="mb-3 mb-md-4">
+                            <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                                Confirm New Password
+                            </label>
+                            <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                        </div>
+                        <button type="submit" class="btn btn-gold-solid w-100">
+                            <i class="bi bi-key-fill me-2"></i>Update Password
+                        </button>
+                    </form>
+                    <form method="POST" action="{{ url_for('user_settings') }}">
+                        <input type="hidden" name="form_type" value="password_otp_cancel">
+                        <button type="submit" class="btn btn-gold-outline w-100">Cancel OTP Change</button>
+                    </form>
+                {% else %}
+                    <form method="POST" action="{{ url_for('user_settings') }}">
+                        <input type="hidden" name="form_type" value="password">
+                        {% if not (otp_login_verified or password_change_verified) %}
+                            <div class="mb-3 mb-md-4">
+                                <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                                    Current Password
+                                </label>
+                                <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                            </div>
+                        {% else %}
+                            <div class="alert alert-success py-2 px-3" role="alert">
+                                <small class="mb-0 d-block">You logged in with a one-time code. Set a new password below.</small>
+                            </div>
+                        {% endif %}
+                        <div class="mb-3 mb-md-4">
+                            <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                                New Password
+                            </label>
+                            <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                        </div>
+                        <div class="mb-3 mb-md-4">
+                            <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                                Confirm New Password
+                            </label>
+                            <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                        </div>
+                        <button type="submit" class="btn btn-gold-solid w-100">
+                            <i class="bi bi-key-fill me-2"></i>Update Password
+                        </button>
+                    </form>
+                    {% if not (otp_login_verified or password_change_verified) %}
+                        <div class="pt-3 mt-3 border-top" style="border-color: var(--border-subtle) !important;">
+                            <p class="text-muted small mb-2">Prefer a one-time code instead?</p>
+                            <form method="POST" action="{{ url_for('user_settings') }}">
+                                <input type="hidden" name="form_type" value="password_otp_request">
+                                <button type="submit" class="btn btn-gold-outline w-100">Use One-Time Code</button>
+                            </form>
+                        </div>
+                    {% endif %}
+                {% endif %}
             </div>
 
             <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
@@ -99,4 +168,14 @@
         </div>
     </div>
 </div>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        if (window.location.hash && window.location.hash.includes('change-password')) {
+            const target = document.getElementById('change-password');
+            if (target) {
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        }
+    });
+</script>
 {% endblock %}
