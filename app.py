@@ -32,6 +32,8 @@ def require_db_ready_for_requests():
     if request.path.startswith('/static/'):
         return None
     if not app.config.get("DB_READY", False):
+        if request.path in ('/', '/favicon.ico'):
+            return "Service warming up", 200
         return "Service warming up", 503
 
 

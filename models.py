@@ -3,7 +3,7 @@ Database models for the Workout Tracker application.
 """
 from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index, Boolean, Enum
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session, relationship
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy_utils import JSONType
 from datetime import datetime
 import os
@@ -265,6 +265,10 @@ def migrate_schema():
             # --- Auth columns ---
             if dialect == 'postgresql':
                 logger.info("Ensuring auth columns exist for PostgreSQL")
+                lock_timeout_ms = int(os.environ.get('DB_LOCK_TIMEOUT_MS', '5000'))
+                statement_timeout_ms = int(os.environ.get('DB_STATEMENT_TIMEOUT_MS', '60000'))
+                conn.execute(text(f"SET LOCAL lock_timeout = '{lock_timeout_ms}ms'"))
+                conn.execute(text(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS email {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS role {str_type} DEFAULT 'user'"))
@@ -359,7 +363,7 @@ def migrate_schema():
                 
     except Exception as e:
         logger.warning(f"Migration warning (may be expected): {e}")
-        if isinstance(e, OperationalError):
+        if isinstance(e, SQLAlchemyError):
             raise
 
 
