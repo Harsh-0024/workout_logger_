@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% block content %}
-<div class="row justify-content-center" style="min-height: 80vh; align-items: center;">
+<div class="row justify-content-center retrieve-step" style="min-height: 80vh; align-items: center;">
     <div class="col-12 col-md-6 col-lg-5">
         <div class="card text-center">
-            <div class="d-flex justify-content-center gap-2 mb-4">
-                <span class="badge bg-primary">1. Category</span>
-                <span class="badge" style="background: rgba(255,255,255,0.1);">2. Days</span>
-                <span class="badge" style="background: rgba(255,255,255,0.1);">3. Result</span>
+            <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap step-badges">
+                <span class="badge bg-primary step-badge">1. Category</span>
+                <span class="badge step-badge" style="background: rgba(255,255,255,0.1);">2. Days</span>
+                <span class="badge step-badge" style="background: rgba(255,255,255,0.1);">3. Result</span>
             </div>
             <div class="mb-4 mb-md-5">
                 <i class="bi bi-bullseye" style="font-size: clamp(4rem, 12vw, 5rem); color: var(--gold-primary); opacity: 0.6;"></i>
@@ -16,7 +16,7 @@
                 Select Target
             </h6>
 
-            <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4">
+            <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4 step-buttons">
                 {% for cat in categories %}
                 <a href="/retrieve/days/{{ cat | url_encode }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);" {% if loop.index <= 9 %}data-shortcut="{{ loop.index }}"{% endif %}>
                     {% if loop.index <= 9 %}
@@ -39,4 +39,39 @@
         </div>
     </div>
 </div>
+<style>
+    .step-badges .badge {
+        padding: 6px 14px;
+        font-size: var(--fs-xs);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+
+    @media (max-width: 576px) {
+        .retrieve-step {
+            min-height: auto !important;
+            align-items: stretch !important;
+        }
+
+        .step-badges {
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .step-badges .badge {
+            width: 100%;
+            max-width: 220px;
+        }
+
+        .step-buttons .btn {
+            padding-top: 14px;
+            padding-bottom: 14px;
+        }
+
+        .step-buttons .shortcut-key {
+            min-width: 26px;
+            font-size: 0.65rem;
+        }
+    }
+</style>
 {% endblock %}

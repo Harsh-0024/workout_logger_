@@ -35,6 +35,15 @@ def register_stats_routes(app):
                 .all()
             )
 
+            bw_exercises = []
+            if user.bodyweight is None and logs:
+                bw_exercises = sorted({
+                    log.exercise
+                    for log in logs
+                    if 'bw' in (getattr(log, 'exercise_string', '') or '').lower()
+                    or 'bw' in (log.sets_display or '').lower()
+                })
+
             csv_size_kb = 0
             json_size_kb = 0
 
@@ -81,6 +90,8 @@ def register_stats_routes(app):
                 exercises=exercises,
                 csv_size_kb=csv_size_kb,
                 json_size_kb=json_size_kb,
+                bw_exercises=bw_exercises,
+                bw_warning_enabled=user.bodyweight is None,
             )
         except Exception as e:
             logger.error(f"Error in stats_index: {e}", exc_info=True)

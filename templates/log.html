@@ -19,10 +19,10 @@
                     <textarea name="workout_text" class="form-control" rows="10" autofocus
                         placeholder="Chest & Triceps 1&#10;Bench Press: 100kg x 5, 100kg x 5, 100kg x 5&#10;Incline DB Press: 35kg x 8, 35kg x 8, 35kg x 8&#10;...">{{ workout_text or '' }}</textarea>
                     <div id="exerciseSuggestions" class="exercise-suggestions" style="display: none;"></div>
-                    <small class="text-muted mt-2 d-flex justify-content-between" style="font-size: var(--fs-xs);">
-                        <span><i class="bi bi-info-circle me-1"></i>Supports BW, BW+10, BW-20, or split weight/reps lines</span>
-                        <span id="lineCount">0 exercises • 0 sets</span>
-                    </small>
+                    <div class="log-meta text-muted mt-2">
+                        <span class="log-hint"><i class="bi bi-info-circle me-1"></i>Supports BW, BW+10, BW-20, or split weight/reps lines</span>
+                        <span id="lineCount" class="log-stats">0 exercises • 0 reps</span>
+                    </div>
                 </div>
                 <button type="submit" class="btn btn-gold-solid w-100 mb-3">
                     <i class="bi bi-check-circle-fill me-2"></i>Analyze & Save
@@ -75,6 +75,35 @@
         background: rgba(212, 175, 55, 0.12);
         color: var(--text-primary);
     }
+
+    .log-meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: var(--fs-xs);
+        flex-wrap: wrap;
+    }
+
+    .log-stats {
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(212, 175, 55, 0.12);
+        color: var(--gold-bright);
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    @media (max-width: 576px) {
+        .log-meta {
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .log-stats {
+            align-self: flex-start;
+        }
+    }
 </style>
 <script>
     (function() {
@@ -91,23 +120,24 @@
             return /^(?:,|-?\d|bw)/.test(trimmed);
         };
 
-        const expandSetCount = (count) => {
-            if (count === 1) return 3;
-            if (count === 2) return 3;
-            return count;
+        const expandShorthand = (values) => {
+            if (!values.length) return [];
+            if (values.length === 1) return [values[0], values[0], values[0]];
+            if (values.length === 2) return [values[0], values[1], values[1]];
+            return values;
         };
 
         const updateCount = () => {
             const value = textarea.value || '';
             const rawLines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
             if (rawLines.length <= 1) {
-                counter.textContent = '0 exercises • 0 sets';
+                counter.textContent = '0 exercises • 0 reps';
                 return;
             }
 
             const lines = rawLines.slice(1);
             let exerciseCount = 0;
-            let setCount = 0;
+            let repCount = 0;
             let i = 0;
 
             while (i < lines.length) {
@@ -161,7 +191,12 @@
                     exerciseCount += 1;
                     const match = dataPart.match(/(bw[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+/gi);
                     if (match) {
-                        setCount += expandSetCount(match.length);
+                        const reps = match.map((item) => {
+                            const repMatch = item.match(/x\s*(\d+)/i);
+                            return repMatch ? Number(repMatch[1]) : 0;
+                        }).filter((val) => !Number.isNaN(val));
+                        const expanded = expandShorthand(reps);
+                        repCount += expanded.reduce((sum, val) => sum + val, 0);
                     } else if (dataPart.includes(',')) {
                         const parts = dataPart.split(',', 1);
                         const weights = parts[0].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
@@ -169,19 +204,27 @@
                         const repsTokens = parts[1]
                             ? parts[1].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean)
                             : [];
-                        const count = Math.max(weightTokens.length, repsTokens.length);
-                        setCount += expandSetCount(count);
+                        const weightCount = expandShorthand(weightTokens).length;
+                        const reps = expandShorthand(
+                            repsTokens.map((val) => Number(val)).filter((val) => !Number.isNaN(val))
+                        );
+                        if (reps.length) {
+                            repCount += reps.reduce((sum, val) => sum + val, 0);
+                        } else if (weightCount) {
+                            repCount += weightCount;
+                        }
                     } else {
                         const weights = dataPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
                         const weightTokens = weights ? weights.split(/\s+/).filter(Boolean) : [];
-                        setCount += expandSetCount(weightTokens.length);
+                        const weightCount = expandShorthand(weightTokens).length;
+                        repCount += weightCount;
                     }
                 }
 
                 i += consumed;
             }
 
-            counter.textContent = `${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'} • ${setCount} set${setCount === 1 ? '' : 's'}`;
+            counter.textContent = `${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'} • ${repCount} rep${repCount === 1 ? '' : 's'}`;
         };
 
         if (suggestionBox && Array.isArray(exerciseList) && exerciseList.length) {

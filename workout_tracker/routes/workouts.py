@@ -32,6 +32,29 @@ def register_workout_routes(app):
             return 3
         return count
 
+    def _expand_shorthand_values(values):
+        if not values:
+            return []
+        if len(values) == 1:
+            return values * 3
+        if len(values) == 2:
+            return [values[0], values[1], values[1]]
+        return values
+
+    def _sum_reps(sets_json=None, sets_display=None):
+        reps = []
+        if sets_json and isinstance(sets_json, dict):
+            reps = [int(r) for r in (sets_json.get('reps') or []) if r is not None]
+        elif sets_display:
+            matches = re.findall(r'x\s*(\d+)', sets_display, flags=re.IGNORECASE)
+            reps = [int(r) for r in matches]
+        reps = _expand_shorthand_values(reps)
+        return sum(reps)
+
+    def _log_uses_bw(log):
+        haystack = f"{getattr(log, 'exercise_string', '')} {getattr(log, 'sets_display', '')}".lower()
+        return 'bw' in haystack
+
     def build_exercise_text(logs):
         lines = []
         for log in logs:
@@ -185,9 +208,15 @@ def register_workout_routes(app):
             header_date = workout_date.strftime('%d/%m')
             workout_text = build_exercise_text(logs)
             workout_text = f"{header_date} {workout_name}\n\n{workout_text}".strip()
-            
+            exercise_count = len(logs)
+            rep_count = 0
+            missing_bw_exercises = set()
+
             # Calculate volume for each exercise
             for log in logs:
+                rep_count += _sum_reps(log.sets_json, log.sets_display)
+                if user.bodyweight is None and _log_uses_bw(log):
+                    missing_bw_exercises.add(log.exercise)
                 total_volume = 0
                 if log.sets_json and isinstance(log.sets_json, dict):
                     weights = log.sets_json.get('weights') or []
@@ -221,6 +250,9 @@ def register_workout_routes(app):
                 workout_name=workout_name,
                 logs=logs,
                 workout_text=workout_text,
+                exercise_count=exercise_count,
+                rep_count=rep_count,
+                missing_bw_exercises=sorted(missing_bw_exercises),
                 share_url=share_url,
             )
         except ValueError:
@@ -344,16 +376,6 @@ def register_workout_routes(app):
                 header_date = new_date.strftime('%d/%m')
                 raw_text = f"{header_date} {title}\n{exercises_input}"
 
-                if re.search(r'\bbw[+-]?\d*\b', raw_text, re.IGNORECASE) and user.bodyweight is None:
-                    flash("Set your bodyweight in Settings before logging BW exercises.", "error")
-                    return render_template(
-                        'workout_edit.html',
-                        workout_date=new_date.strftime('%Y-%m-%d'),
-                        workout_name=title,
-                        workout_text=exercises_input,
-                        date=date_str,
-                    )
-
                 parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
                 if not parsed:
                     raise ParsingError("Could not parse workout data. Please check the format.")
@@ -438,19 +460,16 @@ def register_workout_routes(app):
             flash("Please enter workout data.", "error")
             return redirect(url_for('log_workout'))
 
-        if re.search(r'\bbw[+-]?\d*\b', raw_text, re.IGNORECASE) and user.bodyweight is None:
-            flash("Set your bodyweight in Settings before logging BW exercises.", "error")
-            return render_template(
-                'log.html',
-                workout_text=raw_text,
-                exercise_list=list_of_exercises,
-            )
-
         try:
             parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
             if not parsed:
                 raise ParsingError(
                     "Could not parse workout data. Please check the format."
+                )
+            if user.bodyweight is None and re.search(r'\bbw[+-]?\d*\b', raw_text, re.IGNORECASE):
+                flash(
+                    "Set your bodyweight in Settings to calculate BW loads accurately.",
+                    "info",
                 )
         except ParsingError as e:
             flash(str(e), "error")
@@ -464,10 +483,8 @@ def register_workout_routes(app):
             summary = handle_workout_log(Session, user, parsed)
             exercises = parsed.get('exercises') or []
             exercise_count = len(exercises)
-            set_count = sum(
-                _expand_set_count(
-                    max(len(item.get('reps') or []), len(item.get('weights') or []))
-                )
+            rep_count = sum(
+                _sum_reps({'reps': item.get('reps') or []})
                 for item in exercises
             )
             Session.commit()
@@ -480,7 +497,7 @@ def register_workout_routes(app):
                 summary=summary,
                 date=parsed['date'].strftime('%Y-%m-%d'),
                 exercise_count=exercise_count,
-                set_count=set_count,
+                rep_count=rep_count,
             )
         except Exception as e:
             Session.rollback()

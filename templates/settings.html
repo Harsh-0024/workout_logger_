@@ -27,6 +27,7 @@
             </div>
 
             <form method="POST" action="{{ url_for('user_settings') }}" class="mb-4 mb-md-5">
+                <input type="hidden" name="form_type" id="profileFormType" value="profile">
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Username
@@ -67,20 +68,20 @@
                     <input type="password" name="current_password" class="form-control" autocomplete="current-password">
                     {% if otp_login_verified or password_change_verified %}
                         <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                            <i class="bi bi-shield-check me-1"></i>Use this to change username or email. Bodyweight can be updated without it.
+                            <i class="bi bi-shield-check me-1"></i>Optional if you use the one-time code below. Required for instant updates to username or email.
                         </small>
                     {% else %}
                         <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                            <i class="bi bi-shield-check me-1"></i>Required to update profile details
+                            <i class="bi bi-shield-check me-1"></i>Optional if you use the one-time code below. Required for instant profile updates.
                         </small>
                     {% endif %}
                 </div>
                 <div class="d-grid gap-2 gap-md-3">
-                    <button type="submit" name="form_type" value="profile" class="btn btn-gold-solid w-100 settings-action-btn">
+                    <button type="submit" class="btn btn-gold-solid w-100 settings-action-btn" data-profile-form-type="profile">
                         <i class="bi bi-check-circle-fill"></i>
                         <span>Update Profile</span>
                     </button>
-                    <button type="submit" name="form_type" value="profile_otp" class="btn btn-gold-outline w-100 settings-action-btn">
+                    <button type="submit" class="btn btn-gold-outline w-100 settings-action-btn" data-profile-form-type="profile_otp">
                         <i class="bi bi-shield-lock"></i>
                         <span class="d-none d-md-inline">Update with One-Time Code</span>
                         <span class="d-md-none">Use OTP</span>
@@ -183,6 +184,15 @@
             const y = target.getBoundingClientRect().top + window.scrollY - offset;
             window.scrollTo({ top: y, behavior: 'smooth' });
         };
+
+        const formTypeInput = document.getElementById('profileFormType');
+        document.querySelectorAll('[data-profile-form-type]').forEach((button) => {
+            button.addEventListener('click', () => {
+                if (formTypeInput) {
+                    formTypeInput.value = button.dataset.profileFormType || 'profile';
+                }
+            });
+        });
 
         setTimeout(scrollToChangePassword, 120);
         window.addEventListener('hashchange', scrollToChangePassword);
