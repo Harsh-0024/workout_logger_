@@ -20,8 +20,7 @@
                         placeholder="Chest & Triceps 1&#10;Bench Press: 100kg x 5, 100kg x 5, 100kg x 5&#10;Incline DB Press: 35kg x 8, 35kg x 8, 35kg x 8&#10;...">{{ workout_text or '' }}</textarea>
                     <div id="exerciseSuggestions" class="exercise-suggestions" style="display: none;"></div>
                     <div class="log-meta text-muted mt-2">
-                        <span class="log-hint"><i class="bi bi-info-circle me-1"></i>Supports BW, BW+10, BW-20, or split weight/reps lines</span>
-                        <span id="lineCount" class="log-stats">0 exercises • 0 reps</span>
+                        <span id="lineCount" class="log-stats">0 exercises • 0 sets</span>
                     </div>
                 </div>
                 <button type="submit" class="btn btn-gold-solid w-100 mb-3">
@@ -189,16 +188,18 @@
 
                 if (dataPart) {
                     exerciseCount += 1;
-                    const match = dataPart.match(/(bw[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+/gi);
+                    const match = dataPart.match(/(bw(?:\/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)\s*[x×]\s*\d+/gi);
                     if (match) {
                         const sets = expandShorthand(match);
                         repCount += sets.length;
                     } else if (dataPart.includes(',')) {
-                        const parts = dataPart.split(',', 1);
-                        const weights = parts[0].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
+                        const parts = dataPart.split(',');
+                        const weightsPart = parts[0] ?? '';
+                        const repsPart = parts.slice(1).join(' ').trim();
+                        const weights = weightsPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
                         const weightTokens = weights ? weights.split(/\s+/).filter(Boolean) : [];
-                        const repsTokens = parts[1]
-                            ? parts[1].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean)
+                        const repsTokens = repsPart
+                            ? repsPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean)
                             : [];
                         const sets = Math.max(
                             expandShorthand(weightTokens).length,

@@ -18,8 +18,8 @@
 
             <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4 step-buttons">
                 {% for cat in categories %}
-                <a href="/retrieve/days/{{ cat | url_encode }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);" {% if loop.index <= 9 %}data-shortcut="{{ loop.index }}"{% endif %}>
-                    <i class="bi bi-activity me-2"></i>{{ cat | upper }}
+                <a href="/retrieve/days/{{ cat | url_encode }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold text-center" style="font-size: clamp(1rem, 4vw, 1.25rem);" {% if loop.index <= 9 %}data-shortcut="{{ loop.index }}"{% endif %}>
+                    <i class="bi bi-activity" style="margin-right: 0.5rem;"></i>{{ cat | upper }}
                 </a>
                 {% endfor %}
             </div>
