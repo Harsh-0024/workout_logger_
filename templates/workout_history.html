@@ -16,8 +16,11 @@
                 </p>
             </div>
 
-            <div class="mb-3">
-                <input id="historySearch" type="text" class="form-control" placeholder="Search by date, workout name, exercise (comma-separated). Use 'not term' to exclude." style="font-size: var(--fs-sm);">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <input id="historySearch" type="text" class="form-control flex-grow-1" placeholder="Search by date, workout name, exercise (comma-separated)" style="font-size: var(--fs-sm);">
+                <button type="button" class="btn btn-sm btn-gold-outline" data-bs-toggle="tooltip" title="Use 'not term' or 'no term' to exclude results">
+                    <i class="bi bi-question-circle"></i>
+                </button>
             </div>
 
             <div id="historyEmpty" class="text-muted text-center py-4" style="display: none; font-size: var(--fs-sm);">No results.</div>
@@ -47,6 +50,8 @@
 
 <script>
     (function() {
+        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.forEach((el) => new bootstrap.Tooltip(el));
         const input = document.getElementById('historySearch');
         const list = document.getElementById('historyList');
         const empty = document.getElementById('historyEmpty');
@@ -63,17 +68,18 @@
             const include = [];
             const exclude = [];
             for (const term of terms) {
-                if (term.startsWith('not ')) {
-                    const ex = term.substring(4).trim();
+                const normalized = term.trim();
+                if (normalized.startsWith('not ') || normalized.startsWith('no ')) {
+                    const ex = normalized.replace(/^(not|no)\s+/, '').trim();
                     if (ex) exclude.push(ex);
                 } else {
-                    include.push(term);
+                    include.push(normalized);
                 }
             }
 
             let shown = 0;
             for (const el of items) {
-                const hay = (el.getAttribute('data-search') || '');
+                const hay = (el.getAttribute('data-search') || '').toLowerCase();
                 
                 const hasExcluded = exclude.some(ex => hay.includes(ex));
                 if (hasExcluded) {

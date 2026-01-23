@@ -11,10 +11,13 @@
                 <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">{{ date }}</p>
             </div>
 
-            <div class="d-flex justify-content-center mb-4 mb-md-5">
+            <div class="d-flex justify-content-center gap-2 mb-4 mb-md-5 flex-wrap">
                 <a href="{{ url_for('edit_workout', date_str=date) }}" class="btn btn-gold-outline btn-sm">
                     <i class="bi bi-pencil-square me-2"></i>Edit Workout
                 </a>
+                <button type="button" id="shareWorkoutBtn" class="btn btn-gold-solid btn-sm" data-share-url="{{ share_url }}">
+                    <i class="bi bi-share-fill me-2"></i>Share Workout
+                </button>
             </div>
 
             <div class="mb-4 mb-md-5">
@@ -50,12 +53,16 @@
                     {% endfor %}
                 </div>
 
-                <details class="mt-3">
-                    <summary class="text-muted" style="cursor: pointer; font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">Raw Log</summary>
-                    <textarea class="form-control mt-2" rows="10"
-                              style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6; height: clamp(200px, 32vh, 360px);"
-                              readonly>{{ workout_text }}</textarea>
-                </details>
+                <div class="mt-4 p-3 border rounded" style="border-color: var(--border-subtle) !important; background: rgba(212, 175, 55, 0.03);">
+                    <details>
+                        <summary class="text-gold fw-semibold" style="cursor: pointer; font-size: var(--fs-sm);">
+                            <i class="bi bi-code-square me-2"></i>View Raw Log Data
+                        </summary>
+                        <textarea class="form-control mt-3" rows="10"
+                                  style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6; height: clamp(200px, 32vh, 360px);"
+                                  readonly>{{ workout_text }}</textarea>
+                    </details>
+                </div>
             </div>
 
             <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
@@ -66,4 +73,43 @@
         </div>
     </div>
 </div>
+<script>
+    (function() {
+        const button = document.getElementById('shareWorkoutBtn');
+        if (!button) return;
+        const url = button.dataset.shareUrl || window.location.href;
+
+        const setStatus = (label, timeout = 2000) => {
+            if (!button.dataset.originalLabel) {
+                button.dataset.originalLabel = button.innerHTML;
+            }
+            button.innerHTML = label;
+            window.setTimeout(() => {
+                button.innerHTML = button.dataset.originalLabel || '<i class="bi bi-share-fill me-2"></i>Share Workout';
+            }, timeout);
+        };
+
+        const copyFallback = async () => {
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(url);
+                setStatus('<i class="bi bi-check-circle-fill me-2"></i>Link Copied');
+                return;
+            }
+            const temp = document.createElement('textarea');
+            temp.value = url;
+            temp.setAttribute('readonly', 'true');
+            temp.style.position = 'absolute';
+            temp.style.left = '-9999px';
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            setStatus('<i class="bi bi-check-circle-fill me-2"></i>Link Copied');
+        };
+
+        button.addEventListener('click', async () => {
+            await copyFallback();
+        });
+    })();
+</script>
 {% endblock %}

@@ -19,6 +19,7 @@
 
     <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='icons/app-icon-animated.svg') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/app-icon-192.png') }}">
 
     <style>
@@ -1814,6 +1815,10 @@
                         <span class="text-muted">Retrieve plan</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                        <span class="shortcut-key">1-9</span>
+                        <span class="text-muted">Pick retrieve option</span>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
                         <span class="shortcut-key">S</span>
                         <span class="text-muted">View stats</span>
                     </div>
@@ -1876,6 +1881,37 @@
                 });
                 input.addEventListener('blur', () => applyDefaultDomain(input));
             });
+        })();
+    </script>
+    <script>
+        (function() {
+            const dismissDelay = 4500;
+
+            const scheduleDismiss = (alert) => {
+                if (!alert) return;
+                window.setTimeout(() => {
+                    alert.classList.remove('show');
+                    window.setTimeout(() => {
+                        alert.remove();
+                    }, 300);
+                }, dismissDelay);
+            };
+
+            document.querySelectorAll('.flash-stack .alert').forEach(scheduleDismiss);
+
+            const clientAlerts = document.getElementById('client-alerts');
+            if (clientAlerts && 'MutationObserver' in window) {
+                const observer = new MutationObserver((mutations) => {
+                    mutations.forEach((mutation) => {
+                        mutation.addedNodes.forEach((node) => {
+                            if (node.classList && node.classList.contains('alert')) {
+                                scheduleDismiss(node);
+                            }
+                        });
+                    });
+                });
+                observer.observe(clientAlerts, { childList: true });
+            }
         })();
     </script>
     <script>
@@ -2101,6 +2137,14 @@
                 if (isTypingContext(event.target)) return;
 
                 const key = event.key.toLowerCase();
+                if (/^[1-9]$/.test(key)) {
+                    const target = document.querySelector(`[data-shortcut="${key}"]`);
+                    if (target) {
+                        event.preventDefault();
+                        target.click();
+                    }
+                    return;
+                }
                 if (key === 'l') {
                     event.preventDefault();
                     window.location.href = '/log';

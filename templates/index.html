@@ -44,9 +44,11 @@
                 <h5 class="mb-0 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">Recent Workouts</h5>
             </div>
 
+            {% if recent_workouts|length > 3 %}
             <div class="mb-3">
                 <input id="recentSearch" type="text" class="form-control" placeholder="Search by date, workout name, exercise (comma-separated)" style="font-size: var(--fs-sm);">
             </div>
+            {% endif %}
 
             <div id="recentEmpty" class="text-muted text-center py-4" style="display: none; font-size: var(--fs-sm);">No results.</div>
 
@@ -96,10 +98,28 @@
                 ? q.split(',').map(t => t.trim()).filter(Boolean)
                 : [];
 
+            const include = [];
+            const exclude = [];
+            for (const term of terms) {
+                if (term.startsWith('not ') || term.startsWith('no ')) {
+                    const ex = term.replace(/^(not|no)\s+/, '').trim();
+                    if (ex) exclude.push(ex);
+                } else {
+                    include.push(term);
+                }
+            }
+
             let shown = 0;
             for (const el of items) {
-                const hay = (el.getAttribute('data-search') || '');
-                const match = terms.length === 0 || terms.some(t => hay.includes(t));
+                const hay = (el.getAttribute('data-search') || '').toLowerCase();
+
+                const hasExcluded = exclude.some(ex => hay.includes(ex));
+                if (hasExcluded) {
+                    el.style.display = 'none';
+                    continue;
+                }
+
+                const match = include.length === 0 || include.some(t => hay.includes(t));
                 el.style.display = match ? 'block' : 'none';
                 if (match) shown++;
             }

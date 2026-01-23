@@ -5,7 +5,7 @@ from flask_login import login_required, current_user
 
 from list_of_exercise import get_workout_days
 from models import Plan, RepRange, Session
-from services.retrieve import generate_retrieve_output
+from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -16,9 +16,8 @@ def register_plan_routes(app):
         user = current_user
 
         try:
-            plan = Session.query(Plan).filter_by(user_id=user.id).first()
-            raw_text = plan.text_content if plan else ""
-            data = get_workout_days(raw_text)
+            raw_text = get_effective_plan_text(Session, user)
+            data = get_workout_days(raw_text or "")
 
             categories = list(data.get('workout', {}).keys())
 
@@ -38,13 +37,12 @@ def register_plan_routes(app):
 
         try:
             category = sanitize_text_input(category, max_length=100)
-            plan = Session.query(Plan).filter_by(user_id=user.id).first()
-
-            if not plan:
+            raw_text = get_effective_plan_text(Session, user)
+            if not raw_text:
                 flash("No workout plan found.", "error")
                 return redirect(url_for('set_plan'))
 
-            data = get_workout_days(plan.text_content)
+            data = get_workout_days(raw_text)
 
             if category not in data.get('workout', {}):
                 flash("Invalid category.", "error")

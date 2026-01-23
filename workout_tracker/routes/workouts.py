@@ -2,8 +2,10 @@ from datetime import datetime, timedelta
 import re
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
-from sqlalchemy import desc
+from itsdangerous import URLSafeSerializer, BadSignature
+from sqlalchemy import desc, func
 
+from list_of_exercise import list_of_exercises
 from models import Session, User, WorkoutLog
 from parsers.workout import workout_parser
 from services.logging import handle_workout_log
@@ -13,6 +15,18 @@ from utils.validators import sanitize_text_input, validate_username
 
 
 def register_workout_routes(app):
+    serializer = URLSafeSerializer(app.config.get('SECRET_KEY', 'workout-share'))
+
+    def _make_share_token(user_id, workout_date):
+        payload = {
+            "user_id": user_id,
+            "date": workout_date.strftime('%Y-%m-%d'),
+        }
+        return serializer.dumps(payload)
+
+    def _load_share_token(token):
+        return serializer.loads(token)
+
     def build_exercise_text(logs):
         lines = []
         for log in logs:
@@ -109,17 +123,21 @@ def register_workout_routes(app):
     def user_dashboard(username):
         try:
             username = validate_username(username)
+            normalized_current = (current_user.username or '').strip().lower()
 
-            if current_user.username != username and not current_user.is_admin():
-                flash("You can only view your own dashboard.", "error")
-                return redirect(url_for('user_dashboard', username=current_user.username))
-
-            user = Session.query(User).filter_by(username=username).first()
+            if username == normalized_current:
+                user = current_user
+            else:
+                user = Session.query(User).filter(func.lower(User.username) == username).first()
 
             if not user:
-                if username != current_user.username:
-                    return redirect(url_for('user_dashboard', username=current_user.username))
+                if username != normalized_current:
+                    return redirect(url_for('user_dashboard', username=normalized_current or current_user.username))
                 raise UserNotFoundError("User not found")
+
+            if user.id != current_user.id and not current_user.is_admin():
+                flash("You can only view your own dashboard.", "error")
+                return redirect(url_for('user_dashboard', username=normalized_current or current_user.username))
 
             recent_workouts = get_recent_workouts(user, limit=250)
 
@@ -189,12 +207,16 @@ def register_workout_routes(app):
                             continue
                 log.total_volume = total_volume if total_volume > 0 else None
             
+            share_token = _make_share_token(user.id, workout_date)
+            share_url = url_for('shared_workout', token=share_token, _external=True)
+
             return render_template(
                 'workout_detail.html',
                 date=date_str,
                 workout_name=workout_name,
                 logs=logs,
                 workout_text=workout_text,
+                share_url=share_url,
             )
         except ValueError:
             flash("Invalid date format.", "error")
@@ -207,6 +229,49 @@ def register_workout_routes(app):
     @login_required
     def workout_history():
         return redirect(url_for('user_dashboard', username=current_user.username))
+
+    def shared_workout(token):
+        try:
+            payload = _load_share_token(token)
+            user_id = payload.get('user_id')
+            date_str = payload.get('date')
+            if not user_id or not date_str:
+                raise BadSignature("Missing data")
+
+            workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            start_dt = datetime.combine(workout_date, datetime.min.time())
+            end_dt = start_dt + timedelta(days=1)
+
+            logs = (
+                Session.query(WorkoutLog)
+                .filter_by(user_id=user_id)
+                .filter(WorkoutLog.date >= start_dt)
+                .filter(WorkoutLog.date < end_dt)
+                .order_by(WorkoutLog.id)
+                .all()
+            )
+
+            if not logs:
+                return render_template('share_workout.html', missing=True)
+
+            workout_name = logs[0].workout_name or "Workout"
+            header_date = workout_date.strftime('%d/%m')
+            workout_text = build_exercise_text(logs)
+            workout_text = f"{header_date} {workout_name}\n\n{workout_text}".strip()
+
+            return render_template(
+                'share_workout.html',
+                date=date_str,
+                workout_name=workout_name,
+                logs=logs,
+                workout_text=workout_text,
+                missing=False,
+            )
+        except BadSignature:
+            return render_template('share_workout.html', missing=True)
+        except Exception as e:
+            logger.error(f"Error loading shared workout: {e}", exc_info=True)
+            return render_template('share_workout.html', missing=True)
 
     @login_required
     def edit_workout(date_str):
@@ -356,7 +421,7 @@ def register_workout_routes(app):
         user = current_user
 
         if request.method == 'GET':
-            return render_template('log.html')
+            return render_template('log.html', exercise_list=list_of_exercises)
 
         raw_text = request.form.get('workout_text', '').strip()
 
@@ -366,7 +431,11 @@ def register_workout_routes(app):
 
         if re.search(r'\bbw[+-]?\d*\b', raw_text, re.IGNORECASE) and user.bodyweight is None:
             flash("Set your bodyweight in Settings before logging BW exercises.", "error")
-            return render_template('log.html', workout_text=raw_text)
+            return render_template(
+                'log.html',
+                workout_text=raw_text,
+                exercise_list=list_of_exercises,
+            )
 
         try:
             parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
@@ -384,6 +453,12 @@ def register_workout_routes(app):
 
         try:
             summary = handle_workout_log(Session, user, parsed)
+            exercises = parsed.get('exercises') or []
+            exercise_count = len(exercises)
+            set_count = sum(
+                max(len(item.get('reps') or []), len(item.get('weights') or []))
+                for item in exercises
+            )
             Session.commit()
             logger.info(
                 f"Workout logged successfully for user {user.username} on {parsed['date']}"
@@ -393,6 +468,8 @@ def register_workout_routes(app):
                 'result.html',
                 summary=summary,
                 date=parsed['date'].strftime('%Y-%m-%d'),
+                exercise_count=exercise_count,
+                set_count=set_count,
             )
         except Exception as e:
             Session.rollback()
@@ -402,6 +479,7 @@ def register_workout_routes(app):
 
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
     app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])
+    app.add_url_rule('/share/<token>', endpoint='shared_workout', view_func=shared_workout, methods=['GET'])
     app.add_url_rule(
         '/<username>',
         endpoint='user_dashboard',

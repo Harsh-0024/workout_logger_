@@ -1,0 +1,84 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="card">
+            {% if missing %}
+                <div class="text-center py-5">
+                    <div class="mb-3">
+                        <i class="bi bi-link-45deg" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
+                    </div>
+                    <h2 class="fw-bold mb-3" style="font-size: clamp(1.4rem, 5vw, 2rem);">Workout link expired</h2>
+                    <p class="text-muted mb-4" style="font-size: var(--fs-sm);">
+                        This shared workout is no longer available. Ask the sender to share a fresh link.
+                    </p>
+                    <a href="/register" class="btn btn-gold-solid btn-sm">
+                        <i class="bi bi-stars me-2"></i>Start Tracking with Workout Logger
+                    </a>
+                </div>
+            {% else %}
+                <div class="text-center mb-4 mb-md-5">
+                    <div class="mb-3 mb-md-4">
+                        <i class="bi bi-calendar-check" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
+                    </div>
+                    <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">{{ workout_name }}</h2>
+                    <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">{{ date }}</p>
+                </div>
+
+                <div class="mb-4 mb-md-5">
+                    <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        <i class="bi bi-list-check me-2"></i>Exercises
+                    </label>
+
+                    <div class="list-group">
+                        {% for log in logs %}
+                        <div class="list-group-item bg-dark border-subtle mb-2" style="border-radius: 12px; border-color: var(--border-subtle);">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-2 text-white" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ log.exercise }}</h6>
+                                    <div class="text-muted" style="font-size: var(--fs-xs);">
+                                        {% if log.sets_display %}
+                                            <div class="mb-1">Sets: {{ log.sets_display }}</div>
+                                        {% elif log.top_weight and log.top_reps %}
+                                            <div class="mb-1">Top Set: {{ log.top_weight }}kg × {{ log.top_reps }} reps</div>
+                                        {% endif %}
+                                        <div class="d-flex gap-3 flex-wrap">
+                                            {% if log.estimated_1rm %}
+                                                <span>Est. 1RM: {{ "%.1f"|format(log.estimated_1rm) }}kg</span>
+                                            {% endif %}
+                                            {% if log.total_volume %}
+                                                <span>Volume: {{ "%.0f"|format(log.total_volume) }}kg</span>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="mt-4 p-3 border rounded" style="border-color: var(--border-subtle) !important; background: rgba(212, 175, 55, 0.03);">
+                        <details>
+                            <summary class="text-gold fw-semibold" style="cursor: pointer; font-size: var(--fs-sm);">
+                                <i class="bi bi-code-square me-2"></i>View Raw Log Data
+                            </summary>
+                            <textarea class="form-control mt-3" rows="10"
+                                      style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6; height: clamp(200px, 32vh, 360px);"
+                                      readonly>{{ workout_text }}</textarea>
+                        </details>
+                    </div>
+                </div>
+
+                <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
+                    <p class="text-muted mb-3" style="font-size: var(--fs-sm);">
+                        Like this workout? Start logging your own progress in seconds.
+                    </p>
+                    <a href="/register" class="btn btn-gold-solid btn-sm">
+                        <i class="bi bi-stars me-2"></i>Use Workout Logger
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

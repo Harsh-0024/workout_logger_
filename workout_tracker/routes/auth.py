@@ -365,7 +365,7 @@ def register_auth_routes(app, email_service):
         allow_otp_profile = otp_login_verified or password_change_verified
 
         if request.method == 'POST':
-            form_type = request.form.get('form_type')
+            form_type = request.form.get('form_type') or 'profile'
 
             try:
                 if form_type in {'profile', 'profile_otp'}:

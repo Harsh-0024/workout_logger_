@@ -9,8 +9,16 @@
                     <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Performance analysis and progress tracking</p>
                 </div>
                 <div class="text-start text-md-end w-100 w-md-auto">
-                    <div class="badge bg-primary d-inline-block" style="font-size: var(--fs-sm); padding: 10px 18px;">
-                        <i class="bi bi-calendar3 me-2"></i>{{ date }}
+                    <div class="d-flex flex-wrap gap-2 justify-content-md-end">
+                        <div class="badge bg-primary d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px;">
+                            <i class="bi bi-calendar3 me-2"></i>{{ date }}
+                        </div>
+                        <div class="badge bg-dark d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
+                            <i class="bi bi-activity me-2 text-gold"></i>{{ exercise_count or 0 }} Exercises
+                        </div>
+                        <div class="badge bg-dark d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
+                            <i class="bi bi-stack me-2 text-gold"></i>{{ set_count or 0 }} Sets
+                        </div>
                     </div>
                 </div>
             </div>

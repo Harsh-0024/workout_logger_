@@ -37,21 +37,25 @@
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Email
                     </label>
-                    <input type="email" name="email" class="form-control" value="{{ user.email }}" maxlength="255" autocomplete="email" required data-email-assist="true">
+                    <input type="email" inputmode="email" name="email" class="form-control" value="{{ user.email }}" maxlength="255" autocomplete="email" required data-email-assist="true">
                 </div>
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Bodyweight
                     </label>
-                    <input
-                        type="number"
-                        name="bodyweight"
-                        class="form-control"
-                        value="{% if user.bodyweight is not none %}{{ user.bodyweight }}{% endif %}"
-                        min="1"
-                        step="0.1"
-                        placeholder="e.g. 72.5"
-                    >
+                    <div class="input-group">
+                        <input
+                            type="number"
+                            inputmode="decimal"
+                            name="bodyweight"
+                            class="form-control"
+                            value="{% if user.bodyweight is not none %}{{ user.bodyweight }}{% endif %}"
+                            min="1"
+                            step="0.1"
+                            placeholder="e.g. 72.5"
+                        >
+                        <span class="input-group-text" style="background: rgba(212, 175, 55, 0.1); border-color: var(--border-subtle); color: var(--text-muted);">kg</span>
+                    </div>
                     <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
                         <i class="bi bi-person-check me-1"></i>Used for bodyweight (BW) exercises
                     </small>
@@ -78,7 +82,8 @@
                     </button>
                     <button type="submit" name="form_type" value="profile_otp" class="btn btn-gold-outline w-100 settings-action-btn">
                         <i class="bi bi-shield-lock"></i>
-                        <span>Update with One-Time Code</span>
+                        <span class="d-none d-md-inline">Update with One-Time Code</span>
+                        <span class="d-md-none">Use OTP</span>
                     </button>
                 </div>
             </form>

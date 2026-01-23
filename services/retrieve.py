@@ -1,25 +1,89 @@
 from datetime import datetime, timedelta
 import re
 
-from models import Plan, RepRange
-from list_of_exercise import BW_EXERCISES, get_workout_days
+from models import Plan, RepRange, User, UserRole
+from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
 from services.helpers import find_best_match
+
+
+def _normalize_text(text: str) -> str:
+    return "\n".join(line.rstrip() for line in (text or "").strip().splitlines())
+
+
+def _build_default_rep_text() -> str:
+    return "\n".join(f"{ex}: {rng}" for ex, rng in DEFAULT_REP_RANGES.items())
+
+
+def _get_admin_user(db_session):
+    return (
+        db_session.query(User)
+        .filter(User.role == UserRole.ADMIN)
+        .order_by(User.id.asc())
+        .first()
+    )
+
+
+def get_effective_plan_text(db_session, user) -> str:
+    plan_row = db_session.query(Plan).filter_by(user_id=user.id).first()
+    user_text = plan_row.text_content if plan_row else ""
+    default_text = DEFAULT_PLAN or ""
+
+    if user.is_admin():
+        return user_text or default_text
+
+    admin_user = _get_admin_user(db_session)
+    admin_text = ""
+    if admin_user:
+        admin_plan = db_session.query(Plan).filter_by(user_id=admin_user.id).first()
+        admin_text = admin_plan.text_content if admin_plan else ""
+
+    if not user_text:
+        return admin_text or default_text
+
+    if _normalize_text(user_text) == _normalize_text(default_text):
+        return admin_text or user_text
+
+    return user_text
+
+
+def get_effective_rep_ranges_text(db_session, user) -> str:
+    rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
+    user_text = rep_row.text_content if rep_row else ""
+    default_text = _build_default_rep_text()
+
+    if user.is_admin():
+        return user_text or default_text
+
+    admin_user = _get_admin_user(db_session)
+    admin_text = ""
+    if admin_user:
+        admin_rep = db_session.query(RepRange).filter_by(user_id=admin_user.id).first()
+        admin_text = admin_rep.text_content if admin_rep else ""
+
+    if not user_text:
+        return admin_text or default_text
+
+    if _normalize_text(user_text) == _normalize_text(default_text):
+        return admin_text or user_text
+
+    return user_text
 
 
 def generate_retrieve_output(db_session, user, category, day_id):
     key = f"{category} {day_id}"
-    plan_row = db_session.query(Plan).filter_by(user_id=user.id).first()
-    if not plan_row: return "Plan not found."
+    plan_text = get_effective_plan_text(db_session, user)
+    if not plan_text:
+        return "Plan not found."
 
-    all_plans = get_workout_days(plan_row.text_content)
+    all_plans = get_workout_days(plan_text)
 
-    rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
+    rep_text = get_effective_rep_ranges_text(db_session, user)
     custom_ranges = {}
-    if rep_row and rep_row.text_content:
-        for line in rep_row.text_content.split('\n'):
+    if rep_text:
+        for line in rep_text.split('\n'):
             if ':' in line:
                 k, v = line.split(':', 1)
-                custom_ranges[k.strip()] = v.strip()
+                custom_ranges[k.strip().lower()] = v.strip()
 
     ist_offset = timedelta(hours=5, minutes=30)
     today_str = (datetime.utcnow() + ist_offset).strftime("%d/%m")
@@ -28,7 +92,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
     try:
         exercises = all_plans["workout"][category][key]
         for ex in exercises:
-            rng = custom_ranges.get(ex, "")
+            rng = custom_ranges.get(ex.lower(), "")
             fmt_rng = f" - [{rng}]" if rng else ""
 
             rec = find_best_match(db_session, user.id, ex)

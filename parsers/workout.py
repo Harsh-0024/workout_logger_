@@ -180,6 +180,18 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
             else:
                 name, data_part = clean_line, ""
 
+        if not data_part and i + 1 < len(list_of_lines) and is_data_line(list_of_lines[i + 1]):
+            data_line = list_of_lines[i + 1].strip()
+            exercise_lines.append(data_line)
+            data_part = data_line
+            consumed += 1
+
+            if "," not in data_part and i + 2 < len(list_of_lines) and is_data_line(list_of_lines[i + 2]):
+                reps_line = list_of_lines[i + 2].strip()
+                exercise_lines.append(reps_line)
+                data_part = f"{data_part}, {reps_line}"
+                consumed += 1
+
         if data_part:
             w_list, r_list = parse_weight_x_reps(data_part, bodyweight)
             if w_list:
