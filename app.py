@@ -22,7 +22,16 @@ app = create_app(init_db=False)
 
 @app.route('/health')
 def health_check():
-    return jsonify({"status": "ok", "db_ready": bool(app.config.get("DB_READY"))}), 200
+    return (
+        jsonify(
+            {
+                "status": "ok",
+                "db_ready": bool(app.config.get("DB_READY")),
+                "db_init_last_error": app.config.get("DB_INIT_LAST_ERROR"),
+            }
+        ),
+        200,
+    )
 
 
 @app.before_request
@@ -48,14 +57,21 @@ if __name__ == '__main__':
         wait_interval = float(os.environ.get("DB_WAIT_INTERVAL", "2"))
 
         def _init_db_in_background():
-            for attempt in range(1, init_retries + 1):
+            attempt = 0
+            while True:
+                attempt += 1
+                if init_retries > 0 and attempt > init_retries:
+                    logger.critical("Database initialization failed after all retries")
+                    return
                 try:
                     wait_for_db(wait_timeout, wait_interval)
                     initialize_database()
                     app.config["DB_READY"] = True
+                    app.config.pop("DB_INIT_LAST_ERROR", None)
                     logger.info("Database initialized successfully")
                     return
                 except OperationalError as exc:
+                    app.config["DB_INIT_LAST_ERROR"] = f"{type(exc).__name__}: {exc}"
                     logger.warning(
                         "Database not ready (attempt %s/%s): %s",
                         attempt,
@@ -65,6 +81,7 @@ if __name__ == '__main__':
                     )
                     time.sleep(init_delay)
                 except Exception as exc:
+                    app.config["DB_INIT_LAST_ERROR"] = f"{type(exc).__name__}: {exc}"
                     logger.critical(
                         "Database initialization failed (attempt %s/%s): %s",
                         attempt,
@@ -73,8 +90,6 @@ if __name__ == '__main__':
                         exc_info=True,
                     )
                     time.sleep(init_delay)
-
-            logger.critical("Database initialization failed after all retries")
 
         threading.Thread(target=_init_db_in_background, daemon=True).start()
 

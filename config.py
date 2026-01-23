@@ -2,6 +2,7 @@
 Configuration management for the Workout Tracker application.
 """
 import os
+import urllib.parse
 from typing import Optional
 
 try:
@@ -77,6 +78,15 @@ class Config:
         database_url = Config.DATABASE_URL
         if database_url and database_url.startswith("postgres://"):
             database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+        if database_url and database_url.startswith("postgresql://") and "sslmode=" not in database_url:
+            parsed = urllib.parse.urlparse(database_url)
+            query = dict(urllib.parse.parse_qsl(parsed.query, keep_blank_values=True))
+            query.setdefault("sslmode", "require")
+            query.setdefault("connect_timeout", "10")
+            database_url = urllib.parse.urlunparse(
+                parsed._replace(query=urllib.parse.urlencode(query))
+            )
         
         if not database_url:
             BASE_DIR = os.path.dirname(os.path.abspath(__file__))

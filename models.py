@@ -14,9 +14,20 @@ import enum
 # --- DATABASE CONNECTION ---
 database_url = Config.get_database_url()
 
+connect_args = {}
+if isinstance(database_url, str) and database_url.startswith("postgresql://"):
+    connect_args = {
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    }
+
 # Enable connection pooling and better error handling
 engine = create_engine(
     database_url,
+    connect_args=connect_args,
     pool_pre_ping=True,  # Verify connections before using
     pool_recycle=3600,   # Recycle connections after 1 hour
     echo=False
@@ -340,7 +351,7 @@ def migrate_schema():
 
             # --- Workout log columns ---
             if 'email_verifications' not in inspector.get_table_names():
-                EmailVerification.__table__.create(bind=engine, checkfirst=True)
+                EmailVerification.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
