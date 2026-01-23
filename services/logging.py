@@ -77,15 +77,17 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 r_peak, r_sum, r_vol = get_set_stats(record.sets_json)
 
                 improvement = None
+                _, p_sum, _ = get_set_stats(new_sets)
+                
                 if p_peak > r_peak:
                     diff = p_peak - r_peak
                     improvement = f"PEAK (+{diff:.1f})"
-                elif p_peak == r_peak:
-                    _, p_sum, _ = get_set_stats(new_sets)
-                    if p_sum > r_sum:
-                        improvement = "CONSISTENCY"
-                    elif p_vol > r_vol:
-                        improvement = "VOLUME"
+                elif p_peak == r_peak and p_sum > r_sum:
+                    improvement = "PEAK (CONSISTENCY)"
+                elif p_peak == r_peak and p_vol > r_vol:
+                    improvement = "CONSISTENCY"
+                elif p_sum > r_sum:
+                    improvement = "VOLUME"
 
                 if improvement:
                     record.sets_json = new_sets

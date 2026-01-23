@@ -191,12 +191,8 @@
                     exerciseCount += 1;
                     const match = dataPart.match(/(bw[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+/gi);
                     if (match) {
-                        const reps = match.map((item) => {
-                            const repMatch = item.match(/x\s*(\d+)/i);
-                            return repMatch ? Number(repMatch[1]) : 0;
-                        }).filter((val) => !Number.isNaN(val));
-                        const expanded = expandShorthand(reps);
-                        repCount += expanded.reduce((sum, val) => sum + val, 0);
+                        const sets = expandShorthand(match);
+                        repCount += sets.length;
                     } else if (dataPart.includes(',')) {
                         const parts = dataPart.split(',', 1);
                         const weights = parts[0].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
@@ -204,27 +200,23 @@
                         const repsTokens = parts[1]
                             ? parts[1].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean)
                             : [];
-                        const weightCount = expandShorthand(weightTokens).length;
-                        const reps = expandShorthand(
-                            repsTokens.map((val) => Number(val)).filter((val) => !Number.isNaN(val))
+                        const sets = Math.max(
+                            expandShorthand(weightTokens).length,
+                            expandShorthand(repsTokens.map((val) => Number(val)).filter((val) => !Number.isNaN(val))).length
                         );
-                        if (reps.length) {
-                            repCount += reps.reduce((sum, val) => sum + val, 0);
-                        } else if (weightCount) {
-                            repCount += weightCount;
-                        }
+                        repCount += sets;
                     } else {
                         const weights = dataPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
                         const weightTokens = weights ? weights.split(/\s+/).filter(Boolean) : [];
-                        const weightCount = expandShorthand(weightTokens).length;
-                        repCount += weightCount;
+                        const sets = expandShorthand(weightTokens).length;
+                        repCount += sets;
                     }
                 }
 
                 i += consumed;
             }
 
-            counter.textContent = `${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'} • ${repCount} rep${repCount === 1 ? '' : 's'}`;
+            counter.textContent = `${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'} • ${repCount} set${repCount === 1 ? '' : 's'}`;
         };
 
         if (suggestionBox && Array.isArray(exerciseList) && exerciseList.length) {

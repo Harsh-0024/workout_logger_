@@ -16,7 +16,7 @@
                     <i class="bi bi-activity me-2 text-gold"></i>{{ exercise_count or 0 }} Exercises
                 </div>
                 <div class="badge bg-dark d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
-                    <i class="bi bi-stack me-2 text-gold"></i>{{ rep_count or 0 }} Reps
+                    <i class="bi bi-stack me-2 text-gold"></i>{{ set_count or 0 }} Sets
                 </div>
             </div>
 
@@ -27,14 +27,24 @@
             </div>
             {% endif %}
 
-            <div class="d-flex justify-content-center gap-2 mb-4 mb-md-5 flex-wrap">
-                <a href="{{ url_for('edit_workout', date_str=date) }}" class="btn btn-gold-outline btn-sm">
+            <div class="d-flex justify-content-center gap-2 mb-4 mb-md-5 flex-wrap workout-action-buttons">
+                <a href="{{ url_for('edit_workout', date_str=date) }}" class="btn btn-gold-outline btn-sm flex-fill flex-sm-grow-0">
                     <i class="bi bi-pencil-square me-2"></i>Edit Workout
                 </a>
-                <button type="button" id="shareWorkoutBtn" class="btn btn-gold-solid btn-sm" data-share-url="{{ share_url }}">
+                <button type="button" id="shareWorkoutBtn" class="btn btn-gold-solid btn-sm flex-fill flex-sm-grow-0" data-share-url="{{ share_url }}">
                     <i class="bi bi-share-fill me-2"></i>Share Workout
                 </button>
             </div>
+            <style>
+                @media (max-width: 576px) {
+                    .workout-action-buttons {
+                        flex-direction: row;
+                    }
+                    .workout-action-buttons .btn {
+                        min-width: 0;
+                    }
+                }
+            </style>
 
             <div class="mb-4 mb-md-5">
                 <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">

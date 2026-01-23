@@ -41,15 +41,17 @@ def register_workout_routes(app):
             return [values[0], values[1], values[1]]
         return values
 
-    def _sum_reps(sets_json=None, sets_display=None):
-        reps = []
+    def _count_sets(sets_json=None, sets_display=None):
         if sets_json and isinstance(sets_json, dict):
-            reps = [int(r) for r in (sets_json.get('reps') or []) if r is not None]
+            weights = sets_json.get('weights') or []
+            reps = sets_json.get('reps') or []
+            count = max(len(weights), len(reps))
         elif sets_display:
-            matches = re.findall(r'x\s*(\d+)', sets_display, flags=re.IGNORECASE)
-            reps = [int(r) for r in matches]
-        reps = _expand_shorthand_values(reps)
-        return sum(reps)
+            matches = re.findall(r'(bw[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+', sets_display, flags=re.IGNORECASE)
+            count = len(matches) if matches else 0
+        else:
+            count = 0
+        return len(_expand_shorthand_values([1] * count)) if count > 0 else 0
 
     def _log_uses_bw(log):
         haystack = f"{getattr(log, 'exercise_string', '')} {getattr(log, 'sets_display', '')}".lower()
@@ -209,12 +211,12 @@ def register_workout_routes(app):
             workout_text = build_exercise_text(logs)
             workout_text = f"{header_date} {workout_name}\n\n{workout_text}".strip()
             exercise_count = len(logs)
-            rep_count = 0
+            set_count = 0
             missing_bw_exercises = set()
 
             # Calculate volume for each exercise
             for log in logs:
-                rep_count += _sum_reps(log.sets_json, log.sets_display)
+                set_count += _count_sets(log.sets_json, log.sets_display)
                 if user.bodyweight is None and _log_uses_bw(log):
                     missing_bw_exercises.add(log.exercise)
                 total_volume = 0
@@ -251,7 +253,7 @@ def register_workout_routes(app):
                 logs=logs,
                 workout_text=workout_text,
                 exercise_count=exercise_count,
-                rep_count=rep_count,
+                set_count=set_count,
                 missing_bw_exercises=sorted(missing_bw_exercises),
                 share_url=share_url,
             )
@@ -483,8 +485,8 @@ def register_workout_routes(app):
             summary = handle_workout_log(Session, user, parsed)
             exercises = parsed.get('exercises') or []
             exercise_count = len(exercises)
-            rep_count = sum(
-                _sum_reps({'reps': item.get('reps') or []})
+            set_count = sum(
+                _count_sets({'weights': item.get('weights') or [], 'reps': item.get('reps') or []})
                 for item in exercises
             )
             Session.commit()
@@ -497,7 +499,7 @@ def register_workout_routes(app):
                 summary=summary,
                 date=parsed['date'].strftime('%Y-%m-%d'),
                 exercise_count=exercise_count,
-                rep_count=rep_count,
+                set_count=set_count,
             )
         except Exception as e:
             Session.rollback()
