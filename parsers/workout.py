@@ -16,10 +16,22 @@ def align_sets(weights, reps):
     if not weights and not reps:
         return [], []
 
+    def expand_shorthand(values):
+        if not values:
+            return []
+        if len(values) == 1:
+            return values * 3
+        if len(values) == 2:
+            return [values[0], values[1], values[1]]
+        return values
+
     if not reps and weights:
         reps = [1] * len(weights)
     if not weights and reps:
         weights = [1.0] * len(reps)
+
+    weights = expand_shorthand(weights)
+    reps = expand_shorthand(reps)
 
     if len(weights) == 1 and len(reps) > 1:
         weights = weights * len(reps)

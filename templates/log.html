@@ -91,6 +91,12 @@
             return /^(?:,|-?\d|bw)/.test(trimmed);
         };
 
+        const expandSetCount = (count) => {
+            if (count === 1) return 3;
+            if (count === 2) return 3;
+            return count;
+        };
+
         const updateCount = () => {
             const value = textarea.value || '';
             const rawLines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
@@ -155,7 +161,7 @@
                     exerciseCount += 1;
                     const match = dataPart.match(/(bw[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+/gi);
                     if (match) {
-                        setCount += match.length;
+                        setCount += expandSetCount(match.length);
                     } else if (dataPart.includes(',')) {
                         const parts = dataPart.split(',', 1);
                         const weights = parts[0].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
@@ -164,11 +170,11 @@
                             ? parts[1].replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean)
                             : [];
                         const count = Math.max(weightTokens.length, repsTokens.length);
-                        setCount += count;
+                        setCount += expandSetCount(count);
                     } else {
                         const weights = dataPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
                         const weightTokens = weights ? weights.split(/\s+/).filter(Boolean) : [];
-                        setCount += weightTokens.length;
+                        setCount += expandSetCount(weightTokens.length);
                     }
                 }
 

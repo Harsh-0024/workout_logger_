@@ -27,6 +27,11 @@ def register_workout_routes(app):
     def _load_share_token(token):
         return serializer.loads(token)
 
+    def _expand_set_count(count):
+        if count in (1, 2):
+            return 3
+        return count
+
     def build_exercise_text(logs):
         lines = []
         for log in logs:
@@ -238,6 +243,9 @@ def register_workout_routes(app):
             if not user_id or not date_str:
                 raise BadSignature("Missing data")
 
+            share_user = Session.query(User).get(user_id)
+            share_username = share_user.username.title() if share_user else "Workout Logger User"
+
             workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             start_dt = datetime.combine(workout_date, datetime.min.time())
             end_dt = start_dt + timedelta(days=1)
@@ -262,6 +270,7 @@ def register_workout_routes(app):
             return render_template(
                 'share_workout.html',
                 date=date_str,
+                share_username=share_username,
                 workout_name=workout_name,
                 logs=logs,
                 workout_text=workout_text,
@@ -456,7 +465,9 @@ def register_workout_routes(app):
             exercises = parsed.get('exercises') or []
             exercise_count = len(exercises)
             set_count = sum(
-                max(len(item.get('reps') or []), len(item.get('weights') or []))
+                _expand_set_count(
+                    max(len(item.get('reps') or []), len(item.get('weights') or []))
+                )
                 for item in exercises
             )
             Session.commit()

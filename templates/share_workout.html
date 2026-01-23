@@ -22,7 +22,10 @@
                         <i class="bi bi-calendar-check" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
                     </div>
                     <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">{{ workout_name }}</h2>
-                    <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">{{ date }}</p>
+                    <p class="text-muted mb-1" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">{{ date }}</p>
+                    <p class="text-muted mb-0" style="font-size: var(--fs-sm);">
+                        Shared by {{ share_username or 'Workout Logger User' }}
+                    </p>
                 </div>
 
                 <div class="mb-4 mb-md-5">
