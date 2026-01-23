@@ -980,6 +980,23 @@
             font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
         }
 
+        .shortcut-key {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 32px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            background: rgba(212, 175, 55, 0.12);
+            border: 1px solid rgba(212, 175, 55, 0.4);
+            color: var(--gold-primary);
+            font-family: 'SF Mono', 'Menlo', 'Monaco', monospace;
+        }
+
         /* Smooth scroll */
         html {
             scroll-behavior: smooth;
@@ -1744,14 +1761,73 @@
             {% endif %}
         {% endwith %}
 
+        <div id="client-alerts" class="flash-stack" aria-live="assertive"></div>
+
         {% block content %}{% endblock %}
     </div>
 
     <footer class="footer">
         <div class="container">
-            2025 Workout Tracker
+            <div class="d-flex flex-column flex-sm-row align-items-center justify-content-between gap-2">
+                <span>2025 Workout Tracker</span>
+                <button type="button" class="btn btn-sm btn-gold-outline" data-bs-toggle="modal" data-bs-target="#shortcutsModal">
+                    <i class="bi bi-command me-2"></i>Keyboard Shortcuts
+                </button>
+            </div>
         </div>
     </footer>
+
+    <!-- Global Confirmation Modal -->
+    <div class="modal fade" id="confirmActionModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: var(--card-bg-solid); border: 1px solid var(--border-subtle);">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title" id="confirmActionTitle">Confirm Action</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted mb-0" id="confirmActionMessage">Are you sure you want to continue?</p>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-gold-outline btn-sm" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-gold-solid btn-sm" id="confirmActionButton">Confirm</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyboard Shortcuts Modal -->
+    <div class="modal fade" id="shortcutsModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content" style="background: var(--card-bg-solid); border: 1px solid var(--border-subtle);">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">Keyboard Shortcuts</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                        <span class="shortcut-key">L</span>
+                        <span class="text-muted">Log workout</span>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                        <span class="shortcut-key">R</span>
+                        <span class="text-muted">Retrieve plan</span>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                        <span class="shortcut-key">S</span>
+                        <span class="text-muted">View stats</span>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between py-2">
+                        <span class="shortcut-key">/</span>
+                        <span class="text-muted">Focus search (history or recent)</span>
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-gold-outline btn-sm" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <datalist id="email-domain-options"></datalist>
     <script>
@@ -1799,6 +1875,250 @@
                     buildOptions(localPart);
                 });
                 input.addEventListener('blur', () => applyDefaultDomain(input));
+            });
+        })();
+    </script>
+    <script>
+        (function() {
+            if (!('serviceWorker' in navigator)) return;
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch((err) => {
+                    console.warn('Service worker registration failed', err);
+                });
+            });
+        })();
+    </script>
+    <script>
+        (function() {
+            const alertContainer = document.getElementById('client-alerts');
+            if (!alertContainer) return;
+            let alertShown = false;
+
+            const showClientAlert = (message) => {
+                if (alertShown) return;
+                alertShown = true;
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-danger alert-dismissible fade show';
+                alert.role = 'alert';
+                alert.innerHTML = `${message}<button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>`;
+                alertContainer.appendChild(alert);
+            };
+
+            window.addEventListener('error', (event) => {
+                console.error('Unhandled error:', event.error || event.message);
+                showClientAlert('Something went wrong. Please refresh the page and try again.');
+            });
+
+            window.addEventListener('unhandledrejection', (event) => {
+                console.error('Unhandled promise rejection:', event.reason);
+                showClientAlert('Something went wrong. Please refresh the page and try again.');
+            });
+        })();
+    </script>
+    <script>
+        (function() {
+            const getMessage = (field) => {
+                if (field.validity.valueMissing) return 'This field is required.';
+                if (field.validity.typeMismatch) {
+                    if (field.type === 'email') return 'Enter a valid email address.';
+                    return 'Enter a valid value.';
+                }
+                if (field.validity.patternMismatch) return field.dataset.patternMessage || 'Use the requested format.';
+                if (field.validity.tooShort) return `Please enter at least ${field.minLength} characters.`;
+                if (field.validity.rangeUnderflow) return `Value must be at least ${field.min}.`;
+                if (field.validity.rangeOverflow) return `Value must be at most ${field.max}.`;
+                if (field.validity.customError) return field.validationMessage || 'Please check this field.';
+                return field.validationMessage || 'Please check this field.';
+            };
+
+            const clearFieldError = (field) => {
+                field.classList.remove('is-invalid');
+                field.removeAttribute('aria-invalid');
+                const error = field.parentElement ? field.parentElement.querySelector('.field-error') : null;
+                if (error) error.remove();
+            };
+
+            const showFieldError = (field, message) => {
+                if (field.dataset.inlineError === 'true' && field.validity.customError) {
+                    return;
+                }
+                field.classList.add('is-invalid');
+                field.setAttribute('aria-invalid', 'true');
+                if (!field.parentElement) return;
+                const existing = field.parentElement.querySelector('.field-error');
+                if (existing) {
+                    existing.textContent = message;
+                    return;
+                }
+                const error = document.createElement('div');
+                error.className = 'text-danger mt-2 field-error';
+                error.style.fontSize = 'var(--fs-xs)';
+                error.textContent = message;
+                field.parentElement.appendChild(error);
+            };
+
+            const applyLoadingState = (form) => {
+                if (form.dataset.noLoading === 'true') return;
+                const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
+                let targetButton = null;
+                if (form.dataset.submitButtonId) {
+                    targetButton = document.getElementById(form.dataset.submitButtonId);
+                }
+                if (!targetButton) {
+                    targetButton = form.querySelector('button[type="submit"]');
+                }
+                submitButtons.forEach((btn) => {
+                    btn.disabled = true;
+                });
+                if (targetButton && targetButton.tagName === 'BUTTON') {
+                    if (!targetButton.dataset.originalLabel) {
+                        targetButton.dataset.originalLabel = targetButton.innerHTML;
+                    }
+                    const label = targetButton.dataset.loadingText || 'Processing...';
+                    targetButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>${label}`;
+                }
+            };
+
+            const controlsSelector = 'input, select, textarea';
+            const forms = Array.from(document.querySelectorAll('form'));
+            let pendingConfirmForm = null;
+
+            document.addEventListener('click', (event) => {
+                const btn = event.target.closest('button[type="submit"], input[type="submit"]');
+                if (!btn || !btn.form) return;
+                if (!btn.id) {
+                    btn.id = `submit-${Math.random().toString(36).slice(2, 9)}`;
+                }
+                btn.form.dataset.submitButtonId = btn.id;
+            });
+
+            const confirmModalEl = document.getElementById('confirmActionModal');
+            const confirmTitle = document.getElementById('confirmActionTitle');
+            const confirmMessage = document.getElementById('confirmActionMessage');
+            const confirmButton = document.getElementById('confirmActionButton');
+            let confirmModalInstance = null;
+
+            const openConfirmModal = (form) => {
+                if (!confirmModalEl || !confirmButton) return;
+                pendingConfirmForm = form;
+                confirmTitle.textContent = form.dataset.confirmTitle || 'Confirm Action';
+                confirmMessage.textContent = form.dataset.confirmMessage || 'Are you sure you want to continue?';
+                confirmButton.textContent = form.dataset.confirmCta || 'Confirm';
+
+                confirmButton.classList.remove('btn-danger', 'btn-gold-solid');
+                if (form.dataset.confirmDestructive === 'true') {
+                    confirmButton.classList.add('btn-danger');
+                } else {
+                    confirmButton.classList.add('btn-gold-solid');
+                }
+
+                if (!confirmModalInstance) {
+                    confirmModalInstance = new bootstrap.Modal(confirmModalEl);
+                }
+                confirmModalInstance.show();
+            };
+
+            if (confirmButton) {
+                confirmButton.addEventListener('click', () => {
+                    if (!pendingConfirmForm) return;
+                    applyLoadingState(pendingConfirmForm);
+                    pendingConfirmForm.submit();
+                    pendingConfirmForm = null;
+                    if (confirmModalInstance) {
+                        confirmModalInstance.hide();
+                    }
+                });
+            }
+
+            forms.forEach((form) => {
+                form.setAttribute('novalidate', 'novalidate');
+                const fields = Array.from(form.querySelectorAll(controlsSelector));
+                fields.forEach((field) => {
+                    field.addEventListener('input', () => {
+                        if (field.checkValidity()) {
+                            clearFieldError(field);
+                        }
+                    });
+                });
+
+                form.addEventListener('submit', (event) => {
+                    fields.forEach(clearFieldError);
+                    if (!form.checkValidity()) {
+                        event.preventDefault();
+                        fields.forEach((field) => {
+                            if (!field.checkValidity()) {
+                                showFieldError(field, getMessage(field));
+                            }
+                        });
+                        const firstInvalid = form.querySelector('.is-invalid');
+                        if (firstInvalid) firstInvalid.focus();
+                        return;
+                    }
+
+                    if (form.dataset.confirm === 'true') {
+                        event.preventDefault();
+                        openConfirmModal(form);
+                        return;
+                    }
+
+                    applyLoadingState(form);
+                });
+            });
+        })();
+    </script>
+    <script>
+        (function() {
+            const isTypingContext = (target) => {
+                if (!target) return false;
+                if (target.isContentEditable) return true;
+                const tag = target.tagName;
+                return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+            };
+
+            const focusSearch = () => {
+                const searchInput = document.getElementById('historySearch') || document.getElementById('recentSearch');
+                if (searchInput) {
+                    searchInput.focus();
+                    searchInput.select();
+                    return true;
+                }
+                return false;
+            };
+
+            const shortcutsModalEl = document.getElementById('shortcutsModal');
+            let shortcutsModalInstance = null;
+
+            const openShortcutsModal = () => {
+                if (!shortcutsModalEl) return;
+                if (!shortcutsModalInstance) {
+                    shortcutsModalInstance = new bootstrap.Modal(shortcutsModalEl);
+                }
+                shortcutsModalInstance.show();
+            };
+
+            document.addEventListener('keydown', (event) => {
+                if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
+                if (isTypingContext(event.target)) return;
+
+                const key = event.key.toLowerCase();
+                if (key === 'l') {
+                    event.preventDefault();
+                    window.location.href = '/log';
+                } else if (key === 'r') {
+                    event.preventDefault();
+                    window.location.href = '/retrieve/categories';
+                } else if (key === 's') {
+                    event.preventDefault();
+                    window.location.href = '/stats';
+                } else if (key === '/') {
+                    event.preventDefault();
+                    if (!focusSearch()) {
+                        openShortcutsModal();
+                    }
+                } else if (key === '?' || (event.shiftKey && event.key === '/')) {
+                    event.preventDefault();
+                    openShortcutsModal();
+                }
             });
         })();
     </script>

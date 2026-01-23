@@ -42,7 +42,15 @@
                 </button>
             </form>
 
-            <form method="POST" action="{{ url_for('delete_workout', date_str=date) }}" onsubmit="return confirm('Delete this entire workout day? This cannot be undone.');">
+            <form
+                method="POST"
+                action="{{ url_for('delete_workout', date_str=date) }}"
+                data-confirm="true"
+                data-confirm-title="Delete workout day"
+                data-confirm-message="Delete this entire workout day? This cannot be undone."
+                data-confirm-cta="Delete Workout"
+                data-confirm-destructive="true"
+            >
                 <button type="submit" class="btn btn-outline-danger w-100 mb-3">
                     <i class="bi bi-trash-fill me-2"></i>Delete Workout Day
                 </button>
