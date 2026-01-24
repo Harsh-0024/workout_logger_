@@ -152,7 +152,13 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
     workout_day = {"date": date_obj, "workout_name": workout_name, "exercises": []}
 
     # Exercises
-    list_of_lines = [re.sub(r'^\s*\d+\s*(?:[.)\-:]?)\s*', '', line) for line in raw_lines]
+    list_of_lines = []
+    for line in raw_lines:
+        stripped = line.strip()
+        if is_data_line(stripped):
+            list_of_lines.append(stripped)
+        else:
+            list_of_lines.append(re.sub(r'^\s*\d+\s*(?:[.)\-:]?)\s*', '', stripped))
     i = 1
     while i < len(list_of_lines):
         clean_line = list_of_lines[i]

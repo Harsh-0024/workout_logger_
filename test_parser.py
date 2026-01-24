@@ -134,6 +134,25 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[5]['weights'], [1.0])
         self.assertEqual(exs[5]['reps'], [16])
 
+    def test_decimal_weights_are_preserved(self):
+        raw_text = """
+        04/02 Chest Day
+        Flat Dumbbell Press - [8-12]
+        20.8 20, 10 12
+        Skull Crushers - [6-10]
+        2.5 1, 9 11
+        """
+        result = workout_parser(raw_text)
+        exs = result['exercises']
+
+        self.assertEqual(exs[0]['name'], "Flat Dumbbell Press")
+        self.assertEqual(exs[0]['weights'], [20.8, 20.0, 20.0])
+        self.assertEqual(exs[0]['reps'], [10, 12, 12])
+
+        self.assertEqual(exs[1]['name'], "Skull Crushers")
+        self.assertEqual(exs[1]['weights'], [2.5, 1.0, 1.0])
+        self.assertEqual(exs[1]['reps'], [9, 11, 11])
+
 
 if __name__ == '__main__':
     unittest.main()

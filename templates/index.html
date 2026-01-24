@@ -56,9 +56,9 @@
                 {% for workout in recent_workouts %}
                 <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="recent-workout-item text-decoration-none recent-item" style="transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d/%m/%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
                     <div class="d-flex justify-content-between align-items-center gap-2">
-                        <div style="flex: 1; min-width: 0;">
-                            <span class="text-white fw-semibold d-block" style="font-size: clamp(0.875rem, 3vw, 1rem); overflow-wrap: break-word; word-break: break-word;">{{ workout.title }}</span>
-                            <small class="text-muted" style="font-size: var(--fs-xs); white-space: nowrap;">{{ workout.date | format_date }} • {{ workout.date.strftime('%A') }}</small>
+                        <div class="recent-workout-body" style="flex: 1; min-width: 0;">
+                            <span class="text-white fw-semibold d-block recent-workout-title" style="font-size: clamp(0.875rem, 3vw, 1rem); overflow-wrap: break-word; word-break: break-word;">{{ workout.title }}</span>
+                            <small class="text-muted recent-workout-date" style="font-size: var(--fs-xs); white-space: nowrap;">{{ workout.date | format_date }} • {{ workout.date.strftime('%A') }}</small>
                         </div>
                         <i class="bi bi-chevron-right text-muted" style="flex-shrink: 0;"></i>
                     </div>

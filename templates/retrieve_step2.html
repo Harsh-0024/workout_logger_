@@ -20,7 +20,7 @@
                 {% for i in range(1, num_days + 1) %}
                 <a href="/retrieve/final/{{ category_name | url_encode }}/{{ i }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold btn-icon-center" style="font-size: clamp(1rem, 4vw, 1.25rem);" {% if i <= 9 %}data-shortcut="{{ i }}"{% endif %}>
                     <span class="btn-icon-slot"><i class="bi bi-calendar3"></i></span>
-                    <span>DAY {{ i }}</span>
+                    <span style="position: relative; left: -2%;">DAY {{ i }}</span>
                     <span class="btn-icon-spacer" aria-hidden="true"></span>
                 </a>
                 {% endfor %}
