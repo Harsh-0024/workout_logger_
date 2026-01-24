@@ -236,6 +236,22 @@
             box-shadow: var(--shadow-gold);
         }
 
+        .btn-icon-center {
+            display: grid;
+            grid-template-columns: 1.75rem 1fr 1.75rem;
+            align-items: center;
+            column-gap: 0.5rem;
+            text-align: center;
+        }
+
+        .btn-icon-center .btn-icon-slot,
+        .btn-icon-center .btn-icon-spacer {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.75rem;
+        }
+
         .btn-gold-outline {
             background: rgba(212, 175, 55, 0.05);
             border: 2px solid var(--border-gold);
@@ -903,6 +919,13 @@
         .recent-workouts-list {
             overflow-y: auto;
             padding-right: 4px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .recent-workouts-list .recent-workout-item {
+            margin-bottom: 0;
         }
 
         .recent-workouts-list::-webkit-scrollbar {
@@ -953,6 +976,7 @@
             transition: all var(--transition-base);
             cursor: pointer;
             position: relative;
+            display: block;
         }
 
         .recent-workout-item::before {
