@@ -17,10 +17,10 @@
                     <h5 class="mb-0 fw-bold">Quick Actions</h5>
                 </div>
                 <div class="d-grid gap-2 gap-md-3">
-                    <a href="{{ url_for('set_plan') }}" class="btn btn-gold-outline">
+                    <a href="{{ url_for('set_plan') }}" class="btn btn-gold-outline btn-sm">
                         <i class="bi bi-journal-text me-2"></i>Edit Plan
                     </a>
-                    <a href="{{ url_for('set_exercises') }}" class="btn btn-gold-outline">
+                    <a href="{{ url_for('set_exercises') }}" class="btn btn-gold-outline btn-sm">
                         <i class="bi bi-sliders me-2"></i>Edit Rep Ranges
                     </a>
                 </div>
@@ -121,7 +121,7 @@
                     </form>
                     <form method="POST" action="{{ url_for('user_settings') }}">
                         <input type="hidden" name="form_type" value="password_otp_cancel">
-                        <button type="submit" class="btn btn-gold-outline w-100">Cancel OTP Change</button>
+                        <button type="submit" class="btn btn-gold-outline w-100 btn-sm">Cancel OTP Change</button>
                     </form>
                 {% else %}
                     <form method="POST" action="{{ url_for('user_settings') }}">
@@ -159,7 +159,7 @@
                             <p class="text-muted small mb-2">Prefer a one-time code instead?</p>
                             <form method="POST" action="{{ url_for('user_settings') }}">
                                 <input type="hidden" name="form_type" value="password_otp_request">
-                                <button type="submit" class="btn btn-gold-outline w-100">Use One-Time Code</button>
+                                <button type="submit" class="btn btn-gold-outline w-100 btn-sm">Use One-Time Code</button>
                             </form>
                         </div>
                     {% endif %}

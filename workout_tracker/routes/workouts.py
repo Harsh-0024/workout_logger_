@@ -32,26 +32,21 @@ def register_workout_routes(app):
             return 3
         return count
 
-    def _expand_shorthand_values(values):
-        if not values:
-            return []
-        if len(values) == 1:
-            return values * 3
-        if len(values) == 2:
-            return [values[0], values[1], values[1]]
-        return values
-
     def _count_sets(sets_json=None, sets_display=None):
         if sets_json and isinstance(sets_json, dict):
             weights = sets_json.get('weights') or []
             reps = sets_json.get('reps') or []
-            count = max(len(weights), len(reps))
+            count = _expand_set_count(max(len(weights), len(reps)))
         elif sets_display:
-            matches = re.findall(r'(bw[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+', sets_display, flags=re.IGNORECASE)
-            count = len(matches) if matches else 0
+            matches = re.findall(
+                r'(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*[x×]\s*\d+',
+                sets_display,
+                flags=re.IGNORECASE,
+            )
+            count = _expand_set_count(len(matches) if matches else 0)
         else:
             count = 0
-        return len(_expand_shorthand_values([1] * count)) if count > 0 else 0
+        return count
 
     def _log_uses_bw(log):
         haystack = f"{getattr(log, 'exercise_string', '')} {getattr(log, 'sets_display', '')}".lower()

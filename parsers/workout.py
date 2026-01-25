@@ -47,16 +47,25 @@ def align_sets(weights, reps):
 
 
 def parse_weight_x_reps(segment, base_weight=None):
-    segment = segment.replace('*', 'x').lower()
-    matches = re.findall(r'(bw[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*(\d+)', segment)
-    if matches:
-        weights, reps = [], []
-        for w, r in matches:
+    segment = (segment or '').replace('×', 'x').replace('*', 'x').lower()
+    matches = re.findall(
+        r'(?:(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*)?x\s*(\d+)',
+        segment,
+    )
+    if not matches:
+        return None, None
+
+    weights, reps = [], []
+    last_weight = None
+    for w, r in matches:
+        if w:
             bw_weight = parse_bw_weight(w, base_weight)
-            weights.append(bw_weight if bw_weight is not None else float(w))
-            reps.append(int(r))
-        return weights, reps
-    return None, None
+            last_weight = bw_weight if bw_weight is not None else float(w)
+        if last_weight is None:
+            return None, None
+        weights.append(last_weight)
+        reps.append(int(r))
+    return weights, reps
 
 
 def extract_numbers(segment):
@@ -79,15 +88,32 @@ def parse_bw_weight(token, base_weight=None):
     token = token.replace('bw', '', 1)
     token = re.sub(r'(kg|lbs|lb)', '', token).strip()
     base = base_weight if base_weight is not None else 0.0
+
+    divisor = 1.0
+    if token.startswith('/'):
+        m = re.match(r'^/(\d+(?:\.\d+)?)(.*)$', token)
+        if m:
+            try:
+                divisor = float(m.group(1))
+                token = (m.group(2) or '').strip()
+            except ValueError:
+                divisor = 1.0
+
+    if divisor == 0:
+        divisor = 1.0
+
+    effective_base = base / divisor
     if token in ('', '+', '-'):
-        return base
+        return effective_base
+
     try:
         adjustment = float(token)
     except ValueError:
-        return base
+        return effective_base
+
     if token.startswith(('+', '-')):
-        return base + adjustment
-    return base + adjustment if base_weight is not None else adjustment
+        return effective_base + adjustment
+    return effective_base + adjustment if base_weight is not None else adjustment
 
 
 def extract_weights(segment, base_weight=None):
@@ -109,7 +135,120 @@ def extract_weights(segment, base_weight=None):
 def is_data_line(line):
     if not line:
         return False
-    return bool(re.match(r'^(?:,|-?\d|bw)', line.strip().lower()))
+    stripped = line.strip()
+    if re.match(r'^\d+(?:[.)\-:])\s*[A-Za-z]', stripped):
+        return False
+    tokens = stripped.split()
+    if len(tokens) > 1 and re.match(r'^\d+(?:[.)\-:])?$', tokens[0]) and re.match(r'^[A-Za-z]', tokens[1]):
+        return False
+    return bool(re.match(r'^(?:,|-?\d|bw)', stripped.lower()))
+
+
+def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None):
+    segment = (segment or '').strip()
+    if not segment:
+        return None, None
+    if ',' in segment:
+        return None, None
+    if re.search(r'[x×*]', segment, flags=re.IGNORECASE):
+        return None, None
+
+    tokens = segment.split()
+    if len(tokens) < 2:
+        return None, None
+
+    if len(tokens) != 2 and len(tokens) % 2 != 0:
+        return None, None
+
+    def parse_weight_token(token: str):
+        bw_weight = parse_bw_weight(token, base_weight)
+        if bw_weight is not None:
+            return bw_weight
+        try:
+            return float(token)
+        except ValueError:
+            return None
+
+    def parse_reps_token(token: str):
+        if not re.match(r'^\d+$', token):
+            return None
+        try:
+            return int(token)
+        except ValueError:
+            return None
+
+    if len(tokens) == 2:
+        w_token, r_token = tokens[0], tokens[1]
+        w_val = parse_weight_token(w_token)
+        r_val = parse_reps_token(r_token)
+        if w_val is None or r_val is None:
+            return None, None
+        if r_val <= 0 or r_val > 30:
+            return None, None
+        weight_hint = (
+            '.' in w_token
+            or w_token.lower().startswith('bw')
+            or w_token.startswith('-')
+            or w_token != r_token
+        )
+        if not weight_hint:
+            return None, None
+        return [w_val], [r_val]
+
+    weights, reps = [], []
+    for idx in range(0, len(tokens), 2):
+        w = parse_weight_token(tokens[idx])
+        r = parse_reps_token(tokens[idx + 1])
+        if w is None or r is None:
+            return None, None
+        if r <= 0 or r > 30:
+            return None, None
+        weights.append(w)
+        reps.append(r)
+    return weights, reps
+
+
+def parse_weight_reps_halves(segment, base_weight: Optional[float] = None):
+    segment = (segment or '').strip()
+    if not segment:
+        return None, None
+    if ',' in segment:
+        return None, None
+    if re.search(r'[x×*]', segment, flags=re.IGNORECASE):
+        return None, None
+
+    tokens = segment.split()
+    if len(tokens) < 4 or len(tokens) % 2 != 0:
+        return None, None
+
+    half = len(tokens) // 2
+    weights_tokens = tokens[:half]
+    reps_tokens = tokens[half:]
+
+    reps = []
+    for tok in reps_tokens:
+        if not re.match(r'^\d+$', tok):
+            return None, None
+        try:
+            val = int(tok)
+        except ValueError:
+            return None, None
+        if val <= 0 or val > 30:
+            return None, None
+        reps.append(val)
+
+    weights = []
+    for tok in weights_tokens:
+        bw_weight = parse_bw_weight(tok, base_weight)
+        if bw_weight is not None:
+            weights.append(bw_weight)
+            continue
+        try:
+            weights.append(float(tok))
+        except ValueError:
+            return None, None
+
+    return weights, reps
 
 
 def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None) -> Optional[Dict]:

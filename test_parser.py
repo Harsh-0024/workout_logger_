@@ -32,6 +32,20 @@ class TestWorkoutParser(unittest.TestCase):
         w, r = parse_weight_x_reps("22.5x10")
         self.assertEqual(w, [22.5])
 
+        # Repeated reps reuse last weight
+        w, r = parse_weight_x_reps("100x5 x5 x5")
+        self.assertEqual(w, [100.0, 100.0, 100.0])
+        self.assertEqual(r, [5, 5, 5])
+
+        # BW divisor and adjustment
+        w, r = parse_weight_x_reps("bw/4x6", 80)
+        self.assertEqual(w, [20.0])
+        self.assertEqual(r, [6])
+
+        w, r = parse_weight_x_reps("bw/2+10x5 x6", 80)
+        self.assertEqual(w, [50.0, 50.0])
+        self.assertEqual(r, [5, 6])
+
     def test_full_workout_parsing(self):
         """Test the full text block parsing."""
         raw_text = """
@@ -46,7 +60,8 @@ class TestWorkoutParser(unittest.TestCase):
 
         # Exercise 1: Bench Press (Standard X)
         self.assertEqual(exs[0]['name'], "Bench Press")
-        self.assertEqual(exs[0]['weights'], [100.0])
+        self.assertEqual(exs[0]['weights'], [100.0, 100.0, 100.0])
+        self.assertEqual(exs[0]['reps'], [5, 5, 5])
         self.assertEqual(exs[0]['valid'], True)
 
         # Exercise 2: Incline DB (Comma separated)
@@ -56,12 +71,14 @@ class TestWorkoutParser(unittest.TestCase):
 
         # Exercise 3: Pec Fly (Implicit Reps)
         self.assertEqual(exs[2]['name'], "Pec Fly")
-        self.assertEqual(exs[2]['weights'], [15.0, 15.0])
+        self.assertEqual(exs[2]['weights'], [15.0, 15.0, 15.0])
+        self.assertEqual(exs[2]['reps'], [1, 1, 1])
         self.assertEqual(exs[2]['valid'], True)
 
         # Exercise 4: Pull Ups (Negative)
         self.assertEqual(exs[3]['name'], "Pull Ups")
-        self.assertEqual(exs[3]['weights'], [-35.0])
+        self.assertEqual(exs[3]['weights'], [-35.0, -35.0, -35.0])
+        self.assertEqual(exs[3]['reps'], [5, 5, 5])
         self.assertEqual(exs[3]['valid'], True)
 
     def test_fail_loudly_case(self):
@@ -122,17 +139,17 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[1]['weights'], [45.0, 40.0, 40.0])
         self.assertEqual(exs[1]['reps'], [10, 15, 10])
 
-        self.assertEqual(exs[2]['weights'], [70.0])
-        self.assertEqual(exs[2]['reps'], [6])
+        self.assertEqual(exs[2]['weights'], [70.0, 70.0, 70.0])
+        self.assertEqual(exs[2]['reps'], [6, 6, 6])
 
-        self.assertEqual(exs[3]['weights'], [50.0])
-        self.assertEqual(exs[3]['reps'], [6])
+        self.assertEqual(exs[3]['weights'], [50.0, 50.0, 50.0])
+        self.assertEqual(exs[3]['reps'], [6, 6, 6])
 
-        self.assertEqual(exs[4]['weights'], [80.0])
-        self.assertEqual(exs[4]['reps'], [6])
+        self.assertEqual(exs[4]['weights'], [80.0, 80.0, 80.0])
+        self.assertEqual(exs[4]['reps'], [6, 6, 6])
 
-        self.assertEqual(exs[5]['weights'], [1.0])
-        self.assertEqual(exs[5]['reps'], [16])
+        self.assertEqual(exs[5]['weights'], [1.0, 1.0, 1.0])
+        self.assertEqual(exs[5]['reps'], [16, 16, 16])
 
     def test_decimal_weights_are_preserved(self):
         raw_text = """

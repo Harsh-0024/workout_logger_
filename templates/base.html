@@ -277,8 +277,19 @@
         }
 
         .btn-sm {
-            padding: 12px 24px;
+            padding: 10px 20px;
             font-size: 0.8125rem;
+        }
+
+        @media (max-width: 576px) {
+            .btn {
+                min-height: 48px;
+            }
+
+            .btn-sm {
+                min-height: 44px;
+                padding: 10px 18px;
+            }
         }
 
         /* --- PREMIUM CARDS - GLASSMORPHISM & DEPTH --- */
@@ -295,6 +306,79 @@
             position: relative;
             overflow: hidden;
             transition: all var(--transition-base);
+        }
+
+        .card.interactive-card {
+            cursor: pointer;
+        }
+
+        .card.interactive-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-gold);
+        }
+
+        .exercise-card-link:hover {
+            transform: translateX(4px);
+            border-color: var(--gold-primary) !important;
+            box-shadow: 0 4px 12px rgba(212, 175, 55, 0.2);
+        }
+
+        .global-loader {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(8, 8, 10, 0.78);
+            backdrop-filter: blur(8px);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity var(--transition-base);
+            z-index: 2000;
+        }
+
+        body.is-loading {
+            cursor: progress;
+        }
+
+        body.is-loading .global-loader {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .global-loader-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            padding: 24px 28px;
+            border-radius: 20px;
+            background: rgba(15, 15, 17, 0.9);
+            border: 1px solid var(--border-subtle);
+            box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
+        }
+
+        .global-loader-ring {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            border: 3px solid rgba(212, 175, 55, 0.2);
+            border-top-color: var(--gold-primary);
+            animation: loader-spin 0.9s linear infinite;
+        }
+
+        .global-loader-text {
+            font-size: var(--fs-xs);
+            text-transform: uppercase;
+            letter-spacing: 0.35em;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        @keyframes loader-spin {
+            to {
+                transform: rotate(360deg);
+            }
         }
 
         .card::before {
@@ -909,15 +993,16 @@
                 max-height: var(--recent-item-height);
                 margin-bottom: 0;
                 display: flex;
-                align-items: flex-start;
-                padding: 12px 16px !important;
+                align-items: center;
+                padding: 14px 16px !important;
                 overflow: hidden;
             }
 
             .recent-workout-body {
                 display: flex;
                 flex-direction: column;
-                gap: 6px;
+                gap: 4px;
+                justify-content: center;
             }
 
             .recent-workout-title {
@@ -1006,7 +1091,8 @@
             transition: all var(--transition-base);
             cursor: pointer;
             position: relative;
-            display: block;
+            display: flex;
+            align-items: center;
         }
 
         .recent-workout-item::before {
@@ -1703,6 +1789,12 @@
     </style>
 </head>
 <body>
+    <div class="global-loader" id="globalLoader" aria-live="polite" aria-busy="true">
+        <div class="global-loader-content">
+            <div class="global-loader-ring"></div>
+            <div class="global-loader-text">Loading</div>
+        </div>
+    </div>
     <!-- Mobile Top Header -->
     <div class="mobile-header d-sm-none">
         <div class="container mobile-header-inner">
@@ -2060,6 +2152,14 @@
                 field.parentElement.appendChild(error);
             };
 
+            const showGlobalLoader = () => {
+                document.body.classList.add('is-loading');
+            };
+
+            const hideGlobalLoader = () => {
+                document.body.classList.remove('is-loading');
+            };
+
             const applyLoadingState = (form) => {
                 if (form.dataset.noLoading === 'true') return;
                 const submitButtons = form.querySelectorAll('button[type="submit"], input[type="submit"]');
@@ -2080,6 +2180,7 @@
                     const label = targetButton.dataset.loadingText || 'Processing...';
                     targetButton.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>${label}`;
                 }
+                showGlobalLoader();
             };
 
             const controlsSelector = 'input, select, textarea';
@@ -2167,6 +2268,33 @@
                     applyLoadingState(form);
                 });
             });
+
+            const shouldSkipLinkLoading = (link, event) => {
+                if (!link || !link.getAttribute) return true;
+                if (event.defaultPrevented) return true;
+                if (event.button !== 0) return true;
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return true;
+                if (link.target && link.target !== '_self') return true;
+                if (link.hasAttribute('download')) return true;
+                if (link.dataset.noLoading === 'true') return true;
+                const href = link.getAttribute('href');
+                if (!href) return true;
+                const trimmed = href.trim();
+                if (!trimmed || trimmed.startsWith('#')) return true;
+                if (trimmed.startsWith('javascript:') || trimmed.startsWith('mailto:') || trimmed.startsWith('tel:')) {
+                    return true;
+                }
+                return false;
+            };
+
+            document.addEventListener('click', (event) => {
+                const link = event.target.closest('a[href]');
+                if (!link) return;
+                if (shouldSkipLinkLoading(link, event)) return;
+                showGlobalLoader();
+            });
+
+            window.addEventListener('pageshow', hideGlobalLoader);
         })();
     </script>
     <script>

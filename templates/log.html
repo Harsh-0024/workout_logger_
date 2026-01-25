@@ -113,24 +113,62 @@
         const exerciseList = exerciseData ? JSON.parse(exerciseData.textContent || '[]') : [];
         if (!textarea || !counter) return;
 
-        const isDataLine = (line) => {
-            const trimmed = line.trim().toLowerCase();
-            if (!trimmed) return false;
-            return /^(?:,|-?\d|bw)/.test(trimmed);
+        const stripListNumbering = (line) => {
+            const trimmed = (line || '').trim();
+            if (/^\d+(?:[.)\-:])\s*[A-Za-z]/.test(trimmed)) {
+                return trimmed.replace(/^\s*\d+\s*(?:[.)\-:]?)\s*/, '');
+            }
+            return line;
         };
 
-        const expandShorthand = (values) => {
-            if (!values.length) return [];
-            if (values.length === 1) return [values[0], values[0], values[0]];
-            if (values.length === 2) return [values[0], values[1], values[1]];
-            return values;
+        const isDataLine = (line) => {
+            const trimmed = (line || '').trim();
+            if (!trimmed) return false;
+            if (/^\d+(?:[.)\-:])\s*[A-Za-z]/.test(trimmed)) return false;
+            const tokens = trimmed.split(/\s+/);
+            if (tokens.length > 1 && /^\d+(?:[.)\-:]?)?$/.test(tokens[0]) && /^[A-Za-z]/.test(tokens[1])) {
+                return false;
+            }
+            return /^(?:,|-?\d|bw)/.test(trimmed.toLowerCase());
+        };
+
+        const tokenizeSegment = (segment) => {
+            return (segment || '')
+                .replace(/(kg|lbs|lb)/gi, ' ')
+                .replace(/,/g, ' ')
+                .trim()
+                .split(/\s+/)
+                .filter(Boolean);
+        };
+
+        const expandSetCount = (count) => {
+            if (count === 1 || count === 2) return 3;
+            return count;
+        };
+
+        const countSetsFromDataPart = (dataPart) => {
+            const normalized = (dataPart || '').replace(/×/g, 'x');
+            const xMatches = normalized.match(/(?:bw(?:\/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)?\s*x\s*\d+/gi);
+            if (xMatches && xMatches.length) return expandSetCount(xMatches.length);
+
+            if (normalized.includes(',')) {
+                const parts = normalized.split(',');
+                const weightsTokens = tokenizeSegment(parts[0] || '').filter((t) => t.toLowerCase() !== 'x');
+                const repsTokens = tokenizeSegment(parts.slice(1).join(' '));
+                const repsNumbers = repsTokens.map((val) => Number(val)).filter((val) => !Number.isNaN(val));
+                const count = Math.max(weightsTokens.length, repsNumbers.length);
+                return count > 0 ? expandSetCount(count) : 0;
+            }
+
+            const tokens = tokenizeSegment(normalized).filter((t) => t.toLowerCase() !== 'x');
+            return expandSetCount(tokens.length);
         };
 
         const updateCount = () => {
             const value = textarea.value || '';
             const rawLines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
             if (rawLines.length <= 1) {
-                counter.textContent = '0 exercises • 0 reps';
+                counter.textContent = '0 exercises • 0 sets';
                 return;
             }
 
@@ -140,7 +178,7 @@
             let i = 0;
 
             while (i < lines.length) {
-                const line = lines[i];
+                const line = stripListNumbering(lines[i]);
                 if (!line) {
                     i += 1;
                     continue;
@@ -188,30 +226,7 @@
 
                 if (dataPart) {
                     exerciseCount += 1;
-                    const match = dataPart.match(/(bw(?:\/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)\s*[x×]\s*\d+/gi);
-                    if (match) {
-                        const sets = expandShorthand(match);
-                        repCount += sets.length;
-                    } else if (dataPart.includes(',')) {
-                        const parts = dataPart.split(',');
-                        const weightsPart = parts[0] ?? '';
-                        const repsPart = parts.slice(1).join(' ').trim();
-                        const weights = weightsPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
-                        const weightTokens = weights ? weights.split(/\s+/).filter(Boolean) : [];
-                        const repsTokens = repsPart
-                            ? repsPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim().split(/\s+/).filter(Boolean)
-                            : [];
-                        const sets = Math.max(
-                            expandShorthand(weightTokens).length,
-                            expandShorthand(repsTokens.map((val) => Number(val)).filter((val) => !Number.isNaN(val))).length
-                        );
-                        repCount += sets;
-                    } else {
-                        const weights = dataPart.replace(/(kg|lbs|lb)/gi, ' ').replace(/,/g, ' ').trim();
-                        const weightTokens = weights ? weights.split(/\s+/).filter(Boolean) : [];
-                        const sets = expandShorthand(weightTokens).length;
-                        repCount += sets;
-                    }
+                    repCount += countSetsFromDataPart(dataPart);
                 }
 
                 i += consumed;
