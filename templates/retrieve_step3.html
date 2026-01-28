@@ -3,10 +3,10 @@
 <div class="row justify-content-center">
     <div class="col-12 col-md-10 col-lg-8">
         <div class="card text-center">
-            <div class="d-flex justify-content-center gap-2 mb-4 step-badges">
-                <a href="{{ url_for('retrieve_categories') }}" class="badge step-badge-link" style="background: rgba(255,255,255,0.1);">1. Category</a>
-                <a href="{{ url_for('retrieve_days', category=category_name | url_encode) }}" class="badge step-badge-link" style="background: rgba(255,255,255,0.1);">2. Days</a>
-                <span class="badge bg-primary">3. Result</span>
+            <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap step-badges">
+                <a href="{{ url_for('retrieve_categories') }}" class="badge step-badge step-badge-link"><span class="step-number">1.</span> Category</a>
+                <a href="{{ url_for('retrieve_days', category=category_name | url_encode) }}" class="badge step-badge step-badge-link"><span class="step-number">2.</span> Days</a>
+                <span class="badge bg-primary step-badge"><span class="step-number">3.</span> Result</span>
             </div>
             <div class="mb-3 mb-md-5">
                 <i class="bi bi-check-circle-fill" style="font-size: clamp(4rem, 12vw, 5rem); color: var(--gold-primary); opacity: 0.8;"></i>
@@ -87,16 +87,58 @@
     }
 </script>
 <style>
-    .step-badges .step-badge-link {
+    .step-badge {
+        padding: 8px 16px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+    }
+
+    .step-number {
+        font-weight: 700;
+        opacity: 0.9;
+    }
+
+    .step-badge-link {
         text-decoration: none;
         color: inherit;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .step-badges .step-badge-link:hover {
+    .step-badge-link:hover {
         transform: translateY(-1px);
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         color: inherit;
+    }
+
+    @media (max-width: 576px) {
+        .step-badges {
+            flex-direction: row;
+            flex-wrap: nowrap;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 12px !important;
+        }
+
+        .step-badges .badge {
+            width: auto;
+            max-width: none;
+            flex: 1 1 0;
+            text-align: center;
+            padding: 6px 8px;
+            font-size: 0.6rem;
+        }
+
+        .step-badges .step-number {
+            display: none;
+        }
     }
 </style>
 {% endblock %}

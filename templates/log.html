@@ -16,7 +16,7 @@
                     <label class="form-label text-muted mb-2 mb-md-3 tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Workout Data
                     </label>
-                    <textarea name="workout_text" class="form-control" rows="10" autofocus
+                    <textarea name="workout_text" id="workoutTextarea" class="form-control" rows="10" autofocus
                         placeholder="Chest & Triceps 1&#10;Bench Press: 100kg x 5, 100kg x 5, 100kg x 5&#10;Incline DB Press: 35kg x 8, 35kg x 8, 35kg x 8&#10;...">{{ workout_text or '' }}</textarea>
                     <div id="exerciseSuggestions" class="exercise-suggestions" style="display: none;"></div>
                     <div class="log-meta text-muted mt-2">
@@ -43,7 +43,7 @@
         left: 0;
         right: 0;
         top: calc(100% - 12px);
-        background: rgba(15, 15, 17, 0.98);
+        background: var(--card-bg-solid);
         border: 1px solid var(--border-subtle);
         border-radius: 12px;
         box-shadow: var(--shadow-md);
@@ -71,7 +71,7 @@
 
     .exercise-suggestion.active,
     .exercise-suggestion:hover {
-        background: rgba(212, 175, 55, 0.12);
+        background: var(--gold-subtle);
         color: var(--text-primary);
     }
 
@@ -87,7 +87,7 @@
     .log-stats {
         padding: 6px 12px;
         border-radius: 999px;
-        background: rgba(212, 175, 55, 0.12);
+        background: var(--gold-subtle);
         color: var(--gold-bright);
         font-weight: 600;
         letter-spacing: 0.5px;
@@ -95,13 +95,17 @@
 
     @media (max-width: 576px) {
         .log-meta {
-            flex-direction: column;
-            align-items: flex-start;
+            flex-direction: row;
+            align-items: center;
+            justify-content: space-between;
         }
 
-        .log-stats {
-            align-self: flex-start;
+        #workoutTextarea {
+            height: 220px !important;
+            min-height: 220px !important;
+            max-height: 220px !important;
         }
+
     }
 </style>
 <script>
@@ -346,18 +350,13 @@
             });
 
             textarea.addEventListener('blur', () => {
-                setTimeout(() => {
-                    activeSuggestions = [];
-                    renderSuggestions();
-                }, 150);
+                setTimeout(() => hideSuggestions(), 200);
             });
-
-            textarea.addEventListener('input', updateSuggestions);
-            updateSuggestions();
         }
 
         textarea.addEventListener('input', updateCount);
         updateCount();
     })();
+
 </script>
 {% endblock %}

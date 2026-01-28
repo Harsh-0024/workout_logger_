@@ -26,6 +26,31 @@
                 </div>
             </div>
 
+            <div class="border-top pt-4 pt-md-5 mb-4 mb-md-5" style="border-color: var(--border-subtle) !important;">
+                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                    <i class="bi bi-palette text-gold"></i>
+                    <h5 class="mb-0 fw-bold">Appearance</h5>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        Theme Mode
+                    </label>
+                    <div class="d-flex gap-2 gap-md-3">
+                        <button type="button" onclick="setTheme('dark')" id="themeDark" class="btn btn-gold-outline flex-fill theme-toggle-btn">
+                            <i class="bi bi-moon-stars me-2"></i>
+                            <span>Dark</span>
+                        </button>
+                        <button type="button" onclick="setTheme('light')" id="themeLight" class="btn btn-gold-outline flex-fill theme-toggle-btn">
+                            <i class="bi bi-sun me-2"></i>
+                            <span>Light</span>
+                        </button>
+                    </div>
+                    <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                        <i class="bi bi-info-circle me-1"></i>Choose your preferred theme. Changes apply instantly.
+                    </small>
+                </div>
+            </div>
+
             <form method="POST" action="{{ url_for('user_settings') }}" class="mb-4 mb-md-5">
                 <input type="hidden" name="form_type" id="profileFormType" value="profile">
                 <div class="mb-3 mb-md-4">
@@ -55,7 +80,7 @@
                             step="0.1"
                             placeholder="e.g. 72.5"
                         >
-                        <span class="input-group-text" style="background: rgba(212, 175, 55, 0.1); border-color: var(--border-subtle); color: var(--text-muted);">kg</span>
+                        <span class="input-group-text" style="background: var(--gold-subtle); border-color: var(--border-subtle); color: var(--text-muted);">kg</span>
                     </div>
                     <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
                         <i class="bi bi-person-check me-1"></i>Used for bodyweight (BW) exercises
@@ -197,6 +222,46 @@
         setTimeout(scrollToChangePassword, 120);
         window.addEventListener('hashchange', scrollToChangePassword);
         window.addEventListener('load', scrollToChangePassword);
+    });
+
+    // Theme Toggle Logic
+    const updateThemeButtons = () => {
+        const currentTheme = window.getCurrentTheme ? window.getCurrentTheme() : 'dark';
+        const darkBtn = document.getElementById('themeDark');
+        const lightBtn = document.getElementById('themeLight');
+        
+        if (darkBtn && lightBtn) {
+            darkBtn.classList.remove('btn-gold-solid');
+            lightBtn.classList.remove('btn-gold-solid');
+            darkBtn.classList.add('btn-gold-outline');
+            lightBtn.classList.add('btn-gold-outline');
+            
+            if (currentTheme === 'dark') {
+                darkBtn.classList.remove('btn-gold-outline');
+                darkBtn.classList.add('btn-gold-solid');
+            } else {
+                lightBtn.classList.remove('btn-gold-outline');
+                lightBtn.classList.add('btn-gold-solid');
+            }
+        }
+    };
+
+    const setTheme = (theme) => {
+        if (window.toggleTheme && window.getCurrentTheme) {
+            const currentTheme = window.getCurrentTheme();
+            if (currentTheme !== theme) {
+                window.toggleTheme();
+            }
+        }
+        updateThemeButtons();
+    };
+
+    window.setTheme = setTheme;
+
+    // Initialize button states
+    document.addEventListener('DOMContentLoaded', () => {
+        updateThemeButtons();
+        window.addEventListener('themechange', updateThemeButtons);
     });
 </script>
 {% endblock %}

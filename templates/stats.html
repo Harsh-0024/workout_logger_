@@ -147,6 +147,11 @@
                 }
 
                 if (placeholder) placeholder.style.display = 'none';
+                // Detect current theme
+                const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
+                const pointBorderColor = isLightMode ? '#FFFFFF' : '#000000';
+                const pointHoverBorderColor = isLightMode ? '#F5F3F0' : '#FFFFFF';
+
                 myChart = new Chart(ctx, {
                     type: 'line',
                     data: {
@@ -162,10 +167,10 @@
                             pointRadius: 5,
                             pointHoverRadius: 8,
                             pointBackgroundColor: '#D4AF37',
-                            pointBorderColor: '#000000',
+                            pointBorderColor: pointBorderColor,
                             pointBorderWidth: 2,
                             pointHoverBackgroundColor: '#F4D03F',
-                            pointHoverBorderColor: '#FFFFFF',
+                            pointHoverBorderColor: pointHoverBorderColor,
                             pointHoverBorderWidth: 3
                         }]
                     },

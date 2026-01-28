@@ -21,7 +21,7 @@
             </div>
 
             {% if missing_bw_exercises %}
-            <div class="alert alert-warning mb-4 mb-md-5" role="alert" style="background: rgba(212, 175, 55, 0.12); border-color: rgba(212, 175, 55, 0.35); color: var(--platinum);">
+            <div class="alert alert-warning mb-4 mb-md-5" role="alert" style="background: var(--gold-subtle); border-color: var(--border-gold); color: var(--text-primary);">
                 <i class="bi bi-info-circle me-2"></i>
                 Set your bodyweight in Settings to see accurate BW volume and 1RM for: {{ missing_bw_exercises | join(', ') }}.
             </div>
@@ -84,7 +84,7 @@
                     {% endfor %}
                 </div>
 
-                <div class="mt-4 p-3 border rounded" style="border-color: var(--border-subtle) !important; background: rgba(212, 175, 55, 0.03);">
+                <div class="mt-4 p-3 border rounded" style="border-color: var(--border-subtle) !important; background: var(--gold-subtle);">
                     <details>
                         <summary class="text-gold fw-semibold" style="cursor: pointer; font-size: var(--fs-sm);">
                             <i class="bi bi-code-square me-2"></i>View Raw Log Data

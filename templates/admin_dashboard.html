@@ -128,7 +128,7 @@
                         <tr>
                             <td>
                                 <div class="d-flex align-items-center gap-3">
-                                    <div class="d-flex align-items-center justify-content-center rounded-circle" style="width: 40px; height: 40px; background: rgba(212, 175, 55, 0.12);">
+                                    <div class="d-flex align-items-center justify-content-center rounded-circle" style="width: 40px; height: 40px; background: var(--gold-subtle);">
                                         <span class="text-gold fw-semibold">{{ user.username[0].upper() }}</span>
                                     </div>
                                     <div>
@@ -171,9 +171,9 @@
             <!-- Mobile Card View -->
             <div class="d-md-none">
                 {% for user in users %}
-                <div class="card mb-3" style="background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-subtle);">
+                <div class="card mb-3" style="background: var(--card-bg); border: 1px solid var(--border-subtle);">
                     <div class="d-flex align-items-center gap-3 mb-3">
-                        <div class="d-flex align-items-center justify-content-center rounded-circle" style="width: 48px; height: 48px; background: rgba(212, 175, 55, 0.12);">
+                        <div class="d-flex align-items-center justify-content-center rounded-circle" style="width: 48px; height: 48px; background: var(--gold-subtle);">
                             <span class="text-gold fw-semibold" style="font-size: 1.25rem;">{{ user.username[0].upper() }}</span>
                         </div>
                         <div class="flex-grow-1">

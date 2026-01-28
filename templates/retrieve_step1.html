@@ -5,8 +5,8 @@
         <div class="card text-center">
             <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap step-badges">
                 <a href="{{ url_for('retrieve_categories') }}" class="badge bg-primary step-badge step-badge-link"><span class="step-number">1.</span> Category</a>
-                <span class="badge step-badge" style="background: rgba(255,255,255,0.1);"><span class="step-number">2.</span> Days</span>
-                <span class="badge step-badge" style="background: rgba(255,255,255,0.1);"><span class="step-number">3.</span> Result</span>
+                <span class="badge step-badge"><span class="step-number">2.</span> Days</span>
+                <span class="badge step-badge"><span class="step-number">3.</span> Result</span>
             </div>
             <div class="mb-4 mb-md-5">
                 <i class="bi bi-bullseye retrieve-icon" style="font-size: clamp(4rem, 12vw, 5rem); color: var(--gold-primary); opacity: 0.6;"></i>
@@ -39,22 +39,33 @@
     </div>
 </div>
 <style>
-    .step-badges .badge {
-        padding: 6px 14px;
-        font-size: var(--fs-xs);
-        letter-spacing: 0.08em;
+    .step-badge {
+        padding: 8px 16px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.05em;
         text-transform: uppercase;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
     }
 
-    .step-badges .step-badge-link {
+    .step-number {
+        font-weight: 700;
+        opacity: 0.9;
+    }
+
+    .step-badge-link {
         text-decoration: none;
         color: inherit;
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
 
-    .step-badges .step-badge-link:hover {
+    .step-badge-link:hover {
         transform: translateY(-1px);
-        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         color: inherit;
     }
 
