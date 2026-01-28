@@ -1,10 +1,12 @@
 import os
+import secrets
 import urllib.parse
 from datetime import datetime
 
 from flask import Flask, render_template, send_from_directory
 from flask_login import LoginManager
 from flask_mail import Mail
+from flask_wtf.csrf import CSRFProtect
 
 from config import Config
 from models import Session, User, initialize_database
@@ -25,8 +27,24 @@ def create_app(config_object=Config, init_db: bool = True):
         template_folder=os.path.join(base_dir, 'templates'),
         static_folder=os.path.join(base_dir, 'static'),
     )
-    app.secret_key = config_object.SECRET_KEY
     app.config.from_object(config_object)
+
+    if not app.config.get('SECRET_KEY'):
+        if app.config.get('TESTING') or app.config.get('DEBUG'):
+            app.config['SECRET_KEY'] = secrets.token_urlsafe(32)
+        else:
+            raise RuntimeError('SECRET_KEY must be set in the environment for production')
+    app.secret_key = app.config['SECRET_KEY']
+
+    app.config.setdefault('WTF_CSRF_ENABLED', bool(getattr(config_object, 'ENABLE_CSRF', False)))
+    if app.config.get('WTF_CSRF_ENABLED'):
+        CSRFProtect(app)
+
+    @app.context_processor
+    def inject_feature_flags():
+        return {
+            'ENABLE_CSRF': bool(app.config.get('WTF_CSRF_ENABLED')),
+        }
 
     if init_db:
         try:

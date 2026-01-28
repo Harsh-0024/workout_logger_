@@ -15,7 +15,7 @@ except Exception:
 class Config:
     """Base configuration class."""
     # Flask
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'dev-secret-key-change-in-production'
+    SECRET_KEY = os.environ.get('SECRET_KEY')
     
     # Database
     DATABASE_URL = os.environ.get('DATABASE_URL')
@@ -112,6 +112,7 @@ class TestingConfig(Config):
     """Testing configuration."""
     TESTING = True
     DATABASE_URL = 'sqlite:///:memory:'
+    SECRET_KEY = 'test-secret-key'
 
 
 # Configuration mapping

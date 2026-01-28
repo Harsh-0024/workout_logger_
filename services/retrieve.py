@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 import re
 
-from models import Plan, RepRange, User, UserRole
+from models import Plan, RepRange, User, UserRole, WorkoutLog
 from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
-from services.helpers import find_best_match
+from parsers.workout import align_sets
 
 
 def _normalize_text(text: str) -> str:
@@ -98,40 +98,14 @@ def generate_retrieve_output(db_session, user, category, day_id):
             rng = custom_ranges.get(ex.lower(), "")
             fmt_rng = f" - [{rng}]" if rng else ""
 
-            rec = find_best_match(db_session, user.id, ex)
-            sets_line = ""
-            if rec and rec.best_string:
-                sets_line = _extract_sets_line(rec.best_string, ex)
-                if sets_line and ex in BW_EXERCISES:
-                    sets_line = _normalize_bw(sets_line)
+            sets_line = _build_best_sets_line_from_logs(db_session, user, ex)
 
-            if not sets_line and rec and rec.sets_json:
-                sets_line = _format_sets_json(rec.sets_json)
-
-            filled_defaults = False
             if ex in BW_EXERCISES:
-                if not sets_line or _is_default_numeric_sets(sets_line):
+                if not sets_line:
                     sets_line = "bw/4, 1"
-                    filled_defaults = True
                 sets_line = _normalize_bw(sets_line)
             elif not sets_line:
-                # Default missing weights/reps to 1,1 (expands to 3 sets)
                 sets_line = "1, 1"
-                filled_defaults = True
-
-            if sets_line:
-                default_weight = "bw/4" if ex in BW_EXERCISES else "1"
-                has_x = re.search(r'(bw(?:/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)\s*[x×]\s*\d+', sets_line, flags=re.IGNORECASE)
-                missing_side = False
-                if not has_x:
-                    if ',' in sets_line:
-                        parts = sets_line.split(',', 1)
-                        missing_side = not parts[0].strip() or not parts[1].strip()
-                    else:
-                        missing_side = True
-
-                if filled_defaults or missing_side:
-                    sets_line = _normalize_sets_line(sets_line, default_weight=default_weight)
 
             # Count sets from sets_line
             if sets_line:
@@ -145,6 +119,164 @@ def generate_retrieve_output(db_session, user, category, day_id):
         return "\n".join(output_lines).rstrip(), exercise_count, set_count
     except KeyError:
         return f"Day '{key}' not found in plan.", 0, 0
+
+
+def _exercise_candidates(exercise_name: str):
+    if not exercise_name:
+        return []
+    name = exercise_name.strip()
+    candidates = [
+        name,
+        name.title(),
+        name.replace("'", "’"),
+        name.replace("'", "’").title(),
+        name.replace("’", "'"),
+        name.replace("’", "'").title(),
+        name.replace("-", "–"),
+        name.replace("–", "-"),
+    ]
+    return list(dict.fromkeys(candidates))
+
+
+def _compress_shorthand_values(values):
+    if not values:
+        return []
+    if len(values) != 3:
+        return list(values)
+    a, b, c = values[0], values[1], values[2]
+    if a == b == c:
+        return [a]
+    if a == b and b != c:
+        return [a, b, c]
+    if b == c and a != b:
+        return [a, b]
+    return [a, b, c]
+
+
+def _format_weight_token(exercise: str, weight, bodyweight):
+    token = _format_value(weight)
+    if exercise not in BW_EXERCISES:
+        return token
+    if bodyweight is None:
+        return token
+    try:
+        bw = float(bodyweight)
+    except Exception:
+        return token
+
+    candidates = [
+        ("bw", bw),
+        ("bw/2", bw / 2.0 if bw else 0.0),
+        ("bw/4", bw / 4.0 if bw else 0.0),
+    ]
+    for label, value in candidates:
+        if not value:
+            continue
+        if abs(float(weight) - value) <= abs(value) * 0.02:
+            return label
+    return token
+
+
+def _build_best_sets_line_from_logs(db_session, user, exercise: str) -> str:
+    candidates = _exercise_candidates(exercise)
+    if not candidates:
+        return ""
+
+    logs = (
+        db_session.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user.id)
+        .filter(WorkoutLog.exercise.in_(candidates))
+        .order_by(WorkoutLog.date.desc())
+        .all()
+    )
+    if not logs:
+        return ""
+
+    best_log = None
+    best_peak = None
+
+    for log in logs:
+        sets_json = log.sets_json if isinstance(log.sets_json, dict) else None
+        if not sets_json:
+            continue
+        weights = sets_json.get("weights") or []
+        reps = sets_json.get("reps") or []
+        if not weights and not reps:
+            continue
+
+        try:
+            weights = [float(w) for w in weights]
+            reps = [int(r) for r in reps]
+        except Exception:
+            continue
+
+        weights, reps = align_sets(weights, reps)
+
+        peak = None
+        for w, r in zip(weights, reps):
+            if w is None or r is None:
+                continue
+            if r <= 0:
+                continue
+            est = float(w) * (1.0 + float(r) / 30.0)
+            if peak is None or est > peak:
+                peak = est
+
+        if peak is None:
+            continue
+
+        if best_peak is None or peak > best_peak or (peak == best_peak and log.date > getattr(best_log, 'date', log.date)):
+            best_peak = peak
+            best_log = log
+
+    if not best_log:
+        return ""
+
+    sets_json = best_log.sets_json if isinstance(best_log.sets_json, dict) else None
+    if not sets_json:
+        return ""
+    weights = sets_json.get("weights") or []
+    reps = sets_json.get("reps") or []
+
+    try:
+        weights = [float(w) for w in weights]
+        reps = [int(r) for r in reps]
+    except Exception:
+        return ""
+
+    weights, reps = align_sets(weights, reps)
+
+    scored = []
+    for w, r in zip(weights, reps):
+        if w is None or r is None:
+            continue
+        if r <= 0:
+            continue
+        est = float(w) * (1.0 + float(r) / 30.0)
+        scored.append((est, float(w), int(r)))
+
+    if not scored:
+        return ""
+
+    scored.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
+    top3 = scored[:3]
+    weights_top = [t[1] for t in top3]
+    reps_top = [t[2] for t in top3]
+    weights_top, reps_top = align_sets(weights_top, reps_top)
+    weights_top = weights_top[:3]
+    reps_top = reps_top[:3]
+
+    weight_tokens = [_format_weight_token(exercise, w, getattr(user, "bodyweight", None)) for w in weights_top]
+    rep_tokens = [str(int(r)) for r in reps_top]
+
+    weight_tokens = _compress_shorthand_values(weight_tokens)
+    rep_tokens = _compress_shorthand_values(rep_tokens)
+
+    weights_part = " ".join(weight_tokens).strip()
+    reps_part = " ".join(rep_tokens).strip()
+    if not weights_part or not reps_part:
+        return ""
+    return f"{weights_part}, {reps_part}"
 
 
 def _format_value(value):

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from urllib.parse import urljoin, urlparse
 
 from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import login_required, login_user, logout_user, current_user
@@ -12,8 +13,59 @@ from utils.validators import sanitize_text_input, validate_username
 
 from .decorators import dev_only, require_admin
 
+import threading
+import time
+from collections import deque
+
+_RATE_LIMIT_BUCKETS = {}
+_RATE_LIMIT_LOCK = threading.Lock()
+
 
 def register_auth_routes(app, email_service):
+    def _is_safe_redirect_url(target: str) -> bool:
+        if not target:
+            return False
+        ref_url = urlparse(request.host_url)
+        test_url = urlparse(urljoin(request.host_url, target))
+        return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+
+    def _get_client_ip() -> str:
+        forwarded = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+        if forwarded:
+            return forwarded
+        return request.remote_addr or 'unknown'
+
+    def _allow_rate_limit(bucket: str, limit: int, window_seconds: int) -> bool:
+        now = time.time()
+        with _RATE_LIMIT_LOCK:
+            dq = _RATE_LIMIT_BUCKETS.get(bucket)
+            if dq is None:
+                dq = deque()
+                _RATE_LIMIT_BUCKETS[bucket] = dq
+
+            cutoff = now - float(window_seconds)
+            while dq and dq[0] <= cutoff:
+                dq.popleft()
+
+            if len(dq) >= int(limit):
+                return False
+
+            dq.append(now)
+            return True
+
+    def _enforce_rate_limit(action: str, identifier: str | None, limit: int, window_seconds: int) -> None:
+        if not app.config.get('ENABLE_RATE_LIMITING', False):
+            return
+
+        ip = _get_client_ip()
+        buckets = [f"{action}:ip:{ip}"]
+        if identifier:
+            buckets.append(f"{action}:id:{identifier.strip().lower()}")
+
+        for bucket in buckets:
+            if not _allow_rate_limit(bucket, limit=limit, window_seconds=window_seconds):
+                raise AuthenticationError("Too many attempts. Please wait and try again.")
+
     def register():
         if current_user.is_authenticated:
             return redirect(url_for('user_dashboard', username=current_user.username))
@@ -71,6 +123,8 @@ def register_auth_routes(app, email_service):
                 password = request.form.get('password', '')
                 remember_me = request.form.get('remember_me') == 'on'
 
+                _enforce_rate_limit('login', username_or_email, limit=10, window_seconds=600)
+
                 user = AuthService.authenticate_user(username_or_email, password)
 
                 if not user:
@@ -90,7 +144,7 @@ def register_auth_routes(app, email_service):
                 flash(f"Welcome back, {user.username.title()}!", "success")
 
                 next_page = request.args.get('next')
-                if next_page:
+                if next_page and _is_safe_redirect_url(next_page):
                     return redirect(next_page)
                 return redirect(url_for('user_dashboard', username=user.username))
 
@@ -112,6 +166,7 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             identifier = request.form.get('username_or_email', '').strip()
             try:
+                _enforce_rate_limit('login_otp_request', identifier, limit=5, window_seconds=600)
                 otp_payload = AuthService.request_login_otp(identifier)
 
                 email_sent = email_service.send_otp_email(
@@ -163,6 +218,8 @@ def register_auth_routes(app, email_service):
             try:
                 otp_code = request.form.get('otp_code', '').strip()
 
+                _enforce_rate_limit('login_otp_verify', str(user_id), limit=15, window_seconds=600)
+
                 if AuthService.verify_otp(user_id, otp_code, 'login_otp', mark_verified=True):
                     session.pop('pending_otp_user_id', None)
                     session.pop('pending_otp_identifier', None)
@@ -211,6 +268,7 @@ def register_auth_routes(app, email_service):
             return redirect(url_for('login_otp_request'))
 
         try:
+            _enforce_rate_limit('login_otp_resend', identifier, limit=5, window_seconds=600)
             otp_payload = AuthService.request_login_otp(identifier)
             email_sent = email_service.send_otp_email(
                 email=otp_payload['email'],
