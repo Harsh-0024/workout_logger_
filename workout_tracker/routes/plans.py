@@ -66,7 +66,14 @@ def register_plan_routes(app):
         try:
             category = sanitize_text_input(category, max_length=100)
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
-            return render_template('retrieve_step3.html', output=output, exercise_count=exercise_count, set_count=set_count)
+            return render_template(
+                'retrieve_step3.html',
+                output=output,
+                exercise_count=exercise_count,
+                set_count=set_count,
+                category_name=category,
+                day_id=day_id,
+            )
         except Exception as e:
             logger.error(f"Error in retrieve_final: {e}", exc_info=True)
             flash("Error generating workout plan.", "error")

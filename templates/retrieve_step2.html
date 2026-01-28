@@ -4,7 +4,7 @@
     <div class="col-12 col-md-6 col-lg-5">
         <div class="card text-center">
             <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap step-badges">
-                <span class="badge step-badge" style="background: rgba(255,255,255,0.1);"><span class="step-number">1.</span> Category</span>
+                <a href="{{ url_for('retrieve_categories') }}" class="badge step-badge step-badge-link" style="background: rgba(255,255,255,0.1);"><span class="step-number">1.</span> Category</a>
                 <span class="badge bg-primary step-badge"><span class="step-number">2.</span> Days</span>
                 <span class="badge step-badge" style="background: rgba(255,255,255,0.1);"><span class="step-number">3.</span> Result</span>
             </div>
@@ -44,6 +44,18 @@
         font-size: var(--fs-xs);
         letter-spacing: 0.08em;
         text-transform: uppercase;
+    }
+
+    .step-badges .step-badge-link {
+        text-decoration: none;
+        color: inherit;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .step-badges .step-badge-link:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+        color: inherit;
     }
 
     @media (max-width: 576px) {

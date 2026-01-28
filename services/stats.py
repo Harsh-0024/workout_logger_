@@ -3,10 +3,28 @@ Statistics and data export services for workout tracking.
 """
 import csv
 import io
+import json
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
 from models import WorkoutLog
+
+
+def _serialize_sets_json(sets_json) -> str:
+    if not sets_json:
+        return ""
+    if isinstance(sets_json, str):
+        return sets_json
+    try:
+        return json.dumps(sets_json, ensure_ascii=False)
+    except Exception:
+        return str(sets_json)
+
+
+def _format_list(values) -> str:
+    if not values:
+        return ""
+    return ",".join(str(v) for v in values if v is not None)
 
 
 def get_csv_export(db_session, user):
@@ -18,19 +36,66 @@ def get_csv_export(db_session, user):
     output = io.StringIO()
     writer = csv.writer(output)
 
-    # Headers
-    writer.writerow(['Date', 'Exercise', 'Top Weight (kg)', 'Reps', 'Est 1RM (kg)'])
+    writer.writerow([
+        'Date',
+        'Workout Name',
+        'Exercise',
+        'Exercise String',
+        'Weights',
+        'Reps',
+        'Sets JSON',
+        'Top Weight (kg)',
+        'Top Reps',
+        'Estimated 1RM (kg)',
+    ])
 
     for log in logs:
+        sets_json = log.sets_json if isinstance(log.sets_json, dict) else {}
+        weights = sets_json.get('weights') if isinstance(sets_json, dict) else None
+        reps = sets_json.get('reps') if isinstance(sets_json, dict) else None
         writer.writerow([
-            log.date.strftime("%Y-%m-%d"),
-            log.exercise,
-            log.top_weight or 0,
-            log.top_reps or 0,
-            f"{log.estimated_1rm:.1f}" if log.estimated_1rm else "0.0"
+            log.date.isoformat() if log.date else "",
+            log.workout_name or "",
+            log.exercise or "",
+            log.exercise_string or "",
+            _format_list(weights),
+            _format_list(reps),
+            _serialize_sets_json(log.sets_json),
+            log.top_weight if log.top_weight is not None else "",
+            log.top_reps if log.top_reps is not None else "",
+            f"{log.estimated_1rm:.2f}" if log.estimated_1rm is not None else "",
         ])
 
     return output.getvalue()
+
+
+def get_json_export(db_session, user) -> Dict:
+    """Generate full JSON export payload for workout history."""
+    logs = db_session.query(WorkoutLog).filter_by(
+        user_id=user.id
+    ).order_by(desc(WorkoutLog.date)).all()
+
+    workouts_by_date: Dict[str, Dict] = {}
+    for log in logs:
+        date_key = log.date.strftime('%Y-%m-%d') if log.date else ""
+        entry = {
+            'id': log.id,
+            'date': log.date.isoformat() if log.date else None,
+            'workout_name': log.workout_name,
+            'exercise': log.exercise,
+            'exercise_string': log.exercise_string,
+            'sets_json': log.sets_json,
+            'top_weight': log.top_weight,
+            'top_reps': log.top_reps,
+            'estimated_1rm': log.estimated_1rm,
+        }
+        workouts_by_date.setdefault(date_key, {'date': date_key, 'entries': []})['entries'].append(entry)
+
+    return {
+        'user': user.username,
+        'export_date': datetime.now().isoformat(),
+        'workouts': list(workouts_by_date.values()),
+    }
 
 
 def get_chart_data(db_session, user, exercise_name):

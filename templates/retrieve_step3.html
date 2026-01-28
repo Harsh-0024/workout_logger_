@@ -3,9 +3,9 @@
 <div class="row justify-content-center">
     <div class="col-12 col-md-10 col-lg-8">
         <div class="card text-center">
-            <div class="d-flex justify-content-center gap-2 mb-4">
-                <span class="badge" style="background: rgba(255,255,255,0.1);">1. Category</span>
-                <span class="badge" style="background: rgba(255,255,255,0.1);">2. Days</span>
+            <div class="d-flex justify-content-center gap-2 mb-4 step-badges">
+                <a href="{{ url_for('retrieve_categories') }}" class="badge step-badge-link" style="background: rgba(255,255,255,0.1);">1. Category</a>
+                <a href="{{ url_for('retrieve_days', category=category_name | url_encode) }}" class="badge step-badge-link" style="background: rgba(255,255,255,0.1);">2. Days</a>
                 <span class="badge bg-primary">3. Result</span>
             </div>
             <div class="mb-3 mb-md-5">
@@ -86,4 +86,17 @@
         }, 2000);
     }
 </script>
+<style>
+    .step-badges .step-badge-link {
+        text-decoration: none;
+        color: inherit;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .step-badges .step-badge-link:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.25);
+        color: inherit;
+    }
+</style>
 {% endblock %}

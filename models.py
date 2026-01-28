@@ -439,16 +439,23 @@ def _bootstrap_admin_user(session):
         import bcrypt
 
         user = session.query(User).filter_by(username=admin_username).first()
+        created = False
         if not user:
             user = User(username=admin_username)
             session.add(user)
+            created = True
 
-        user.email = admin_email
-        user.password_hash = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-        user.role = UserRole.ADMIN
-        user.is_verified = True
-        user.verification_token = None
-        user.verification_token_expires = None
+        if not user.email:
+            user.email = admin_email
+        if not user.is_admin():
+            user.role = UserRole.ADMIN
+        if created or not user.password_hash:
+            user.password_hash = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        if not user.is_verified:
+            user.is_verified = True
+        if user.verification_token or user.verification_token_expires:
+            user.verification_token = None
+            user.verification_token_expires = None
         if not user.created_at:
             user.created_at = datetime.now()
         user.updated_at = datetime.now()

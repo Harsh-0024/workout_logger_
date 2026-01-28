@@ -2092,10 +2092,36 @@
             const alertContainer = document.getElementById('client-alerts');
             if (!alertContainer) return;
             let alertShown = false;
+            const alertKey = 'clientAlertShown';
+
+            const hasShownAlert = () => {
+                try {
+                    return sessionStorage.getItem(alertKey) === 'true';
+                } catch (err) {
+                    return false;
+                }
+            };
+
+            const markAlertShown = () => {
+                try {
+                    sessionStorage.setItem(alertKey, 'true');
+                } catch (err) {
+                    // Ignore storage errors
+                }
+            };
+
+            const shouldIgnoreError = (message) => {
+                if (!message) return true;
+                const normalized = String(message).toLowerCase();
+                if (normalized.includes('script error')) return true;
+                if (normalized.includes('resizeobserver')) return true;
+                return false;
+            };
 
             const showClientAlert = (message) => {
-                if (alertShown) return;
+                if (alertShown || hasShownAlert()) return;
                 alertShown = true;
+                markAlertShown();
                 const alert = document.createElement('div');
                 alert.className = 'alert alert-danger alert-dismissible fade show';
                 alert.role = 'alert';
@@ -2104,12 +2130,16 @@
             };
 
             window.addEventListener('error', (event) => {
+                const message = event?.error?.message || event?.message || '';
                 console.error('Unhandled error:', event.error || event.message);
+                if (shouldIgnoreError(message)) return;
                 showClientAlert('Something went wrong. Please refresh the page and try again.');
             });
 
             window.addEventListener('unhandledrejection', (event) => {
+                const message = event?.reason?.message || event?.reason || '';
                 console.error('Unhandled promise rejection:', event.reason);
+                if (shouldIgnoreError(message)) return;
                 showClientAlert('Something went wrong. Please refresh the page and try again.');
             });
         })();

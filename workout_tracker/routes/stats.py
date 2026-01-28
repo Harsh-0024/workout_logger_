@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import desc
 
 from models import Session, WorkoutLog
-from services.stats import get_chart_data, get_csv_export
+from services.stats import get_chart_data, get_csv_export, get_json_export
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -48,41 +48,12 @@ def register_stats_routes(app):
             json_size_kb = 0
 
             if logs:
-                output = io.StringIO()
-                writer = csv.writer(output)
-                writer.writerow(['Date', 'Exercise', 'Top Weight (kg)', 'Reps', 'Est 1RM (kg)'])
-                for log in logs:
-                    writer.writerow([
-                        log.date.strftime("%Y-%m-%d"),
-                        log.exercise,
-                        log.top_weight or 0,
-                        log.top_reps or 0,
-                        f"{log.estimated_1rm:.1f}" if log.estimated_1rm else "0.0",
-                    ])
-                csv_bytes = output.getvalue().encode('utf-8')
+                csv_data = get_csv_export(Session, user)
+                csv_bytes = csv_data.encode('utf-8')
                 csv_size_kb = (len(csv_bytes) + 1023) // 1024
 
-                workouts_by_date = {}
-                for log in logs:
-                    date_str = log.date.strftime('%Y-%m-%d')
-                    workouts_by_date.setdefault(date_str, []).append(
-                        {
-                            'exercise': log.exercise,
-                            'top_weight': log.top_weight,
-                            'top_reps': log.top_reps,
-                            'estimated_1rm': log.estimated_1rm,
-                        }
-                    )
-
-                data = {
-                    'user': user.username,
-                    'export_date': datetime.now().isoformat(),
-                    'workouts': [
-                        {'date': date_str, 'exercises': exercises}
-                        for date_str, exercises in workouts_by_date.items()
-                    ],
-                }
-                json_bytes = json.dumps(data, ensure_ascii=False, indent=2).encode('utf-8')
+                json_payload = get_json_export(Session, user)
+                json_bytes = json.dumps(json_payload, ensure_ascii=False, indent=2).encode('utf-8')
                 json_size_kb = (len(json_bytes) + 1023) // 1024
 
             return render_template(
@@ -134,32 +105,7 @@ def register_stats_routes(app):
         user = current_user
 
         try:
-            logs = (
-                Session.query(WorkoutLog)
-                .filter_by(user_id=user.id)
-                .order_by(desc(WorkoutLog.date))
-                .all()
-            )
-
-            data = {'user': user.username, 'export_date': datetime.now().isoformat(), 'workouts': []}
-
-            workouts_by_date = {}
-            for log in logs:
-                date_str = log.date.strftime('%Y-%m-%d')
-                if date_str not in workouts_by_date:
-                    workouts_by_date[date_str] = []
-
-                workouts_by_date[date_str].append(
-                    {
-                        'exercise': log.exercise,
-                        'top_weight': log.top_weight,
-                        'top_reps': log.top_reps,
-                        'estimated_1rm': log.estimated_1rm,
-                    }
-                )
-
-            for date_str, exercises in workouts_by_date.items():
-                data['workouts'].append({'date': date_str, 'exercises': exercises})
+            data = get_json_export(Session, user)
 
             filename = (
                 f"workout_history_{user.username}_{datetime.now().strftime('%Y%m%d')}.json"
