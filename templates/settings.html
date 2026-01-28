@@ -35,7 +35,7 @@
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Theme Mode
                     </label>
-                    <div class="d-flex gap-2 gap-md-3">
+                    <div class="d-flex gap-2 gap-md-3 flex-wrap theme-toggle-group">
                         <button type="button" onclick="setTheme('dark')" id="themeDark" class="btn btn-gold-outline flex-fill theme-toggle-btn">
                             <i class="bi bi-moon-stars me-2"></i>
                             <span>Dark</span>
@@ -43,6 +43,10 @@
                         <button type="button" onclick="setTheme('light')" id="themeLight" class="btn btn-gold-outline flex-fill theme-toggle-btn">
                             <i class="bi bi-sun me-2"></i>
                             <span>Light</span>
+                        </button>
+                        <button type="button" onclick="setTheme('system')" id="themeSystem" class="btn btn-gold-outline flex-fill theme-toggle-btn">
+                            <i class="bi bi-display me-2"></i>
+                            <span>System</span>
                         </button>
                     </div>
                     <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
@@ -199,6 +203,25 @@
         </div>
     </div>
 </div>
+<style>
+    @media (max-width: 576px) {
+        .theme-toggle-group {
+            gap: 8px !important;
+        }
+
+        .theme-toggle-btn {
+            padding: 10px 12px;
+            font-size: 0.72rem;
+            border-radius: 14px;
+            letter-spacing: 0.4px;
+        }
+
+        .theme-toggle-btn i {
+            margin-right: 6px !important;
+            font-size: 0.9rem;
+        }
+    }
+</style>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
         const scrollToChangePassword = () => {
@@ -226,32 +249,32 @@
 
     // Theme Toggle Logic
     const updateThemeButtons = () => {
-        const currentTheme = window.getCurrentTheme ? window.getCurrentTheme() : 'dark';
+        const preference = window.getThemePreference ? window.getThemePreference() : 'system';
         const darkBtn = document.getElementById('themeDark');
         const lightBtn = document.getElementById('themeLight');
-        
-        if (darkBtn && lightBtn) {
-            darkBtn.classList.remove('btn-gold-solid');
-            lightBtn.classList.remove('btn-gold-solid');
-            darkBtn.classList.add('btn-gold-outline');
-            lightBtn.classList.add('btn-gold-outline');
-            
-            if (currentTheme === 'dark') {
-                darkBtn.classList.remove('btn-gold-outline');
-                darkBtn.classList.add('btn-gold-solid');
-            } else {
-                lightBtn.classList.remove('btn-gold-outline');
-                lightBtn.classList.add('btn-gold-solid');
-            }
+        const systemBtn = document.getElementById('themeSystem');
+
+        [darkBtn, lightBtn, systemBtn].forEach((btn) => {
+            if (!btn) return;
+            btn.classList.remove('btn-gold-solid');
+            btn.classList.add('btn-gold-outline');
+        });
+
+        if (preference === 'dark' && darkBtn) {
+            darkBtn.classList.remove('btn-gold-outline');
+            darkBtn.classList.add('btn-gold-solid');
+        } else if (preference === 'light' && lightBtn) {
+            lightBtn.classList.remove('btn-gold-outline');
+            lightBtn.classList.add('btn-gold-solid');
+        } else if (systemBtn) {
+            systemBtn.classList.remove('btn-gold-outline');
+            systemBtn.classList.add('btn-gold-solid');
         }
     };
 
     const setTheme = (theme) => {
-        if (window.toggleTheme && window.getCurrentTheme) {
-            const currentTheme = window.getCurrentTheme();
-            if (currentTheme !== theme) {
-                window.toggleTheme();
-            }
+        if (window.setThemePreference) {
+            window.setThemePreference(theme);
         }
         updateThemeButtons();
     };

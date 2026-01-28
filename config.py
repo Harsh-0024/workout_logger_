@@ -27,7 +27,7 @@ class Config:
     
     # Feature Flags
     ENABLE_CSRF = True
-    ENABLE_RATE_LIMITING = False
+    ENABLE_RATE_LIMITING = os.environ.get('ENABLE_RATE_LIMITING', 'True').lower() == 'true'
     
     # Pagination
     ITEMS_PER_PAGE = 20
