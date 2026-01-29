@@ -1,14 +1,18 @@
 from datetime import datetime, timedelta
 import re
-from flask import flash, redirect, render_template, request, url_for
+import threading
+import time
+
+from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 from itsdangerous import URLSafeSerializer, BadSignature
 from sqlalchemy import desc, func
 
-from list_of_exercise import list_of_exercises
+from list_of_exercise import get_workout_days, list_of_exercises
 from models import Session, User, WorkoutLog
 from parsers.workout import workout_parser
 from services.logging import handle_workout_log
+from services.retrieve import get_effective_plan_text
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
 from utils.validators import sanitize_text_input, validate_username
@@ -16,6 +20,9 @@ from utils.validators import sanitize_text_input, validate_username
 
 def register_workout_routes(app):
     serializer = URLSafeSerializer(app.config.get('SECRET_KEY', 'workout-share'))
+
+    _reco_cache = {}
+    _reco_cache_lock = threading.Lock()
 
     def _make_share_token(user_id, workout_date):
         payload = {
@@ -270,6 +277,136 @@ def register_workout_routes(app):
     def workout_history():
         return redirect(url_for('user_dashboard', username=current_user.username))
 
+    @login_required
+    def recommend_workout_api():
+        user = current_user
+
+        now = time.time()
+        cache_key = f"u:{user.id}"
+        with _reco_cache_lock:
+            cached = _reco_cache.get(cache_key)
+            ttl = cached.get('ttl', 120) if cached else 120
+            if cached and now - cached.get('ts', 0) < ttl:
+                return jsonify(cached['payload'])
+
+        try:
+            plan_text = get_effective_plan_text(Session, user)
+            plan_data = get_workout_days(plan_text or "")
+            workout_map = plan_data.get('workout', {}) if isinstance(plan_data, dict) else {}
+            categories = []
+            for cat, cat_map in workout_map.items():
+                num_days = len(cat_map) if isinstance(cat_map, dict) else 0
+                if num_days > 0:
+                    categories.append({"name": str(cat), "num_days": int(num_days)})
+
+            if not categories:
+                return jsonify({"ok": False, "error": "No workout plan found."}), 400
+
+            recent = get_recent_workouts(user, limit=20)
+            recent_context = []
+            for w in recent:
+                dt = w.get('date')
+                recent_context.append(
+                    {
+                        "date": dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt),
+                        "title": w.get('title') or "Workout",
+                        "exercises": w.get('exercises') or "",
+                    }
+                )
+
+            from services.gemini import GeminiService, GeminiServiceError
+
+            fallback_warning = None
+            source = "gemini"
+            reco = None
+            try:
+                reco = GeminiService.recommend_workout(categories=categories, recent_workouts=recent_context)
+            except GeminiServiceError as e:
+                logger.warning(f"Gemini unavailable, using fallback: {e}")
+                source = "fallback"
+                fallback_warning = "Gemini is busy right now. Showing a smart fallback suggestion."
+
+                today = datetime.utcnow().date()
+                last_dates = {}
+                for item in recent_context:
+                    title = (item.get('title') or '').lower()
+                    exercises = (item.get('exercises') or '').lower()
+                    date_str = item.get('date') or ''
+                    for cat in categories:
+                        name = str(cat.get('name') or '').lower()
+                        if not name or name in last_dates:
+                            continue
+                        if name in title or name in exercises:
+                            try:
+                                last_dates[name] = datetime.strptime(date_str, '%Y-%m-%d').date()
+                            except Exception:
+                                last_dates[name] = None
+                    if len(last_dates) == len(categories):
+                        break
+
+                best = None
+                best_score = -1
+                for cat in categories:
+                    name = str(cat.get('name') or '')
+                    key = name.lower()
+                    last_date = last_dates.get(key)
+                    days_since = 999
+                    if last_date:
+                        days_since = max((today - last_date).days, 0)
+                    score = days_since + (cat.get('num_days') or 0) / 100
+                    if score > best_score:
+                        best_score = score
+                        best = (name, int(cat.get('num_days') or 1), days_since)
+
+                if not best:
+                    best = (categories[0]['name'], int(categories[0].get('num_days') or 1), 999)
+
+                name, num_days, days_since = best
+                reco = {
+                    "category": name,
+                    "day_id": 1,
+                    "reasons": [
+                        f"You haven't trained {name} in {days_since} day(s)." if days_since != 999 else f"You haven't logged {name} recently.",
+                        "Keeps your training split balanced this week.",
+                        f"Aligned with your plan: {name} day 1.",
+                    ],
+                    "model": "heuristic",
+                }
+
+            raw_category = (reco.get('category') or '').strip()
+            raw_day_id = int(reco.get('day_id') or 0)
+
+            category_lookup = {c['name'].strip().lower(): c for c in categories}
+            chosen = category_lookup.get(raw_category.lower())
+            if not chosen:
+                chosen = categories[0]
+                raw_category = chosen['name']
+
+            num_days = int(chosen.get('num_days') or 0)
+            if raw_day_id < 1 or raw_day_id > num_days:
+                raw_day_id = 1
+
+            deep_link = url_for('retrieve_final', category=raw_category, day_id=raw_day_id)
+
+            payload = {
+                "ok": True,
+                "category": raw_category,
+                "day_id": raw_day_id,
+                "reasons": reco.get('reasons') or [],
+                "url": deep_link,
+                "model": reco.get('model'),
+                "source": source,
+                "warning": fallback_warning,
+            }
+            with _reco_cache_lock:
+                ttl = 60 if source == "fallback" else 120
+                _reco_cache[cache_key] = {"ts": now, "payload": payload, "ttl": ttl}
+
+            return jsonify(payload)
+        except Exception as e:
+            logger.error(f"Workout recommendation failed: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": "Unable to generate a recommendation right now."}), 500
+
     def shared_workout(token):
         try:
             payload = _load_share_token(token)
@@ -521,3 +658,4 @@ def register_workout_routes(app):
     app.add_url_rule('/workout/<date_str>/edit', endpoint='edit_workout', view_func=edit_workout, methods=['GET', 'POST'])
     app.add_url_rule('/workout/<date_str>/delete', endpoint='delete_workout', view_func=delete_workout, methods=['POST'])
     app.add_url_rule('/log', endpoint='log_workout', view_func=log_workout, methods=['GET', 'POST'])
+    app.add_url_rule('/api/recommend-workout', endpoint='recommend_workout_api', view_func=recommend_workout_api, methods=['GET'])

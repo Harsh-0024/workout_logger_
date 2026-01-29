@@ -53,6 +53,9 @@ class Config:
     BREVO_API_KEY = os.environ.get('BREVO_API_KEY')
     BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL') or MAIL_DEFAULT_SENDER
     BREVO_SENDER_NAME = os.environ.get('BREVO_SENDER_NAME', 'Workout Tracker')
+
+    # Google Gemini API (Google AI Studio)
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
     
     # Authentication
     REMEMBER_COOKIE_DURATION = 30  # days

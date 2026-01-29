@@ -41,6 +41,11 @@
                 <a href="{{ url_for('set_exercises') }}" class="btn btn-gold-outline">
                     <i class="bi bi-sliders me-2"></i>Edit Rep Ranges
                 </a>
+                {% if current_user.is_admin() %}
+                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-shield-lock me-2"></i>Admin Dashboard
+                </a>
+                {% endif %}
             </div>
 
             <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
