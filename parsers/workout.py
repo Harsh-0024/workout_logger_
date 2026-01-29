@@ -48,6 +48,7 @@ def align_sets(weights, reps):
 
 def parse_weight_x_reps(segment, base_weight=None):
     segment = (segment or '').replace('×', 'x').replace('*', 'x').lower()
+    segment = re.sub(r'(kg|lbs|lb)', '', segment)
     matches = re.findall(
         r'(?:(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*)?x\s*(\d+)',
         segment,
@@ -142,6 +143,32 @@ def is_data_line(line):
     if len(tokens) > 1 and re.match(r'^\d+(?:[.)\-:])?$', tokens[0]) and re.match(r'^[A-Za-z]', tokens[1]):
         return False
     return bool(re.match(r'^(?:,|-?\d|bw)', stripped.lower()))
+
+
+def is_probable_data_segment(segment: str) -> bool:
+    segment = (segment or '').strip()
+    if not segment:
+        return False
+
+    lowered = segment.lower()
+    if re.search(r'[x×*]', lowered):
+        return True
+    if ',' in lowered:
+        return True
+
+    tokens = re.split(r'\s+', lowered)
+    for token in tokens:
+        if not token:
+            continue
+        cleaned = re.sub(r'[,:]+$', '', token)
+        if cleaned.startswith('bw'):
+            continue
+        cleaned = re.sub(r'(kg|lbs|lb)', '', cleaned)
+        if re.match(r'^-?\d+(?:\.\d+)?$', cleaned):
+            continue
+        return False
+
+    return True
 
 
 def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None):
@@ -348,6 +375,9 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
                 exercise_lines.append(reps_line)
                 data_part = f"{data_part}, {reps_line}"
                 consumed += 1
+
+        if data_part and not is_probable_data_segment(data_part):
+            data_part = ""
 
         if data_part:
             w_list, r_list = parse_weight_x_reps(data_part, bodyweight)

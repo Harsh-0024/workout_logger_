@@ -173,26 +173,57 @@
     (function() {
         const list = document.querySelector('.recent-workouts-list');
         if (!list) return;
+        let lastY = 0;
+        let scrollTimeout = null;
 
-        let startY = 0;
+        const markScrolling = () => {
+            list.classList.add('is-scrolling');
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            scrollTimeout = setTimeout(() => {
+                list.classList.remove('is-scrolling');
+            }, 120);
+        };
+
         list.addEventListener('touchstart', (event) => {
             if (!event.touches || !event.touches.length) return;
-            startY = event.touches[0].clientY;
+            lastY = event.touches[0].clientY;
         }, { passive: true });
 
         list.addEventListener('touchmove', (event) => {
             if (!event.touches || !event.touches.length) return;
             const currentY = event.touches[0].clientY;
-            const deltaY = currentY - startY;
+            const deltaY = currentY - lastY;
+            lastY = currentY;
+
+            const canScroll = list.scrollHeight > list.offsetHeight + 2;
             const atTop = list.scrollTop <= 0;
             const atBottom = list.scrollTop + list.offsetHeight >= list.scrollHeight - 1;
+            const shouldChain = !canScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0);
 
-            if ((atTop && deltaY > 0) || (atBottom && deltaY < 0)) {
-                window.scrollBy({ top: -deltaY, behavior: 'auto' });
-                startY = currentY;
+            if (shouldChain) {
                 event.preventDefault();
+                window.scrollBy({ top: -deltaY, behavior: 'auto' });
+                markScrolling();
             }
         }, { passive: false });
+
+        list.addEventListener('scroll', markScrolling, { passive: true });
+
+        list.addEventListener('touchend', () => {
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            list.classList.remove('is-scrolling');
+        });
+
+        list.addEventListener('touchcancel', () => {
+            if (scrollTimeout) {
+                clearTimeout(scrollTimeout);
+            }
+            list.classList.remove('is-scrolling');
+        });
     })();
 </script>
 {% endblock %}

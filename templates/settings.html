@@ -207,9 +207,12 @@
     @media (max-width: 576px) {
         .theme-toggle-group {
             gap: 8px !important;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
         .theme-toggle-btn {
+            width: 100%;
             padding: 10px 12px;
             font-size: 0.72rem;
             border-radius: 14px;

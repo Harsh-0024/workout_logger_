@@ -1367,6 +1367,15 @@
             flex-direction: column;
             gap: 12px;
             -webkit-overflow-scrolling: touch;
+            touch-action: pan-y;
+        }
+
+        .recent-workout-item {
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .recent-workouts-list.is-scrolling .recent-workout-item {
+            pointer-events: none;
         }
 
         .recent-workouts-list .recent-workout-item {
