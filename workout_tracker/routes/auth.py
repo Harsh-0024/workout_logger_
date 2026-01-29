@@ -224,7 +224,9 @@ def register_auth_routes(app, email_service):
                 flash("An error occurred. Please try again.", "error")
 
         if request.method != 'POST':
-            identifier = request.args.get('identifier', '').strip() or session.get('pending_otp_identifier', '')
+            identifier = request.args.get('identifier', '').strip()
+            if not identifier:
+                session.pop('pending_otp_identifier', None)
 
         return render_template('request_otp.html', identifier=identifier)
 

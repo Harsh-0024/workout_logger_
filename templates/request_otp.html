@@ -30,6 +30,12 @@
                         autocomplete="username"
                         value="{{ identifier or '' }}"
                     >
+                    <div class="email-domain-grid mt-2">
+                        <button type="button" class="email-domain-chip" data-email-domain="gmail.com">@gmail.com</button>
+                        <button type="button" class="email-domain-chip" data-email-domain="icloud.com">@icloud.com</button>
+                        <button type="button" class="email-domain-chip" data-email-domain="outlook.com">@outlook.com</button>
+                        <button type="button" class="email-domain-chip" data-email-domain="yahoo.com">@yahoo.com</button>
+                    </div>
                     <div class="form-text text-muted" style="font-size: var(--fs-xs);">
                         We'll send the code to the email saved on your account.
                     </div>
@@ -51,4 +57,55 @@
         </div>
     </div>
 </div>
+<script>
+    (function() {
+        const style = document.createElement('style');
+        style.textContent = `
+            .email-domain-grid {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.45rem;
+                align-items: center;
+            }
+            .email-domain-chip {
+                border: 1px solid rgba(212, 175, 55, 0.35);
+                background: transparent;
+                color: rgba(212, 175, 55, 0.95);
+                font-size: 0.68rem;
+                font-weight: 600;
+                letter-spacing: 0.02em;
+                text-transform: none;
+                padding: 0.3rem 0.65rem;
+                border-radius: 999px;
+                line-height: 1.2;
+                white-space: nowrap;
+                transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+            }
+            .email-domain-chip:hover {
+                background: var(--gold-subtle);
+                border-color: rgba(212, 175, 55, 0.65);
+                transform: translateY(-1px);
+            }
+        `;
+        document.head.appendChild(style);
+    })();
+
+    (function() {
+        const input = document.getElementById('username_or_email');
+        if (!input) return;
+        document.querySelectorAll('[data-email-domain]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const domain = button.getAttribute('data-email-domain');
+                const value = (input.value || '').trim();
+                const localPart = value.split('@')[0].trim();
+                if (!localPart) {
+                    input.focus();
+                    return;
+                }
+                input.value = `${localPart}@${domain}`;
+                input.focus();
+            });
+        });
+    })();
+</script>
 {% endblock %}

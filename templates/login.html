@@ -14,7 +14,7 @@
                 <p class="text-muted mb-0">Sign in to continue tracking your progress</p>
             </div>
 
-            <form method="POST" action="{{ url_for('login') }}">
+            <form method="POST" action="{{ url_for('login') }}" id="loginForm">
                 <div class="mb-3">
                     <label for="username_or_email" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Username or Email
@@ -39,14 +39,19 @@
                     <label for="password" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Password
                     </label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
-                        required 
-                        class="form-control"
-                        placeholder="Enter your password"
-                    >
+                    <div class="password-field">
+                        <input 
+                            type="password" 
+                            id="password" 
+                            name="password" 
+                            required 
+                            class="form-control"
+                            placeholder="Enter your password"
+                        >
+                        <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                            <i class="bi bi-eye"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div class="form-check mb-4">
@@ -122,6 +127,27 @@
                 border-color: rgba(212, 175, 55, 0.65);
                 transform: translateY(-1px);
             }
+            .password-field {
+                position: relative;
+            }
+            .password-field .form-control {
+                padding-right: 44px;
+            }
+            .password-toggle {
+                position: absolute;
+                top: 50%;
+                right: 12px;
+                transform: translateY(-50%);
+                border: none;
+                background: transparent;
+                color: var(--text-muted);
+                font-size: 1rem;
+                padding: 0;
+                cursor: pointer;
+            }
+            .password-toggle:hover {
+                color: var(--gold-primary);
+            }
         `;
         document.head.appendChild(style);
     })();
@@ -144,6 +170,9 @@
 
     (function() {
         const input = document.getElementById('username_or_email');
+        const password = document.getElementById('password');
+        const form = document.getElementById('loginForm');
+        const toggle = document.querySelector('.password-toggle');
         if (!input) return;
         document.querySelectorAll('[data-email-domain]').forEach((button) => {
             button.addEventListener('click', () => {
@@ -157,6 +186,25 @@
                 input.value = `${localPart}@${domain}`;
                 input.focus();
             });
+        });
+
+        const handleEnterSubmit = (event) => {
+            if (event.key !== 'Enter') return;
+            if (!form) return;
+            event.preventDefault();
+            form.requestSubmit();
+        };
+
+        input.addEventListener('keydown', handleEnterSubmit);
+        password?.addEventListener('keydown', handleEnterSubmit);
+
+        toggle?.addEventListener('click', () => {
+            if (!password) return;
+            const isHidden = password.type === 'password';
+            password.type = isHidden ? 'text' : 'password';
+            toggle.innerHTML = isHidden ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+            toggle.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+            toggle.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
         });
     })();
 </script>
