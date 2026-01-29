@@ -14,7 +14,7 @@
                 <p class="text-muted mb-0">Enter your username or email to receive a 6-digit code</p>
             </div>
 
-            <form method="POST" action="{{ url_for('login_otp_request') }}">
+            <form method="POST" action="{{ url_for('login_otp_request') }}" id="otpRequestForm" autocomplete="off">
                 <div class="mb-4">
                     <label for="username_or_email" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Username or Email
@@ -25,9 +25,10 @@
                         name="username_or_email"
                         required
                         class="form-control"
-                        data-email-assist="true"
                         placeholder="Enter your username or email"
-                        autocomplete="username"
+                        autocomplete="off"
+                        autocapitalize="none"
+                        spellcheck="false"
                         value="{{ identifier or '' }}"
                     >
                     <div class="email-domain-grid mt-2">
@@ -92,6 +93,7 @@
 
     (function() {
         const input = document.getElementById('username_or_email');
+        const form = document.getElementById('otpRequestForm');
         if (!input) return;
         document.querySelectorAll('[data-email-domain]').forEach((button) => {
             button.addEventListener('click', () => {
@@ -105,6 +107,12 @@
                 input.value = `${localPart}@${domain}`;
                 input.focus();
             });
+        });
+
+        input.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' || !form) return;
+            event.preventDefault();
+            form.requestSubmit();
         });
     })();
 </script>

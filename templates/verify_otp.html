@@ -15,7 +15,7 @@
                 <p class="text-gold fw-semibold mb-0">{{ email }}</p>
             </div>
 
-            <form method="POST" action="{{ action_url }}">
+            <form method="POST" action="{{ action_url }}" id="otpVerifyForm">
                 <div class="mb-4">
                     <label for="otp_code" class="form-label text-muted mb-2 text-center w-100" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         Enter 6-Digit Code
@@ -58,4 +58,16 @@
         </div>
     </div>
 </div>
+<script>
+    (function() {
+        const form = document.getElementById('otpVerifyForm');
+        const input = document.getElementById('otp_code');
+        if (!form || !input) return;
+        input.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') return;
+            event.preventDefault();
+            form.requestSubmit();
+        });
+    })();
+</script>
 {% endblock %}

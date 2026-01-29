@@ -240,13 +240,23 @@
                                 <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                                     New Password
                                 </label>
-                                <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                <div class="password-field">
+                                    <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="mb-3 mb-md-4">
                                 <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                                     Confirm New Password
                                 </label>
-                                <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                <div class="password-field">
+                                    <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-gold-solid w-100 settings-action-btn">
                                 <i class="bi bi-key-fill me-2"></i>Update Password
@@ -264,7 +274,12 @@
                                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                                         Current Password
                                     </label>
-                                    <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                                    <div class="password-field">
+                                        <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
+                                        <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             {% else %}
                                 <div class="alert alert-success py-2 px-3" role="alert">
@@ -275,13 +290,23 @@
                                 <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                                     New Password
                                 </label>
-                                <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                <div class="password-field">
+                                    <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div class="mb-3 mb-md-4">
                                 <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                                     Confirm New Password
                                 </label>
-                                <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                <div class="password-field">
+                                    <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
                             </div>
                             <button type="submit" class="btn btn-gold-solid w-100 settings-action-btn">
                                 <i class="bi bi-key-fill me-2"></i>Update Password
@@ -337,6 +362,31 @@
         border: 2px solid var(--border-gold);
         box-shadow: var(--shadow-gold-lg);
         overflow: hidden;
+    }
+
+    .password-field {
+        position: relative;
+    }
+
+    .password-field .form-control {
+        padding-right: 44px;
+    }
+
+    .password-toggle {
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        transform: translateY(-50%);
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 1rem;
+        padding: 0;
+        cursor: pointer;
+    }
+
+    .password-toggle:hover {
+        color: var(--gold-primary);
     }
 
     .profile-photo-img {
@@ -510,6 +560,7 @@
     document.addEventListener('DOMContentLoaded', () => {
         const accountTabBtns = document.querySelectorAll('.account-tab-btn');
         const accountTabContents = document.querySelectorAll('.account-tab-content');
+        const passwordToggles = document.querySelectorAll('.password-toggle');
 
         const activateAccountTab = (tabName) => {
             accountTabBtns.forEach((btn) => btn.classList.remove('active'));
@@ -540,6 +591,19 @@
                 if (formTypeInput) {
                     formTypeInput.value = button.dataset.profileFormType || 'profile';
                 }
+            });
+        });
+
+        passwordToggles.forEach((toggle) => {
+            toggle.addEventListener('click', () => {
+                const field = toggle.closest('.password-field');
+                const input = field?.querySelector('input');
+                if (!input) return;
+                const isHidden = input.type === 'password';
+                input.type = isHidden ? 'text' : 'password';
+                toggle.innerHTML = isHidden ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
+                toggle.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
+                toggle.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
             });
         });
 
