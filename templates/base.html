@@ -1371,12 +1371,12 @@
         }
 
         .profile-avatar {
-            width: clamp(3rem, 8vw, 4rem);
-            height: clamp(3rem, 8vw, 4rem);
+            width: clamp(5rem, 12vw, 6.5rem);
+            height: clamp(5rem, 12vw, 6.5rem);
             border-radius: 50%;
             object-fit: cover;
-            border: 1px solid var(--border-gold);
-            box-shadow: var(--shadow-gold);
+            border: 2px solid var(--border-gold);
+            box-shadow: var(--shadow-gold-lg);
             background: var(--gold-subtle);
         }
 
@@ -2795,6 +2795,13 @@
                 } catch (err) {
                     // Ignore storage errors
                 }
+                
+                // Update theme-color meta tag for mobile browsers
+                const themeColorMeta = document.querySelector('meta[name="theme-color"]');
+                if (themeColorMeta) {
+                    themeColorMeta.setAttribute('content', theme === 'light' ? '#F5F3F0' : '#000000');
+                }
+                
                 window.dispatchEvent(new CustomEvent('themechange', { detail: { theme } }));
             };
 

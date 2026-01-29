@@ -480,6 +480,22 @@ def register_auth_routes(app, email_service):
                         flash("Failed to update profile photo. Please try again.", "error")
                     return redirect(url_for('user_settings'))
 
+                if form_type == 'remove_photo':
+                    try:
+                        if user.profile_image:
+                            photo_path = Path(app.static_folder) / user.profile_image
+                            if photo_path.exists():
+                                photo_path.unlink()
+                        user.profile_image = None
+                        user.updated_at = datetime.now()
+                        Session.commit()
+                        flash("Profile photo removed successfully!", "success")
+                    except Exception as e:
+                        Session.rollback()
+                        logger.error(f"Profile photo removal failed: {e}", exc_info=True)
+                        flash("Failed to remove profile photo. Please try again.", "error")
+                    return redirect(url_for('user_settings'))
+
                 if form_type in {'profile', 'profile_otp'}:
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)

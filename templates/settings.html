@@ -32,29 +32,58 @@
                     <h5 class="mb-0 fw-bold">Profile Photo</h5>
                 </div>
                 <div class="profile-photo-card">
-                    <div class="profile-photo-preview">
+                    <div class="profile-photo-preview" id="photoPreview">
                         {% if profile_image_url %}
-                        <img src="{{ profile_image_url }}" alt="Profile photo" class="profile-photo-img">
+                        <img src="{{ profile_image_url }}" alt="Profile photo" class="profile-photo-img" id="currentPhoto">
                         {% else %}
-                        <i class="bi bi-person-circle profile-photo-placeholder"></i>
+                        <i class="bi bi-person-circle profile-photo-placeholder" id="photoPlaceholder"></i>
                         {% endif %}
                     </div>
-                    <form method="POST" action="{{ url_for('user_settings') }}" enctype="multipart/form-data" class="profile-photo-form">
-                        <input type="hidden" name="form_type" value="profile_photo">
+                    <div class="profile-photo-controls">
                         <input
                             type="file"
-                            name="profile_image"
-                            accept="image/png,image/jpeg,image/webp"
+                            id="photoInput"
+                            accept="image/png,image/jpeg,image/webp,image/jpg"
                             class="form-control mb-2"
-                            required
+                            style="display: none;"
                         >
-                        <button type="submit" class="btn btn-gold-solid w-100">
-                            <i class="bi bi-camera-fill me-2"></i>Update Photo
+                        <button type="button" id="selectPhotoBtn" class="btn btn-gold-solid w-100 mb-2">
+                            <i class="bi bi-camera-fill me-2"></i>Select Photo
                         </button>
+                        <div id="cropContainer" style="display: none;">
+                            <div class="crop-preview-wrapper mb-2">
+                                <canvas id="cropCanvas" class="crop-canvas"></canvas>
+                            </div>
+                            <div class="d-flex gap-2 mb-2">
+                                <button type="button" id="zoomInBtn" class="btn btn-gold-outline btn-sm flex-fill">
+                                    <i class="bi bi-zoom-in"></i>
+                                </button>
+                                <button type="button" id="zoomOutBtn" class="btn btn-gold-outline btn-sm flex-fill">
+                                    <i class="bi bi-zoom-out"></i>
+                                </button>
+                                <button type="button" id="rotateBtn" class="btn btn-gold-outline btn-sm flex-fill">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                            <button type="button" id="uploadCroppedBtn" class="btn btn-gold-solid w-100 mb-2">
+                                <i class="bi bi-upload me-2"></i>Upload Photo
+                            </button>
+                            <button type="button" id="cancelCropBtn" class="btn btn-gold-outline w-100 btn-sm">
+                                Cancel
+                            </button>
+                        </div>
+                        {% if profile_image_url %}
+                        <form method="POST" action="{{ url_for('user_settings') }}" id="removePhotoForm">
+                            <input type="hidden" name="form_type" value="remove_photo">
+                            <button type="submit" class="btn btn-outline-danger w-100 btn-sm mt-2">
+                                <i class="bi bi-trash me-2"></i>Remove Photo
+                            </button>
+                        </form>
+                        {% endif %}
                         <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                            PNG, JPG, or WEBP. Square images look best.
+                            PNG, JPG, or WEBP. Drag to reposition, use controls to adjust.
                         </small>
-                    </form>
+                    </div>
                 </div>
             </div>
 
@@ -268,8 +297,26 @@
         opacity: 0.55;
     }
 
-    .profile-photo-form {
+    .profile-photo-controls {
         width: 100%;
+    }
+
+    .crop-preview-wrapper {
+        width: 100%;
+        max-width: 320px;
+        margin: 0 auto;
+        border-radius: 12px;
+        overflow: hidden;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-subtle);
+    }
+
+    .crop-canvas {
+        display: block;
+        width: 100%;
+        height: auto;
+        cursor: move;
+        touch-action: none;
     }
 
     @media (max-width: 576px) {
@@ -279,8 +326,12 @@
             text-align: center;
         }
 
-        .profile-photo-form {
+        .profile-photo-controls {
             width: 100%;
+        }
+
+        .crop-preview-wrapper {
+            max-width: 280px;
         }
 
         .theme-toggle-group {
@@ -367,5 +418,196 @@
         updateThemeButtons();
         window.addEventListener('themechange', updateThemeButtons);
     });
+
+    // Profile Photo Crop Logic
+    (function() {
+        const photoInput = document.getElementById('photoInput');
+        const selectPhotoBtn = document.getElementById('selectPhotoBtn');
+        const cropContainer = document.getElementById('cropContainer');
+        const cropCanvas = document.getElementById('cropCanvas');
+        const uploadCroppedBtn = document.getElementById('uploadCroppedBtn');
+        const cancelCropBtn = document.getElementById('cancelCropBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const rotateBtn = document.getElementById('rotateBtn');
+        const photoPreview = document.getElementById('photoPreview');
+
+        if (!photoInput || !cropCanvas) return;
+
+        let image = null;
+        let scale = 1;
+        let rotation = 0;
+        let offsetX = 0;
+        let offsetY = 0;
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        const canvasSize = 320;
+
+        const drawImage = () => {
+            if (!image) return;
+            const ctx = cropCanvas.getContext('2d');
+            cropCanvas.width = canvasSize;
+            cropCanvas.height = canvasSize;
+            ctx.clearRect(0, 0, canvasSize, canvasSize);
+
+            ctx.save();
+            ctx.translate(canvasSize / 2, canvasSize / 2);
+            ctx.rotate((rotation * Math.PI) / 180);
+            ctx.scale(scale, scale);
+            ctx.translate(offsetX, offsetY);
+
+            const imgAspect = image.width / image.height;
+            let drawWidth = canvasSize;
+            let drawHeight = canvasSize;
+            if (imgAspect > 1) {
+                drawHeight = canvasSize / imgAspect;
+            } else {
+                drawWidth = canvasSize * imgAspect;
+            }
+            ctx.drawImage(image, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+            ctx.restore();
+        };
+
+        selectPhotoBtn?.addEventListener('click', () => {
+            photoInput.click();
+        });
+
+        photoInput.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                image = new Image();
+                image.onload = () => {
+                    scale = 1;
+                    rotation = 0;
+                    offsetX = 0;
+                    offsetY = 0;
+                    drawImage();
+                    cropContainer.style.display = 'block';
+                    selectPhotoBtn.style.display = 'none';
+                };
+                image.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        zoomInBtn?.addEventListener('click', () => {
+            scale = Math.min(scale * 1.2, 5);
+            drawImage();
+        });
+
+        zoomOutBtn?.addEventListener('click', () => {
+            scale = Math.max(scale / 1.2, 0.5);
+            drawImage();
+        });
+
+        rotateBtn?.addEventListener('click', () => {
+            rotation = (rotation + 90) % 360;
+            drawImage();
+        });
+
+        const getEventPos = (e) => {
+            const rect = cropCanvas.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        };
+
+        cropCanvas.addEventListener('mousedown', (e) => {
+            isDragging = true;
+            const pos = getEventPos(e);
+            startX = pos.x;
+            startY = pos.y;
+        });
+
+        cropCanvas.addEventListener('touchstart', (e) => {
+            isDragging = true;
+            const pos = getEventPos(e);
+            startX = pos.x;
+            startY = pos.y;
+            e.preventDefault();
+        }, { passive: false });
+
+        cropCanvas.addEventListener('mousemove', (e) => {
+            if (!isDragging) return;
+            const pos = getEventPos(e);
+            const dx = pos.x - startX;
+            const dy = pos.y - startY;
+            offsetX += dx / scale;
+            offsetY += dy / scale;
+            startX = pos.x;
+            startY = pos.y;
+            drawImage();
+        });
+
+        cropCanvas.addEventListener('touchmove', (e) => {
+            if (!isDragging) return;
+            const pos = getEventPos(e);
+            const dx = pos.x - startX;
+            const dy = pos.y - startY;
+            offsetX += dx / scale;
+            offsetY += dy / scale;
+            startX = pos.x;
+            startY = pos.y;
+            drawImage();
+            e.preventDefault();
+        }, { passive: false });
+
+        const stopDrag = () => {
+            isDragging = false;
+        };
+
+        cropCanvas.addEventListener('mouseup', stopDrag);
+        cropCanvas.addEventListener('mouseleave', stopDrag);
+        cropCanvas.addEventListener('touchend', stopDrag);
+        cropCanvas.addEventListener('touchcancel', stopDrag);
+
+        uploadCroppedBtn?.addEventListener('click', async () => {
+            if (!image) return;
+            uploadCroppedBtn.disabled = true;
+            uploadCroppedBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Uploading...';
+
+            cropCanvas.toBlob(async (blob) => {
+                const formData = new FormData();
+                formData.append('profile_image', blob, 'profile.png');
+                formData.append('form_type', 'profile_photo');
+
+                try {
+                    const response = await fetch('{{ url_for("user_settings") }}', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                        }
+                    });
+
+                    if (response.ok) {
+                        window.location.reload();
+                    } else {
+                        alert('Upload failed. Please try again.');
+                        uploadCroppedBtn.disabled = false;
+                        uploadCroppedBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Upload Photo';
+                    }
+                } catch (error) {
+                    alert('Upload failed. Please try again.');
+                    uploadCroppedBtn.disabled = false;
+                    uploadCroppedBtn.innerHTML = '<i class="bi bi-upload me-2"></i>Upload Photo';
+                }
+            }, 'image/png');
+        });
+
+        cancelCropBtn?.addEventListener('click', () => {
+            image = null;
+            photoInput.value = '';
+            cropContainer.style.display = 'none';
+            selectPhotoBtn.style.display = 'block';
+        });
+    })();
 </script>
 {% endblock %}
