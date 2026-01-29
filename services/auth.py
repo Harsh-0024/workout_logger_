@@ -70,6 +70,11 @@ class AuthService:
             created_at=datetime.now(),
         )
         session.add(verification)
+        session.flush()
+        logger.info(
+            "OTP created",
+            extra={"user_id": user_id, "purpose": purpose, "verification_id": verification.id},
+        )
         return otp_code
 
     @staticmethod
@@ -179,6 +184,11 @@ class AuthService:
             )
             session.commit()
 
+            logger.info(
+                "Password change OTP created",
+                extra={"user_id": user.id},
+            )
+
             return {
                 'id': user.id,
                 'email': user.email,
@@ -277,11 +287,17 @@ class AuthService:
             if not identifier:
                 raise AuthenticationError("Username or email is required")
 
+            identifier_type = 'email' if '@' in identifier else 'username'
+
             user = session.query(User).filter(
                 (User.username == identifier) | (User.email == identifier)
             ).first()
 
             if not user:
+                logger.info(
+                    "Login OTP request rejected: user not found",
+                    extra={"identifier_type": identifier_type},
+                )
                 raise AuthenticationError("Account not found for that username or email")
 
             if not user.email:
@@ -356,16 +372,28 @@ class AuthService:
         try:
             user = session.query(User).get(user_id)
             if not user:
+                logger.info(
+                    "OTP verification failed: user missing",
+                    extra={"user_id": user_id, "purpose": purpose},
+                )
                 return False
 
             verification = AuthService._get_latest_email_verification(session, user.id, purpose)
             if not verification:
+                logger.info(
+                    "OTP verification failed: no active code",
+                    extra={"user_id": user_id, "purpose": purpose},
+                )
                 return False
 
             if verification.expires_at and verification.expires_at < datetime.now():
                 raise AuthenticationError("One-time code has expired")
 
             if verification.code != otp_code:
+                logger.info(
+                    "OTP verification failed: code mismatch",
+                    extra={"user_id": user_id, "purpose": purpose},
+                )
                 return False
 
             verification.verified_at = datetime.now()

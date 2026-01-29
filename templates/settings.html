@@ -202,8 +202,8 @@
                             Current Password
                         </label>
                         <div class="password-field">
-                            <input type="password" name="current_password" class="form-control" autocomplete="current-password">
-                            <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                            <input type="password" id="profileCurrentPassword" name="current_password" class="form-control" autocomplete="current-password">
+                            <button type="button" class="password-toggle" data-password-target="profileCurrentPassword" aria-label="Show password" title="Show password">
                                 <i class="bi bi-eye"></i>
                             </button>
                         </div>
@@ -246,8 +246,8 @@
                                     New Password
                                 </label>
                                 <div class="password-field">
-                                    <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
-                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                    <input type="password" id="otpNewPassword" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" data-password-target="otpNewPassword" aria-label="Show password" title="Show password">
                                         <i class="bi bi-eye"></i>
                                     </button>
                                 </div>
@@ -257,8 +257,8 @@
                                     Confirm New Password
                                 </label>
                                 <div class="password-field">
-                                    <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
-                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                    <input type="password" id="otpConfirmPassword" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" data-password-target="otpConfirmPassword" aria-label="Show password" title="Show password">
                                         <i class="bi bi-eye"></i>
                                     </button>
                                 </div>
@@ -280,8 +280,8 @@
                                         Current Password
                                     </label>
                                     <div class="password-field">
-                                        <input type="password" name="current_password" class="form-control" autocomplete="current-password" required>
-                                        <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                        <input type="password" id="changeCurrentPassword" name="current_password" class="form-control" autocomplete="current-password" required>
+                                        <button type="button" class="password-toggle" data-password-target="changeCurrentPassword" aria-label="Show password" title="Show password">
                                             <i class="bi bi-eye"></i>
                                         </button>
                                     </div>
@@ -296,8 +296,8 @@
                                     New Password
                                 </label>
                                 <div class="password-field">
-                                    <input type="password" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
-                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                    <input type="password" id="changeNewPassword" name="new_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" data-password-target="changeNewPassword" aria-label="Show password" title="Show password">
                                         <i class="bi bi-eye"></i>
                                     </button>
                                 </div>
@@ -307,8 +307,8 @@
                                     Confirm New Password
                                 </label>
                                 <div class="password-field">
-                                    <input type="password" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
-                                    <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                    <input type="password" id="changeConfirmPassword" name="confirm_password" class="form-control" autocomplete="new-password" minlength="8" required>
+                                    <button type="button" class="password-toggle" data-password-target="changeConfirmPassword" aria-label="Show password" title="Show password">
                                         <i class="bi bi-eye"></i>
                                     </button>
                                 </div>
@@ -375,6 +375,10 @@
 
     .password-field .form-control {
         padding-right: 44px;
+    }
+
+    .password-field input[type="text"] {
+        -webkit-text-security: none;
     }
 
     .password-toggle {
@@ -601,11 +605,15 @@
 
         passwordToggles.forEach((toggle) => {
             toggle.addEventListener('click', () => {
+                const targetId = toggle.getAttribute('data-password-target');
                 const field = toggle.closest('.password-field');
-                const input = field?.querySelector('input');
+                const input = targetId ? document.getElementById(targetId) : field?.querySelector('input');
                 if (!input) return;
                 const isHidden = input.type === 'password';
-                input.type = isHidden ? 'text' : 'password';
+                const nextType = isHidden ? 'text' : 'password';
+                input.type = nextType;
+                input.setAttribute('type', nextType);
+                input.style.webkitTextSecurity = isHidden ? 'none' : '';
                 toggle.innerHTML = isHidden ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
                 toggle.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
                 toggle.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
