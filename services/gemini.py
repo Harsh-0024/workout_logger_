@@ -4,6 +4,7 @@ from datetime import datetime
 import requests
 
 from config import Config
+from utils.logger import logger
 
 
 class GeminiServiceError(Exception):
@@ -114,6 +115,8 @@ class GeminiService:
             if not api_key:
                 continue
 
+            key_label = key_entry.get("account_label") or key_entry.get("source") or f"key_id={key_entry.get('id')}"
+
             models_to_try: list[str] = list(GeminiService.DEFAULT_MODEL_CANDIDATES)
 
             # Try common model aliases first.
@@ -159,6 +162,10 @@ class GeminiService:
                 except requests.HTTPError as e:
                     last_error = e
                     status = getattr(e.response, "status_code", None)
+                    logger.warning(
+                        "Gemini model call failed",
+                        extra={"status": status, "model": model, "key": key_label},
+                    )
                     # 404 means model not available for this API key / region. Try next model.
                     if status == 404:
                         continue
@@ -168,11 +175,17 @@ class GeminiService:
                     raise GeminiServiceError(f"Gemini request failed: HTTP {status}")
                 except (requests.RequestException, GeminiServiceError, ValueError, json.JSONDecodeError) as e:
                     last_error = e
+                    logger.warning(
+                        "Gemini request error",
+                        extra={"error": type(e).__name__, "model": model, "key": key_label},
+                    )
                     continue
 
             # If common aliases failed, ask the API what models this key can access.
             try:
                 available = GeminiService._list_models(api_key)
+                if not available:
+                    logger.warning("Gemini listModels returned no available models", extra={"key": key_label})
                 for model in available[:5]:
                     try:
                         data = GeminiService._generate_content(api_key=api_key, model=model, payload=payload)
@@ -212,14 +225,26 @@ class GeminiService:
                     except requests.HTTPError as e:
                         last_error = e
                         status = getattr(e.response, "status_code", None)
+                        logger.warning(
+                            "Gemini model call failed",
+                            extra={"status": status, "model": model, "key": key_label},
+                        )
                         if status in {401, 403, 429}:
                             break
                         continue
                     except Exception as e:
                         last_error = e
+                        logger.warning(
+                            "Gemini request error",
+                            extra={"error": type(e).__name__, "model": model, "key": key_label},
+                        )
                         continue
             except requests.RequestException as e:
                 last_error = e
+                logger.warning(
+                    "Gemini listModels failed",
+                    extra={"error": type(e).__name__, "key": key_label},
+                )
                 continue
 
         if last_error:
