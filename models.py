@@ -282,6 +282,7 @@ def migrate_schema():
                 statement_timeout_ms = int(os.environ.get('DB_STATEMENT_TIMEOUT_MS', '60000'))
                 conn.execute(text(f"SET LOCAL lock_timeout = '{lock_timeout_ms}ms'"))
                 conn.execute(text(f"SET LOCAL statement_timeout = '{statement_timeout_ms}ms'"))
+                conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS full_name VARCHAR(100)"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS email {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS role {str_type} DEFAULT 'user'"))
@@ -300,6 +301,10 @@ def migrate_schema():
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at {ts_type}"))
                 conn.execute(text(f"UPDATE users SET updated_at = {now_func} WHERE updated_at IS NULL"))
             else:
+                if 'full_name' not in users_columns:
+                    logger.info("Adding full_name column to users table")
+                    conn.execute(text("ALTER TABLE users ADD COLUMN full_name VARCHAR(100)"))
+
                 if 'email' not in users_columns:
                     logger.info("Adding email column to users table")
                     conn.execute(text(f"ALTER TABLE users ADD COLUMN email {str_type}"))
