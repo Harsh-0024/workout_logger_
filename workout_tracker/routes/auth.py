@@ -196,6 +196,11 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             identifier = request.form.get('username_or_email', '').strip()
             try:
+                identifier_type = 'email' if '@' in (identifier or '') else 'username'
+                logger.info(
+                    "Login OTP request received",
+                    extra={"identifier_type": identifier_type, "has_identifier": bool(identifier)},
+                )
                 _enforce_rate_limit('login_otp_request', identifier, limit=5, window_seconds=600)
                 otp_payload = AuthService.request_login_otp(identifier)
 
@@ -210,6 +215,11 @@ def register_auth_routes(app, email_service):
                     flash("Unable to send login code. Please try again later.", "error")
                     return render_template('request_otp.html', identifier=identifier)
 
+                logger.info(
+                    "Login OTP email sent",
+                    extra={"user_id": otp_payload.get('id')},
+                )
+
                 session['pending_otp_user_id'] = otp_payload['id']
                 session['pending_otp_identifier'] = identifier
                 session['pending_otp_purpose'] = 'login_otp'
@@ -218,6 +228,10 @@ def register_auth_routes(app, email_service):
                 return redirect(url_for('verify_login_otp'))
 
             except AuthenticationError as e:
+                logger.info(
+                    "Login OTP request rejected",
+                    extra={"reason": str(e)[:120]},
+                )
                 flash(str(e), "error")
             except Exception as e:
                 logger.error(f"OTP login request error: {e}", exc_info=True)
