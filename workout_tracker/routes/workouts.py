@@ -166,10 +166,15 @@ def register_workout_routes(app):
 
             recent_workouts = get_recent_workouts(user, limit=250)
 
+            profile_image_url = None
+            if getattr(user, 'profile_image', None):
+                profile_image_url = url_for('static', filename=user.profile_image)
+
             return render_template(
                 'index.html',
                 user=user.username.title(),
                 recent_workouts=recent_workouts,
+                profile_image_url=profile_image_url,
             )
         except (ValidationError, UserNotFoundError) as e:
             flash(str(e), "error")

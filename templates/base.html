@@ -1370,6 +1370,16 @@
             touch-action: pan-y;
         }
 
+        .profile-avatar {
+            width: clamp(3rem, 8vw, 4rem);
+            height: clamp(3rem, 8vw, 4rem);
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid var(--border-gold);
+            box-shadow: var(--shadow-gold);
+            background: var(--gold-subtle);
+        }
+
         .recent-workout-item {
             -webkit-tap-highlight-color: transparent;
         }

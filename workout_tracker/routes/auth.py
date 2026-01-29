@@ -1,8 +1,11 @@
 from datetime import datetime, timedelta
+from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
 from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import login_required, login_user, logout_user, current_user
+from PIL import Image, ImageOps
+from werkzeug.utils import secure_filename
 
 from config import Config
 from models import Session, User, UserRole
@@ -52,6 +55,33 @@ def register_auth_routes(app, email_service):
 
             dq.append(now)
             return True
+
+    def _is_allowed_profile_image(filename: str) -> bool:
+        if not filename or '.' not in filename:
+            return False
+        ext = filename.rsplit('.', 1)[1].lower()
+        return ext in {'png', 'jpg', 'jpeg', 'webp'}
+
+    def _save_profile_image(user_id: int, file_storage) -> str:
+        uploads_dir = Path(app.static_folder) / 'uploads' / 'avatars'
+        uploads_dir.mkdir(parents=True, exist_ok=True)
+
+        filename = secure_filename(file_storage.filename or '')
+        if not _is_allowed_profile_image(filename):
+            raise AuthenticationError("Unsupported profile image type.")
+
+        image = Image.open(file_storage.stream)
+        image = ImageOps.exif_transpose(image)
+        image = image.convert('RGB')
+
+        size = 320
+        image = ImageOps.fit(image, (size, size), Image.LANCZOS)
+
+        output_name = f"user_{user_id}.png"
+        output_path = uploads_dir / output_name
+        image.save(output_path, format='PNG', optimize=True)
+
+        return f"uploads/avatars/{output_name}"
 
     def _enforce_rate_limit(action: str, identifier: str | None, limit: int, window_seconds: int) -> None:
         if not app.config.get('ENABLE_RATE_LIMITING', False):
@@ -426,6 +456,30 @@ def register_auth_routes(app, email_service):
             form_type = request.form.get('form_type') or 'profile'
 
             try:
+                if form_type == 'profile_photo':
+                    image_file = request.files.get('profile_image')
+                    if not image_file or not image_file.filename:
+                        flash("Please choose a profile photo to upload.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    if not _is_allowed_profile_image(image_file.filename):
+                        flash("Unsupported file type. Use PNG, JPG, or WEBP.", "error")
+                        return redirect(url_for('user_settings'))
+
+                    try:
+                        user.profile_image = _save_profile_image(user.id, image_file)
+                        user.updated_at = datetime.now()
+                        Session.commit()
+                        flash("Profile photo updated successfully!", "success")
+                    except AuthenticationError as e:
+                        Session.rollback()
+                        flash(str(e), "error")
+                    except Exception as e:
+                        Session.rollback()
+                        logger.error(f"Profile photo update failed: {e}", exc_info=True)
+                        flash("Failed to update profile photo. Please try again.", "error")
+                    return redirect(url_for('user_settings'))
+
                 if form_type in {'profile', 'profile_otp'}:
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
@@ -651,12 +705,17 @@ def register_auth_routes(app, email_service):
                 flash("Failed to update settings. Please try again.", "error")
                 return redirect(url_for('user_settings'))
 
+        profile_image_url = None
+        if getattr(user, 'profile_image', None):
+            profile_image_url = url_for('static', filename=user.profile_image)
+
         return render_template(
             'settings.html',
             user=user,
             otp_login_verified=otp_login_verified,
             password_change_verified=password_change_verified,
             pending_password_change=pending_password_change,
+            profile_image_url=profile_image_url,
         )
 
     @login_required

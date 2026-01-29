@@ -6,7 +6,11 @@
         <div class="card w-100 dashboard-main-card">
             <div class="text-center mb-4 mb-md-5">
                 <div class="mb-2 mb-md-3">
+                    {% if profile_image_url %}
+                    <img src="{{ profile_image_url }}" alt="Profile photo" class="profile-avatar">
+                    {% else %}
                     <i class="bi bi-person-circle" style="font-size: clamp(3rem, 8vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
+                    {% endif %}
                 </div>
                 <h6 class="text-muted mb-2 mb-md-3 tracking-wide" style="font-size: var(--fs-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 3px;">
                     Active Profile
@@ -175,6 +179,7 @@
         if (!list) return;
         let lastY = 0;
         let scrollTimeout = null;
+        let chainLock = false;
 
         const markScrolling = () => {
             list.classList.add('is-scrolling');
@@ -189,6 +194,7 @@
         list.addEventListener('touchstart', (event) => {
             if (!event.touches || !event.touches.length) return;
             lastY = event.touches[0].clientY;
+            chainLock = false;
         }, { passive: true });
 
         list.addEventListener('touchmove', (event) => {
@@ -197,12 +203,22 @@
             const deltaY = currentY - lastY;
             lastY = currentY;
 
-            const canScroll = list.scrollHeight > list.offsetHeight + 2;
-            const atTop = list.scrollTop <= 0;
-            const atBottom = list.scrollTop + list.offsetHeight >= list.scrollHeight - 1;
-            const shouldChain = !canScroll || (atTop && deltaY > 0) || (atBottom && deltaY < 0);
+            if (chainLock) {
+                event.preventDefault();
+                window.scrollBy({ top: -deltaY, behavior: 'auto' });
+                markScrolling();
+                return;
+            }
+
+            const maxScrollTop = Math.max(list.scrollHeight - list.clientHeight, 0);
+            const atTop = list.scrollTop <= 1;
+            const atBottom = list.scrollTop >= maxScrollTop - 1;
+            const shouldChain = maxScrollTop <= 0
+                || (atTop && deltaY > 0)
+                || (atBottom && deltaY < 0);
 
             if (shouldChain) {
+                chainLock = true;
                 event.preventDefault();
                 window.scrollBy({ top: -deltaY, behavior: 'auto' });
                 markScrolling();
@@ -216,6 +232,7 @@
                 clearTimeout(scrollTimeout);
             }
             list.classList.remove('is-scrolling');
+            chainLock = false;
         });
 
         list.addEventListener('touchcancel', () => {
@@ -223,6 +240,7 @@
                 clearTimeout(scrollTimeout);
             }
             list.classList.remove('is-scrolling');
+            chainLock = false;
         });
     })();
 </script>

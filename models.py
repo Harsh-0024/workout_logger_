@@ -66,6 +66,7 @@ class User(Base):
     otp_purpose = Column(String(32), nullable=True)
     otp_expires = Column(DateTime, nullable=True)
     bodyweight = Column(Float, nullable=True)
+    profile_image = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=True)
 
@@ -292,6 +293,7 @@ def migrate_schema():
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_purpose {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS otp_expires {ts_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS bodyweight {float_type}"))
+                conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_image {str_type}"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at {ts_type}"))
                 conn.execute(text(f"UPDATE users SET created_at = {now_func} WHERE created_at IS NULL"))
                 conn.execute(text(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at {ts_type}"))
@@ -338,6 +340,10 @@ def migrate_schema():
                 if 'bodyweight' not in users_columns:
                     logger.info("Adding bodyweight column to users table")
                     conn.execute(text(f"ALTER TABLE users ADD COLUMN bodyweight {float_type}"))
+
+                if 'profile_image' not in users_columns:
+                    logger.info("Adding profile_image column to users table")
+                    conn.execute(text(f"ALTER TABLE users ADD COLUMN profile_image {str_type}"))
                 
                 if 'created_at' not in users_columns:
                     logger.info("Adding created_at column to users table")
