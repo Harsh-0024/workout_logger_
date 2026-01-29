@@ -93,15 +93,20 @@ def register_workout_routes(app):
                         'date': log.date,
                         'title': log.workout_name or "Workout",
                         'exercises': set(),
+                        'logs': [],
                     }
                 by_date[date_key]['exercises'].add(log.exercise)
+                by_date[date_key]['logs'].append(log)
 
             for date_key in sorted(by_date.keys(), reverse=True):
                 item = by_date[date_key]
+                exercise_list = sorted(item['exercises'])
                 workouts.append({
                     'date': item['date'],
                     'title': item['title'],
-                    'exercises': ", ".join(sorted(item['exercises'])),
+                    'exercises': ", ".join(exercise_list),
+                    'exercise_list': exercise_list,
+                    'exercise_details': build_exercise_text(item['logs']),
                 })
                 if limit is not None and len(workouts) >= limit:
                     break
@@ -294,10 +299,29 @@ def register_workout_routes(app):
             plan_data = get_workout_days(plan_text or "")
             workout_map = plan_data.get('workout', {}) if isinstance(plan_data, dict) else {}
             categories = []
+            plan_days = []
+            day_lookup = {}
             for cat, cat_map in workout_map.items():
-                num_days = len(cat_map) if isinstance(cat_map, dict) else 0
+                if not isinstance(cat_map, dict):
+                    continue
+                num_days = len(cat_map)
                 if num_days > 0:
                     categories.append({"name": str(cat), "num_days": int(num_days)})
+                for day_name, exercises in cat_map.items():
+                    if not isinstance(day_name, str):
+                        continue
+                    match = re.search(r"\s+(\d+)$", day_name)
+                    if not match:
+                        continue
+                    day_id = int(match.group(1))
+                    entry = {
+                        "category": str(cat),
+                        "day_id": day_id,
+                        "name": day_name,
+                        "exercises": exercises if isinstance(exercises, list) else [],
+                    }
+                    plan_days.append(entry)
+                    day_lookup[day_name.strip().lower()] = entry
 
             if not categories:
                 return jsonify({"ok": False, "error": "No workout plan found."}), 400
@@ -306,11 +330,26 @@ def register_workout_routes(app):
             recent_context = []
             for w in recent:
                 dt = w.get('date')
+                title = w.get('title') or "Workout"
+                title_lower = title.lower()
+                matched = None
+                if title_lower in day_lookup:
+                    matched = day_lookup[title_lower]
+                else:
+                    for day in plan_days:
+                        if day['name'].lower() in title_lower:
+                            matched = day
+                            break
                 recent_context.append(
                     {
                         "date": dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt),
-                        "title": w.get('title') or "Workout",
+                        "title": title,
                         "exercises": w.get('exercises') or "",
+                        "exercise_list": w.get('exercise_list') or [],
+                        "exercise_details": w.get('exercise_details') or "",
+                        "category": matched['category'] if matched else None,
+                        "day_id": matched['day_id'] if matched else None,
+                        "day_name": matched['name'] if matched else None,
                     }
                 )
 
@@ -320,55 +359,61 @@ def register_workout_routes(app):
             source = "gemini"
             reco = None
             try:
-                reco = GeminiService.recommend_workout(categories=categories, recent_workouts=recent_context)
+                reco = GeminiService.recommend_workout(
+                    categories=categories,
+                    recent_workouts=recent_context,
+                    plan_days=plan_days,
+                )
             except GeminiServiceError as e:
                 logger.warning(f"Gemini unavailable, using fallback: {e}")
                 source = "fallback"
                 fallback_warning = "Gemini is busy right now. Showing a smart fallback suggestion."
 
                 today = datetime.utcnow().date()
-                last_dates = {}
+                last_day_dates = {}
                 for item in recent_context:
-                    title = (item.get('title') or '').lower()
-                    exercises = (item.get('exercises') or '').lower()
+                    cat = item.get('category')
+                    day_id = item.get('day_id')
                     date_str = item.get('date') or ''
-                    for cat in categories:
-                        name = str(cat.get('name') or '').lower()
-                        if not name or name in last_dates:
-                            continue
-                        if name in title or name in exercises:
-                            try:
-                                last_dates[name] = datetime.strptime(date_str, '%Y-%m-%d').date()
-                            except Exception:
-                                last_dates[name] = None
-                    if len(last_dates) == len(categories):
-                        break
+                    if not cat or not day_id:
+                        continue
+                    try:
+                        parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                    except Exception:
+                        continue
+                    key = (str(cat).lower(), int(day_id))
+                    if key not in last_day_dates or parsed_date > last_day_dates[key]:
+                        last_day_dates[key] = parsed_date
 
-                best = None
+                best_day = None
                 best_score = -1
-                for cat in categories:
-                    name = str(cat.get('name') or '')
-                    key = name.lower()
-                    last_date = last_dates.get(key)
+                for day in plan_days:
+                    key = (day['category'].lower(), int(day['day_id']))
+                    last_date = last_day_dates.get(key)
                     days_since = 999
                     if last_date:
                         days_since = max((today - last_date).days, 0)
-                    score = days_since + (cat.get('num_days') or 0) / 100
+                    score = days_since
                     if score > best_score:
                         best_score = score
-                        best = (name, int(cat.get('num_days') or 1), days_since)
+                        best_day = (day, days_since)
 
-                if not best:
-                    best = (categories[0]['name'], int(categories[0].get('num_days') or 1), 999)
+                if best_day:
+                    chosen_day, days_since = best_day
+                    name = chosen_day['category']
+                    day_id = int(chosen_day['day_id'])
+                else:
+                    name = categories[0]['name']
+                    day_id = 1
+                    days_since = 999
 
-                name, num_days, days_since = best
                 reco = {
                     "category": name,
-                    "day_id": 1,
+                    "day_id": day_id,
                     "reasons": [
                         f"You haven't trained {name} in {days_since} day(s)." if days_since != 999 else f"You haven't logged {name} recently.",
                         "Keeps your training split balanced this week.",
-                        f"Aligned with your plan: {name} day 1.",
+                        f"Aligned with your plan: {name} day {day_id}.",
                     ],
                     "model": "heuristic",
                 }

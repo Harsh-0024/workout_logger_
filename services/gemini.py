@@ -59,7 +59,12 @@ class GeminiService:
         return resp.json() if resp.content else {}
 
     @staticmethod
-    def recommend_workout(*, categories: list[dict], recent_workouts: list[dict]) -> dict:
+    def recommend_workout(
+        *,
+        categories: list[dict],
+        recent_workouts: list[dict],
+        plan_days: list[dict],
+    ) -> dict:
         api_key = getattr(Config, "GEMINI_API_KEY", None)
         if not api_key:
             raise GeminiServiceError("GEMINI_API_KEY is not configured")
@@ -79,8 +84,11 @@ class GeminiService:
                                 "Constraints:\n"
                                 "- category must be one of the provided categories.\n"
                                 "- day_id must be within 1..num_days for that category.\n"
+                                "- Prefer the least-recently-trained day across the whole plan.\n"
+                                "- Use recent workouts (title, exercises, details) to match plan days.\n"
                                 "- reasons must be 3-6 short bullet-style strings.\n\n"
                                 f"Plan categories: {json.dumps(categories, ensure_ascii=False)}\n"
+                                f"Plan days (name, category, day_id, exercises): {json.dumps(plan_days, ensure_ascii=False)}\n"
                                 f"Recent workouts (most recent first): {json.dumps(recent_workouts, ensure_ascii=False)}\n"
                             )
                         }
