@@ -519,6 +519,7 @@ def register_auth_routes(app, email_service):
                     return redirect(url_for('user_settings'))
 
                 if form_type in {'profile', 'profile_otp'}:
+                    full_name = sanitize_text_input(request.form.get('full_name', ''), max_length=100)
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
                     current_password = request.form.get('current_password', '')
@@ -583,6 +584,7 @@ def register_auth_routes(app, email_service):
 
                     if email_changed:
                         session['pending_email_change'] = {
+                            'full_name': full_name,
                             'username': username,
                             'email': email,
                             'current_email': user_email,
@@ -617,6 +619,7 @@ def register_auth_routes(app, email_service):
 
                     if form_type == 'profile_otp':
                         session['pending_profile_update'] = {
+                            'full_name': full_name,
                             'username': username,
                             'email': email,
                             'bodyweight': bodyweight,
@@ -634,6 +637,7 @@ def register_auth_routes(app, email_service):
                         flash("Unable to send OTP. Please try again.", "error")
                         return redirect(url_for('user_settings'))
 
+                    user.full_name = full_name if full_name else None
                     user.username = username
                     user.email = email
                     if bodyweight is not None:
@@ -776,6 +780,7 @@ def register_auth_routes(app, email_service):
                 otp_code = request.form.get('otp_code', '').strip()
 
                 if AuthService.verify_otp(user_id, otp_code, 'profile_update'):
+                    full_name = pending_update.get('full_name')
                     username = pending_update.get('username')
                     email = pending_update.get('email')
                     bodyweight = pending_update.get('bodyweight')
@@ -808,11 +813,13 @@ def register_auth_routes(app, email_service):
 
                     if email_changed:
                         session['pending_profile_update'] = {
+                            'full_name': full_name,
                             'username': username,
                             'email': email,
                             'bodyweight': bodyweight,
                         }
                         session['pending_email_change'] = {
+                            'full_name': full_name,
                             'username': username,
                             'email': email,
                             'current_email': user_email,
@@ -983,6 +990,7 @@ def register_auth_routes(app, email_service):
                 new_valid = AuthService.verify_otp(user.id, otp_new, 'change_email_new')
 
                 if old_valid and new_valid:
+                    full_name = pending_change.get('full_name')
                     username = pending_change.get('username')
                     email = pending_change.get('email')
 
@@ -995,6 +1003,7 @@ def register_auth_routes(app, email_service):
                         flash("User not found.", "error")
                         return redirect(url_for('login'))
 
+                    user.full_name = full_name if full_name else None
                     user.username = username
                     user.email = email.lower()
                     bodyweight = pending_change.get('bodyweight')

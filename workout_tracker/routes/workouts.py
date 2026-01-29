@@ -170,9 +170,10 @@ def register_workout_routes(app):
             if getattr(user, 'profile_image', None):
                 profile_image_url = url_for('static', filename=user.profile_image)
 
+            display_name = (user.full_name or user.username or '').strip()
             return render_template(
                 'index.html',
-                user=user.username.title(),
+                display_name=display_name,
                 recent_workouts=recent_workouts,
                 profile_image_url=profile_image_url,
             )

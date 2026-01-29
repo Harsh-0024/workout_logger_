@@ -2324,6 +2324,10 @@
                 </div>
                 <div class="modal-body">
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                        <span class="shortcut-key">H</span>
+                        <span class="text-muted">Go to home</span>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
                         <span class="shortcut-key">L</span>
                         <span class="text-muted">Log workout</span>
                     </div>
@@ -2337,7 +2341,15 @@
                     </div>
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
                         <span class="shortcut-key">S</span>
+                        <span class="text-muted">Settings</span>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                        <span class="shortcut-key">P</span>
                         <span class="text-muted">View stats</span>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                        <span class="shortcut-key">A</span>
+                        <span class="text-muted">Admin panel</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between py-2">
                         <span class="shortcut-key">/</span>
@@ -2541,7 +2553,10 @@
                     }
                     return;
                 }
-                if (key === 'l') {
+                if (key === 'h') {
+                    event.preventDefault();
+                    window.location.href = '/';
+                } else if (key === 'l') {
                     event.preventDefault();
                     window.location.href = '/log';
                 } else if (key === 'r') {
@@ -2549,7 +2564,13 @@
                     window.location.href = '/retrieve/categories';
                 } else if (key === 's') {
                     event.preventDefault();
+                    window.location.href = '/settings';
+                } else if (key === 'p') {
+                    event.preventDefault();
                     window.location.href = '/stats';
+                } else if (key === 'a') {
+                    event.preventDefault();
+                    window.location.href = '/admin';
                 } else if (key === '/') {
                     event.preventDefault();
                     if (!focusSearch()) {
@@ -2762,7 +2783,10 @@
                     }
                     return;
                 }
-                if (key === 'l') {
+                if (key === 'h') {
+                    event.preventDefault();
+                    window.location.href = '/';
+                } else if (key === 'l') {
                     event.preventDefault();
                     window.location.href = '/log';
                 } else if (key === 'r') {
@@ -2770,7 +2794,13 @@
                     window.location.href = '/retrieve/categories';
                 } else if (key === 's') {
                     event.preventDefault();
+                    window.location.href = '/settings';
+                } else if (key === 'p') {
+                    event.preventDefault();
                     window.location.href = '/stats';
+                } else if (key === 'a') {
+                    event.preventDefault();
+                    window.location.href = '/admin';
                 } else if (key === '/') {
                     event.preventDefault();
                     if (!focusSearch()) {
