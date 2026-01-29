@@ -13,11 +13,13 @@ class GeminiServiceError(Exception):
 
 class GeminiService:
     DEFAULT_MODEL_CANDIDATES = (
+        "gemini-2.5-flash",
         "gemini-1.5-flash-latest",
         "gemini-1.5-flash",
         "gemini-2.0-flash",
         "gemini-2.0-flash-lite",
     )
+    _model_cache: dict[str, str] = {}
 
     BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -116,10 +118,35 @@ class GeminiService:
                 continue
 
             key_label = key_entry.get("account_label") or key_entry.get("source") or f"key_id={key_entry.get('id')}"
+            cache_key = (
+                str(key_entry.get("id"))
+                if key_entry.get("id")
+                else key_entry.get("account_label")
+                or key_entry.get("source")
+                or f"suffix_{api_key[-6:]}"
+            )
 
             models_to_try: list[str] = list(GeminiService.DEFAULT_MODEL_CANDIDATES)
+            try:
+                available = GeminiService._list_models(api_key)
+                if not available:
+                    logger.warning("Gemini listModels returned no available models", extra={"key": key_label})
+                for model in available:
+                    if model not in models_to_try:
+                        models_to_try.append(model)
+            except requests.RequestException as e:
+                last_error = e
+                logger.warning(
+                    "Gemini listModels failed",
+                    extra={"error": type(e).__name__, "key": key_label},
+                )
 
-            # Try common model aliases first.
+            # Try preferred models first, then any available models for the key.
+            cached_model = GeminiService._model_cache.get(cache_key)
+            if cached_model:
+                if cached_model in models_to_try:
+                    models_to_try.remove(cached_model)
+                models_to_try.insert(0, cached_model)
             for model in models_to_try:
                 try:
                     data = GeminiService._generate_content(api_key=api_key, model=model, payload=payload)
@@ -151,6 +178,8 @@ class GeminiService:
                     obj["category"] = obj["category"].strip()
                     obj["reasons"] = [r.strip() for r in obj["reasons"] if r and r.strip()]
 
+                    GeminiService._model_cache[cache_key] = model
+
                     return {
                         "category": obj["category"],
                         "day_id": int(obj["day_id"]),
@@ -168,6 +197,8 @@ class GeminiService:
                     )
                     # 404 means model not available for this API key / region. Try next model.
                     if status == 404:
+                        if GeminiService._model_cache.get(cache_key) == model:
+                            GeminiService._model_cache.pop(cache_key, None)
                         continue
                     # Auth or quota: try next key.
                     if status in {401, 403, 429}:
@@ -180,72 +211,6 @@ class GeminiService:
                         extra={"error": type(e).__name__, "model": model, "key": key_label},
                     )
                     continue
-
-            # If common aliases failed, ask the API what models this key can access.
-            try:
-                available = GeminiService._list_models(api_key)
-                if not available:
-                    logger.warning("Gemini listModels returned no available models", extra={"key": key_label})
-                for model in available[:5]:
-                    try:
-                        data = GeminiService._generate_content(api_key=api_key, model=model, payload=payload)
-                        text = (
-                            data.get("candidates", [{}])[0]
-                            .get("content", {})
-                            .get("parts", [{}])[0]
-                            .get("text", "")
-                        )
-                        if not text:
-                            continue
-                        start = text.find('{')
-                        end = text.rfind('}')
-                        if start == -1 or end == -1 or end <= start:
-                            continue
-                        obj = json.loads(text[start : end + 1])
-                        if not isinstance(obj, dict):
-                            continue
-                        if not isinstance(obj.get("category"), str) or not obj["category"].strip():
-                            continue
-                        if not isinstance(obj.get("day_id"), int):
-                            continue
-                        if not isinstance(obj.get("reasons"), list) or not all(isinstance(x, str) for x in obj["reasons"]):
-                            continue
-
-                        obj["category"] = obj["category"].strip()
-                        obj["reasons"] = [r.strip() for r in obj["reasons"] if r and r.strip()]
-
-                        return {
-                            "category": obj["category"],
-                            "day_id": int(obj["day_id"]),
-                            "reasons": obj["reasons"],
-                            "model": model,
-                            "generated_at": datetime.utcnow().isoformat() + "Z",
-                            "key_id": key_entry.get("id"),
-                        }
-                    except requests.HTTPError as e:
-                        last_error = e
-                        status = getattr(e.response, "status_code", None)
-                        logger.warning(
-                            "Gemini model call failed",
-                            extra={"status": status, "model": model, "key": key_label},
-                        )
-                        if status in {401, 403, 429}:
-                            break
-                        continue
-                    except Exception as e:
-                        last_error = e
-                        logger.warning(
-                            "Gemini request error",
-                            extra={"error": type(e).__name__, "model": model, "key": key_label},
-                        )
-                        continue
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    "Gemini listModels failed",
-                    extra={"error": type(e).__name__, "key": key_label},
-                )
-                continue
 
         if last_error:
             raise GeminiServiceError(f"Gemini request failed: {type(last_error).__name__}")
