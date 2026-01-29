@@ -9,7 +9,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from sqlalchemy import desc, func
 
 from list_of_exercise import get_workout_days, list_of_exercises
-from models import Session, User, WorkoutLog
+from models import Session, User, WorkoutLog, UserApiKey
 from parsers.workout import workout_parser
 from services.logging import handle_workout_log
 from services.retrieve import get_effective_plan_text
@@ -73,6 +73,43 @@ def register_workout_routes(app):
             else:
                 lines.append(log.exercise)
         return "\n\n".join(lines)
+
+    def _norm_ex_name(name: str) -> str:
+        if not name:
+            return ""
+        s = str(name).strip().lower()
+        s = re.sub(r"^\s*\d+\s*[\).:-]\s*", "", s)
+        s = re.sub(r"\s+", " ", s)
+        return s
+
+    def _best_match_plan_day(*, title: str, exercise_list: list[str], plan_days: list[dict], day_lookup: dict):
+        title_lower = (title or "").strip().lower()
+        if title_lower in day_lookup:
+            return day_lookup[title_lower]
+
+        for day in plan_days:
+            if day.get('name') and str(day['name']).lower() in title_lower:
+                return day
+
+        workout_ex = {_norm_ex_name(x) for x in (exercise_list or []) if _norm_ex_name(x)}
+        if not workout_ex:
+            return None
+
+        best = None
+        best_score = 0
+        for day in plan_days:
+            day_ex = {_norm_ex_name(x) for x in (day.get('exercises') or []) if _norm_ex_name(x)}
+            if not day_ex:
+                continue
+            overlap = len(workout_ex.intersection(day_ex))
+            score = overlap / max(len(day_ex), 1)
+            if score > best_score:
+                best_score = score
+                best = day
+
+        if best and best_score >= 0.25:
+            return best
+        return None
 
     def get_recent_workouts(user, limit=50):
         try:
@@ -331,15 +368,12 @@ def register_workout_routes(app):
             for w in recent:
                 dt = w.get('date')
                 title = w.get('title') or "Workout"
-                title_lower = title.lower()
-                matched = None
-                if title_lower in day_lookup:
-                    matched = day_lookup[title_lower]
-                else:
-                    for day in plan_days:
-                        if day['name'].lower() in title_lower:
-                            matched = day
-                            break
+                matched = _best_match_plan_day(
+                    title=title,
+                    exercise_list=w.get('exercise_list') or [],
+                    plan_days=plan_days,
+                    day_lookup=day_lookup,
+                )
                 recent_context.append(
                     {
                         "date": dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt),
@@ -355,6 +389,18 @@ def register_workout_routes(app):
 
             from services.gemini import GeminiService, GeminiServiceError
 
+            api_keys = (
+                Session.query(UserApiKey)
+                .filter_by(user_id=user.id, is_active=True)
+                .order_by(UserApiKey.created_at.asc())
+                .all()
+            )
+            api_key_payloads = [
+                {"id": key.id, "api_key": key.api_key}
+                for key in api_keys
+                if key.api_key
+            ]
+
             fallback_warning = None
             source = "gemini"
             reco = None
@@ -363,13 +409,25 @@ def register_workout_routes(app):
                     categories=categories,
                     recent_workouts=recent_context,
                     plan_days=plan_days,
+                    api_keys=api_key_payloads,
                 )
+                key_id = reco.get("key_id")
+                if key_id:
+                    key_row = (
+                        Session.query(UserApiKey)
+                        .filter_by(id=key_id, user_id=user.id)
+                        .first()
+                    )
+                    if key_row:
+                        key_row.last_used_at = datetime.utcnow()
+                        Session.commit()
             except GeminiServiceError as e:
                 logger.warning(f"Gemini unavailable, using fallback: {e}")
                 source = "fallback"
                 fallback_warning = "Gemini is busy right now. Showing a smart fallback suggestion."
 
                 today = datetime.utcnow().date()
+                last_category_dates = {}
                 last_day_dates = {}
                 for item in recent_context:
                     cat = item.get('category')
@@ -381,31 +439,48 @@ def register_workout_routes(app):
                         parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
                     except Exception:
                         continue
-                    key = (str(cat).lower(), int(day_id))
-                    if key not in last_day_dates or parsed_date > last_day_dates[key]:
-                        last_day_dates[key] = parsed_date
+                    cat_key = str(cat).lower()
+                    if cat_key not in last_category_dates or parsed_date > last_category_dates[cat_key]:
+                        last_category_dates[cat_key] = parsed_date
 
-                best_day = None
-                best_score = -1
-                for day in plan_days:
-                    key = (day['category'].lower(), int(day['day_id']))
-                    last_date = last_day_dates.get(key)
+                    day_key = (cat_key, int(day_id))
+                    if day_key not in last_day_dates or parsed_date > last_day_dates[day_key]:
+                        last_day_dates[day_key] = parsed_date
+
+                # 1) Choose the least-recently-trained CATEGORY (prevents "unlogged day" in a recently-trained category).
+                best_cat = None
+                best_cat_days_since = -1
+                for cat in categories:
+                    cat_name = str(cat.get('name') or '')
+                    cat_key = cat_name.lower()
+                    last_date = last_category_dates.get(cat_key)
                     days_since = 999
                     if last_date:
                         days_since = max((today - last_date).days, 0)
-                    score = days_since
-                    if score > best_score:
-                        best_score = score
-                        best_day = (day, days_since)
+                    if days_since > best_cat_days_since:
+                        best_cat_days_since = days_since
+                        best_cat = cat_name
 
-                if best_day:
-                    chosen_day, days_since = best_day
-                    name = chosen_day['category']
-                    day_id = int(chosen_day['day_id'])
-                else:
-                    name = categories[0]['name']
-                    day_id = 1
+                chosen_category = best_cat or categories[0]['name']
+
+                # 2) Within that category, choose the least-recently-done DAY.
+                best_day = None
+                best_day_days_since = -1
+                for day in plan_days:
+                    if str(day.get('category') or '').lower() != str(chosen_category).lower():
+                        continue
+                    day_key = (str(chosen_category).lower(), int(day['day_id']))
+                    last_date = last_day_dates.get(day_key)
                     days_since = 999
+                    if last_date:
+                        days_since = max((today - last_date).days, 0)
+                    if days_since > best_day_days_since:
+                        best_day_days_since = days_since
+                        best_day = day
+
+                name = chosen_category
+                day_id = int(best_day['day_id']) if best_day else 1
+                days_since = best_cat_days_since if best_cat_days_since >= 0 else 999
 
                 reco = {
                     "category": name,

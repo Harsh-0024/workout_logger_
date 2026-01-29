@@ -16,6 +16,11 @@
                 <span class="d-none d-md-inline">Quick Actions</span>
                 <span class="d-md-none">Actions</span>
             </button>
+            <button type="button" onclick="scrollToSection('ai-keys')" class="btn btn-gold-outline">
+                <i class="bi bi-stars"></i>
+                <span class="d-none d-md-inline">AI Keys</span>
+                <span class="d-md-none">AI</span>
+            </button>
             <button type="button" onclick="scrollToSection('profile-appearance')" class="btn btn-gold-outline">
                 <i class="bi bi-palette"></i>
                 <span class="d-none d-md-inline">Profile & Style</span>
@@ -164,6 +169,59 @@
                     </small>
                 </div>
             </div>
+        </div>
+
+        <div class="card mb-4" id="ai-keys">
+            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                <i class="bi bi-stars text-gold"></i>
+                <h5 class="mb-0 fw-bold">AI API Keys</h5>
+            </div>
+            <p class="text-muted" style="font-size: var(--fs-sm);">
+                Add multiple Gemini API keys. The app will automatically rotate if one hits rate limits.
+            </p>
+
+            <form method="POST" action="{{ url_for('user_settings') }}" class="mb-3">
+                <input type="hidden" name="form_type" value="add_api_key">
+                <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                    New API Key
+                </label>
+                <div class="input-group mb-2">
+                    <input type="text" name="account_label" class="form-control" placeholder="Account name (e.g. Personal, Backup)" maxlength="100" autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <input type="password" name="api_key" class="form-control" placeholder="Paste your Gemini API key" autocomplete="off" required>
+                    <button type="submit" class="btn btn-gold-solid">Add</button>
+                </div>
+                <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                    <i class="bi bi-shield-lock me-1"></i>Keys are stored securely and only used for AI recommendations.
+                </small>
+            </form>
+
+            {% if user_api_keys %}
+            <div class="d-grid gap-2">
+                {% for key in user_api_keys %}
+                <div class="d-flex align-items-center justify-content-between gap-3 p-2" style="border: 1px solid var(--border-subtle); border-radius: 12px;">
+                    <div>
+                        <div class="text-white fw-semibold" style="font-size: var(--fs-sm);">
+                            {{ key.account_label or 'API Key' }}
+                        </div>
+                        <div class="text-muted" style="font-size: var(--fs-xs);">
+                            ****{{ key.api_key[-4:] if key.api_key else '' }}
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ url_for('user_settings') }}" class="m-0">
+                        <input type="hidden" name="form_type" value="delete_api_key">
+                        <input type="hidden" name="key_id" value="{{ key.id }}">
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="text-muted" style="font-size: var(--fs-sm);">No API keys saved yet.</div>
+            {% endif %}
         </div>
 
         <div class="card mb-4" id="account-security">
@@ -353,6 +411,23 @@
         gap: 20px;
         max-width: 400px;
         margin: 0 auto;
+    }
+
+    .settings-nav-buttons {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .settings-nav-buttons .btn {
+        width: 100%;
+    }
+
+    @media (min-width: 768px) {
+        .settings-nav-buttons {
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+        }
     }
 
     @media (min-width: 768px) {

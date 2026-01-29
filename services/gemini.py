@@ -64,9 +64,15 @@ class GeminiService:
         categories: list[dict],
         recent_workouts: list[dict],
         plan_days: list[dict],
+        api_keys: list[dict] | None = None,
     ) -> dict:
-        api_key = getattr(Config, "GEMINI_API_KEY", None)
-        if not api_key:
+        env_key = getattr(Config, "GEMINI_API_KEY", None)
+        keys_to_try: list[dict] = []
+        if api_keys:
+            keys_to_try.extend([k for k in api_keys if k.get("api_key")])
+        if env_key:
+            keys_to_try.append({"id": None, "api_key": env_key, "source": "env"})
+        if not keys_to_try:
             raise GeminiServiceError("GEMINI_API_KEY is not configured")
 
         payload = {
@@ -101,63 +107,17 @@ class GeminiService:
             },
         }
 
-        models_to_try: list[str] = list(GeminiService.DEFAULT_MODEL_CANDIDATES)
         last_error: Exception | None = None
 
-        # Try common model aliases first.
-        for model in models_to_try:
-            try:
-                data = GeminiService._generate_content(api_key=api_key, model=model, payload=payload)
-                text = (
-                    data.get("candidates", [{}])[0]
-                    .get("content", {})
-                    .get("parts", [{}])[0]
-                    .get("text", "")
-                )
-                if not text:
-                    raise GeminiServiceError("Empty response from Gemini")
-
-                start = text.find('{')
-                end = text.rfind('}')
-                if start == -1 or end == -1 or end <= start:
-                    raise GeminiServiceError("Gemini response was not valid JSON")
-
-                obj = json.loads(text[start : end + 1])
-                if not isinstance(obj, dict):
-                    raise GeminiServiceError("Gemini response JSON was not an object")
-
-                if not isinstance(obj.get("category"), str) or not obj["category"].strip():
-                    raise GeminiServiceError("Missing category")
-                if not isinstance(obj.get("day_id"), int):
-                    raise GeminiServiceError("Missing day_id")
-                if not isinstance(obj.get("reasons"), list) or not all(isinstance(x, str) for x in obj["reasons"]):
-                    raise GeminiServiceError("Missing reasons")
-
-                obj["category"] = obj["category"].strip()
-                obj["reasons"] = [r.strip() for r in obj["reasons"] if r and r.strip()]
-
-                return {
-                    "category": obj["category"],
-                    "day_id": int(obj["day_id"]),
-                    "reasons": obj["reasons"],
-                    "model": model,
-                    "generated_at": datetime.utcnow().isoformat() + "Z",
-                }
-            except requests.HTTPError as e:
-                last_error = e
-                status = getattr(e.response, "status_code", None)
-                # 404 means model not available for this API key / region. Try next.
-                if status == 404:
-                    continue
-                raise GeminiServiceError(f"Gemini request failed: HTTP {status}")
-            except (requests.RequestException, GeminiServiceError, ValueError, json.JSONDecodeError) as e:
-                last_error = e
+        for key_entry in keys_to_try:
+            api_key = key_entry.get("api_key")
+            if not api_key:
                 continue
 
-        # If common aliases failed, ask the API what models this key can access.
-        try:
-            available = GeminiService._list_models(api_key)
-            for model in available[:5]:
+            models_to_try: list[str] = list(GeminiService.DEFAULT_MODEL_CANDIDATES)
+
+            # Try common model aliases first.
+            for model in models_to_try:
                 try:
                     data = GeminiService._generate_content(api_key=api_key, model=model, payload=payload)
                     text = (
@@ -167,20 +127,23 @@ class GeminiService:
                         .get("text", "")
                     )
                     if not text:
-                        continue
+                        raise GeminiServiceError("Empty response from Gemini")
+
                     start = text.find('{')
                     end = text.rfind('}')
                     if start == -1 or end == -1 or end <= start:
-                        continue
+                        raise GeminiServiceError("Gemini response was not valid JSON")
+
                     obj = json.loads(text[start : end + 1])
                     if not isinstance(obj, dict):
-                        continue
+                        raise GeminiServiceError("Gemini response JSON was not an object")
+
                     if not isinstance(obj.get("category"), str) or not obj["category"].strip():
-                        continue
+                        raise GeminiServiceError("Missing category")
                     if not isinstance(obj.get("day_id"), int):
-                        continue
+                        raise GeminiServiceError("Missing day_id")
                     if not isinstance(obj.get("reasons"), list) or not all(isinstance(x, str) for x in obj["reasons"]):
-                        continue
+                        raise GeminiServiceError("Missing reasons")
 
                     obj["category"] = obj["category"].strip()
                     obj["reasons"] = [r.strip() for r in obj["reasons"] if r and r.strip()]
@@ -191,12 +154,73 @@ class GeminiService:
                         "reasons": obj["reasons"],
                         "model": model,
                         "generated_at": datetime.utcnow().isoformat() + "Z",
+                        "key_id": key_entry.get("id"),
                     }
-                except Exception as e:
+                except requests.HTTPError as e:
+                    last_error = e
+                    status = getattr(e.response, "status_code", None)
+                    # 404 means model not available for this API key / region. Try next model.
+                    if status == 404:
+                        continue
+                    # Auth or quota: try next key.
+                    if status in {401, 403, 429}:
+                        break
+                    raise GeminiServiceError(f"Gemini request failed: HTTP {status}")
+                except (requests.RequestException, GeminiServiceError, ValueError, json.JSONDecodeError) as e:
                     last_error = e
                     continue
-        except requests.RequestException as e:
-            last_error = e
+
+            # If common aliases failed, ask the API what models this key can access.
+            try:
+                available = GeminiService._list_models(api_key)
+                for model in available[:5]:
+                    try:
+                        data = GeminiService._generate_content(api_key=api_key, model=model, payload=payload)
+                        text = (
+                            data.get("candidates", [{}])[0]
+                            .get("content", {})
+                            .get("parts", [{}])[0]
+                            .get("text", "")
+                        )
+                        if not text:
+                            continue
+                        start = text.find('{')
+                        end = text.rfind('}')
+                        if start == -1 or end == -1 or end <= start:
+                            continue
+                        obj = json.loads(text[start : end + 1])
+                        if not isinstance(obj, dict):
+                            continue
+                        if not isinstance(obj.get("category"), str) or not obj["category"].strip():
+                            continue
+                        if not isinstance(obj.get("day_id"), int):
+                            continue
+                        if not isinstance(obj.get("reasons"), list) or not all(isinstance(x, str) for x in obj["reasons"]):
+                            continue
+
+                        obj["category"] = obj["category"].strip()
+                        obj["reasons"] = [r.strip() for r in obj["reasons"] if r and r.strip()]
+
+                        return {
+                            "category": obj["category"],
+                            "day_id": int(obj["day_id"]),
+                            "reasons": obj["reasons"],
+                            "model": model,
+                            "generated_at": datetime.utcnow().isoformat() + "Z",
+                            "key_id": key_entry.get("id"),
+                        }
+                    except requests.HTTPError as e:
+                        last_error = e
+                        status = getattr(e.response, "status_code", None)
+                        if status in {401, 403, 429}:
+                            break
+                        continue
+                    except Exception as e:
+                        last_error = e
+                        continue
+            except requests.RequestException as e:
+                last_error = e
+                continue
 
         if last_error:
             raise GeminiServiceError(f"Gemini request failed: {type(last_error).__name__}")

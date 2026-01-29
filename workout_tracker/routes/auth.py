@@ -8,7 +8,7 @@ from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
 from config import Config
-from models import Session, User, UserRole
+from models import Session, User, UserRole, UserApiKey
 from services.auth import AuthService, AuthenticationError
 from utils.errors import ValidationError
 from utils.logger import logger
@@ -472,6 +472,53 @@ def register_auth_routes(app, email_service):
             form_type = request.form.get('form_type') or 'profile'
 
             try:
+                if form_type == 'add_api_key':
+                    account_label = request.form.get('account_label', '').strip()
+                    api_key = request.form.get('api_key', '').strip()
+                    if not api_key:
+                        flash("Please enter an API key.", "error")
+                        return redirect(url_for('user_settings') + '#ai-keys')
+
+                    if account_label and len(account_label) > 100:
+                        flash("Account label is too long.", "error")
+                        return redirect(url_for('user_settings') + '#ai-keys')
+
+                    existing_key = (
+                        Session.query(UserApiKey)
+                        .filter_by(user_id=user_id, api_key=api_key)
+                        .first()
+                    )
+                    if existing_key:
+                        flash("That API key is already saved.", "info")
+                        return redirect(url_for('user_settings') + '#ai-keys')
+
+                    Session.add(
+                        UserApiKey(
+                            user_id=user_id,
+                            api_key=api_key,
+                            account_label=account_label or None,
+                        )
+                    )
+                    Session.commit()
+                    flash("API key added successfully!", "success")
+                    return redirect(url_for('user_settings') + '#ai-keys')
+
+                if form_type == 'delete_api_key':
+                    key_id = request.form.get('key_id')
+                    key = (
+                        Session.query(UserApiKey)
+                        .filter_by(id=key_id, user_id=user_id)
+                        .first()
+                    )
+                    if not key:
+                        flash("API key not found.", "error")
+                        return redirect(url_for('user_settings') + '#ai-keys')
+
+                    Session.delete(key)
+                    Session.commit()
+                    flash("API key removed.", "success")
+                    return redirect(url_for('user_settings') + '#ai-keys')
+
                 if form_type == 'profile_photo':
                     image_file = request.files.get('profile_image')
                     if not image_file or not image_file.filename:
@@ -772,6 +819,13 @@ def register_auth_routes(app, email_service):
             except Exception:
                 profile_image_url = None
 
+        user_api_keys = (
+            Session.query(UserApiKey)
+            .filter_by(user_id=user_id)
+            .order_by(UserApiKey.created_at.desc())
+            .all()
+        )
+
         return render_template(
             'settings.html',
             user=user,
@@ -779,6 +833,7 @@ def register_auth_routes(app, email_service):
             password_change_verified=password_change_verified,
             pending_password_change=pending_password_change,
             profile_image_url=profile_image_url,
+            user_api_keys=user_api_keys,
         )
 
     @login_required

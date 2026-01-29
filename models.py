@@ -75,6 +75,7 @@ class User(Base):
     plan = relationship("Plan", uselist=False, back_populates="user", cascade="all, delete-orphan")
     rep_ranges = relationship("RepRange", uselist=False, back_populates="user", cascade="all, delete-orphan")
     logs = relationship("WorkoutLog", back_populates="user", cascade="all, delete-orphan")
+    api_keys = relationship("UserApiKey", back_populates="user", cascade="all, delete-orphan")
     
     def is_admin(self):
         """Check if user has admin role."""
@@ -114,6 +115,23 @@ class EmailVerification(Base):
     expires_at = Column(DateTime, nullable=False)
     verified_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+
+# --- USER API KEYS TABLE ---
+class UserApiKey(Base):
+    __tablename__ = 'user_api_keys'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    account_label = Column(String(100), nullable=True)
+    api_key = Column(String(255), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    last_used_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="api_keys")
+
+    def __repr__(self):
+        return f"<UserApiKey(id={self.id}, user_id={self.user_id}, active={self.is_active})>"
 
 
 # --- 2. LIFTS TABLE (PR Tracker) ---
@@ -364,6 +382,13 @@ def migrate_schema():
             # --- Workout log columns ---
             if 'email_verifications' not in inspector.get_table_names():
                 EmailVerification.__table__.create(bind=conn, checkfirst=True)
+
+            if 'user_api_keys' not in inspector.get_table_names():
+                UserApiKey.__table__.create(bind=conn, checkfirst=True)
+            else:
+                key_columns = [col['name'] for col in inspector.get_columns('user_api_keys')]
+                if 'account_label' not in key_columns:
+                    conn.execute(text("ALTER TABLE user_api_keys ADD COLUMN account_label VARCHAR(100)"))
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]

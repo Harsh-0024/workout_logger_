@@ -42,6 +42,7 @@
                     <i class="bi bi-lightbulb text-gold"></i>
                     <h6 class="mb-0 fw-bold">Suggested workout</h6>
                 </div>
+                <div id="recommendWorkoutMeta" class="text-muted mb-2" style="display: none; font-size: var(--fs-xs);"></div>
                 <a id="recommendWorkoutLink" href="#" class="btn btn-gold-solid w-100 mb-3" style="display: none;"></a>
                 <ul id="recommendWorkoutReasons" class="text-muted mb-0" style="text-align: left; padding-left: 1.1rem;"></ul>
             </div>
@@ -160,7 +161,8 @@
         const card = document.getElementById('recommendWorkoutCard');
         const link = document.getElementById('recommendWorkoutLink');
         const reasonsEl = document.getElementById('recommendWorkoutReasons');
-        if (!btn || !card || !link || !reasonsEl) return;
+        const metaEl = document.getElementById('recommendWorkoutMeta');
+        if (!btn || !card || !link || !reasonsEl || !metaEl) return;
 
         const setLoading = (loading) => {
             btn.disabled = loading;
@@ -185,12 +187,22 @@
                 const dayId = data.day_id;
                 const url = data.url;
                 const reasons = Array.isArray(data.reasons) ? data.reasons : [];
+                const warning = data.warning;
+                const source = data.source;
 
                 reasonsEl.innerHTML = '';
                 for (const r of reasons) {
                     const li = document.createElement('li');
                     li.textContent = r;
                     reasonsEl.appendChild(li);
+                }
+
+                if (warning || source) {
+                    metaEl.style.display = 'block';
+                    metaEl.textContent = warning || (source === 'fallback' ? 'Fallback suggestion' : '');
+                } else {
+                    metaEl.style.display = 'none';
+                    metaEl.textContent = '';
                 }
 
                 link.style.display = 'block';
@@ -202,6 +214,8 @@
                 window.scrollTo({ top: y, behavior: 'smooth' });
             } catch (e) {
                 card.style.display = 'none';
+                metaEl.style.display = 'none';
+                metaEl.textContent = '';
                 alert('Unable to suggest a workout right now. Please try again.');
             } finally {
                 setLoading(false);
