@@ -201,7 +201,12 @@
                         <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                             Current Password
                         </label>
-                        <input type="password" name="current_password" class="form-control" autocomplete="current-password">
+                        <div class="password-field">
+                            <input type="password" name="current_password" class="form-control" autocomplete="current-password">
+                            <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="d-grid gap-2 gap-md-3">
                         <button type="submit" class="btn btn-gold-solid w-100 settings-action-btn" data-profile-form-type="profile">
