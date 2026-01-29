@@ -751,7 +751,12 @@ def register_auth_routes(app, email_service):
 
         profile_image_url = None
         if getattr(user, 'profile_image', None):
-            profile_image_url = url_for('static', filename=user.profile_image)
+            try:
+                image_path = Path(app.static_folder) / user.profile_image
+                if image_path.exists():
+                    profile_image_url = url_for('static', filename=user.profile_image)
+            except Exception:
+                profile_image_url = None
 
         return render_template(
             'settings.html',
@@ -861,6 +866,7 @@ def register_auth_routes(app, email_service):
                         flash("User not found.", "error")
                         return redirect(url_for('login'))
 
+                    user.full_name = full_name if full_name else None
                     user.username = username
                     user.email = email
                     if bodyweight is not None:
@@ -871,6 +877,7 @@ def register_auth_routes(app, email_service):
 
                     Session.commit()
                     session.pop('pending_profile_update', None)
+                    session.pop('pending_profile_update_user_id', None)
 
                     flash("Profile updated successfully!", "success")
                     return redirect(url_for('user_settings'))
