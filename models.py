@@ -450,7 +450,11 @@ def _bootstrap_admin_user(session):
     try:
         import bcrypt
 
-        user = session.query(User).filter_by(username=admin_username).first()
+        user = None
+        if admin_email:
+            user = session.query(User).filter_by(email=admin_email).first()
+        if not user:
+            user = session.query(User).filter_by(username=admin_username).first()
         created = False
         if not user:
             user = User(username=admin_username)
