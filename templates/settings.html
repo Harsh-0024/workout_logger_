@@ -2,93 +2,137 @@
 {% block content %}
 <div class="row justify-content-center mt-3 mt-md-4">
     <div class="col-12 col-md-10 col-lg-8">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3 mb-md-4">
-                    <i class="bi bi-gear" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                </div>
-                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">Profile Settings</h2>
-                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Manage your account details</p>
+        <div class="text-center mb-4">
+            <div class="mb-3">
+                <i class="bi bi-gear" style="font-size: clamp(2.5rem, 8vw, 3.5rem); color: var(--gold-primary); opacity: 0.6;"></i>
+            </div>
+            <h2 class="fw-bold mb-2" style="font-size: clamp(1.5rem, 6vw, 2rem);">Profile Settings</h2>
+            <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Manage your account details</p>
+        </div>
+
+        <div class="d-flex gap-2 mb-4 settings-nav-buttons">
+            <button type="button" onclick="scrollToSection('quick-actions')" class="btn btn-gold-outline btn-sm flex-fill">
+                <i class="bi bi-lightning-charge me-1"></i>
+                <span class="d-none d-md-inline">Quick Actions</span>
+                <span class="d-md-none">Actions</span>
+            </button>
+            <button type="button" onclick="scrollToSection('profile-appearance')" class="btn btn-gold-outline btn-sm flex-fill">
+                <i class="bi bi-palette me-1"></i>
+                <span class="d-none d-md-inline">Profile & Style</span>
+                <span class="d-md-none">Profile</span>
+            </button>
+            <button type="button" onclick="scrollToSection('account-security')" class="btn btn-gold-outline btn-sm flex-fill">
+                <i class="bi bi-shield-lock me-1"></i>
+                <span class="d-none d-md-inline">Account & Security</span>
+                <span class="d-md-none">Account</span>
+            </button>
+        </div>
+
+        <div class="card mb-4" id="quick-actions">
+
+            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                <i class="bi bi-lightning-charge text-gold"></i>
+                <h5 class="mb-0 fw-bold">Quick Actions</h5>
+            </div>
+            <div class="d-grid gap-2 gap-md-3">
+                <a href="{{ url_for('set_plan') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-journal-text me-2"></i>Edit Plan
+                </a>
+                <a href="{{ url_for('set_exercises') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-sliders me-2"></i>Edit Rep Ranges
+                </a>
             </div>
 
-            <div class="border-top pt-4 pt-md-5 mb-4 mb-md-5" style="border-color: var(--border-subtle) !important;">
-                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
-                    <i class="bi bi-lightning-charge text-gold"></i>
-                    <h5 class="mb-0 fw-bold">Quick Actions</h5>
-                </div>
-                <div class="d-grid gap-2 gap-md-3">
-                    <a href="{{ url_for('set_plan') }}" class="btn btn-gold-outline btn-sm">
-                        <i class="bi bi-journal-text me-2"></i>Edit Plan
-                    </a>
-                    <a href="{{ url_for('set_exercises') }}" class="btn btn-gold-outline btn-sm">
-                        <i class="bi bi-sliders me-2"></i>Edit Rep Ranges
-                    </a>
-                </div>
-            </div>
-
-            <div class="border-top pt-4 pt-md-5 mb-4 mb-md-5" style="border-color: var(--border-subtle) !important;">
-                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
-                    <i class="bi bi-person-circle text-gold"></i>
-                    <h5 class="mb-0 fw-bold">Profile Photo</h5>
-                </div>
-                <div class="profile-photo-card">
-                    <div class="profile-photo-preview" id="photoPreview">
-                        {% if profile_image_url %}
-                        <img src="{{ profile_image_url }}" alt="Profile photo" class="profile-photo-img" id="currentPhoto">
-                        {% else %}
-                        <i class="bi bi-person-circle profile-photo-placeholder" id="photoPlaceholder"></i>
-                        {% endif %}
-                    </div>
-                    <div class="profile-photo-controls">
-                        <input
-                            type="file"
-                            id="photoInput"
-                            accept="image/png,image/jpeg,image/webp,image/jpg"
-                            class="form-control mb-2"
-                            style="display: none;"
-                        >
-                        <button type="button" id="selectPhotoBtn" class="btn btn-gold-solid w-100 mb-2">
-                            <i class="bi bi-camera-fill me-2"></i>Select Photo
-                        </button>
-                        <div id="cropContainer" style="display: none;">
-                            <div class="crop-preview-wrapper mb-2">
-                                <canvas id="cropCanvas" class="crop-canvas"></canvas>
-                            </div>
-                            <div class="d-flex gap-2 mb-2">
-                                <button type="button" id="zoomInBtn" class="btn btn-gold-outline btn-sm flex-fill">
-                                    <i class="bi bi-zoom-in"></i>
-                                </button>
-                                <button type="button" id="zoomOutBtn" class="btn btn-gold-outline btn-sm flex-fill">
-                                    <i class="bi bi-zoom-out"></i>
-                                </button>
-                                <button type="button" id="rotateBtn" class="btn btn-gold-outline btn-sm flex-fill">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                </button>
-                            </div>
-                            <button type="button" id="uploadCroppedBtn" class="btn btn-gold-solid w-100 mb-2">
-                                <i class="bi bi-upload me-2"></i>Upload Photo
-                            </button>
-                            <button type="button" id="cancelCropBtn" class="btn btn-gold-outline w-100 btn-sm">
-                                Cancel
-                            </button>
+            <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
+                <form method="POST" action="{{ url_for('user_settings') }}">
+                    <input type="hidden" name="form_type" value="bodyweight">
+                    <div class="mb-3">
+                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                            Bodyweight
+                        </label>
+                        <div class="input-group">
+                            <input
+                                type="number"
+                                inputmode="decimal"
+                                name="bodyweight"
+                                class="form-control"
+                                value="{% if user.bodyweight is not none %}{{ user.bodyweight }}{% endif %}"
+                                min="1"
+                                step="0.1"
+                                placeholder="e.g. 72.5"
+                            >
+                            <span class="input-group-text" style="background: var(--gold-subtle); border-color: var(--border-subtle); color: var(--text-muted);">kg</span>
                         </div>
-                        {% if profile_image_url %}
-                        <form method="POST" action="{{ url_for('user_settings') }}" id="removePhotoForm">
-                            <input type="hidden" name="form_type" value="remove_photo">
-                            <button type="submit" class="btn btn-outline-danger w-100 btn-sm mt-2">
-                                <i class="bi bi-trash me-2"></i>Remove Photo
-                            </button>
-                        </form>
-                        {% endif %}
                         <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                            PNG, JPG, or WEBP. Drag to reposition, use controls to adjust.
+                            <i class="bi bi-person-check me-1"></i>Used for bodyweight (BW) exercises
                         </small>
                     </div>
+                    <button type="submit" class="btn btn-gold-solid w-100">
+                        <i class="bi bi-check-circle-fill me-2"></i>Update Bodyweight
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4" id="profile-appearance">
+            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                <i class="bi bi-person-circle text-gold"></i>
+                <h5 class="mb-0 fw-bold">Profile Photo</h5>
+            </div>
+            <div class="profile-photo-card">
+                <div class="profile-photo-preview" id="photoPreview">
+                    {% if profile_image_url %}
+                    <img src="{{ profile_image_url }}" alt="Profile photo" class="profile-photo-img" id="currentPhoto">
+                    {% else %}
+                    <i class="bi bi-person-circle profile-photo-placeholder" id="photoPlaceholder"></i>
+                    {% endif %}
+                </div>
+                <div class="profile-photo-controls">
+                    <input
+                        type="file"
+                        id="photoInput"
+                        accept="image/png,image/jpeg,image/webp,image/jpg"
+                        class="form-control mb-2"
+                        style="display: none;"
+                    >
+                    <button type="button" id="selectPhotoBtn" class="btn btn-gold-solid w-100 mb-2">
+                        <i class="bi bi-camera-fill me-2"></i>Select Photo
+                    </button>
+                    <div id="cropContainer" style="display: none;">
+                        <div class="crop-preview-wrapper mb-2">
+                            <canvas id="cropCanvas" class="crop-canvas"></canvas>
+                        </div>
+                        <div class="d-flex gap-2 mb-2">
+                            <button type="button" id="zoomInBtn" class="btn btn-gold-outline btn-sm flex-fill">
+                                <i class="bi bi-zoom-in"></i>
+                            </button>
+                            <button type="button" id="zoomOutBtn" class="btn btn-gold-outline btn-sm flex-fill">
+                                <i class="bi bi-zoom-out"></i>
+                            </button>
+                            <button type="button" id="rotateBtn" class="btn btn-gold-outline btn-sm flex-fill">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <button type="button" id="uploadCroppedBtn" class="btn btn-gold-solid w-100 mb-2">
+                            <i class="bi bi-upload me-2"></i>Upload Photo
+                        </button>
+                        <button type="button" id="cancelCropBtn" class="btn btn-gold-outline w-100 btn-sm">
+                            Cancel
+                        </button>
+                    </div>
+                    {% if profile_image_url %}
+                    <form method="POST" action="{{ url_for('user_settings') }}" id="removePhotoForm">
+                        <input type="hidden" name="form_type" value="remove_photo">
+                        <button type="submit" class="btn btn-outline-danger w-100 btn-sm mt-2">
+                            <i class="bi bi-trash me-2"></i>Remove Photo
+                        </button>
+                    </form>
+                    {% endif %}
                 </div>
             </div>
 
-            <div class="border-top pt-4 pt-md-5 mb-4 mb-md-5" style="border-color: var(--border-subtle) !important;">
-                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+            <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
+                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4 mt-4">
                     <i class="bi bi-palette text-gold"></i>
                     <h5 class="mb-0 fw-bold">Appearance</h5>
                 </div>
@@ -115,8 +159,15 @@
                     </small>
                 </div>
             </div>
+        </div>
 
-            <form method="POST" action="{{ url_for('user_settings') }}" class="mb-4 mb-md-5">
+        <div class="card mb-4" id="account-security">
+            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                <i class="bi bi-person-badge text-gold"></i>
+                <h5 class="mb-0 fw-bold">Account Information</h5>
+            </div>
+
+            <form method="POST" action="{{ url_for('user_settings') }}" class="mb-4">
                 <input type="hidden" name="form_type" id="profileFormType" value="profile">
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
@@ -129,27 +180,6 @@
                         Email
                     </label>
                     <input type="email" inputmode="email" name="email" class="form-control" value="{{ user.email }}" maxlength="255" autocomplete="email" required data-email-assist="true">
-                </div>
-                <div class="mb-3 mb-md-4">
-                    <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Bodyweight
-                    </label>
-                    <div class="input-group">
-                        <input
-                            type="number"
-                            inputmode="decimal"
-                            name="bodyweight"
-                            class="form-control"
-                            value="{% if user.bodyweight is not none %}{{ user.bodyweight }}{% endif %}"
-                            min="1"
-                            step="0.1"
-                            placeholder="e.g. 72.5"
-                        >
-                        <span class="input-group-text" style="background: var(--gold-subtle); border-color: var(--border-subtle); color: var(--text-muted);">kg</span>
-                    </div>
-                    <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                        <i class="bi bi-person-check me-1"></i>Used for bodyweight (BW) exercises
-                    </small>
                 </div>
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
@@ -179,8 +209,8 @@
                 </div>
             </form>
 
-            <div class="border-top pt-4 pt-md-5" id="change-password" style="border-color: var(--border-subtle) !important;">
-                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+            <div class="border-top pt-4 mt-4" id="change-password" style="border-color: var(--border-subtle) !important;">
+                <div class="d-flex align-items-center gap-2 mb-3 mb-md-4 mt-4">
                     <i class="bi bi-shield-lock text-gold"></i>
                     <h5 class="mb-0 fw-bold">Change Password</h5>
                 </div>
@@ -255,33 +285,41 @@
                     {% endif %}
                 {% endif %}
             </div>
+        </div>
 
-            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
-                    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
-                </a>
-            </div>
+        <div class="text-center mt-3">
+            <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+            </a>
         </div>
     </div>
 </div>
 <style>
     .profile-photo-card {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 16px;
+        display: flex;
+        flex-direction: column;
         align-items: center;
+        gap: 20px;
+        max-width: 400px;
+        margin: 0 auto;
+    }
+
+    @media (min-width: 768px) {
+        .profile-photo-card {
+            max-width: 500px;
+        }
     }
 
     .profile-photo-preview {
-        width: 96px;
-        height: 96px;
+        width: 120px;
+        height: 120px;
         border-radius: 50%;
         display: flex;
         align-items: center;
         justify-content: center;
         background: var(--gold-subtle);
-        border: 1px solid var(--border-gold);
-        box-shadow: var(--shadow-gold);
+        border: 2px solid var(--border-gold);
+        box-shadow: var(--shadow-gold-lg);
         overflow: hidden;
     }
 
@@ -292,7 +330,7 @@
     }
 
     .profile-photo-placeholder {
-        font-size: 2.5rem;
+        font-size: 3.5rem;
         color: var(--gold-primary);
         opacity: 0.55;
     }
@@ -319,11 +357,61 @@
         touch-action: none;
     }
 
+    .settings-nav-buttons {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+
+    .settings-nav-buttons .btn {
+        padding: 12px 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        min-height: 60px;
+    }
+
+    .settings-nav-buttons .btn i {
+        font-size: 1.25rem;
+        margin: 0;
+    }
+
+    @media (min-width: 768px) {
+        .settings-nav-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .settings-nav-buttons .btn {
+            flex-direction: row;
+            padding: 10px 20px;
+            font-size: 0.875rem;
+            min-height: auto;
+            gap: 8px;
+        }
+
+        .settings-nav-buttons .btn i {
+            font-size: 1rem;
+        }
+    }
+
     @media (max-width: 576px) {
         .profile-photo-card {
-            grid-template-columns: 1fr;
-            justify-items: center;
-            text-align: center;
+            max-width: 100%;
+        }
+
+        .profile-photo-preview {
+            width: 96px;
+            height: 96px;
+        }
+
+        .profile-photo-placeholder {
+            font-size: 2.5rem;
         }
 
         .profile-photo-controls {
@@ -609,5 +697,14 @@
             selectPhotoBtn.style.display = 'block';
         });
     })();
+
+    // Smooth scroll to section
+    function scrollToSection(sectionId) {
+        const section = document.getElementById(sectionId);
+        if (!section) return;
+        const offset = 100;
+        const y = section.getBoundingClientRect().top + window.scrollY - offset;
+        window.scrollTo({ top: y, behavior: 'smooth' });
+    }
 </script>
 {% endblock %}

@@ -496,6 +496,28 @@ def register_auth_routes(app, email_service):
                         flash("Failed to remove profile photo. Please try again.", "error")
                     return redirect(url_for('user_settings'))
 
+                if form_type == 'bodyweight':
+                    bodyweight_raw = request.form.get('bodyweight', '').strip()
+                    try:
+                        if bodyweight_raw:
+                            bodyweight = float(bodyweight_raw)
+                            if bodyweight < 1:
+                                flash("Bodyweight must be at least 1 kg.", "error")
+                                return redirect(url_for('user_settings'))
+                            user.bodyweight = bodyweight
+                        else:
+                            user.bodyweight = None
+                        user.updated_at = datetime.now()
+                        Session.commit()
+                        flash("Bodyweight updated successfully!", "success")
+                    except ValueError:
+                        flash("Invalid bodyweight value.", "error")
+                    except Exception as e:
+                        Session.rollback()
+                        logger.error(f"Bodyweight update failed: {e}", exc_info=True)
+                        flash("Failed to update bodyweight. Please try again.", "error")
+                    return redirect(url_for('user_settings'))
+
                 if form_type in {'profile', 'profile_otp'}:
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
