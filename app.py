@@ -2,10 +2,8 @@ import os
 import hashlib
 import threading
 import time
-
 from flask import jsonify, request
 from sqlalchemy.exc import OperationalError
-
 from config import Config
 from models import initialize_database
 from utils.logger import logger
