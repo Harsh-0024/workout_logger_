@@ -89,18 +89,49 @@ class GeminiService:
         cat_key = str(category or "").strip().lower()
         today = datetime.utcnow().date()
 
-        known_categories: list[tuple[str, str]] = []
-        for c in categories or []:
-            if not isinstance(c, dict):
-                continue
-            name = c.get("name")
-            if not isinstance(name, str) or not name.strip():
-                continue
-            known_categories.append((name.strip().lower(), name.strip()))
+        def _norm_ex_name(name: str) -> str:
+            if not name:
+                return ""
+            s = str(name).strip().lower()
+            s = re.sub(r"^\s*\d+\s*[\).:-]\s*", "", s)
+            s = re.sub(r"\s+", " ", s)
+            return s
+
+        def _infer_from_exercises(exercise_list: object) -> tuple[str | None, int | None]:
+            if not isinstance(exercise_list, list):
+                return (None, None)
+            workout_ex = {_norm_ex_name(x) for x in exercise_list if _norm_ex_name(x)}
+            if not workout_ex:
+                return (None, None)
+
+            best_cat = None
+            best_day = None
+            best_score = 0.0
+            for day in plan_days or []:
+                if not isinstance(day, dict):
+                    continue
+                day_ex = {_norm_ex_name(x) for x in (day.get("exercises") or []) if _norm_ex_name(x)}
+                if not day_ex:
+                    continue
+                overlap = len(workout_ex.intersection(day_ex))
+                day_len = len(day_ex)
+                required_overlap = max(2, int(day_len * 0.7 + 0.999))
+                if overlap < required_overlap:
+                    continue
+                score = overlap / max(day_len, 1)
+                if score > best_score:
+                    best_score = score
+                    best_cat = day.get("category") if isinstance(day.get("category"), str) else None
+                    best_day = day.get("day_id") if isinstance(day.get("day_id"), int) else None
+
+            if best_score >= 0.7:
+                return (best_cat, best_day)
+            return (None, None)
 
         last_cat_date: date | None = None
-        last_cat_title: str | None = None
         last_day_date: date | None = None
+        last_done_day_id: int | None = None
+        last_done_date: date | None = None
 
         last_by_cat: dict[str, date] = {}
         for w in recent_workouts or []:
@@ -111,31 +142,14 @@ class GeminiService:
                 continue
 
             w_cat = w.get("category")
-            if not (isinstance(w_cat, str) and w_cat.strip()):
-                title = w.get("title")
-                if isinstance(title, str) and title.strip() and known_categories:
-                    title_l = title.strip().lower()
-                    best_norm = None
-                    best_display = None
-                    best_len = -1
-                    for norm, display in known_categories:
-                        if norm and norm in title_l and len(norm) > best_len:
-                            best_norm = norm
-                            best_display = display
-                            best_len = len(norm)
-                    if best_norm is not None:
-                        w_cat = best_display
-
             w_day = w.get("day_id")
-            if not isinstance(w_day, int):
-                title = w.get("title")
-                if isinstance(title, str) and title.strip():
-                    m = re.search(r"\s+(\d+)$", title.strip())
-                    if m:
-                        try:
-                            w_day = int(m.group(1))
-                        except Exception:
-                            w_day = None
+
+            if not (isinstance(w_cat, str) and w_cat.strip()) or not isinstance(w_day, int):
+                inferred_cat, inferred_day = _infer_from_exercises(w.get("exercise_list"))
+                if not (isinstance(w_cat, str) and w_cat.strip()) and isinstance(inferred_cat, str) and inferred_cat.strip():
+                    w_cat = inferred_cat
+                if not isinstance(w_day, int) and isinstance(inferred_day, int):
+                    w_day = inferred_day
 
             if isinstance(w_cat, str) and w_cat.strip():
                 w_cat_key = w_cat.strip().lower()
@@ -146,19 +160,50 @@ class GeminiService:
             if isinstance(w_cat, str) and w_cat.strip().lower() == cat_key:
                 if last_cat_date is None or d > last_cat_date:
                     last_cat_date = d
-                    t = w.get("title")
-                    last_cat_title = t if isinstance(t, str) and t.strip() else None
+
+                if isinstance(w_day, int):
+                    if last_done_date is None or d > last_done_date:
+                        last_done_date = d
+                        last_done_day_id = int(w_day)
 
                 if isinstance(w_day, int) and w_day == int(day_id):
                     if last_day_date is None or d > last_day_date:
                         last_day_date = d
 
         reasons: list[str] = []
+
+        num_days = None
+        for c in categories or []:
+            if not isinstance(c, dict):
+                continue
+            if str(c.get('name') or '').strip().lower() != cat_key:
+                continue
+            try:
+                num_days = int(c.get('num_days') or 0)
+            except Exception:
+                num_days = None
+            break
+        if not num_days:
+            try:
+                num_days = max(
+                    int(d.get('day_id') or 0)
+                    for d in (plan_days or [])
+                    if isinstance(d, dict) and str(d.get('category') or '').strip().lower() == cat_key
+                )
+            except Exception:
+                num_days = None
+
+        if last_done_day_id and num_days and num_days > 0:
+            next_day = int(last_done_day_id) + 1
+            if next_day > int(num_days):
+                next_day = 1
+            reasons.append(f"Continuing your {category} order: last completed day {int(last_done_day_id)}, next is day {int(next_day)}.")
+        elif num_days and num_days > 0:
+            reasons.append(f"Starting {category} from day 1 to keep your plan in order.")
         if last_cat_date:
             days_since = max((today - last_cat_date).days, 0)
             suffix = f" ({days_since} day(s) ago)" if days_since != 0 else " (today)"
-            title_part = f" — last session: {last_cat_title}" if last_cat_title else ""
-            reasons.append(f"You last trained {category} on {last_cat_date.isoformat()}{suffix}{title_part}.")
+            reasons.append(f"You last trained {category} on {last_cat_date.isoformat()}{suffix}.")
         else:
             reasons.append(f"You haven't logged {category} recently.")
 
@@ -298,7 +343,9 @@ class GeminiService:
                                 "- category must be one of the provided categories.\n"
                                 "- day_id must be within 1..num_days for that category.\n"
                                 "- Prefer the least-recently-trained day across the whole plan.\n"
-                                "- Use recent workouts (title, exercises, details) to match plan days.\n"
+                                "- Use recent workouts' exercises and details to match plan days. Titles may be arbitrary.\n"
+                                "- Each category includes sequencing fields like next_day_id and last_done_date; recommend the next_day_id to keep days in order.\n"
+                                "- Do not treat a workout as completing a plan day unless it clearly matches that full plan day (not just a single overlapping exercise).\n"
                                 "- reasons must be 3-6 short bullet-style strings.\n\n"
                                 f"Plan categories: {json.dumps(categories, ensure_ascii=False)}\n"
                                 f"Plan days (name, category, day_id, exercises): {json.dumps(plan_days, ensure_ascii=False)}\n"
@@ -536,6 +583,28 @@ class GeminiService:
                         raise GeminiServiceError("Missing day_id")
                     obj["category"] = obj["category"].strip()
 
+                    original_day_id_val = int(day_id_val)
+                    desired_day_id = None
+                    for c in categories or []:
+                        if not isinstance(c, dict):
+                            continue
+                        if str(c.get('name') or '').strip().lower() != obj["category"].strip().lower():
+                            continue
+                        if isinstance(c.get('next_day_id'), int):
+                            desired_day_id = int(c.get('next_day_id'))
+                        elif isinstance(c.get('last_done_day_id'), int) and isinstance(c.get('num_days'), int):
+                            nd = int(c.get('last_done_day_id')) + 1
+                            if nd > int(c.get('num_days')):
+                                nd = 1
+                            desired_day_id = nd
+                        break
+
+                    day_overridden = False
+                    if isinstance(desired_day_id, int) and desired_day_id > 0 and desired_day_id != int(day_id_val):
+                        day_id_val = int(desired_day_id)
+                        obj["day_id"] = int(desired_day_id)
+                        day_overridden = True
+
                     reasons_val = obj.get("reasons")
                     reasons_clean: list[str] = []
                     if isinstance(reasons_val, list):
@@ -565,13 +634,17 @@ class GeminiService:
                         recent_workouts=recent_workouts,
                     )
 
-                    if not reasons_clean:
+                    if day_overridden or int(obj.get("day_id") or 0) != int(day_id_val) or int(original_day_id_val) != int(day_id_val):
+                        reasons_clean = default_reasons
+                    elif not reasons_clean:
                         reasons_clean = default_reasons
                     else:
+                        existing = {x.lower() for x in reasons_clean}
                         for r in default_reasons:
                             if len(reasons_clean) >= 6:
                                 break
-                            if r.lower() not in {x.lower() for x in reasons_clean}:
+                            if r.lower() not in existing:
+                                existing.add(r.lower())
                                 reasons_clean.append(r)
                         if len(reasons_clean) < 3:
                             reasons_clean = default_reasons

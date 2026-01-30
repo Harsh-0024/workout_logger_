@@ -77,34 +77,57 @@ def register_workout_routes(app):
         s = re.sub(r"\s+", " ", s)
         return s
 
+    def _norm_title_key(title: str) -> str:
+        s = str(title or "").strip().lower()
+        s = re.sub(r"\s+", " ", s)
+        return s
+
     def _best_match_plan_day(*, title: str, exercise_list: list[str], plan_days: list[dict], day_lookup: dict):
-        title_lower = (title or "").strip().lower()
-        if title_lower in day_lookup:
-            return day_lookup[title_lower]
+        title_key = _norm_title_key(title)
+        if title_key in day_lookup:
+            return day_lookup[title_key], "title"
 
         for day in plan_days:
-            if day.get('name') and str(day['name']).lower() in title_lower:
-                return day
+            day_name = day.get('name')
+            if not isinstance(day_name, str) or not day_name.strip():
+                continue
+            day_key = _norm_title_key(day_name)
+            if title_key == day_key or (day_key and title_key.startswith(day_key + " ")):
+                return day, "title"
 
         workout_ex = {_norm_ex_name(x) for x in (exercise_list or []) if _norm_ex_name(x)}
-        if not workout_ex:
-            return None
+        if workout_ex:
+            best = None
+            best_score = 0.0
+            for day in plan_days:
+                day_ex = {_norm_ex_name(x) for x in (day.get('exercises') or []) if _norm_ex_name(x)}
+                if not day_ex:
+                    continue
+                overlap = len(workout_ex.intersection(day_ex))
+                day_len = len(day_ex)
+                required_overlap = max(2, int(day_len * 0.7 + 0.999))
+                if overlap < required_overlap:
+                    continue
+                score = overlap / float(day_len)
+                if score > best_score:
+                    best_score = score
+                    best = day
 
-        best = None
-        best_score = 0
+            if best and best_score >= 0.7:
+                return best, "exercises"
+            return None, None
+
+        if title_key in day_lookup:
+            return day_lookup[title_key], "title"
+
         for day in plan_days:
-            day_ex = {_norm_ex_name(x) for x in (day.get('exercises') or []) if _norm_ex_name(x)}
-            if not day_ex:
+            day_name = day.get('name')
+            if not isinstance(day_name, str) or not day_name.strip():
                 continue
-            overlap = len(workout_ex.intersection(day_ex))
-            score = overlap / max(len(day_ex), 1)
-            if score > best_score:
-                best_score = score
-                best = day
+            if _norm_title_key(day_name) and _norm_title_key(day_name) in title_key:
+                return day, "title"
 
-        if best and best_score >= 0.25:
-            return best
-        return None
+        return None, None
 
     def get_recent_workouts(user, limit=50):
         try:
@@ -363,7 +386,7 @@ def register_workout_routes(app):
             for w in recent:
                 dt = w.get('date')
                 title = w.get('title') or "Workout"
-                matched = _best_match_plan_day(
+                matched_day, matched_source = _best_match_plan_day(
                     title=title,
                     exercise_list=w.get('exercise_list') or [],
                     plan_days=plan_days,
@@ -372,15 +395,58 @@ def register_workout_routes(app):
                 recent_context.append(
                     {
                         "date": dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt),
-                        "title": title,
                         "exercises": w.get('exercises') or "",
                         "exercise_list": w.get('exercise_list') or [],
                         "exercise_details": w.get('exercise_details') or "",
-                        "category": matched['category'] if matched else None,
-                        "day_id": matched['day_id'] if matched else None,
-                        "day_name": matched['name'] if matched else None,
+                        "category": matched_day['category'] if matched_day else None,
+                        "day_id": matched_day['day_id'] if matched_day else None,
+                        "day_name": matched_day['name'] if matched_day else None,
+                        "match_source": matched_source,
                     }
                 )
+
+            category_progress = {}
+            for item in recent_context:
+                cat = item.get('category')
+                day_id = item.get('day_id')
+                date_str = item.get('date')
+                src = item.get('match_source')
+                if not (isinstance(cat, str) and cat.strip()):
+                    continue
+                if not isinstance(day_id, int):
+                    continue
+                if src not in ('title', 'exercises'):
+                    continue
+                try:
+                    d = datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
+                except Exception:
+                    continue
+                key = cat.strip().lower()
+                prev = category_progress.get(key)
+                if not prev or d > prev.get('date'):
+                    category_progress[key] = {'date': d, 'day_id': int(day_id)}
+
+            for c in categories:
+                if not isinstance(c, dict):
+                    continue
+                name = c.get('name')
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                key = name.strip().lower()
+                num_days = int(c.get('num_days') or 0)
+                prev = category_progress.get(key)
+                if prev and num_days > 0:
+                    last_day_id = int(prev.get('day_id') or 0)
+                    next_day = last_day_id + 1
+                    if next_day > num_days:
+                        next_day = 1
+                    c['last_done_day_id'] = last_day_id
+                    c['last_done_date'] = prev.get('date').isoformat() if prev.get('date') else None
+                    c['next_day_id'] = int(next_day)
+                else:
+                    c['last_done_day_id'] = None
+                    c['last_done_date'] = None
+                    c['next_day_id'] = 1
 
             from services.gemini import GeminiService, GeminiServiceError
 
