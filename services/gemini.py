@@ -251,7 +251,11 @@ class GeminiService:
 
                     if not isinstance(obj.get("category"), str) or not obj["category"].strip():
                         raise GeminiServiceError("Missing category")
-                    if not isinstance(obj.get("day_id"), int):
+                    day_id_val = obj.get("day_id")
+                    if isinstance(day_id_val, str) and day_id_val.strip().isdigit():
+                        day_id_val = int(day_id_val.strip())
+                        obj["day_id"] = day_id_val
+                    if not isinstance(day_id_val, int):
                         raise GeminiServiceError("Missing day_id")
                     if not isinstance(obj.get("reasons"), list) or not all(isinstance(x, str) for x in obj["reasons"]):
                         raise GeminiServiceError("Missing reasons")
