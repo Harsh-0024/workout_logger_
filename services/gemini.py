@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import date, datetime
 import time
 import re
 
@@ -67,6 +67,159 @@ class GeminiService:
         return resp.json() if resp.content else {}
 
     @staticmethod
+    def _parse_recent_date(value: object) -> date | None:
+        if isinstance(value, datetime):
+            return value.date()
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            return datetime.strptime(value[:10], "%Y-%m-%d").date()
+        except Exception:
+            return None
+
+    @staticmethod
+    def _build_reasons_from_history(
+        *,
+        category: str,
+        day_id: int,
+        categories: list[dict],
+        plan_days: list[dict],
+        recent_workouts: list[dict],
+    ) -> list[str]:
+        cat_key = str(category or "").strip().lower()
+        today = datetime.utcnow().date()
+
+        known_categories: list[tuple[str, str]] = []
+        for c in categories or []:
+            if not isinstance(c, dict):
+                continue
+            name = c.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            known_categories.append((name.strip().lower(), name.strip()))
+
+        last_cat_date: date | None = None
+        last_cat_title: str | None = None
+        last_day_date: date | None = None
+
+        last_by_cat: dict[str, date] = {}
+        for w in recent_workouts or []:
+            if not isinstance(w, dict):
+                continue
+            d = GeminiService._parse_recent_date(w.get("date"))
+            if not d:
+                continue
+
+            w_cat = w.get("category")
+            if not (isinstance(w_cat, str) and w_cat.strip()):
+                title = w.get("title")
+                if isinstance(title, str) and title.strip() and known_categories:
+                    title_l = title.strip().lower()
+                    best_norm = None
+                    best_display = None
+                    best_len = -1
+                    for norm, display in known_categories:
+                        if norm and norm in title_l and len(norm) > best_len:
+                            best_norm = norm
+                            best_display = display
+                            best_len = len(norm)
+                    if best_norm is not None:
+                        w_cat = best_display
+
+            w_day = w.get("day_id")
+            if not isinstance(w_day, int):
+                title = w.get("title")
+                if isinstance(title, str) and title.strip():
+                    m = re.search(r"\s+(\d+)$", title.strip())
+                    if m:
+                        try:
+                            w_day = int(m.group(1))
+                        except Exception:
+                            w_day = None
+
+            if isinstance(w_cat, str) and w_cat.strip():
+                w_cat_key = w_cat.strip().lower()
+                prev = last_by_cat.get(w_cat_key)
+                if prev is None or d > prev:
+                    last_by_cat[w_cat_key] = d
+
+            if isinstance(w_cat, str) and w_cat.strip().lower() == cat_key:
+                if last_cat_date is None or d > last_cat_date:
+                    last_cat_date = d
+                    t = w.get("title")
+                    last_cat_title = t if isinstance(t, str) and t.strip() else None
+
+                if isinstance(w_day, int) and w_day == int(day_id):
+                    if last_day_date is None or d > last_day_date:
+                        last_day_date = d
+
+        reasons: list[str] = []
+        if last_cat_date:
+            days_since = max((today - last_cat_date).days, 0)
+            suffix = f" ({days_since} day(s) ago)" if days_since != 0 else " (today)"
+            title_part = f" — last session: {last_cat_title}" if last_cat_title else ""
+            reasons.append(f"You last trained {category} on {last_cat_date.isoformat()}{suffix}{title_part}.")
+        else:
+            reasons.append(f"You haven't logged {category} recently.")
+
+        if last_day_date:
+            days_since = max((today - last_day_date).days, 0)
+            suffix = f" ({days_since} day(s) ago)" if days_since != 0 else " (today)"
+            reasons.append(f"You last did {category} day {int(day_id)} on {last_day_date.isoformat()}{suffix}.")
+        else:
+            reasons.append(f"This matches your plan: {category} day {int(day_id)}.")
+
+        cat_names = [
+            str(c.get("name")).strip().lower()
+            for c in categories
+            if isinstance(c, dict) and isinstance(c.get("name"), str)
+        ]
+        overdue: list[tuple[str, int]] = []
+        for ckey in cat_names:
+            last_d = last_by_cat.get(ckey)
+            days_since = 999 if not last_d else max((today - last_d).days, 0)
+            overdue.append((ckey, int(days_since)))
+        if overdue:
+            most_overdue = max(overdue, key=lambda x: x[1])
+            if most_overdue[0] == cat_key:
+                reasons.append("This is the least recently trained category in your split right now.")
+            else:
+                reasons.append("Keeps your training split balanced based on what you've trained most recently.")
+        else:
+            reasons.append("Keeps your training split balanced this week.")
+
+        plan_day_name = None
+        for d in plan_days or []:
+            if not isinstance(d, dict):
+                continue
+            if str(d.get("category") or "").strip().lower() != cat_key:
+                continue
+            if d.get("day_id") == int(day_id):
+                n = d.get("name")
+                if isinstance(n, str) and n.strip():
+                    plan_day_name = n.strip()
+                break
+        if plan_day_name:
+            reasons.append(f"Selected plan day: {plan_day_name}.")
+
+        out: list[str] = []
+        seen: set[str] = set()
+        for r in reasons:
+            rr = str(r or "").strip()
+            if not rr:
+                continue
+            k = rr.lower()
+            if k in seen:
+                continue
+            seen.add(k)
+            out.append(rr)
+            if len(out) >= 6:
+                break
+        while len(out) < 3:
+            out.append("Recommended based on your plan and recent workouts.")
+        return out
+
+    @staticmethod
     def _recover_reco_from_partial_json_text(text: str, category_names: list[str] | None = None) -> dict | None:
         if not isinstance(text, str) or not text:
             return None
@@ -105,22 +258,7 @@ class GeminiService:
         except Exception:
             return None
 
-        reasons: list[str] = []
-        m_reasons = re.search(r'"reasons"\s*:\s*\[(.*)$', text, flags=re.DOTALL)
-        if m_reasons:
-            tail = m_reasons.group(1)
-            for m in re.finditer(r'"([^"\\]*(?:\\.[^"\\]*)*)"', tail):
-                r = m.group(1).strip()
-                if r:
-                    reasons.append(r)
-                if len(reasons) >= 6:
-                    break
-
-        if len(reasons) < 3:
-            while len(reasons) < 3:
-                reasons.append("Recommended based on your plan and recent workouts.")
-
-        return {"category": category, "day_id": day_id, "reasons": reasons}
+        return {"category": category, "day_id": day_id, "reasons": []}
 
     @staticmethod
     def recommend_workout(
@@ -396,11 +534,49 @@ class GeminiService:
                         obj["day_id"] = day_id_val
                     if not isinstance(day_id_val, int):
                         raise GeminiServiceError("Missing day_id")
-                    if not isinstance(obj.get("reasons"), list) or not all(isinstance(x, str) for x in obj["reasons"]):
-                        raise GeminiServiceError("Missing reasons")
-
                     obj["category"] = obj["category"].strip()
-                    obj["reasons"] = [r.strip() for r in obj["reasons"] if r and r.strip()]
+
+                    reasons_val = obj.get("reasons")
+                    reasons_clean: list[str] = []
+                    if isinstance(reasons_val, list):
+                        for r in reasons_val:
+                            if isinstance(r, str) and r.strip():
+                                reasons_clean.append(r.strip())
+
+                    generic_line = "recommended based on your plan and recent workouts."
+                    if reasons_clean and all(str(r).strip().lower() == generic_line for r in reasons_clean):
+                        reasons_clean = []
+
+                    seen_reason: set[str] = set()
+                    uniq: list[str] = []
+                    for r in reasons_clean:
+                        k = r.lower()
+                        if k in seen_reason:
+                            continue
+                        seen_reason.add(k)
+                        uniq.append(r)
+                    reasons_clean = uniq
+
+                    default_reasons = GeminiService._build_reasons_from_history(
+                        category=obj["category"],
+                        day_id=int(day_id_val),
+                        categories=categories,
+                        plan_days=plan_days,
+                        recent_workouts=recent_workouts,
+                    )
+
+                    if not reasons_clean:
+                        reasons_clean = default_reasons
+                    else:
+                        for r in default_reasons:
+                            if len(reasons_clean) >= 6:
+                                break
+                            if r.lower() not in {x.lower() for x in reasons_clean}:
+                                reasons_clean.append(r)
+                        if len(reasons_clean) < 3:
+                            reasons_clean = default_reasons
+
+                    obj["reasons"] = reasons_clean[:6]
 
                     GeminiService._model_cache[cache_key] = model
 
