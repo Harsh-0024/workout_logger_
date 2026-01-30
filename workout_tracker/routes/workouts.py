@@ -393,7 +393,6 @@ def register_workout_routes(app):
             recent = get_recent_workouts(user, limit=20)
 
             plan_days_by_cat = {}
-            plan_days_norm = []
             for d in plan_days:
                 if not isinstance(d, dict):
                     continue
@@ -401,7 +400,6 @@ def register_workout_routes(app):
                 if not isinstance(cat, str) or not cat.strip():
                     continue
                 ex_set = {_norm_ex_name(x) for x in (d.get('exercises') or []) if _norm_ex_name(x)}
-                plan_days_norm.append((d, ex_set))
                 plan_days_by_cat.setdefault(cat.strip().lower(), []).append((d, ex_set))
 
             recent_context = []
@@ -468,14 +466,6 @@ def register_workout_routes(app):
                 day_matches = list(dedup.values())
 
                 trained_categories = set()
-                for c in categories:
-                    nm = c.get('name') if isinstance(c, dict) else None
-                    if not isinstance(nm, str) or not nm.strip():
-                        continue
-                    cat_key = nm.strip().lower()
-                    if _contains_phrase(title_key, cat_key):
-                        trained_categories.add(nm.strip())
-
                 if workout_ex:
                     for cat_key, days in plan_days_by_cat.items():
                         best_score = 0.0
