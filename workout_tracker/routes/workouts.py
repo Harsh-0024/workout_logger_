@@ -82,6 +82,15 @@ def register_workout_routes(app):
         s = re.sub(r"\s+", " ", s)
         return s
 
+    def _contains_phrase(haystack: str, needle: str) -> bool:
+        if not haystack or not needle:
+            return False
+        try:
+            pat = r"(^|[^a-z0-9])" + re.escape(str(needle)) + r"($|[^a-z0-9])"
+            return re.search(pat, str(haystack)) is not None
+        except Exception:
+            return False
+
     def _best_match_plan_day(*, title: str, exercise_list: list[str], plan_days: list[dict], day_lookup: dict):
         title_key = _norm_title_key(title)
         if title_key in day_lookup:
@@ -92,7 +101,7 @@ def register_workout_routes(app):
             if not isinstance(day_name, str) or not day_name.strip():
                 continue
             day_key = _norm_title_key(day_name)
-            if title_key == day_key or (day_key and title_key.startswith(day_key + " ")):
+            if title_key == day_key or (day_key and title_key.startswith(day_key + " ")) or _contains_phrase(title_key, day_key):
                 return day, "title"
 
         workout_ex = {_norm_ex_name(x) for x in (exercise_list or []) if _norm_ex_name(x)}
@@ -382,16 +391,133 @@ def register_workout_routes(app):
                 return jsonify({"ok": False, "error": "No workout plan found."}), 400
 
             recent = get_recent_workouts(user, limit=20)
+
+            plan_days_by_cat = {}
+            plan_days_norm = []
+            for d in plan_days:
+                if not isinstance(d, dict):
+                    continue
+                cat = d.get('category')
+                if not isinstance(cat, str) or not cat.strip():
+                    continue
+                ex_set = {_norm_ex_name(x) for x in (d.get('exercises') or []) if _norm_ex_name(x)}
+                plan_days_norm.append((d, ex_set))
+                plan_days_by_cat.setdefault(cat.strip().lower(), []).append((d, ex_set))
+
             recent_context = []
             for w in recent:
                 dt = w.get('date')
                 title = w.get('title') or "Workout"
-                matched_day, matched_source = _best_match_plan_day(
-                    title=title,
-                    exercise_list=w.get('exercise_list') or [],
-                    plan_days=plan_days,
-                    day_lookup=day_lookup,
-                )
+                title_key = _norm_title_key(title)
+                workout_ex = {_norm_ex_name(x) for x in (w.get('exercise_list') or []) if _norm_ex_name(x)}
+
+                day_matches = []
+                for day in plan_days:
+                    day_name = day.get('name')
+                    if not isinstance(day_name, str) or not day_name.strip():
+                        continue
+                    day_key = _norm_title_key(day_name)
+                    if _contains_phrase(title_key, day_key):
+                        day_matches.append({
+                            'category': day.get('category'),
+                            'day_id': day.get('day_id'),
+                            'day_name': day_name,
+                            'source': 'title',
+                        })
+
+                if workout_ex:
+                    best_by_cat = {}
+                    for cat_key, days in plan_days_by_cat.items():
+                        best = None
+                        best_score = 0.0
+                        for day, day_ex in days:
+                            if not day_ex:
+                                continue
+                            overlap = len(workout_ex.intersection(day_ex))
+                            day_len = len(day_ex)
+                            required_overlap = max(2, int(day_len * 0.7 + 0.999))
+                            if overlap < required_overlap:
+                                continue
+                            score = overlap / float(day_len)
+                            if score > best_score:
+                                best_score = score
+                                best = day
+                        if best and best_score >= 0.7:
+                            best_by_cat[cat_key] = (best, best_score)
+                    for cat_key, tup in best_by_cat.items():
+                        day, _score = tup
+                        day_matches.append({
+                            'category': day.get('category'),
+                            'day_id': day.get('day_id'),
+                            'day_name': day.get('name'),
+                            'source': 'exercises',
+                        })
+
+                dedup = {}
+                for m in day_matches:
+                    cat = m.get('category')
+                    if not isinstance(cat, str) or not cat.strip():
+                        continue
+                    cat_key = cat.strip().lower()
+                    prev = dedup.get(cat_key)
+                    if not prev:
+                        dedup[cat_key] = m
+                        continue
+                    if prev.get('source') != 'title' and m.get('source') == 'title':
+                        dedup[cat_key] = m
+                day_matches = list(dedup.values())
+
+                trained_categories = set()
+                for c in categories:
+                    nm = c.get('name') if isinstance(c, dict) else None
+                    if not isinstance(nm, str) or not nm.strip():
+                        continue
+                    cat_key = nm.strip().lower()
+                    if _contains_phrase(title_key, cat_key):
+                        trained_categories.add(nm.strip())
+
+                if workout_ex:
+                    for cat_key, days in plan_days_by_cat.items():
+                        best_score = 0.0
+                        for _day, day_ex in days:
+                            if not day_ex:
+                                continue
+                            overlap = len(workout_ex.intersection(day_ex))
+                            if overlap < 2:
+                                continue
+                            score = overlap / float(max(len(day_ex), 1))
+                            if score > best_score:
+                                best_score = score
+                        if best_score >= 0.35:
+                            for c in categories:
+                                if not isinstance(c, dict):
+                                    continue
+                                nm = c.get('name')
+                                if isinstance(nm, str) and nm.strip().lower() == cat_key:
+                                    trained_categories.add(nm.strip())
+                                    break
+
+                for m in day_matches:
+                    cat = m.get('category')
+                    if isinstance(cat, str) and cat.strip():
+                        trained_categories.add(cat.strip())
+
+                primary = None
+                for m in day_matches:
+                    if m.get('source') == 'title':
+                        primary = m
+                        break
+                if not primary and day_matches:
+                    primary = day_matches[0]
+
+                matched_day = None
+                matched_source = None
+                if primary:
+                    for d in plan_days:
+                        if str(d.get('category') or '').strip().lower() == str(primary.get('category') or '').strip().lower() and d.get('day_id') == primary.get('day_id'):
+                            matched_day = d
+                            matched_source = primary.get('source')
+                            break
                 recent_context.append(
                     {
                         "date": dt.strftime('%Y-%m-%d') if hasattr(dt, 'strftime') else str(dt),
@@ -402,27 +528,47 @@ def register_workout_routes(app):
                         "day_id": matched_day['day_id'] if matched_day else None,
                         "day_name": matched_day['name'] if matched_day else None,
                         "match_source": matched_source,
+                        "day_matches": day_matches,
+                        "trained_categories": sorted(list(trained_categories)),
                     }
                 )
 
             today = datetime.utcnow().date()
             matched_items = []
+            category_trained = {}
             for item in recent_context:
-                cat = item.get('category')
-                day_id = item.get('day_id')
                 date_str = item.get('date')
-                src = item.get('match_source')
-                if not (isinstance(cat, str) and cat.strip()):
-                    continue
-                if not isinstance(day_id, int):
-                    continue
-                if src not in ('title', 'exercises'):
-                    continue
                 try:
                     d = datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
                 except Exception:
                     continue
-                matched_items.append((d, cat.strip().lower(), int(day_id)))
+
+                trained = item.get('trained_categories')
+                if isinstance(trained, list):
+                    for cat in trained:
+                        if not isinstance(cat, str) or not cat.strip():
+                            continue
+                        key = cat.strip().lower()
+                        prev = category_trained.get(key)
+                        if prev is None or d > prev:
+                            category_trained[key] = d
+
+                matches = item.get('day_matches')
+                if isinstance(matches, list):
+                    for m in matches:
+                        if not isinstance(m, dict):
+                            continue
+                        cat = m.get('category')
+                        day_id = m.get('day_id')
+                        src = m.get('source')
+                        if not (isinstance(cat, str) and cat.strip()):
+                            continue
+                        if not isinstance(day_id, int):
+                            continue
+                        if src not in ('title', 'exercises'):
+                            continue
+                        matched_items.append((d, cat.strip().lower(), int(day_id)))
+
             matched_items.sort(key=lambda x: x[0])
 
             cycle_done: dict[str, set[int]] = {}
@@ -461,7 +607,7 @@ def register_workout_routes(app):
                 done_set = cycle_done.get(cat_key) or set()
                 missing = [i for i in range(1, nd + 1) if i not in done_set] if nd > 0 else [1]
                 next_day = int(min(missing)) if missing else 1
-                last_date = cycle_last_date.get(cat_key)
+                last_date = category_trained.get(cat_key)
                 c['cycle_done_day_ids'] = sorted(done_set)
                 c['cycle_missing_day_ids'] = missing
                 c['last_done_date'] = last_date.isoformat() if last_date else None

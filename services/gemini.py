@@ -141,6 +141,19 @@ class GeminiService:
             if not d:
                 continue
 
+            trained_cats = w.get("trained_categories")
+            if isinstance(trained_cats, list):
+                for tc in trained_cats:
+                    if not isinstance(tc, str) or not tc.strip():
+                        continue
+                    tc_key = tc.strip().lower()
+                    prev = last_by_cat.get(tc_key)
+                    if prev is None or d > prev:
+                        last_by_cat[tc_key] = d
+                    if tc_key == cat_key:
+                        if last_cat_date is None or d > last_cat_date:
+                            last_cat_date = d
+
             w_cat = w.get("category")
             w_day = w.get("day_id")
 
@@ -170,6 +183,25 @@ class GeminiService:
                     if last_day_date is None or d > last_day_date:
                         last_day_date = d
 
+            day_matches = w.get("day_matches")
+            if isinstance(day_matches, list):
+                for m in day_matches:
+                    if not isinstance(m, dict):
+                        continue
+                    m_cat = m.get("category")
+                    m_day = m.get("day_id")
+                    if not (isinstance(m_cat, str) and m_cat.strip()):
+                        continue
+                    if not isinstance(m_day, int):
+                        continue
+                    if m_cat.strip().lower() != cat_key:
+                        continue
+                    if last_cat_date is None or d > last_cat_date:
+                        last_cat_date = d
+                    if int(m_day) == int(day_id):
+                        if last_day_date is None or d > last_day_date:
+                            last_day_date = d
+
         reasons: list[str] = []
 
         cat_meta = None
@@ -180,6 +212,11 @@ class GeminiService:
                 continue
             cat_meta = c
             break
+
+        if cat_meta and isinstance(cat_meta.get('last_done_date'), str):
+            meta_d = GeminiService._parse_recent_date(cat_meta.get('last_done_date'))
+            if meta_d and (last_cat_date is None or meta_d > last_cat_date):
+                last_cat_date = meta_d
 
         next_day_id = None
         done_ids: list[int] = []
@@ -231,7 +268,16 @@ class GeminiService:
         ]
         overdue: list[tuple[str, int]] = []
         for ckey in cat_names:
-            last_d = last_by_cat.get(ckey)
+            meta_last = None
+            for c in categories or []:
+                if not isinstance(c, dict):
+                    continue
+                if str(c.get('name') or '').strip().lower() != ckey:
+                    continue
+                if isinstance(c.get('last_done_date'), str):
+                    meta_last = GeminiService._parse_recent_date(c.get('last_done_date'))
+                break
+            last_d = meta_last or last_by_cat.get(ckey)
             days_since = 999 if not last_d else max((today - last_d).days, 0)
             overdue.append((ckey, int(days_since)))
         if overdue:
