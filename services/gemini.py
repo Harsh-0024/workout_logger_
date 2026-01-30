@@ -111,8 +111,8 @@ class GeminiService:
                 }
             ],
             "generationConfig": {
-                "temperature": 0.4,
-                "maxOutputTokens": 256,
+                "temperature": 0.2,
+                "maxOutputTokens": 512,
             },
         }
 
@@ -188,12 +188,36 @@ class GeminiService:
                     except Exception:
                         candidate0 = None
 
-                    text = (
-                        data.get("candidates", [{}])[0]
-                        .get("content", {})
-                        .get("parts", [{}])[0]
-                        .get("text", "")
-                    )
+                    text_parts: list[str] = []
+                    try:
+                        content = candidate0.get("content") if candidate0 else None
+                        parts = content.get("parts") if isinstance(content, dict) else None
+                        if isinstance(parts, list):
+                            for part in parts:
+                                if isinstance(part, dict) and isinstance(part.get("text"), str):
+                                    text_parts.append(part.get("text") or "")
+                    except Exception:
+                        text_parts = []
+
+                    text = "".join(text_parts).strip()
+                    if not text:
+                        text = (
+                            data.get("candidates", [{}])[0]
+                            .get("content", {})
+                            .get("parts", [{}])[0]
+                            .get("text", "")
+                        )
+
+                    # If Gemini wraps JSON in code fences, strip them.
+                    if isinstance(text, str) and "```" in text:
+                        cleaned_lines = []
+                        in_fence = False
+                        for line in text.splitlines():
+                            if line.strip().startswith("```"):
+                                in_fence = not in_fence
+                                continue
+                            cleaned_lines.append(line)
+                        text = "\n".join(cleaned_lines).strip()
                     if not text:
                         finish_reason = None
                         try:
