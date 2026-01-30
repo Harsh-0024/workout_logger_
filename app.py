@@ -1,7 +1,3 @@
-"""
-Main Flask application for the Workout Tracker.
-"""
-
 import os
 import threading
 import time
