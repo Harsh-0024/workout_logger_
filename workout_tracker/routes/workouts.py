@@ -396,7 +396,7 @@ def register_workout_routes(app):
                 .all()
             )
             api_key_payloads = [
-                {"id": key.id, "api_key": key.api_key}
+                {"id": key.id, "api_key": key.api_key, "account_label": key.account_label}
                 for key in api_keys
                 if key.api_key
             ]

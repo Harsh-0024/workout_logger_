@@ -191,9 +191,16 @@ class GeminiService:
                 except requests.HTTPError as e:
                     last_error = e
                     status = getattr(e.response, "status_code", None)
+                    body = ""
+                    try:
+                        body = (e.response.text or "") if getattr(e, "response", None) is not None else ""
+                    except Exception:
+                        body = ""
+                    if body and len(body) > 800:
+                        body = body[:800] + "…"
+
                     logger.warning(
-                        "Gemini model call failed",
-                        extra={"status": status, "model": model, "key": key_label},
+                        f"Gemini model call failed (key={key_label}, model={model}, status={status}, body={body})"
                     )
                     # 404 means model not available for this API key / region. Try next model.
                     if status == 404:
@@ -207,8 +214,7 @@ class GeminiService:
                 except (requests.RequestException, GeminiServiceError, ValueError, json.JSONDecodeError) as e:
                     last_error = e
                     logger.warning(
-                        "Gemini request error",
-                        extra={"error": type(e).__name__, "model": model, "key": key_label},
+                        f"Gemini request error (key={key_label}, model={model}, error={type(e).__name__})"
                     )
                     continue
 
