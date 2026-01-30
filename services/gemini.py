@@ -113,6 +113,30 @@ class GeminiService:
             "generationConfig": {
                 "temperature": 0.2,
                 "maxOutputTokens": 512,
+                "responseMimeType": "application/json",
+                "responseJsonSchema": {
+                    "type": "object",
+                    "propertyOrdering": ["category", "day_id", "reasons"],
+                    "properties": {
+                        "category": {
+                            "type": "string",
+                            "description": "Workout plan category name. Must match one of the provided categories.",
+                        },
+                        "day_id": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Day number within the selected category.",
+                        },
+                        "reasons": {
+                            "type": "array",
+                            "minItems": 3,
+                            "maxItems": 6,
+                            "items": {"type": "string"},
+                            "description": "3-6 short bullet-style reasons for the recommendation.",
+                        },
+                    },
+                    "required": ["category", "day_id", "reasons"],
+                },
             },
         }
 
