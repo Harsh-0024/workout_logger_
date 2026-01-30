@@ -23,6 +23,7 @@ class GeminiService:
     )
     _model_cache: dict[str, str] = {}
     _key_cooldown_until: dict[str, float] = {}
+    _key_model_cooldown_until: dict[str, dict[str, float]] = {}
     _key_bad_models: dict[str, set[str]] = {}
     _available_models_cache: dict[str, dict] = {}
     _available_models_ttl_s: int = 600
@@ -68,6 +69,62 @@ class GeminiService:
         return resp.json() if resp.content else {}
 
     @staticmethod
+    def _recover_reco_from_partial_json_text(text: str, category_names: list[str] | None = None) -> dict | None:
+        if not isinstance(text, str) or not text:
+            return None
+        m_cat = re.search(r'"category"\s*:\s*"([^\"]*)', text)
+        m_day = re.search(r'"day_id"\s*:\s*(?:"(\d+)"|(\d+))', text)
+        if not m_cat or not m_day:
+            return None
+
+        category = (m_cat.group(1) or "").strip()
+        if category_names:
+            normalized = category.lower()
+            exact = None
+            for name in category_names:
+                if isinstance(name, str) and name.strip().lower() == normalized:
+                    exact = name
+                    break
+            if exact is not None:
+                category = exact
+            else:
+                best = None
+                for name in category_names:
+                    if not isinstance(name, str):
+                        continue
+                    n = name.strip().lower()
+                    if n and (n.startswith(normalized) or normalized.startswith(n)):
+                        best = name
+                        break
+                if best is not None:
+                    category = best
+
+        if not category:
+            return None
+        day_id_str = m_day.group(1) or m_day.group(2)
+        try:
+            day_id = int(day_id_str)
+        except Exception:
+            return None
+
+        reasons: list[str] = []
+        m_reasons = re.search(r'"reasons"\s*:\s*\[(.*)$', text, flags=re.DOTALL)
+        if m_reasons:
+            tail = m_reasons.group(1)
+            for m in re.finditer(r'"([^"\\]*(?:\\.[^"\\]*)*)"', tail):
+                r = m.group(1).strip()
+                if r:
+                    reasons.append(r)
+                if len(reasons) >= 6:
+                    break
+
+        if len(reasons) < 3:
+            while len(reasons) < 3:
+                reasons.append("Recommended based on your plan and recent workouts.")
+
+        return {"category": category, "day_id": day_id, "reasons": reasons}
+
+    @staticmethod
     def recommend_workout(
         *,
         categories: list[dict],
@@ -83,6 +140,8 @@ class GeminiService:
             keys_to_try.append({"id": None, "api_key": env_key, "source": "env"})
         if not keys_to_try:
             raise GeminiServiceError("GEMINI_API_KEY is not configured")
+
+        category_names = [c.get("name") for c in categories if isinstance(c, dict) and isinstance(c.get("name"), str)]
 
         payload = {
             "contents": [
@@ -198,10 +257,25 @@ class GeminiService:
                 if cached_model in models_to_try:
                     models_to_try.remove(cached_model)
                 models_to_try.insert(0, cached_model)
+
+            models_tried = 0
+            max_models_per_key = 4
             for model in models_to_try:
+                model_cd = None
+                try:
+                    model_cd = GeminiService._key_model_cooldown_until.get(cache_key, {}).get(model)
+                except Exception:
+                    model_cd = None
+                if model_cd and model_cd > time.time():
+                    continue
+
                 bad_models = GeminiService._key_bad_models.get(cache_key)
                 if bad_models and model in bad_models:
                     continue
+
+                models_tried += 1
+                if models_tried > max_models_per_key:
+                    break
                 try:
                     data = GeminiService._generate_content(api_key=api_key, model=model, payload=payload)
                     candidate0 = None
@@ -263,13 +337,54 @@ class GeminiService:
 
                     start = text.find('{')
                     end = text.rfind('}')
-                    if start == -1 or end == -1 or end <= start:
+                    if start == -1:
+                        finish_reason = None
+                        try:
+                            finish_reason = candidate0.get("finishReason") if candidate0 else None
+                        except Exception:
+                            finish_reason = None
+
+                        block_reason = None
+                        try:
+                            prompt_feedback = data.get("promptFeedback") if isinstance(data, dict) else None
+                            if isinstance(prompt_feedback, dict):
+                                block_reason = prompt_feedback.get("blockReason")
+                        except Exception:
+                            block_reason = None
+
                         excerpt = text.strip().replace("\n", " ")
                         if len(excerpt) > 240:
                             excerpt = excerpt[:240] + "…"
-                        raise GeminiServiceError(f"Gemini response was not valid JSON (excerpt={excerpt})")
+                        raise GeminiServiceError(
+                            f"Gemini response was not valid JSON (finish_reason={finish_reason}, block_reason={block_reason}, excerpt={excerpt})"
+                        )
 
-                    obj = json.loads(text[start : end + 1])
+                    if end == -1 or end <= start:
+                        recovered = GeminiService._recover_reco_from_partial_json_text(text, category_names=category_names)
+                        if recovered is None:
+                            finish_reason = None
+                            try:
+                                finish_reason = candidate0.get("finishReason") if candidate0 else None
+                            except Exception:
+                                finish_reason = None
+
+                            block_reason = None
+                            try:
+                                prompt_feedback = data.get("promptFeedback") if isinstance(data, dict) else None
+                                if isinstance(prompt_feedback, dict):
+                                    block_reason = prompt_feedback.get("blockReason")
+                            except Exception:
+                                block_reason = None
+
+                            excerpt = text.strip().replace("\n", " ")
+                            if len(excerpt) > 240:
+                                excerpt = excerpt[:240] + "…"
+                            raise GeminiServiceError(
+                                f"Gemini response was not valid JSON (finish_reason={finish_reason}, block_reason={block_reason}, excerpt={excerpt})"
+                            )
+                        obj = recovered
+                    else:
+                        obj = json.loads(text[start : end + 1])
                     if not isinstance(obj, dict):
                         raise GeminiServiceError("Gemini response JSON was not an object")
 
@@ -317,34 +432,39 @@ class GeminiService:
                             GeminiService._model_cache.pop(cache_key, None)
                         continue
                     # Auth or quota: try next key.
-                    if status in {401, 403, 429}:
-                        if status == 429:
+                    if status in {401, 403}:
+                        break
+
+                    if status == 429:
+                        retry_after_s = None
+                        try:
+                            retry_after_header = None
+                            if getattr(e, "response", None) is not None:
+                                retry_after_header = e.response.headers.get("retry-after")
+                            if retry_after_header:
+                                retry_after_s = float(retry_after_header)
+                        except Exception:
                             retry_after_s = None
+
+                        if retry_after_s is None:
                             try:
-                                retry_after_header = None
-                                if getattr(e, "response", None) is not None:
-                                    retry_after_header = e.response.headers.get("retry-after")
-                                if retry_after_header:
-                                    retry_after_s = float(retry_after_header)
+                                m = re.search(r"retry in\s+([0-9]+(?:\.[0-9]+)?)s", body, flags=re.IGNORECASE)
+                                if m:
+                                    retry_after_s = float(m.group(1))
                             except Exception:
                                 retry_after_s = None
 
-                            if retry_after_s is None:
-                                try:
-                                    m = re.search(r"retry in\s+([0-9]+(?:\.[0-9]+)?)s", body, flags=re.IGNORECASE)
-                                    if m:
-                                        retry_after_s = float(m.group(1))
-                                except Exception:
-                                    retry_after_s = None
+                        if body and "limit: 0" in body:
+                            GeminiService._key_bad_models.setdefault(cache_key, set()).add(model)
+                            continue
 
-                            # If quota is literally 0 for this model, don't try it again for this key.
-                            if body and "limit: 0" in body:
-                                GeminiService._key_bad_models.setdefault(cache_key, set()).add(model)
-
-                            if retry_after_s and retry_after_s > 0:
-                                # Cool down slightly longer than the suggested backoff.
+                        if retry_after_s and retry_after_s > 0:
+                            GeminiService._key_model_cooldown_until.setdefault(cache_key, {})[model] = (
+                                time.time() + float(retry_after_s) + 0.5
+                            )
+                            if body and "model:" not in body:
                                 GeminiService._key_cooldown_until[cache_key] = time.time() + float(retry_after_s) + 0.5
-                        break
+                        continue
                     raise GeminiServiceError(f"Gemini request failed: HTTP {status}")
                 except (requests.RequestException, GeminiServiceError, ValueError, json.JSONDecodeError) as e:
                     last_error = e
