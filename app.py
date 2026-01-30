@@ -1,4 +1,5 @@
 import os
+import hashlib
 import threading
 import time
 
@@ -18,12 +19,45 @@ app = create_app(init_db=False)
 
 @app.route('/health')
 def health_check():
+    git_env_keys = (
+        "RAILWAY_GIT_COMMIT_SHA",
+        "RAILWAY_GIT_COMMIT",
+        "GIT_COMMIT_SHA",
+        "GIT_COMMIT",
+        "COMMIT_SHA",
+        "SOURCE_VERSION",
+        "VERCEL_GIT_COMMIT_SHA",
+    )
+    git_sha = None
+    for k in git_env_keys:
+        v = os.environ.get(k)
+        if v:
+            git_sha = v
+            break
+
+    def _sha256_file(path: str) -> str | None:
+        try:
+            h = hashlib.sha256()
+            with open(path, "rb") as f:
+                for chunk in iter(lambda: f.read(8192), b""):
+                    h.update(chunk)
+            return h.hexdigest()
+        except Exception:
+            return None
+
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    app_py_hash = _sha256_file(os.path.join(base_dir, "app.py"))
+    gemini_py_hash = _sha256_file(os.path.join(base_dir, "services", "gemini.py"))
+
     return (
         jsonify(
             {
                 "status": "ok",
                 "db_ready": bool(app.config.get("DB_READY")),
                 "db_init_last_error": app.config.get("DB_INIT_LAST_ERROR"),
+                "git_sha": git_sha,
+                "app_py_sha256": app_py_hash,
+                "services_gemini_py_sha256": gemini_py_hash,
             }
         ),
         200,
