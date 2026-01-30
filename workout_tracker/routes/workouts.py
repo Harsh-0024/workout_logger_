@@ -3,7 +3,7 @@ import re
 import threading
 import time
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 from itsdangerous import URLSafeSerializer, BadSignature
 from sqlalchemy import desc, func
@@ -12,7 +12,7 @@ from list_of_exercise import get_workout_days, list_of_exercises
 from models import Session, User, WorkoutLog, UserApiKey
 from parsers.workout import workout_parser
 from services.logging import handle_workout_log
-from services.retrieve import get_effective_plan_text
+from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
 from utils.validators import sanitize_text_input, validate_username
@@ -33,6 +33,19 @@ def register_workout_routes(app):
 
     def _load_share_token(token):
         return serializer.loads(token)
+
+    def _make_shortcut_token(user_id: int):
+        payload = {
+            "user_id": user_id,
+            "scope": "shortcut_recommend",
+        }
+        return serializer.dumps(payload)
+
+    def _load_shortcut_token(token: str) -> dict:
+        payload = serializer.loads(token)
+        if not isinstance(payload, dict) or payload.get("scope") != "shortcut_recommend":
+            raise BadSignature("Invalid shortcut token")
+        return payload
 
     def _count_sets(sets_json=None, sets_display=None):
         if sets_json and isinstance(sets_json, dict):
@@ -82,6 +95,14 @@ def register_workout_routes(app):
         s = re.sub(r"\s+", " ", s)
         return s
 
+    def _norm_day_title_key(title: str) -> str:
+        s = str(title or "").strip().lower()
+        s = s.replace("•", " ")
+        s = re.sub(r"\bday\b", " ", s, flags=re.IGNORECASE)
+        s = re.sub(r"[^a-z0-9&]+", " ", s)
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
+
     def _contains_phrase(haystack: str, needle: str) -> bool:
         if not haystack or not needle:
             return False
@@ -92,7 +113,7 @@ def register_workout_routes(app):
             return False
 
     def _best_match_plan_day(*, title: str, exercise_list: list[str], plan_days: list[dict], day_lookup: dict):
-        title_key = _norm_title_key(title)
+        title_key = _norm_day_title_key(title)
         if title_key in day_lookup:
             return day_lookup[title_key], "title"
 
@@ -100,7 +121,7 @@ def register_workout_routes(app):
             day_name = day.get('name')
             if not isinstance(day_name, str) or not day_name.strip():
                 continue
-            day_key = _norm_title_key(day_name)
+            day_key = _norm_day_title_key(day_name)
             if title_key == day_key or (day_key and title_key.startswith(day_key + " ")) or _contains_phrase(title_key, day_key):
                 return day, "title"
 
@@ -346,17 +367,15 @@ def register_workout_routes(app):
     def workout_history():
         return redirect(url_for('user_dashboard', username=current_user.username))
 
-    @login_required
-    def recommend_workout_api():
-        user = current_user
-
+    def _recommend_workout_payload(user, *, use_cache: bool = True, cache_key_prefix: str = "u:"):
         now = time.time()
-        cache_key = f"u:{user.id}"
-        with _reco_cache_lock:
-            cached = _reco_cache.get(cache_key)
-            ttl = cached.get('ttl', 120) if cached else 120
-            if cached and now - cached.get('ts', 0) < ttl:
-                return jsonify(cached['payload'])
+        cache_key = f"{cache_key_prefix}{user.id}"
+        if use_cache:
+            with _reco_cache_lock:
+                cached = _reco_cache.get(cache_key)
+                ttl = cached.get('ttl', 120) if cached else 120
+                if cached and now - cached.get('ts', 0) < ttl:
+                    return cached['payload'], 200
 
         try:
             plan_text = get_effective_plan_text(Session, user)
@@ -386,9 +405,11 @@ def register_workout_routes(app):
                     }
                     plan_days.append(entry)
                     day_lookup[day_name.strip().lower()] = entry
+                    day_lookup[_norm_title_key(day_name)] = entry
+                    day_lookup[_norm_day_title_key(day_name)] = entry
 
             if not categories:
-                return jsonify({"ok": False, "error": "No workout plan found."}), 400
+                return {"ok": False, "error": "No workout plan found."}, 400
 
             recent = get_recent_workouts(user, limit=20)
 
@@ -406,7 +427,7 @@ def register_workout_routes(app):
             for w in recent:
                 dt = w.get('date')
                 title = w.get('title') or "Workout"
-                title_key = _norm_title_key(title)
+                title_key = _norm_day_title_key(title)
                 workout_ex = {_norm_ex_name(x) for x in (w.get('exercise_list') or []) if _norm_ex_name(x)}
 
                 day_matches = []
@@ -414,7 +435,7 @@ def register_workout_routes(app):
                     day_name = day.get('name')
                     if not isinstance(day_name, str) or not day_name.strip():
                         continue
-                    day_key = _norm_title_key(day_name)
+                    day_key = _norm_day_title_key(day_name)
                     if _contains_phrase(title_key, day_key):
                         day_matches.append({
                             'category': day.get('category'),
@@ -728,14 +749,62 @@ def register_workout_routes(app):
                 "source": source,
                 "warning": fallback_warning,
             }
-            with _reco_cache_lock:
-                ttl = 60 if source == "fallback" else 120
-                _reco_cache[cache_key] = {"ts": now, "payload": payload, "ttl": ttl}
+            if use_cache:
+                with _reco_cache_lock:
+                    ttl = 60 if source == "fallback" else 120
+                    _reco_cache[cache_key] = {"ts": now, "payload": payload, "ttl": ttl}
 
-            return jsonify(payload)
+            return payload, 200
         except Exception as e:
             logger.error(f"Workout recommendation failed: {e}", exc_info=True)
-            return jsonify({"ok": False, "error": "Unable to generate a recommendation right now."}), 500
+            return {"ok": False, "error": "Unable to generate a recommendation right now."}, 500
+
+    @login_required
+    def recommend_workout_api():
+        user = current_user
+        payload, status = _recommend_workout_payload(user, use_cache=True, cache_key_prefix="u:")
+        return jsonify(payload), status
+
+    def _format_reco_label(category: str, day_id: int) -> str:
+        cat = str(category or "").strip()
+        if not cat:
+            cat = "Workout"
+        try:
+            day = int(day_id)
+        except Exception:
+            day = 1
+        return f"{cat} • Day {day}"
+
+    @login_required
+    def shortcut_recommend_url():
+        token = _make_shortcut_token(current_user.id)
+        shortcut_url = url_for('shortcut_recommend', token=token, _external=True)
+        return jsonify({"ok": True, "url": shortcut_url})
+
+    def shortcut_recommend(token):
+        try:
+            payload = _load_shortcut_token(token)
+            user_id = payload.get("user_id")
+            if not user_id:
+                raise BadSignature("Missing user")
+            user = Session.query(User).get(user_id)
+            if not user:
+                raise BadSignature("Unknown user")
+        except BadSignature:
+            return Response("Invalid shortcut token.", status=401, mimetype="text/plain")
+        except Exception as e:
+            logger.error(f"Shortcut token error: {e}", exc_info=True)
+            return Response("Invalid shortcut token.", status=401, mimetype="text/plain")
+
+        reco_payload, status = _recommend_workout_payload(user, use_cache=False, cache_key_prefix="shortcut:")
+        if status != 200 or not reco_payload.get("ok"):
+            msg = reco_payload.get("error") if isinstance(reco_payload, dict) else "Unable to generate a recommendation right now."
+            return Response(str(msg), status=status, mimetype="text/plain")
+
+        category = reco_payload.get("category")
+        day_id = reco_payload.get("day_id")
+        output, _, _ = generate_retrieve_output(Session, user, category, day_id)
+        return Response(str(output), mimetype="text/plain")
 
     def shared_workout(token):
         try:
@@ -978,6 +1047,8 @@ def register_workout_routes(app):
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
     app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])
     app.add_url_rule('/share/<token>', endpoint='shared_workout', view_func=shared_workout, methods=['GET'])
+    app.add_url_rule('/shortcut/recommend', endpoint='shortcut_recommend_url', view_func=shortcut_recommend_url, methods=['GET'])
+    app.add_url_rule('/shortcut/recommend/<token>', endpoint='shortcut_recommend', view_func=shortcut_recommend, methods=['GET'])
     app.add_url_rule(
         '/<username>',
         endpoint='user_dashboard',

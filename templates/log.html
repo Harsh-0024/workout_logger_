@@ -145,6 +145,31 @@
                 .filter(Boolean);
         };
 
+        const extractDeclaredSets = (line) => {
+            const trimmed = (line || '').trim();
+            if (!trimmed) return null;
+            const m = trimmed.match(/(?:\s*[-–—:]\s*)?(\d+)\s*sets?\s*$/i);
+            if (!m) return null;
+            const n = Number(m[1]);
+            if (!Number.isFinite(n) || n <= 0) return null;
+            return Math.floor(n);
+        };
+
+        const extractBracketSets = (line) => {
+            const trimmed = (line || '').trim();
+            if (!trimmed || !trimmed.includes('[') || !trimmed.includes(']')) return null;
+            const start = trimmed.indexOf('[');
+            const end = trimmed.indexOf(']', start + 1);
+            if (start === -1 || end === -1 || end <= start + 1) return null;
+            const inside = trimmed.slice(start + 1, end).trim();
+            if (!inside) return null;
+            const first = inside.split(',', 1)[0].trim();
+            if (!/^\d+$/.test(first)) return null;
+            const n = Number(first);
+            if (!Number.isFinite(n) || n <= 0) return null;
+            return Math.floor(n);
+        };
+
         const countSetsFromDataPart = (dataPart) => {
             const normalized = (dataPart || '').replace(/×/g, 'x');
             const xMatches = normalized.match(/(?:bw(?:\/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)?\s*x\s*\d+/gi);
@@ -182,6 +207,8 @@
                     i += 1;
                     continue;
                 }
+
+                const declaredSets = extractDeclaredSets(line) ?? extractBracketSets(line);
 
                 let dataPart = '';
                 let consumed = 1;
@@ -225,7 +252,11 @@
 
                 if (dataPart) {
                     exerciseCount += 1;
-                    repCount += countSetsFromDataPart(dataPart);
+                    const inferredSets = countSetsFromDataPart(dataPart);
+                    const targetSets = declaredSets !== null
+                        ? Math.max(declaredSets, inferredSets || 0)
+                        : (inferredSets > 3 ? inferredSets : 3);
+                    repCount += targetSets;
                 }
 
                 i += consumed;
