@@ -387,7 +387,7 @@ def register_workout_routes(app):
             api_keys = (
                 Session.query(UserApiKey)
                 .filter_by(user_id=user.id, is_active=True)
-                .order_by(UserApiKey.created_at.asc())
+                .order_by(UserApiKey.created_at.desc())
                 .all()
             )
             api_key_payloads = [

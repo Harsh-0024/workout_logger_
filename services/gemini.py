@@ -18,8 +18,6 @@ class GeminiService:
         "gemini-2.5-flash",
         "gemini-1.5-flash-latest",
         "gemini-1.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-lite",
     )
     _model_cache: dict[str, str] = {}
     _key_cooldown_until: dict[str, float] = {}
@@ -141,6 +139,9 @@ class GeminiService:
         if not keys_to_try:
             raise GeminiServiceError("GEMINI_API_KEY is not configured")
 
+        max_keys_to_try = 2
+        keys_to_try = keys_to_try[:max_keys_to_try]
+
         category_names = [c.get("name") for c in categories if isinstance(c, dict) and isinstance(c.get("name"), str)]
 
         payload = {
@@ -171,7 +172,7 @@ class GeminiService:
             ],
             "generationConfig": {
                 "temperature": 0.2,
-                "maxOutputTokens": 512,
+                "maxOutputTokens": 1024,
                 "responseMimeType": "application/json",
                 "responseJsonSchema": {
                     "type": "object",
@@ -237,8 +238,7 @@ class GeminiService:
                     GeminiService._available_models_cache[cache_key] = {"ts": now_models_ts, "models": available}
                 if available:
                     preferred = [m for m in GeminiService.DEFAULT_MODEL_CANDIDATES if m in available]
-                    remaining = [m for m in available if m not in preferred]
-                    models_to_try = preferred + remaining
+                    models_to_try = preferred
                 else:
                     logger.warning("Gemini listModels returned no available models", extra={"key": key_label})
             except requests.RequestException as e:
@@ -259,7 +259,7 @@ class GeminiService:
                 models_to_try.insert(0, cached_model)
 
             models_tried = 0
-            max_models_per_key = 4
+            max_models_per_key = 2
             for model in models_to_try:
                 model_cd = None
                 try:
