@@ -5,7 +5,7 @@
         <div class="card text-center">
             <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap step-badges">
                 <a href="{{ url_for('retrieve_categories') }}" class="badge step-badge step-badge-link"><span class="step-number">1.</span> Category</a>
-                <a href="{{ url_for('retrieve_days', category=category_name | url_encode) }}" class="badge step-badge step-badge-link"><span class="step-number">2.</span> Days</a>
+                <a href="{{ url_for('retrieve_days', category=category_name) }}" class="badge step-badge step-badge-link"><span class="step-number">2.</span> Days</a>
                 <span class="badge bg-primary step-badge"><span class="step-number">3.</span> Result</span>
             </div>
             <div class="mb-3 mb-md-5">
@@ -15,11 +15,11 @@
             <h2 class="mb-2 mb-md-3 fw-bold tracking-wide" style="font-size: clamp(1.5rem, 5vw, 2rem);">Plan Ready</h2>
             <p class="text-muted mb-3 mb-md-4" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Your workout plan is prepared</p>
             
-            <div class="d-flex justify-content-center flex-wrap gap-2 mb-3 mb-md-5">
-                <div class="badge bg-dark d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
+            <div class="result-stats mb-3 mb-md-5">
+                <div class="badge bg-dark d-inline-flex align-items-center result-stat" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
                     <i class="bi bi-activity me-2 text-gold"></i>{{ exercise_count or 0 }} Exercises
                 </div>
-                <div class="badge bg-dark d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
+                <div class="badge bg-dark d-inline-flex align-items-center result-stat" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
                     <i class="bi bi-stack me-2 text-gold"></i>{{ set_count or 0 }} Sets
                 </div>
             </div>
@@ -105,6 +105,25 @@
         opacity: 0.9;
     }
 
+    .step-badge.step-badge-link {
+        background: transparent !important;
+        border: 1px solid var(--border-subtle) !important;
+    }
+
+    .result-stats {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+        max-width: 520px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .result-stat {
+        width: 100%;
+        justify-content: center;
+    }
+
     .step-badge-link {
         text-decoration: none;
         color: inherit;
@@ -114,7 +133,6 @@
     .step-badge-link:hover {
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-        color: inherit;
     }
 
     @media (max-width: 576px) {

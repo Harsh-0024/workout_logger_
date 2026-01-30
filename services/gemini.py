@@ -126,21 +126,25 @@ class GeminiService:
                 or f"suffix_{api_key[-6:]}"
             )
 
-            models_to_try: list[str] = list(GeminiService.DEFAULT_MODEL_CANDIDATES)
+            models_to_try: list[str] = []
             try:
                 available = GeminiService._list_models(api_key)
-                if not available:
+                if available:
+                    preferred = [m for m in GeminiService.DEFAULT_MODEL_CANDIDATES if m in available]
+                    remaining = [m for m in available if m not in preferred]
+                    models_to_try = preferred + remaining
+                else:
                     logger.warning("Gemini listModels returned no available models", extra={"key": key_label})
-                for model in available:
-                    if model not in models_to_try:
-                        models_to_try.append(model)
             except requests.RequestException as e:
                 last_error = e
                 logger.warning(
                     "Gemini listModels failed",
                     extra={"error": type(e).__name__, "key": key_label},
                 )
+                models_to_try = list(GeminiService.DEFAULT_MODEL_CANDIDATES)
 
+            if not models_to_try:
+                models_to_try = list(GeminiService.DEFAULT_MODEL_CANDIDATES)
             # Try preferred models first, then any available models for the key.
             cached_model = GeminiService._model_cache.get(cache_key)
             if cached_model:

@@ -145,15 +145,10 @@
                 .filter(Boolean);
         };
 
-        const expandSetCount = (count) => {
-            if (count === 1 || count === 2) return 3;
-            return count;
-        };
-
         const countSetsFromDataPart = (dataPart) => {
             const normalized = (dataPart || '').replace(/×/g, 'x');
             const xMatches = normalized.match(/(?:bw(?:\/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)?\s*x\s*\d+/gi);
-            if (xMatches && xMatches.length) return expandSetCount(xMatches.length);
+            if (xMatches && xMatches.length) return xMatches.length;
 
             if (normalized.includes(',')) {
                 const parts = normalized.split(',');
@@ -161,11 +156,11 @@
                 const repsTokens = tokenizeSegment(parts.slice(1).join(' '));
                 const repsNumbers = repsTokens.map((val) => Number(val)).filter((val) => !Number.isNaN(val));
                 const count = Math.max(weightsTokens.length, repsNumbers.length);
-                return count > 0 ? expandSetCount(count) : 0;
+                return count;
             }
 
             const tokens = tokenizeSegment(normalized).filter((t) => t.toLowerCase() !== 'x');
-            return expandSetCount(tokens.length);
+            return tokens.length;
         };
 
         const updateCount = () => {

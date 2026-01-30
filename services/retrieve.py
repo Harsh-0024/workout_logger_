@@ -70,7 +70,7 @@ def get_effective_rep_ranges_text(db_session, user) -> str:
 
 
 def generate_retrieve_output(db_session, user, category, day_id):
-    key = f"{category} {day_id}"
+    day_key = f"{category} {day_id}"
     plan_text = get_effective_plan_text(db_session, user)
     if not plan_text:
         return "Plan not found.", 0, 0
@@ -79,26 +79,45 @@ def generate_retrieve_output(db_session, user, category, day_id):
 
     rep_text = get_effective_rep_ranges_text(db_session, user)
     custom_ranges = {}
+    custom_sets = {}
     if rep_text:
         for line in rep_text.split('\n'):
             if ':' in line:
                 k, v = line.split(':', 1)
-                custom_ranges[k.strip().lower()] = v.strip()
+                exercise_key = k.strip().lower()
+                value = v.strip()
+                m = re.match(r'^(\d+)\s*,\s*(.+)$', value)
+                if m:
+                    try:
+                        custom_sets[exercise_key] = int(m.group(1))
+                    except Exception:
+                        custom_sets[exercise_key] = None
+                    custom_ranges[exercise_key] = m.group(2).strip()
+                else:
+                    custom_ranges[exercise_key] = value
 
     ist_offset = timedelta(hours=5, minutes=30)
     today_str = (datetime.utcnow() + ist_offset).strftime("%d/%m")
-    output_lines = [f"{today_str} {key}", ""]
+    output_lines = [f"{today_str} {day_key}", ""]
 
     try:
-        exercises = all_plans["workout"][category][key]
+        exercises = all_plans["workout"][category][day_key]
         exercise_count = len(exercises)
         set_count = 0
         
         for ex in exercises:
-            rng = custom_ranges.get(ex.lower(), "")
-            fmt_rng = f" - [{rng}]" if rng else ""
+            ex_key = ex.lower()
+            rng = custom_ranges.get(ex_key, "")
+            declared_sets = custom_sets.get(ex_key)
+            fmt_rng = ""
+            if rng and declared_sets:
+                fmt_rng = f" - [{declared_sets}, {rng}]"
+            elif rng:
+                fmt_rng = f" - [{rng}]"
 
-            sets_line = _build_best_sets_line_from_logs(db_session, user, ex)
+            target_sets = int(declared_sets) if isinstance(declared_sets, int) and declared_sets > 0 else 3
+
+            sets_line = _build_best_sets_line_from_logs(db_session, user, ex, target_sets=target_sets)
 
             if ex in BW_EXERCISES:
                 if not sets_line:
@@ -109,7 +128,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
 
             # Count sets from sets_line
             if sets_line:
-                set_count += _count_sets_from_line(sets_line)
+                set_count += _count_sets_from_line(sets_line, target_sets=target_sets)
 
             output_lines.append(f"{ex}{fmt_rng}")
             if sets_line:
@@ -118,7 +137,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
 
         return "\n".join(output_lines).rstrip(), exercise_count, set_count
     except KeyError:
-        return f"Day '{key}' not found in plan.", 0, 0
+        return f"Day '{day_key}' not found in plan.", 0, 0
 
 
 def _exercise_candidates(exercise_name: str):
@@ -141,16 +160,13 @@ def _exercise_candidates(exercise_name: str):
 def _compress_shorthand_values(values):
     if not values:
         return []
-    if len(values) != 3:
+    if len(values) == 1:
         return list(values)
-    a, b, c = values[0], values[1], values[2]
-    if a == b == c:
-        return [a]
-    if a == b and b != c:
-        return [a, b, c]
-    if b == c and a != b:
-        return [a, b]
-    return [a, b, c]
+    if all(v == values[0] for v in values):
+        return [values[0]]
+    if all(v == values[1] for v in values[1:]) and values[0] != values[1]:
+        return [values[0], values[1]]
+    return list(values)
 
 
 def _format_weight_token(exercise: str, weight, bodyweight):
@@ -177,7 +193,7 @@ def _format_weight_token(exercise: str, weight, bodyweight):
     return token
 
 
-def _build_best_sets_line_from_logs(db_session, user, exercise: str) -> str:
+def _build_best_sets_line_from_logs(db_session, user, exercise: str, target_sets: int = 3) -> str:
     candidates = _exercise_candidates(exercise)
     if not candidates:
         return ""
@@ -210,7 +226,7 @@ def _build_best_sets_line_from_logs(db_session, user, exercise: str) -> str:
         except Exception:
             continue
 
-        weights, reps = align_sets(weights, reps)
+        weights, reps = align_sets(weights, reps, target_sets=target_sets)
 
         peak = None
         for w, r in zip(weights, reps):
@@ -244,7 +260,7 @@ def _build_best_sets_line_from_logs(db_session, user, exercise: str) -> str:
     except Exception:
         return ""
 
-    weights, reps = align_sets(weights, reps)
+    weights, reps = align_sets(weights, reps, target_sets=target_sets)
 
     scored = []
     for w, r in zip(weights, reps):
@@ -259,12 +275,13 @@ def _build_best_sets_line_from_logs(db_session, user, exercise: str) -> str:
         return ""
 
     scored.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
-    top3 = scored[:3]
-    weights_top = [t[1] for t in top3]
-    reps_top = [t[2] for t in top3]
-    weights_top, reps_top = align_sets(weights_top, reps_top)
-    weights_top = weights_top[:3]
-    reps_top = reps_top[:3]
+    top = scored[: max(3, int(target_sets) if target_sets else 3)]
+    weights_top = [t[1] for t in top]
+    reps_top = [t[2] for t in top]
+    weights_top, reps_top = align_sets(weights_top, reps_top, target_sets=target_sets)
+    if target_sets:
+        weights_top = weights_top[: int(target_sets)]
+        reps_top = reps_top[: int(target_sets)]
 
     weight_tokens = [_format_weight_token(exercise, w, getattr(user, "bodyweight", None)) for w in weights_top]
     rep_tokens = [str(int(r)) for r in reps_top]
@@ -331,17 +348,21 @@ def _normalize_bw(value: str) -> str:
     return value
 
 
-def _expand_shorthand_tokens(tokens):
+def _expand_shorthand_tokens(tokens, target_sets: int = 3):
     if not tokens:
         return []
+    if target_sets <= 0:
+        return list(tokens)
     if len(tokens) == 1:
-        return [tokens[0], tokens[0], tokens[0]]
-    if len(tokens) == 2:
-        return [tokens[0], tokens[1], tokens[1]]
-    return tokens
+        return [tokens[0]] * target_sets
+    if len(tokens) == 2 and len(tokens) < target_sets:
+        return [tokens[0]] + [tokens[1]] * (target_sets - 1)
+    if len(tokens) < target_sets:
+        return list(tokens) + [tokens[-1]] * (target_sets - len(tokens))
+    return list(tokens)
 
 
-def _normalize_sets_line(sets_line: str, default_weight: str = "1") -> str:
+def _normalize_sets_line(sets_line: str, default_weight: str = "1", target_sets: int = 3) -> str:
     if not sets_line:
         return ""
 
@@ -372,8 +393,8 @@ def _normalize_sets_line(sets_line: str, default_weight: str = "1") -> str:
     elif not reps:
         reps = ["1"] * len(weights)
 
-    weights = _expand_shorthand_tokens(weights)
-    reps = _expand_shorthand_tokens(reps)
+    weights = _expand_shorthand_tokens(weights, target_sets=target_sets)
+    reps = _expand_shorthand_tokens(reps, target_sets=target_sets)
 
     if len(weights) == 1 and len(reps) > 1:
         weights = weights * len(reps)
@@ -390,28 +411,20 @@ def _normalize_sets_line(sets_line: str, default_weight: str = "1") -> str:
     return f"{' '.join(weights)}, {' '.join(reps)}"
 
 
-def _count_sets_from_line(sets_line: str) -> int:
-    """Count number of sets from a sets line applying shorthand expansion.
-    
-    Shorthand rules:
-    - 1 entry → 3 identical sets
-    - 2 entries → first + second * 2
-    - 3+ entries → as is
+def _count_sets_from_line(sets_line: str, target_sets: int = 3) -> int:
+    """Count sets for the display line.
+
+    If the line contains fewer tokens than target_sets, we assume trailing-repeat
+    expansion up to target_sets.
     """
     if not sets_line:
         return 0
-    
-    def apply_shorthand_expansion(count):
-        if count == 1:
-            return 3
-        elif count == 2:
-            return 3
-        return count
-    
+
     # Check for 'x' notation (e.g., 'bw x5 x5 x5' or '100kg x5 x5')
     x_matches = re.findall(r'(bw(?:/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+', sets_line, flags=re.IGNORECASE)
     if x_matches:
-        return apply_shorthand_expansion(len(x_matches))
+        raw = len(x_matches)
+        return int(target_sets) if target_sets and raw < int(target_sets) else raw
     
     # Check for comma-separated format (weights, reps)
     if ',' in sets_line:
@@ -429,9 +442,9 @@ def _count_sets_from_line(sets_line: str) -> int:
         
         # Use maximum and apply shorthand
         raw_count = max(weight_count, rep_count)
-        return apply_shorthand_expansion(raw_count)
+        return int(target_sets) if target_sets and raw_count < int(target_sets) else raw_count
     
     # Single line of weights or values
     tokens = sets_line.replace('kg', '').replace('lbs', '').replace('lb', '').strip().split()
     raw_count = len([t for t in tokens if t])
-    return apply_shorthand_expansion(raw_count)
+    return int(target_sets) if target_sets and raw_count < int(target_sets) else raw_count

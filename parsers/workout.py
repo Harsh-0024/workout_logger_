@@ -12,17 +12,21 @@ def normalize(values):
     return list(values)
 
 
-def align_sets(weights, reps):
+def align_sets(weights, reps, target_sets: Optional[int] = None):
     if not weights and not reps:
         return [], []
 
-    def expand_shorthand(values):
+    def expand_shorthand(values, desired: int):
         if not values:
             return []
+        if desired <= 0:
+            return list(values)
         if len(values) == 1:
-            return values * 3
-        if len(values) == 2:
-            return [values[0], values[1], values[1]]
+            return values * desired
+        if len(values) == 2 and len(values) < desired:
+            return [values[0]] + [values[1]] * (desired - 1)
+        if len(values) < desired:
+            return values + [values[-1]] * (desired - len(values))
         return values
 
     if not reps and weights:
@@ -30,8 +34,11 @@ def align_sets(weights, reps):
     if not weights and reps:
         weights = [1.0] * len(reps)
 
-    weights = expand_shorthand(weights)
-    reps = expand_shorthand(reps)
+    desired = target_sets if isinstance(target_sets, int) and target_sets > 0 else 3
+    desired = max(desired, len(weights), len(reps))
+
+    weights = expand_shorthand(weights, desired)
+    reps = expand_shorthand(reps, desired)
 
     if len(weights) == 1 and len(reps) > 1:
         weights = weights * len(reps)
@@ -44,6 +51,44 @@ def align_sets(weights, reps):
 
     reps = [int(r) for r in reps]
     return weights, reps
+
+
+def _extract_declared_sets(line: str) -> tuple[Optional[int], str]:
+    if not line:
+        return None, line
+
+    m = re.search(r'(?:\s*[-–—:]\s*)?(\d+)\s*sets?\s*$', line, flags=re.IGNORECASE)
+    if not m:
+        return None, line
+    try:
+        count = int(m.group(1))
+    except Exception:
+        return None, line
+    if count <= 0:
+        return None, line
+
+    cleaned = line[: m.start()].rstrip()
+    cleaned = re.sub(r'[-–—:]\s*$', '', cleaned).rstrip()
+    return count, cleaned
+
+
+def _extract_sets_from_bracket(line: str) -> Optional[int]:
+    if not line or '[' not in line or ']' not in line:
+        return None
+    try:
+        inside = line.split('[', 1)[1].split(']', 1)[0].strip()
+    except Exception:
+        return None
+    if not inside:
+        return None
+    first = inside.split(',', 1)[0].strip()
+    if not re.match(r'^\d+$', first):
+        return None
+    try:
+        count = int(first)
+    except Exception:
+        return None
+    return count if count > 0 else None
 
 
 def parse_weight_x_reps(segment, base_weight=None):
@@ -330,13 +375,18 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
         clean_line = list_of_lines[i]
         name, weights, reps = "", [], []
         data_part = ""
-        exercise_lines = [clean_line]
+        declared_sets, cleaned_line = _extract_declared_sets(clean_line)
+        bracket_sets = _extract_sets_from_bracket(cleaned_line)
+        if bracket_sets is not None:
+            declared_sets = bracket_sets
+
+        exercise_lines = [cleaned_line]
         consumed = 1
 
-        if " - [" in clean_line:
-            name = clean_line.split(" - [", 1)[0].strip()
-            if "]" in clean_line:
-                tail = clean_line.split("]", 1)[1].strip()
+        if " - [" in cleaned_line:
+            name = cleaned_line.split(" - [", 1)[0].strip()
+            if "]" in cleaned_line:
+                tail = cleaned_line.split("]", 1)[1].strip()
                 tail = tail.lstrip("-:").strip()
                 data_part = tail
 
@@ -399,7 +449,13 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
         if not name:
             name = "Unknown Exercise"
 
-        weights, reps = align_sets(weights, reps)
+        inferred_sets = max(len(weights), len(reps)) if (weights or reps) else 0
+        if declared_sets is not None:
+            target_sets = max(int(declared_sets), inferred_sets) if inferred_sets else int(declared_sets)
+        else:
+            target_sets = inferred_sets if inferred_sets > 3 else 3
+
+        weights, reps = align_sets(weights, reps, target_sets=target_sets)
         is_valid = bool(reps) or any(w != 0 for w in weights)
 
         workout_day["exercises"].append({

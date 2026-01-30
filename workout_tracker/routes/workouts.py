@@ -34,23 +34,18 @@ def register_workout_routes(app):
     def _load_share_token(token):
         return serializer.loads(token)
 
-    def _expand_set_count(count):
-        if count in (1, 2):
-            return 3
-        return count
-
     def _count_sets(sets_json=None, sets_display=None):
         if sets_json and isinstance(sets_json, dict):
             weights = sets_json.get('weights') or []
             reps = sets_json.get('reps') or []
-            count = _expand_set_count(max(len(weights), len(reps)))
+            count = max(len(weights), len(reps))
         elif sets_display:
             matches = re.findall(
                 r'(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*[x×]\s*\d+',
                 sets_display,
                 flags=re.IGNORECASE,
             )
-            count = _expand_set_count(len(matches) if matches else 0)
+            count = (len(matches) if matches else 0)
         else:
             count = 0
         return count
