@@ -172,34 +172,44 @@ class GeminiService:
 
         reasons: list[str] = []
 
-        num_days = None
+        cat_meta = None
         for c in categories or []:
             if not isinstance(c, dict):
                 continue
             if str(c.get('name') or '').strip().lower() != cat_key:
                 continue
-            try:
-                num_days = int(c.get('num_days') or 0)
-            except Exception:
-                num_days = None
+            cat_meta = c
             break
-        if not num_days:
-            try:
-                num_days = max(
-                    int(d.get('day_id') or 0)
-                    for d in (plan_days or [])
-                    if isinstance(d, dict) and str(d.get('category') or '').strip().lower() == cat_key
-                )
-            except Exception:
-                num_days = None
 
-        if last_done_day_id and num_days and num_days > 0:
-            next_day = int(last_done_day_id) + 1
-            if next_day > int(num_days):
-                next_day = 1
-            reasons.append(f"Continuing your {category} order: last completed day {int(last_done_day_id)}, next is day {int(next_day)}.")
-        elif num_days and num_days > 0:
-            reasons.append(f"Starting {category} from day 1 to keep your plan in order.")
+        next_day_id = None
+        done_ids: list[int] = []
+        missing_ids: list[int] = []
+        try:
+            if cat_meta and isinstance(cat_meta.get('next_day_id'), int):
+                next_day_id = int(cat_meta.get('next_day_id'))
+        except Exception:
+            next_day_id = None
+        try:
+            raw_done = cat_meta.get('cycle_done_day_ids') if cat_meta else None
+            if isinstance(raw_done, list):
+                done_ids = [int(x) for x in raw_done if isinstance(x, int)]
+        except Exception:
+            done_ids = []
+        try:
+            raw_missing = cat_meta.get('cycle_missing_day_ids') if cat_meta else None
+            if isinstance(raw_missing, list):
+                missing_ids = [int(x) for x in raw_missing if isinstance(x, int)]
+        except Exception:
+            missing_ids = []
+
+        if isinstance(next_day_id, int) and next_day_id > 0:
+            if done_ids:
+                done_str = ", ".join(str(x) for x in done_ids)
+                reasons.append(
+                    f"Plan order: completed {category} day(s) {done_str} in the current cycle; next uncompleted is day {int(next_day_id)}."
+                )
+            else:
+                reasons.append(f"Plan order: start {category} at day {int(next_day_id)} to keep your cycle consistent.")
         if last_cat_date:
             days_since = max((today - last_cat_date).days, 0)
             suffix = f" ({days_since} day(s) ago)" if days_since != 0 else " (today)"

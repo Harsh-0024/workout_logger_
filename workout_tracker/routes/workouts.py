@@ -405,7 +405,8 @@ def register_workout_routes(app):
                     }
                 )
 
-            category_progress = {}
+            today = datetime.utcnow().date()
+            matched_items = []
             for item in recent_context:
                 cat = item.get('category')
                 day_id = item.get('day_id')
@@ -421,11 +422,12 @@ def register_workout_routes(app):
                     d = datetime.strptime(str(date_str)[:10], '%Y-%m-%d').date()
                 except Exception:
                     continue
-                key = cat.strip().lower()
-                prev = category_progress.get(key)
-                if not prev or d > prev.get('date'):
-                    category_progress[key] = {'date': d, 'day_id': int(day_id)}
+                matched_items.append((d, cat.strip().lower(), int(day_id)))
+            matched_items.sort(key=lambda x: x[0])
 
+            cycle_done: dict[str, set[int]] = {}
+            cycle_last_date: dict[str, datetime.date] = {}
+            num_days_by_cat: dict[str, int] = {}
             for c in categories:
                 if not isinstance(c, dict):
                     continue
@@ -433,20 +435,71 @@ def register_workout_routes(app):
                 if not isinstance(name, str) or not name.strip():
                     continue
                 key = name.strip().lower()
-                num_days = int(c.get('num_days') or 0)
-                prev = category_progress.get(key)
-                if prev and num_days > 0:
-                    last_day_id = int(prev.get('day_id') or 0)
-                    next_day = last_day_id + 1
-                    if next_day > num_days:
-                        next_day = 1
-                    c['last_done_day_id'] = last_day_id
-                    c['last_done_date'] = prev.get('date').isoformat() if prev.get('date') else None
-                    c['next_day_id'] = int(next_day)
-                else:
-                    c['last_done_day_id'] = None
-                    c['last_done_date'] = None
-                    c['next_day_id'] = 1
+                nd = int(c.get('num_days') or 0)
+                if nd > 0:
+                    num_days_by_cat[key] = nd
+                    cycle_done.setdefault(key, set())
+
+            for d, cat_key, day_id in matched_items:
+                nd = num_days_by_cat.get(cat_key)
+                if not nd or day_id < 1 or day_id > int(nd):
+                    continue
+                s = cycle_done.setdefault(cat_key, set())
+                s.add(int(day_id))
+                cycle_last_date[cat_key] = d
+                if len(s) >= int(nd):
+                    s.clear()
+
+            for c in categories:
+                if not isinstance(c, dict):
+                    continue
+                name = c.get('name')
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                cat_key = name.strip().lower()
+                nd = int(c.get('num_days') or 0)
+                done_set = cycle_done.get(cat_key) or set()
+                missing = [i for i in range(1, nd + 1) if i not in done_set] if nd > 0 else [1]
+                next_day = int(min(missing)) if missing else 1
+                last_date = cycle_last_date.get(cat_key)
+                c['cycle_done_day_ids'] = sorted(done_set)
+                c['cycle_missing_day_ids'] = missing
+                c['last_done_date'] = last_date.isoformat() if last_date else None
+                c['next_day_id'] = next_day
+
+            chosen_category = None
+            chosen_next_day = 1
+            best_score = None
+            for c in categories:
+                if not isinstance(c, dict):
+                    continue
+                name = c.get('name')
+                if not isinstance(name, str) or not name.strip():
+                    continue
+                nd = int(c.get('num_days') or 0)
+                next_day = int(c.get('next_day_id') or 1)
+                last_done_date = c.get('last_done_date')
+                last_d = None
+                if isinstance(last_done_date, str) and last_done_date:
+                    try:
+                        last_d = datetime.strptime(last_done_date[:10], '%Y-%m-%d').date()
+                    except Exception:
+                        last_d = None
+                days_since = 999 if not last_d else max((today - last_d).days, 0)
+                missing_count = 0
+                try:
+                    missing_count = len(c.get('cycle_missing_day_ids') or [])
+                except Exception:
+                    missing_count = 0
+                score = (days_since, missing_count, -nd)
+                if best_score is None or score > best_score:
+                    best_score = score
+                    chosen_category = name.strip()
+                    chosen_next_day = next_day
+
+            if not chosen_category:
+                chosen_category = categories[0]['name']
+                chosen_next_day = int(categories[0].get('next_day_id') or 1)
 
             from services.gemini import GeminiService, GeminiServiceError
 
@@ -463,16 +516,27 @@ def register_workout_routes(app):
             ]
 
             fallback_warning = None
-            source = "gemini"
-            reco = None
+            source = "fallback"
+            reco = {
+                "category": chosen_category,
+                "day_id": int(chosen_next_day),
+                "reasons": [],
+                "model": "heuristic",
+            }
+
+            categories_one = [c for c in categories if isinstance(c, dict) and str(c.get('name') or '').strip().lower() == str(chosen_category).strip().lower()]
+            plan_days_one = [d for d in plan_days if isinstance(d, dict) and str(d.get('category') or '').strip().lower() == str(chosen_category).strip().lower()]
             try:
-                reco = GeminiService.recommend_workout(
-                    categories=categories,
+                reco_ai = GeminiService.recommend_workout(
+                    categories=categories_one or categories,
                     recent_workouts=recent_context,
-                    plan_days=plan_days,
+                    plan_days=plan_days_one or plan_days,
                     api_keys=api_key_payloads,
                 )
-                key_id = reco.get("key_id")
+                if isinstance(reco_ai, dict) and isinstance(reco_ai.get('reasons'), list):
+                    reco['reasons'] = reco_ai.get('reasons') or []
+                reco['model'] = reco_ai.get('model') if isinstance(reco_ai, dict) else reco.get('model')
+                key_id = reco_ai.get("key_id") if isinstance(reco_ai, dict) else None
                 if key_id:
                     key_row = (
                         Session.query(UserApiKey)
@@ -482,77 +546,26 @@ def register_workout_routes(app):
                     if key_row:
                         key_row.last_used_at = datetime.utcnow()
                         Session.commit()
+                source = "gemini"
             except GeminiServiceError as e:
                 logger.warning(f"Gemini unavailable, using fallback: {e}")
-                source = "fallback"
                 fallback_warning = "Gemini is busy right now. Showing a smart fallback suggestion."
 
-                today = datetime.utcnow().date()
-                last_category_dates = {}
-                last_day_dates = {}
-                for item in recent_context:
-                    cat = item.get('category')
-                    day_id = item.get('day_id')
-                    date_str = item.get('date') or ''
-                    if not cat or not day_id:
-                        continue
-                    try:
-                        parsed_date = datetime.strptime(date_str, '%Y-%m-%d').date()
-                    except Exception:
-                        continue
-                    cat_key = str(cat).lower()
-                    if cat_key not in last_category_dates or parsed_date > last_category_dates[cat_key]:
-                        last_category_dates[cat_key] = parsed_date
-
-                    day_key = (cat_key, int(day_id))
-                    if day_key not in last_day_dates or parsed_date > last_day_dates[day_key]:
-                        last_day_dates[day_key] = parsed_date
-
-                # 1) Choose the least-recently-trained CATEGORY (prevents "unlogged day" in a recently-trained category).
-                best_cat = None
-                best_cat_days_since = -1
-                for cat in categories:
-                    cat_name = str(cat.get('name') or '')
-                    cat_key = cat_name.lower()
-                    last_date = last_category_dates.get(cat_key)
-                    days_since = 999
-                    if last_date:
-                        days_since = max((today - last_date).days, 0)
-                    if days_since > best_cat_days_since:
-                        best_cat_days_since = days_since
-                        best_cat = cat_name
-
-                chosen_category = best_cat or categories[0]['name']
-
-                # 2) Within that category, choose the least-recently-done DAY.
-                best_day = None
-                best_day_days_since = -1
-                for day in plan_days:
-                    if str(day.get('category') or '').lower() != str(chosen_category).lower():
-                        continue
-                    day_key = (str(chosen_category).lower(), int(day['day_id']))
-                    last_date = last_day_dates.get(day_key)
-                    days_since = 999
-                    if last_date:
-                        days_since = max((today - last_date).days, 0)
-                    if days_since > best_day_days_since:
-                        best_day_days_since = days_since
-                        best_day = day
-
-                name = chosen_category
-                day_id = int(best_day['day_id']) if best_day else 1
-                days_since = best_cat_days_since if best_cat_days_since >= 0 else 999
-
-                reco = {
-                    "category": name,
-                    "day_id": day_id,
-                    "reasons": [
-                        f"You haven't trained {name} in {days_since} day(s)." if days_since != 999 else f"You haven't logged {name} recently.",
-                        "Keeps your training split balanced this week.",
-                        f"Aligned with your plan: {name} day {day_id}.",
-                    ],
-                    "model": "heuristic",
-                }
+            if not isinstance(reco.get('reasons'), list) or len(reco.get('reasons') or []) < 3:
+                try:
+                    reco['reasons'] = GeminiService._build_reasons_from_history(
+                        category=str(reco.get('category') or ''),
+                        day_id=int(reco.get('day_id') or 1),
+                        categories=categories,
+                        plan_days=plan_days,
+                        recent_workouts=recent_context,
+                    )
+                except Exception:
+                    reco['reasons'] = [
+                        "Recommended based on your plan and recent workouts.",
+                        "Keeps your training split balanced.",
+                        "Suggested to stay consistent with your program.",
+                    ]
 
             raw_category = (reco.get('category') or '').strip()
             raw_day_id = int(reco.get('day_id') or 0)
