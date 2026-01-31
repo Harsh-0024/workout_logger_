@@ -1,6 +1,7 @@
 import unittest
 # IMPORTS: Assumes you have moved files to 'parsers/workout.py'
 from parsers.workout import workout_parser, parse_weight_x_reps, normalize
+from list_of_exercise import get_workout_days
 
 
 class TestWorkoutParser(unittest.TestCase):
@@ -169,6 +170,81 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[1]['name'], "Skull Crushers")
         self.assertEqual(exs[1]['weights'], [2.5, 1.0, 1.0])
         self.assertEqual(exs[1]['reps'], [9, 11, 11])
+
+
+class TestPlanParser(unittest.TestCase):
+
+    def test_get_workout_days_legacy_format(self):
+        raw_text = """
+        Chest & Triceps 1
+        Flat Barbell Press
+        Triceps Rod Pushdown
+
+        Legs 1
+        Leg Press
+        Hip Thrust
+        """
+        data = get_workout_days(raw_text)
+        self.assertIn("Chest & Triceps", data.get("workout", {}))
+        self.assertIn("Chest & Triceps 1", data["workout"]["Chest & Triceps"])
+        self.assertEqual(data["workout"]["Chest & Triceps"]["Chest & Triceps 1"], ["Flat Barbell Press", "Triceps Rod Pushdown"])
+        self.assertIn("Legs", data["workout"])
+        self.assertIn("Legs 1", data["workout"]["Legs"])
+
+    def test_get_workout_days_session_title_format(self):
+        raw_text = """
+        Session 1 - Chest & Biceps
+        Flat Barbell Press
+        Preacher Curl
+
+        Session 2: Legs
+        Leg Press
+        Calf Raises Sitting
+        """
+        data = get_workout_days(raw_text)
+        self.assertIn("Session", data.get("workout", {}))
+        self.assertIn("Session 1", data["workout"]["Session"])
+        self.assertIn("Session 2", data["workout"]["Session"])
+        self.assertEqual(data["workout"]["Session"]["Session 1"], ["Flat Barbell Press", "Preacher Curl"])
+        self.assertEqual(data["session_titles"].get("1"), "Chest & Biceps")
+        self.assertEqual(data["session_titles"].get("2"), "Legs")
+
+    def test_get_workout_days_title_number_format_normalization(self):
+        raw_text = """
+        Shoulders 1
+        Wrist Extension – Dumbbell
+        Farmer’s Walk
+        """
+        data = get_workout_days(raw_text)
+        self.assertIn("Shoulders", data.get("workout", {}))
+        self.assertIn("Shoulders 1", data["workout"]["Shoulders"])
+        self.assertEqual(data["workout"]["Shoulders"]["Shoulders 1"], ["Wrist Extension - Dumbbell", "Farmer's Walk"])
+
+    def test_get_workout_days_ignores_cycle_headings(self):
+        raw_text = """
+        Cycle 1
+
+        Session 1 - Chest & Biceps
+        Flat Barbell Press
+        Preacher Curl
+
+        Cycle 2
+
+        Session 2 - Legs
+        Leg Press
+        Calf Raises Sitting
+        """
+        data = get_workout_days(raw_text)
+        self.assertIn("Session", data.get("workout", {}))
+        self.assertIn("Session 1", data["workout"]["Session"])
+        self.assertIn("Session 2", data["workout"]["Session"])
+        self.assertNotIn("Cycle", data.get("workout", {}))
+        self.assertEqual(data["workout"]["Session"]["Session 1"], ["Flat Barbell Press", "Preacher Curl"])
+        self.assertEqual(data["workout"]["Session"]["Session 2"], ["Leg Press", "Calf Raises Sitting"])
+
+        self.assertEqual(data.get("headings"), ["Cycle 1", "Cycle 2"])
+        self.assertEqual(data.get("heading_sessions", {}).get("Cycle 1"), [1])
+        self.assertEqual(data.get("heading_sessions", {}).get("Cycle 2"), [2])
 
 
 if __name__ == '__main__':

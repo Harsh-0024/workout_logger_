@@ -320,30 +320,118 @@ def get_workout_days(raw_text):
     """
     workout_days = {"workout": {}}
 
-    # Split by empty lines (double newlines)
-    sections = re.split(r'\n\s*\n', raw_text.strip())
+    def _norm_plan_line(s: str) -> str:
+        s = str(s or "")
+        s = s.replace("•", " ")
+        s = s.replace("–", "-")
+        s = s.replace("—", "-")
+        s = s.replace("’", "'")
+        s = re.sub(r"\s+", " ", s).strip()
+        return s
 
-    # Filter out any empty strings
-    sections = [s.strip() for s in sections if s.strip()]
+    def _parse_header(line: str):
+        line = _norm_plan_line(line)
+        if not line:
+            return None
 
-    for block in sections:
-        lines = [line.strip() for line in block.split("\n") if line.strip()]
-        if not lines: continue
+        m = re.match(r"^session\s+(\d+)\s*[-:]\s*(.+)$", line, flags=re.IGNORECASE)
+        if m:
+            day_id = int(m.group(1))
+            session_title = _norm_plan_line(m.group(2))
+            return {
+                "category": "Session",
+                "day_id": day_id,
+                "day_name": f"Session {day_id}",
+                "session_title": session_title,
+            }
 
-        workout_name = lines[0]  # e.g. "Chest & Triceps 1"
+        m = re.match(r"^session\s+(\d+)\s*$", line, flags=re.IGNORECASE)
+        if m:
+            day_id = int(m.group(1))
+            return {
+                "category": "Session",
+                "day_id": day_id,
+                "day_name": f"Session {day_id}",
+                "session_title": "",
+            }
 
-        match = re.search(r"\s+\d+$", workout_name)
-        if not match:
+        m = re.match(r"^(.+?)\s+(\d+)$", line)
+        if m:
+            day_id = int(m.group(2))
+            category = _norm_plan_line(m.group(1))
+            return {
+                "category": category,
+                "day_id": day_id,
+                "day_name": f"{category} {day_id}",
+                "session_title": None,
+            }
+
+        return None
+
+    current_header = None
+    current_exercises = []
+    current_heading = None
+    headings = []
+    heading_sessions = {}
+
+    def _flush_current():
+        nonlocal current_header, current_exercises
+        if not current_header:
+            return
+        cat = current_header.get("category")
+        day_name = current_header.get("day_name")
+        if not cat or not day_name:
+            current_header = None
+            current_exercises = []
+            return
+
+        workout_days["workout"].setdefault(cat, {})[day_name] = list(current_exercises)
+        if cat == "Session":
+            titles = workout_days.setdefault("session_titles", {})
+            day_id = current_header.get("day_id")
+            title = current_header.get("session_title")
+            if isinstance(day_id, int) and title:
+                titles[str(day_id)] = str(title)
+
+        current_header = None
+        current_exercises = []
+
+    for raw_line in str(raw_text or "").split("\n"):
+        line = _norm_plan_line(raw_line)
+        if not line:
             continue
 
-        workout_day_name = workout_name[:match.start()].strip()  # e.g. "Chest & Triceps"
+        m = re.match(r"^(cycle|heading)\s+(\d+)\s*$", line, flags=re.IGNORECASE)
+        if m:
+            _flush_current()
+            prefix = str(m.group(1) or "").strip().title()
+            num = int(m.group(2))
+            current_heading = f"{prefix} {num}"
+            if current_heading not in headings:
+                headings.append(current_heading)
+            heading_sessions.setdefault(current_heading, [])
+            continue
 
-        if workout_day_name not in workout_days["workout"]:
-            workout_days["workout"][workout_day_name] = {}
+        header = _parse_header(line)
+        if header:
+            _flush_current()
+            current_header = header
+            current_exercises = []
 
-        # Exercises are simply the rest of the lines
-        exercises_list = lines[1:]
+            if current_heading and header.get("category") == "Session":
+                day_id = header.get("day_id")
+                if isinstance(day_id, int):
+                    s_list = heading_sessions.setdefault(current_heading, [])
+                    if day_id not in s_list:
+                        s_list.append(day_id)
+            continue
 
-        workout_days["workout"][workout_day_name][workout_name] = exercises_list
+        if current_header:
+            current_exercises.append(line)
 
+    _flush_current()
+
+    if headings:
+        workout_days["headings"] = list(headings)
+        workout_days["heading_sessions"] = dict(heading_sessions)
     return workout_days

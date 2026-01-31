@@ -5,7 +5,11 @@
         <div class="card text-center">
             <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap step-badges">
                 <a href="{{ url_for('retrieve_categories') }}" class="badge step-badge step-badge-link"><span class="step-number">1.</span> Category</a>
+                {% if back_to_days_url %}
+                <a href="{{ back_to_days_url }}" class="badge step-badge step-badge-link"><span class="step-number">2.</span> Days</a>
+                {% else %}
                 <a href="{{ url_for('retrieve_days', category=category_name) }}" class="badge step-badge step-badge-link"><span class="step-number">2.</span> Days</a>
+                {% endif %}
                 <span class="badge bg-primary step-badge"><span class="step-number">3.</span> Result</span>
             </div>
             <div class="mb-3 mb-md-5">

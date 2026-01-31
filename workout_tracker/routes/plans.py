@@ -19,6 +19,11 @@ def register_plan_routes(app):
             raw_text = get_effective_plan_text(Session, user)
             data = get_workout_days(raw_text or "")
 
+            headings = data.get('headings') if isinstance(data, dict) else None
+            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
+            if isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions:
+                return render_template('retrieve_step1.html', headings=headings)
+
             categories = list(data.get('workout', {}).keys())
 
             if not categories:
@@ -30,6 +35,52 @@ def register_plan_routes(app):
             logger.error(f"Error in retrieve_categories: {e}", exc_info=True)
             flash("Error loading workout categories.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
+
+    @login_required
+    def retrieve_heading_days(heading_id: int):
+        user = current_user
+
+        try:
+            raw_text = get_effective_plan_text(Session, user)
+            if not raw_text:
+                flash("No workout plan found.", "error")
+                return redirect(url_for('set_plan'))
+
+            data = get_workout_days(raw_text)
+            headings = data.get('headings') if isinstance(data, dict) else None
+            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
+            if not (isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions):
+                flash("Headings not found in plan.", "error")
+                return redirect(url_for('retrieve_categories'))
+
+            if not isinstance(heading_id, int) or heading_id < 1 or heading_id > len(headings):
+                flash("Invalid heading.", "error")
+                return redirect(url_for('retrieve_categories'))
+
+            heading_name = headings[heading_id - 1]
+            session_ids = heading_sessions.get(heading_name) or []
+            session_ids = [int(x) for x in session_ids if isinstance(x, int) or str(x).isdigit()]
+            session_ids.sort()
+
+            session_titles = None
+            maybe_titles = data.get("session_titles") if isinstance(data, dict) else None
+            if isinstance(maybe_titles, dict):
+                session_titles = maybe_titles
+
+            return render_template(
+                'retrieve_step2.html',
+                category_name='Session',
+                num_days=0,
+                session_titles=session_titles,
+                session_ids=session_ids,
+                heading_id=heading_id,
+                heading_name=heading_name,
+                back_url=url_for('retrieve_categories'),
+            )
+        except Exception as e:
+            logger.error(f"Error in retrieve_heading_days: {e}", exc_info=True)
+            flash("Error loading heading days.", "error")
+            return redirect(url_for('retrieve_categories'))
 
     @login_required
     def retrieve_days(category):
@@ -49,10 +100,16 @@ def register_plan_routes(app):
                 return redirect(url_for('retrieve_categories'))
 
             num_days = len(data['workout'][category])
+            session_titles = None
+            if str(category).strip().lower() == "session":
+                maybe_titles = data.get("session_titles")
+                if isinstance(maybe_titles, dict):
+                    session_titles = maybe_titles
             return render_template(
                 'retrieve_step2.html',
                 category_name=category,
                 num_days=num_days,
+                session_titles=session_titles,
             )
         except Exception as e:
             logger.error(f"Error in retrieve_days: {e}", exc_info=True)
@@ -66,6 +123,12 @@ def register_plan_routes(app):
         try:
             category = sanitize_text_input(category, max_length=100)
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
+
+            back_to_days_url = None
+            if str(category).strip().lower() == 'session':
+                heading_id = request.args.get('heading_id')
+                if heading_id and str(heading_id).isdigit():
+                    back_to_days_url = url_for('retrieve_heading_days', heading_id=int(heading_id))
             return render_template(
                 'retrieve_step3.html',
                 output=output,
@@ -73,6 +136,7 @@ def register_plan_routes(app):
                 set_count=set_count,
                 category_name=category,
                 day_id=day_id,
+                back_to_days_url=back_to_days_url,
             )
         except Exception as e:
             logger.error(f"Error in retrieve_final: {e}", exc_info=True)
@@ -139,6 +203,12 @@ def register_plan_routes(app):
         '/retrieve/categories',
         endpoint='retrieve_categories',
         view_func=retrieve_categories,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/retrieve/heading/<int:heading_id>',
+        endpoint='retrieve_heading_days',
+        view_func=retrieve_heading_days,
         methods=['GET'],
     )
     app.add_url_rule(

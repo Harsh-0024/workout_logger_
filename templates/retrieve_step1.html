@@ -17,6 +17,15 @@
             </h6>
 
             <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4 step-buttons">
+                {% if headings %}
+                {% for heading in headings %}
+                <a href="{{ url_for('retrieve_heading_days', heading_id=loop.index) }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold btn-icon-center" style="font-size: clamp(1rem, 4vw, 1.25rem);" {% if loop.index <= 9 %}data-shortcut="{{ loop.index }}"{% endif %}>
+                    <span class="btn-icon-slot"><i class="bi bi-collection"></i></span>
+                    <span>{{ heading | upper }}</span>
+                    <span class="btn-icon-spacer" aria-hidden="true"></span>
+                </a>
+                {% endfor %}
+                {% else %}
                 {% for cat in categories %}
                 <a href="{{ url_for('retrieve_days', category=cat) }}" class="btn btn-gold-solid py-3 py-md-4 fw-bold btn-icon-center" style="font-size: clamp(1rem, 4vw, 1.25rem);" {% if loop.index <= 9 %}data-shortcut="{{ loop.index }}"{% endif %}>
                     <span class="btn-icon-slot"><i class="bi bi-activity"></i></span>
@@ -24,10 +33,15 @@
                     <span class="btn-icon-spacer" aria-hidden="true"></span>
                 </a>
                 {% endfor %}
+                {% endif %}
             </div>
 
             <div class="text-muted small mb-2" style="font-size: var(--fs-xs);">
+                {% if headings %}
+                Press 1-9 to pick a heading.
+                {% else %}
                 Press 1-9 to pick a category.
+                {% endif %}
             </div>
 
             <div class="text-center mt-4 mt-md-5 pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
