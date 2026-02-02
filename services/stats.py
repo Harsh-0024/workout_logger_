@@ -7,7 +7,9 @@ import json
 from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
+from list_of_exercise import BW_EXERCISES
 from models import WorkoutLog
+from services.helpers import get_set_stats
 
 
 def _serialize_sets_json(sets_json) -> str:
@@ -25,6 +27,99 @@ def _format_list(values) -> str:
     if not values:
         return ""
     return ",".join(str(v) for v in values if v is not None)
+
+
+def backfill_log_bodyweight(db_session, user) -> int:
+    if not getattr(user, 'bodyweight', None):
+        return 0
+    return (
+        db_session.query(WorkoutLog)
+        .filter(
+            WorkoutLog.user_id == user.id,
+            WorkoutLog.bodyweight.is_(None),
+        )
+        .update({WorkoutLog.bodyweight: user.bodyweight}, synchronize_session=False)
+    )
+
+
+def _normalize_sets(sets_json) -> List[List[float]]:
+    if not sets_json or not isinstance(sets_json, dict):
+        return [], []
+    weights = sets_json.get('weights') or []
+    reps = sets_json.get('reps') or []
+    pairs = []
+    for w, r in zip(weights, reps):
+        if w is None or r is None:
+            continue
+        try:
+            pairs.append((float(w), int(r)))
+        except (TypeError, ValueError):
+            continue
+    if not pairs:
+        return [], []
+    return [p[0] for p in pairs], [p[1] for p in pairs]
+
+
+def _log_uses_bw(log) -> bool:
+    if log.exercise in BW_EXERCISES:
+        return True
+    exercise_string = (log.exercise_string or '').lower()
+    return 'bw' in exercise_string
+
+
+def _apply_bodyweight(weights, reps, bodyweight):
+    if bodyweight is None or not reps:
+        return weights, reps
+
+    def is_placeholder(weight):
+        try:
+            return weight is None or float(weight) <= 1
+        except (TypeError, ValueError):
+            return True
+
+    if not weights:
+        return [float(bodyweight)] * len(reps), reps
+
+    if all(is_placeholder(w) for w in weights):
+        return [float(bodyweight)] * len(weights), reps
+
+    return weights, reps
+
+
+def _get_top_weight(weights, reps):
+    if not weights or not reps:
+        return 0, 0
+    top_weight = max(weights)
+    try:
+        idx = weights.index(top_weight)
+        top_reps = reps[idx] if idx < len(reps) else reps[0]
+    except Exception:
+        top_reps = reps[0] if reps else 0
+    return top_weight, top_reps
+
+
+def _get_log_metrics(log):
+    weights, reps = _normalize_sets(log.sets_json)
+
+    if (not weights or not reps) and log.top_weight is not None and log.top_reps is not None:
+        weights = [float(log.top_weight)]
+        reps = [int(log.top_reps)]
+
+    if _log_uses_bw(log):
+        weights, reps = _apply_bodyweight(weights, reps, log.bodyweight)
+
+    if weights and reps:
+        peak, _, _ = get_set_stats({'weights': weights, 'reps': reps})
+        top_weight, top_reps = _get_top_weight(weights, reps)
+        if not peak and log.estimated_1rm:
+            peak = float(log.estimated_1rm)
+        return peak, top_weight, top_reps
+
+    return (
+        float(log.estimated_1rm) if log.estimated_1rm else 0,
+        float(log.top_weight) if log.top_weight else 0,
+        int(log.top_reps) if log.top_reps else 0,
+    )
 
 
 def get_csv_export(db_session, user):
@@ -112,9 +207,10 @@ def get_chart_data(db_session, user, exercise_name):
 
     for log in logs:
         labels.append(log.date.strftime("%d/%m/%y"))
-        data_1rm.append(float(log.estimated_1rm) if log.estimated_1rm else 0)
-        data_weight.append(float(log.top_weight) if log.top_weight else 0)
-        data_reps.append(int(log.top_reps) if log.top_reps else 0)
+        one_rm, top_weight, top_reps = _get_log_metrics(log)
+        data_1rm.append(one_rm)
+        data_weight.append(top_weight)
+        data_reps.append(top_reps)
 
     # Calculate statistics
     stats = {}
@@ -147,24 +243,29 @@ def get_exercise_summary(db_session, user, exercise_name: str) -> Dict:
     if not logs:
         return {}
 
-    first_log = logs[0]
-    latest_log = logs[-1]
-    
+    metrics = []
+    for log in logs:
+        one_rm, top_weight, top_reps = _get_log_metrics(log)
+        metrics.append((log, one_rm, top_weight, top_reps))
+
+    first_log, first_1rm, _, _ = metrics[0]
+    latest_log, latest_1rm, _, _ = metrics[-1]
+
     # Calculate PRs
-    max_1rm_log = max(logs, key=lambda x: x.estimated_1rm or 0)
-    max_weight_log = max(logs, key=lambda x: x.top_weight or 0)
+    max_1rm_log, max_1rm_value, _, _ = max(metrics, key=lambda x: x[1])
+    max_weight_log, _, max_weight_value, max_weight_reps = max(metrics, key=lambda x: x[2])
 
     return {
         'total_sessions': len(logs),
         'first_date': first_log.date,
         'latest_date': latest_log.date,
-        'current_1rm': latest_log.estimated_1rm or 0,
-        'pr_1rm': max_1rm_log.estimated_1rm or 0,
-        'pr_weight': max_weight_log.top_weight or 0,
-        'pr_reps': max_weight_log.top_reps or 0,
+        'current_1rm': latest_1rm or 0,
+        'pr_1rm': max_1rm_value or 0,
+        'pr_weight': max_weight_value or 0,
+        'pr_reps': max_weight_reps or 0,
         'pr_date': max_1rm_log.date,
-        'improvement': (latest_log.estimated_1rm or 0) - (first_log.estimated_1rm or 0),
-        'improvement_pct': ((latest_log.estimated_1rm or 0) - (first_log.estimated_1rm or 0)) / (first_log.estimated_1rm or 1) * 100 if first_log.estimated_1rm else 0
+        'improvement': (latest_1rm or 0) - (first_1rm or 0),
+        'improvement_pct': ((latest_1rm or 0) - (first_1rm or 0)) / (first_1rm or 1) * 100 if first_1rm else 0
     }
 
 

@@ -195,6 +195,7 @@ class WorkoutLog(Base):
     exercise = Column(String(100), nullable=False, index=True)
     exercise_string = Column(Text)
     sets_json = Column(JSONType)
+    bodyweight = Column(Float)
     top_weight = Column(Float)  # Heaviest weight moved that day
     top_reps = Column(Integer)  # Reps at that top weight
     estimated_1rm = Column(Float, index=True)  # Calculated strength metric
@@ -398,6 +399,7 @@ def migrate_schema():
                     conn.execute(text("UPDATE workout_logs SET workout_name = '' WHERE workout_name IS NULL"))
                     conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS exercise_string TEXT"))
                     conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS sets_json {json_type}"))
+                    conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS bodyweight {float_type}"))
                 else:
                     if 'workout_name' not in logs_columns:
                         logger.info("Adding workout_name column to workout_logs table")
@@ -408,6 +410,9 @@ def migrate_schema():
                     if 'sets_json' not in logs_columns:
                         logger.info("Adding sets_json column to workout_logs table")
                         conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN sets_json {json_type}"))
+                    if 'bodyweight' not in logs_columns:
+                        logger.info("Adding bodyweight column to workout_logs table")
+                        conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN bodyweight {float_type}"))
                 
     except Exception as e:
         logger.warning(f"Migration warning (may be expected): {e}")

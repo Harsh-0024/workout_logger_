@@ -181,6 +181,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                     exercise=ex_name,
                     exercise_string=new_str,
                     sets_json=new_sets,
+                    bodyweight=user.bodyweight,
                     top_weight=daily_max_weight if daily_max_weight > 0 else None,
                     top_reps=daily_max_reps if daily_max_reps > 0 else None,
                     estimated_1rm=p_peak if p_peak > 0 else None

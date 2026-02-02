@@ -255,6 +255,11 @@ def _build_best_sets_line_from_logs(db_session, user, exercise: str, target_sets
     if not best_log:
         return ""
 
+    if best_log.exercise_string and "bw" in best_log.exercise_string.lower():
+        extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
+        if extracted:
+            return _normalize_bw(extracted)
+
     sets_json = best_log.sets_json if isinstance(best_log.sets_json, dict) else None
     if not sets_json:
         return ""
@@ -290,7 +295,8 @@ def _build_best_sets_line_from_logs(db_session, user, exercise: str, target_sets
         weights_top = weights_top[: int(target_sets)]
         reps_top = reps_top[: int(target_sets)]
 
-    weight_tokens = [_format_weight_token(exercise, w, getattr(user, "bodyweight", None)) for w in weights_top]
+    log_bodyweight = getattr(best_log, "bodyweight", None)
+    weight_tokens = [_format_weight_token(exercise, w, log_bodyweight or getattr(user, "bodyweight", None)) for w in weights_top]
     rep_tokens = [str(int(r)) for r in reps_top]
 
     weight_tokens = _compress_shorthand_values(weight_tokens)

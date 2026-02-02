@@ -8,7 +8,7 @@ from flask_login import login_required, current_user
 from sqlalchemy import desc
 
 from models import Session, WorkoutLog
-from services.stats import get_chart_data, get_csv_export, get_json_export
+from services.stats import backfill_log_bodyweight, get_chart_data, get_csv_export, get_json_export
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -19,6 +19,9 @@ def register_stats_routes(app):
         user = current_user
 
         try:
+            updated = backfill_log_bodyweight(Session, user)
+            if updated:
+                Session.commit()
             exercises = (
                 Session.query(WorkoutLog.exercise)
                 .filter_by(user_id=user.id)
@@ -75,6 +78,9 @@ def register_stats_routes(app):
 
         try:
             exercise = sanitize_text_input(exercise, max_length=100)
+            updated = backfill_log_bodyweight(Session, user)
+            if updated:
+                Session.commit()
             return jsonify(get_chart_data(Session, user, exercise))
         except Exception as e:
             logger.error(f"Error getting stats data: {e}", exc_info=True)
