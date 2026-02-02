@@ -206,7 +206,7 @@ def get_chart_data(db_session, user, exercise_name):
     data_reps = []  # Reps values
 
     for log in logs:
-        labels.append(log.date.strftime("%d/%m/%y"))
+        labels.append(log.date.strftime("%b %d"))
         one_rm, top_weight, top_reps = _get_log_metrics(log)
         data_1rm.append(one_rm)
         data_weight.append(top_weight)
@@ -294,6 +294,7 @@ def get_average_growth_data(db_session, user) -> Dict:
     for exercise_logs in logs_by_exercise.values():
         exercise_logs.sort(key=lambda l: l.date or datetime.min)
         base = None
+        per_day_values = {}
 
         for log in exercise_logs:
             if not log.date:
@@ -306,7 +307,12 @@ def get_average_growth_data(db_session, user) -> Dict:
             if not base:
                 continue
             pct_change = ((one_rm - base) / base) * 100.0
-            by_date.setdefault(log.date.date(), []).append(pct_change)
+            per_day_values.setdefault(log.date.date(), []).append(pct_change)
+
+        for date_key, values in per_day_values.items():
+            if not values:
+                continue
+            by_date.setdefault(date_key, []).append(sum(values) / len(values))
 
     if not by_date:
         return {
@@ -324,7 +330,7 @@ def get_average_growth_data(db_session, user) -> Dict:
 
     for date_key in sorted(by_date.keys()):
         values = by_date[date_key]
-        labels.append(date_key.strftime("%d/%m/%y"))
+        labels.append(date_key.strftime("%b %d"))
         data_pct.append(sum(values) / len(values) if values else 0)
 
     stats = {}

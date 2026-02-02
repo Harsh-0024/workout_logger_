@@ -341,6 +341,9 @@
         const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
         const pointBorderColor = isLightMode ? '#FFFFFF' : '#000000';
         const pointHoverBorderColor = isLightMode ? '#F5F3F0' : '#FFFFFF';
+        const isPercent = data.unit === 'percent';
+        const yTickCallback = (value) => isPercent ? `${value}%` : value;
+        const tooltipValueSuffix = isPercent ? '%' : '';
 
         myChart = new Chart(ctx, {
             type: 'line',
@@ -388,7 +391,14 @@
                         bodyFont: { size: 13 },
                         cornerRadius: 12,
                         titleSpacing: 8,
-                        bodySpacing: 6
+                        bodySpacing: 6,
+                        callbacks: {
+                            label: (context) => {
+                                const value = context.parsed.y;
+                                if (value === null || value === undefined) return '';
+                                return `${value.toFixed(1)}${tooltipValueSuffix}`;
+                            }
+                        }
                     }
                 },
                 scales: {
@@ -400,7 +410,8 @@
                         ticks: { 
                             color: '#A1A1AA',
                             font: { size: 11, weight: '500' },
-                            padding: 12
+                            padding: 12,
+                            callback: yTickCallback
                         },
                         beginAtZero: false
                     },
@@ -409,7 +420,10 @@
                         ticks: { 
                             color: '#A1A1AA',
                             font: { size: 11, weight: '500' },
-                            padding: 12
+                            padding: 12,
+                            autoSkip: true,
+                            maxTicksLimit: 6,
+                            maxRotation: 0
                         }
                     }
                 }
@@ -421,7 +435,8 @@
         fetch('/stats/data/average')
             .then(response => response.json())
             .then(data => {
-                renderChart(data, 'Average 1RM (kg)');
+                const chartLabel = data.unit === 'percent' ? 'Average Change (%)' : 'Average 1RM (kg)';
+                renderChart(data, chartLabel);
             })
             .catch(error => {
                 console.error('Error loading average chart:', error);
