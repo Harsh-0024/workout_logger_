@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 import csv
 import io
 import json
@@ -8,7 +9,13 @@ from flask_login import login_required, current_user
 from sqlalchemy import desc
 
 from models import Session, WorkoutLog
-from services.stats import backfill_log_bodyweight, get_chart_data, get_csv_export, get_json_export
+from services.stats import (
+    backfill_log_bodyweight,
+    get_average_growth_data,
+    get_chart_data,
+    get_csv_export,
+    get_json_export,
+)
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -30,6 +37,13 @@ def register_stats_routes(app):
                 .all()
             )
             exercises = [e[0] for e in exercises]
+            exercise_options = []
+            for ex in exercises:
+                cleaned = re.sub(r'^\s*\d+\s*[\.)]\s*', '', ex).strip()
+                exercise_options.append({
+                    'value': ex,
+                    'label': cleaned or ex,
+                })
 
             logs = (
                 Session.query(WorkoutLog)
@@ -61,7 +75,7 @@ def register_stats_routes(app):
 
             return render_template(
                 'stats.html',
-                exercises=exercises,
+                exercise_options=exercise_options,
                 csv_size_kb=csv_size_kb,
                 json_size_kb=json_size_kb,
                 bw_exercises=bw_exercises,
@@ -84,6 +98,19 @@ def register_stats_routes(app):
             return jsonify(get_chart_data(Session, user, exercise))
         except Exception as e:
             logger.error(f"Error getting stats data: {e}", exc_info=True)
+            return jsonify({'error': 'Failed to load data'}), 500
+
+    @login_required
+    def stats_average_data():
+        user = current_user
+
+        try:
+            updated = backfill_log_bodyweight(Session, user)
+            if updated:
+                Session.commit()
+            return jsonify(get_average_growth_data(Session, user))
+        except Exception as e:
+            logger.error(f"Error getting average stats data: {e}", exc_info=True)
             return jsonify({'error': 'Failed to load data'}), 500
 
     @login_required
@@ -132,6 +159,12 @@ def register_stats_routes(app):
         '/stats/data/<exercise>',
         endpoint='stats_data',
         view_func=stats_data,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/stats/data/average',
+        endpoint='stats_average_data',
+        view_func=stats_average_data,
         methods=['GET'],
     )
     app.add_url_rule('/export_csv', endpoint='export_csv', view_func=export_csv, methods=['GET'])

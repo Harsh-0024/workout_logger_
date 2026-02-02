@@ -269,6 +269,86 @@ def get_exercise_summary(db_session, user, exercise_name: str) -> Dict:
     }
 
 
+def get_average_growth_data(db_session, user) -> Dict:
+    """Aggregate average percent change per exercise across dates (normalized)."""
+    logs = db_session.query(WorkoutLog).filter(
+        WorkoutLog.user_id == user.id,
+    ).order_by(WorkoutLog.date).all()
+
+    if not logs:
+        return {
+            "labels": [],
+            "data": [],
+            "weight": [],
+            "reps": [],
+            "exercise": "Overall Progress",
+            "stats": {},
+            "unit": "percent",
+        }
+
+    logs_by_exercise = {}
+    for log in logs:
+        logs_by_exercise.setdefault(log.exercise, []).append(log)
+
+    by_date = {}
+    for exercise_logs in logs_by_exercise.values():
+        exercise_logs.sort(key=lambda l: l.date or datetime.min)
+        base = None
+
+        for log in exercise_logs:
+            if not log.date:
+                continue
+            one_rm, _, _ = _get_log_metrics(log)
+            if not one_rm or one_rm <= 0:
+                continue
+            if base is None:
+                base = one_rm
+            if not base:
+                continue
+            pct_change = ((one_rm - base) / base) * 100.0
+            by_date.setdefault(log.date.date(), []).append(pct_change)
+
+    if not by_date:
+        return {
+            "labels": [],
+            "data": [],
+            "weight": [],
+            "reps": [],
+            "exercise": "Overall Progress",
+            "stats": {},
+            "unit": "percent",
+        }
+
+    labels = []
+    data_pct = []
+
+    for date_key in sorted(by_date.keys()):
+        values = by_date[date_key]
+        labels.append(date_key.strftime("%d/%m/%y"))
+        data_pct.append(sum(values) / len(values) if values else 0)
+
+    stats = {}
+    if any(value != 0 for value in data_pct):
+        avg_pct = sum(data_pct) / len(data_pct) if data_pct else 0
+        stats = {
+            'current_1rm': data_pct[-1] if data_pct else 0,
+            'max_1rm': max(data_pct) if data_pct else 0,
+            'min_1rm': min(data_pct) if data_pct else 0,
+            'improvement': data_pct[-1] - data_pct[0] if len(data_pct) > 1 else 0,
+            'improvement_pct': avg_pct,
+        }
+
+    return {
+        "labels": labels,
+        "data": data_pct,
+        "weight": [],
+        "reps": [],
+        "exercise": "Overall Progress",
+        "stats": stats,
+        "unit": "percent",
+    }
+
+
 def get_all_exercises_summary(db_session, user) -> List[Dict]:
     """Get summary for all exercises."""
     exercises = db_session.query(WorkoutLog.exercise).filter_by(

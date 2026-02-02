@@ -24,17 +24,30 @@
                 </div>
             </div>
 
-            <div class="row mb-4 mb-md-5">
-                <div class="col-12 col-md-6">
-                    <label class="text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        <i class="bi bi-list-ul me-2"></i>Select Exercise
+            <div class="row mb-4">
+                <div class="col-12">
+                    <label class="text-muted mb-2 d-block" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">
+                        <i class="bi bi-search me-2"></i>Search Exercise
                     </label>
-                    <select id="exerciseSelect" class="form-control form-select" onchange="loadChart()">
-                        <option value="">-- Choose Exercise --</option>
-                        {% for ex in exercises %}
-                        <option value="{{ ex }}">{{ ex }}</option>
-                        {% endfor %}
-                    </select>
+                    <div class="position-relative">
+                        <input 
+                            id="exerciseSearch" 
+                            class="form-control" 
+                            type="text" 
+                            placeholder="Type to search exercises..." 
+                            autocomplete="off"
+                            oninput="handleSearchInput()" 
+                            onfocus="showSuggestions()" 
+                            onkeydown="handleKeyDown(event)"
+                            style="font-size: var(--fs-sm);"
+                        >
+                        <div id="suggestionsList" class="position-absolute w-100 border rounded-2 mt-1" style="display: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
+                        </div>
+                        <small class="text-muted d-block mt-2" style="font-size: 0.75rem;">
+                            <i class="bi bi-info-circle me-1"></i>Leave empty or select "Overall Progress" to view aggregate stats
+                        </small>
+                    </div>
+                    <script type="application/json" id="exerciseOptionsData">{{ exercise_options | tojson }}</script>
                 </div>
             </div>
 
@@ -47,38 +60,38 @@
             {% endif %}
 
             <!-- Chart Container -->
-            <div class="chart-container" style="position: relative; height: clamp(300px, 50vh, 500px); width:100%; min-height: 300px;">
+            <div class="chart-container mb-4" style="position: relative; height: clamp(350px, 55vh, 550px); width:100%; min-height: 350px;">
                 <div id="chartPlaceholder" class="text-center py-5" style="position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;">
                     <i class="bi bi-graph-up text-muted" style="font-size: 3rem; opacity: 0.3;"></i>
-                    <p class="text-muted mt-3">Select an exercise above to view progress</p>
+                    <p class="text-muted mt-3" style="font-size: var(--fs-sm);">Loading your progress...</p>
                 </div>
                 <canvas id="progressChart"></canvas>
             </div>
 
             <!-- Stats Summary -->
-            <div id="statsSummary" class="row g-2 g-md-3 mt-4 mt-md-5 mb-3 mb-md-4" style="display: none;">
+            <div id="statsSummary" class="row g-3 g-md-4 mb-4" style="display: none;">
                 <div class="col-6 col-md-3">
                     <div class="stat-card">
                         <div class="stat-value" id="current1RM">-</div>
-                        <div class="stat-label">Current 1RM</div>
+                        <div class="stat-label" id="current1RMLabel">Current 1RM</div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="stat-card">
                         <div class="stat-value" id="max1RM">-</div>
-                        <div class="stat-label">Max 1RM</div>
+                        <div class="stat-label" id="max1RMLabel">Max 1RM</div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="stat-card">
                         <div class="stat-value" id="improvement">-</div>
-                        <div class="stat-label">Improvement</div>
+                        <div class="stat-label" id="improvementLabel">Improvement</div>
                     </div>
                 </div>
                 <div class="col-6 col-md-3">
                     <div class="stat-card">
                         <div class="stat-value" id="improvementPct">-</div>
-                        <div class="stat-label">% Change</div>
+                        <div class="stat-label" id="improvementPctLabel">% Change</div>
                     </div>
                 </div>
             </div>
@@ -92,12 +105,331 @@
     </div>
 </div>
 
+<style>
+    #suggestionsList {
+        background: var(--card-bg, #1a1a1a);
+        border-color: var(--border-subtle, #333) !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    
+    [data-theme="light"] #suggestionsList {
+        background: #ffffff;
+        border-color: #d1d5db !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    
+    #suggestionsList .suggestion-item {
+        color: var(--text-primary, #e5e5e5);
+    }
+    
+    [data-theme="light"] #suggestionsList .suggestion-item {
+        color: #1f2937;
+    }
+    
+    #suggestionsList .border-top {
+        border-color: var(--border-subtle, #333) !important;
+    }
+    
+    [data-theme="light"] #suggestionsList .border-top {
+        border-color: #e5e7eb !important;
+    }
+</style>
+
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
     let myChart = null;
 
+    const exerciseOptionsEl = document.getElementById('exerciseOptionsData');
+    const exerciseOptions = exerciseOptionsEl ? JSON.parse(exerciseOptionsEl.textContent || '[]') : [];
+    let currentExercise = '';
+    let selectedSuggestionIndex = -1;
+
+    function getFilteredOptions(filterText) {
+        const normalized = filterText.trim().toLowerCase();
+        if (!normalized) return exerciseOptions;
+        return exerciseOptions.filter(option => 
+            (option.label || '').toLowerCase().includes(normalized)
+        );
+    }
+
+    function renderSuggestions(filterText = '') {
+        const suggestionsList = document.getElementById('suggestionsList');
+        if (!suggestionsList) return;
+
+        const filtered = getFilteredOptions(filterText);
+        suggestionsList.innerHTML = '';
+
+        // Add "Overall Progress" option only if no filter or filter is empty
+        const showOverall = !filterText.trim();
+        if (showOverall) {
+            const overallItem = document.createElement('div');
+            overallItem.className = 'suggestion-item px-3 py-2';
+            overallItem.style.cssText = 'cursor: pointer; transition: background 0.15s;';
+            overallItem.innerHTML = '<i class="bi bi-graph-up me-2 text-gold"></i><span class="fw-semibold">Overall Progress</span>';
+            overallItem.onmouseover = () => { overallItem.style.background = 'rgba(212, 175, 55, 0.25)'; };
+            overallItem.onmouseout = () => { if (selectedSuggestionIndex !== 0) overallItem.style.background = 'transparent'; };
+            overallItem.onclick = () => selectExercise('');
+            overallItem.dataset.index = '0';
+            suggestionsList.appendChild(overallItem);
+        }
+
+        // Add separator if there are exercises and overall is shown
+        if (showOverall && filtered.length > 0) {
+            const separator = document.createElement('div');
+            separator.className = 'border-top my-1';
+            suggestionsList.appendChild(separator);
+        }
+
+        // Add filtered exercises
+        const startIdx = showOverall ? 1 : 0;
+        filtered.forEach((option, idx) => {
+            const item = document.createElement('div');
+            item.className = 'suggestion-item px-3 py-2';
+            item.style.cssText = 'cursor: pointer; transition: background 0.15s;';
+            item.textContent = option.label || option.value;
+            item.onmouseover = () => { item.style.background = 'rgba(212, 175, 55, 0.25)'; };
+            item.onmouseout = () => { if (selectedSuggestionIndex !== idx + startIdx) item.style.background = 'transparent'; };
+            item.onclick = () => selectExercise(option.value);
+            item.dataset.index = String(idx + startIdx);
+            suggestionsList.appendChild(item);
+        });
+
+        if (filtered.length === 0 && filterText.trim()) {
+            const noResults = document.createElement('div');
+            noResults.className = 'px-3 py-2 text-muted';
+            noResults.textContent = 'No exercises found';
+            suggestionsList.appendChild(noResults);
+        }
+        
+        selectedSuggestionIndex = -1;
+    }
+
+    function showSuggestions() {
+        const suggestionsList = document.getElementById('suggestionsList');
+        if (suggestionsList) {
+            suggestionsList.style.display = 'block';
+            selectedSuggestionIndex = -1;
+        }
+    }
+
+    function hideSuggestions() {
+        setTimeout(() => {
+            const suggestionsList = document.getElementById('suggestionsList');
+            if (suggestionsList) {
+                suggestionsList.style.display = 'none';
+            }
+        }, 200);
+    }
+
+    function selectExercise(exerciseValue) {
+        const searchInput = document.getElementById('exerciseSearch');
+        currentExercise = exerciseValue;
+        
+        if (exerciseValue) {
+            const option = exerciseOptions.find(opt => opt.value === exerciseValue);
+            if (searchInput && option) {
+                searchInput.value = option.label || option.value;
+            }
+        } else {
+            if (searchInput) {
+                searchInput.value = '';
+            }
+        }
+        
+        hideSuggestions();
+        loadChart();
+    }
+
+    function handleSearchInput() {
+        const searchInput = document.getElementById('exerciseSearch');
+        const filterText = searchInput ? searchInput.value : '';
+        renderSuggestions(filterText);
+        showSuggestions();
+        
+        // Auto-select if exact match or single result
+        const filtered = getFilteredOptions(filterText);
+        if (filtered.length === 1) {
+            currentExercise = filtered[0].value;
+            loadChart();
+        } else if (filterText.trim() === '') {
+            currentExercise = '';
+            loadChart();
+        }
+    }
+
+    function handleKeyDown(event) {
+        const suggestionsList = document.getElementById('suggestionsList');
+        if (!suggestionsList || suggestionsList.style.display === 'none') return;
+        
+        const items = suggestionsList.querySelectorAll('.suggestion-item');
+        if (items.length === 0) return;
+        
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            selectedSuggestionIndex = (selectedSuggestionIndex + 1) % items.length;
+            updateSelectedSuggestion(items);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            selectedSuggestionIndex = selectedSuggestionIndex <= 0 ? items.length - 1 : selectedSuggestionIndex - 1;
+            updateSelectedSuggestion(items);
+        } else if (event.key === 'Enter') {
+            event.preventDefault();
+            if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < items.length) {
+                items[selectedSuggestionIndex].click();
+            }
+        } else if (event.key === 'Escape') {
+            hideSuggestions();
+        }
+    }
+
+    function updateSelectedSuggestion(items) {
+        items.forEach((item, idx) => {
+            if (idx === selectedSuggestionIndex) {
+                item.style.background = 'rgba(212, 175, 55, 0.25)';
+                item.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            } else {
+                item.style.background = 'transparent';
+            }
+        });
+    }
+
+    // Close suggestions when clicking outside
+    document.addEventListener('click', (e) => {
+        const searchInput = document.getElementById('exerciseSearch');
+        const suggestionsList = document.getElementById('suggestionsList');
+        if (searchInput && suggestionsList && !searchInput.contains(e.target) && !suggestionsList.contains(e.target)) {
+            hideSuggestions();
+            selectedSuggestionIndex = -1;
+        }
+    });
+
+    function renderChart(data, label) {
+        const ctx = document.getElementById('progressChart').getContext('2d');
+
+        if (myChart) myChart.destroy();
+
+        if (data.stats && Object.keys(data.stats).length) {
+            const isPercent = data.unit === 'percent';
+            document.getElementById('statsSummary').style.display = 'flex';
+            const currentValue = data.stats.current_1rm || 0;
+            const maxValue = data.stats.max_1rm || 0;
+            const improvementValue = data.stats.improvement || 0;
+            const improvementPctValue = data.stats.improvement_pct || 0;
+
+            document.getElementById('current1RM').textContent = isPercent ? `${currentValue.toFixed(1)}%` : currentValue.toFixed(1);
+            document.getElementById('max1RM').textContent = isPercent ? `${maxValue.toFixed(1)}%` : maxValue.toFixed(1);
+            const improvement = data.stats.improvement;
+            document.getElementById('improvement').textContent = isPercent
+                ? (improvementValue >= 0 ? '+' : '') + improvementValue.toFixed(1) + '%'
+                : (improvementValue >= 0 ? '+' : '') + improvementValue.toFixed(1);
+            document.getElementById('improvementPct').textContent = isPercent
+                ? (improvementPctValue >= 0 ? '+' : '') + improvementPctValue.toFixed(1) + '%'
+                : (improvementPctValue >= 0 ? '+' : '') + improvementPctValue.toFixed(1) + '%';
+
+            document.getElementById('current1RMLabel').textContent = isPercent ? 'Current Change' : 'Current 1RM';
+            document.getElementById('max1RMLabel').textContent = isPercent ? 'Best Change' : 'Max 1RM';
+            document.getElementById('improvementLabel').textContent = isPercent ? 'Net Change' : 'Improvement';
+            document.getElementById('improvementPctLabel').textContent = isPercent ? 'Avg Change' : '% Change';
+        } else {
+            document.getElementById('statsSummary').style.display = 'none';
+        }
+
+        if (document.getElementById('chartPlaceholder')) {
+            document.getElementById('chartPlaceholder').style.display = 'none';
+        }
+
+        const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
+        const pointBorderColor = isLightMode ? '#FFFFFF' : '#000000';
+        const pointHoverBorderColor = isLightMode ? '#F5F3F0' : '#FFFFFF';
+
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: data.labels,
+                datasets: [{
+                    label: label || 'Estimated 1RM (kg)',
+                    data: data.data,
+                    borderColor: '#D4AF37',
+                    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+                    borderWidth: 3,
+                    tension: 0.4,
+                    fill: true,
+                    pointRadius: 5,
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: '#D4AF37',
+                    pointBorderColor: pointBorderColor,
+                    pointBorderWidth: 2,
+                    pointHoverBackgroundColor: '#F4D03F',
+                    pointHoverBorderColor: pointHoverBorderColor,
+                    pointHoverBorderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { 
+                        labels: { 
+                            color: '#A1A1AA',
+                            font: { size: 12, weight: '600' },
+                            padding: 20
+                        },
+                        display: true
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                        titleColor: '#D4AF37',
+                        bodyColor: '#FFFFFF',
+                        borderColor: '#D4AF37',
+                        borderWidth: 2,
+                        padding: 16,
+                        displayColors: false,
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyFont: { size: 13 },
+                        cornerRadius: 12,
+                        titleSpacing: 8,
+                        bodySpacing: 6
+                    }
+                },
+                scales: {
+                    y: {
+                        grid: { 
+                            color: 'rgba(255,255,255,0.05)',
+                            lineWidth: 1
+                        },
+                        ticks: { 
+                            color: '#A1A1AA',
+                            font: { size: 11, weight: '500' },
+                            padding: 12
+                        },
+                        beginAtZero: false
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { 
+                            color: '#A1A1AA',
+                            font: { size: 11, weight: '500' },
+                            padding: 12
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function loadAverageChart() {
+        fetch('/stats/data/average')
+            .then(response => response.json())
+            .then(data => {
+                renderChart(data, 'Average 1RM (kg)');
+            })
+            .catch(error => {
+                console.error('Error loading average chart:', error);
+            });
+    }
+
     function loadChart() {
-        const exercise = document.getElementById('exerciseSelect').value;
+        const exercise = currentExercise;
         const placeholder = document.getElementById('chartPlaceholder');
         const bwAlert = document.getElementById('bwStatsAlert');
         const bwLabel = document.getElementById('bwStatsExercise');
@@ -117,13 +449,8 @@
         };
 
         if (!exercise) {
-            document.getElementById('statsSummary').style.display = 'none';
-            if (placeholder) placeholder.style.display = 'flex';
-            if (myChart) {
-                myChart.destroy();
-                myChart = null;
-            }
             updateBwAlert('');
+            loadAverageChart();
             return;
         }
 
@@ -132,99 +459,8 @@
         fetch(`/stats/data/${encodeURIComponent(exercise)}`)
             .then(response => response.json())
             .then(data => {
-                const ctx = document.getElementById('progressChart').getContext('2d');
-
-                if (myChart) myChart.destroy();
-
-                // Update stats summary
-                if (data.stats) {
-                    document.getElementById('statsSummary').style.display = 'flex';
-                    document.getElementById('current1RM').textContent = data.stats.current_1rm.toFixed(1);
-                    document.getElementById('max1RM').textContent = data.stats.max_1rm.toFixed(1);
-                    const improvement = data.stats.improvement;
-                    document.getElementById('improvement').textContent = (improvement >= 0 ? '+' : '') + improvement.toFixed(1);
-                    document.getElementById('improvementPct').textContent = (data.stats.improvement_pct >= 0 ? '+' : '') + data.stats.improvement_pct.toFixed(1) + '%';
-                }
-
                 if (placeholder) placeholder.style.display = 'none';
-                // Detect current theme
-                const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
-                const pointBorderColor = isLightMode ? '#FFFFFF' : '#000000';
-                const pointHoverBorderColor = isLightMode ? '#F5F3F0' : '#FFFFFF';
-
-                myChart = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: data.labels,
-                        datasets: [{
-                            label: 'Estimated 1RM (kg)',
-                            data: data.data,
-                            borderColor: '#D4AF37',
-                            backgroundColor: 'rgba(212, 175, 55, 0.15)',
-                            borderWidth: 3,
-                            tension: 0.4,
-                            fill: true,
-                            pointRadius: 5,
-                            pointHoverRadius: 8,
-                            pointBackgroundColor: '#D4AF37',
-                            pointBorderColor: pointBorderColor,
-                            pointBorderWidth: 2,
-                            pointHoverBackgroundColor: '#F4D03F',
-                            pointHoverBorderColor: pointHoverBorderColor,
-                            pointHoverBorderWidth: 3
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: { 
-                                labels: { 
-                                    color: '#A1A1AA',
-                                    font: { size: 12, weight: '600' },
-                                    padding: 20
-                                },
-                                display: true
-                            },
-                            tooltip: {
-                                backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                                titleColor: '#D4AF37',
-                                bodyColor: '#FFFFFF',
-                                borderColor: '#D4AF37',
-                                borderWidth: 2,
-                                padding: 16,
-                                displayColors: false,
-                                titleFont: { size: 14, weight: 'bold' },
-                                bodyFont: { size: 13 },
-                                cornerRadius: 12,
-                                titleSpacing: 8,
-                                bodySpacing: 6
-                            }
-                        },
-                        scales: {
-                            y: {
-                                grid: { 
-                                    color: 'rgba(255,255,255,0.05)',
-                                    lineWidth: 1
-                                },
-                                ticks: { 
-                                    color: '#A1A1AA',
-                                    font: { size: 11, weight: '500' },
-                                    padding: 12
-                                },
-                                beginAtZero: false
-                            },
-                            x: {
-                                grid: { display: false },
-                                ticks: { 
-                                    color: '#A1A1AA',
-                                    font: { size: 11, weight: '500' },
-                                    padding: 12
-                                }
-                            }
-                        }
-                    }
-                });
+                renderChart(data, 'Estimated 1RM (kg)');
             })
             .catch(error => {
                 console.error('Error loading chart:', error);
@@ -235,14 +471,16 @@
     window.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         const exerciseParam = urlParams.get('exercise');
+        renderSuggestions();
+        
         if (exerciseParam) {
-            const select = document.getElementById('exerciseSelect');
-            const option = Array.from(select.options).find(opt => opt.value === exerciseParam);
+            const option = exerciseOptions.find(opt => opt.value === exerciseParam);
             if (option) {
-                select.value = exerciseParam;
-                loadChart();
+                selectExercise(exerciseParam);
+                return;
             }
         }
+        loadAverageChart();
     });
 </script>
 {% endblock %}
