@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import json
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -8,7 +9,9 @@ from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
 from config import Config
-from models import Session, User, UserRole, UserApiKey
+from models import Session, User, UserRole, UserApiKey, WorkoutLog
+from services.stats import get_csv_export, get_json_export
+from sqlalchemy import desc
 from services.auth import AuthService, AuthenticationError
 from utils.errors import ValidationError
 from utils.logger import logger
@@ -826,6 +829,26 @@ def register_auth_routes(app, email_service):
             .all()
         )
 
+        csv_size_kb = 0
+        json_size_kb = 0
+        try:
+            logs = (
+                Session.query(WorkoutLog)
+                .filter_by(user_id=user_id)
+                .order_by(desc(WorkoutLog.date))
+                .all()
+            )
+            if logs:
+                csv_data = get_csv_export(Session, user)
+                csv_bytes = csv_data.encode('utf-8')
+                csv_size_kb = (len(csv_bytes) + 1023) // 1024
+
+                json_payload = get_json_export(Session, user)
+                json_bytes = json.dumps(json_payload, ensure_ascii=False, indent=2).encode('utf-8')
+                json_size_kb = (len(json_bytes) + 1023) // 1024
+        except Exception as e:
+            logger.error(f"Error computing export sizes: {e}", exc_info=True)
+
         return render_template(
             'settings.html',
             user=user,
@@ -834,6 +857,8 @@ def register_auth_routes(app, email_service):
             pending_password_change=pending_password_change,
             profile_image_url=profile_image_url,
             user_api_keys=user_api_keys,
+            csv_size_kb=csv_size_kb,
+            json_size_kb=json_size_kb,
         )
 
     @login_required

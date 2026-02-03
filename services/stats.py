@@ -206,7 +206,7 @@ def get_chart_data(db_session, user, exercise_name):
     data_reps = []  # Reps values
 
     for log in logs:
-        labels.append(log.date.strftime("%b %d"))
+        labels.append(log.date.date().isoformat())
         one_rm, top_weight, top_reps = _get_log_metrics(log)
         data_1rm.append(one_rm)
         data_weight.append(top_weight)
@@ -330,7 +330,7 @@ def get_average_growth_data(db_session, user) -> Dict:
 
     for date_key in sorted(by_date.keys()):
         values = by_date[date_key]
-        labels.append(date_key.strftime("%b %d"))
+        labels.append(date_key.isoformat())
         data_pct.append(sum(values) / len(values) if values else 0)
 
     stats = {}
