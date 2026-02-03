@@ -1,27 +1,70 @@
 import time
 from pathlib import Path
-from threading import Thread
 
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from PIL import Image
 
 from services.admin import AdminError, AdminService
+from services.email_queue import email_queue
 from utils.logger import logger
 
 from .decorators import require_admin
 
 
-def register_admin_routes(app, email_service):
+def register_admin_routes(app):
     def _is_allowed_icon(filename):
         if not filename or '.' not in filename:
             return False
         ext = filename.rsplit('.', 1)[1].lower()
         return ext in {'png', 'jpg', 'jpeg', 'webp'}
 
+    def _validate_image_file(file_storage):
+        """Validate image file content and size, not just extension."""
+        try:
+            # Check file size (limit to 10MB)
+            file_storage.seek(0, 2)  # Seek to end
+            file_size = file_storage.tell()
+            file_storage.seek(0)  # Reset to beginning
+            
+            if file_size > 10 * 1024 * 1024:  # 10MB limit
+                raise ValueError("File size exceeds 10MB limit")
+            
+            # Validate actual image content using PIL
+            image = Image.open(file_storage.stream)
+            
+            # Verify it's actually an image by trying to load it
+            image.verify()
+            
+            # Reset stream for further processing
+            file_storage.seek(0)
+            
+            # Check image dimensions (reasonable limits)
+            image = Image.open(file_storage.stream)
+            width, height = image.size
+            
+            if width > 4096 or height > 4096:
+                raise ValueError("Image dimensions too large (max 4096x4096)")
+            
+            if width < 16 or height < 16:
+                raise ValueError("Image dimensions too small (min 16x16)")
+            
+            # Reset stream again
+            file_storage.seek(0)
+            
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Image validation failed: {e}")
+            return False
+
     def _save_app_icon(file_storage):
         icon_dir = Path(app.static_folder) / 'icons'
         icon_dir.mkdir(parents=True, exist_ok=True)
+
+        # Validate the image file first
+        if not _validate_image_file(file_storage):
+            raise ValueError("Invalid image file")
 
         image = Image.open(file_storage.stream)
         image = image.convert('RGBA')
@@ -37,22 +80,20 @@ def register_admin_routes(app, email_service):
             resized.save(icon_dir / filename, format='PNG', optimize=True)
 
     def send_deletion_email_async(user_info):
+        """Queue deletion email for reliable delivery."""
         if not user_info.get('email'):
             return
-
-        def _send():
-            try:
-                with app.app_context():
-                    email_service.send_account_deletion_email(
-                        email=user_info['email'],
-                        username=user_info['username'],
-                        admin_message=user_info['deletion_reason'],
-                        admin_username=user_info['admin_username'],
-                    )
-            except Exception as exc:
-                logger.error(f"Failed to send deletion email: {exc}", exc_info=True)
-
-        Thread(target=_send, daemon=True).start()
+        
+        try:
+            email_queue.enqueue(
+                'account_deletion',
+                email=user_info['email'],
+                username=user_info['username'],
+                admin_message=user_info['deletion_reason'],
+                admin_username=user_info['admin_username']
+            )
+        except Exception as exc:
+            logger.error(f"Failed to queue deletion email: {exc}", exc_info=True)
 
     @require_admin
     def admin_dashboard():
@@ -142,7 +183,7 @@ def register_admin_routes(app, email_service):
             return redirect(url_for('admin_dashboard'))
 
         if not _is_allowed_icon(icon_file.filename):
-            flash("Unsupported file type. Use PNG or JPG.", "error")
+            flash("Unsupported file type. Use PNG, JPG, JPEG, or WebP.", "error")
             return redirect(url_for('admin_dashboard'))
 
         try:
@@ -151,6 +192,8 @@ def register_admin_routes(app, email_service):
                 "App icon updated. Remove and re-add the app to your Home Screen to refresh the icon.",
                 "success",
             )
+        except ValueError as e:
+            flash(f"Invalid image file: {str(e)}", "error")
         except Exception as e:
             logger.error(f"App icon update failed: {e}", exc_info=True)
             flash("Failed to update app icon. Please try again.", "error")

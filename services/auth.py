@@ -107,33 +107,29 @@ class AuthService:
         """
         session = Session()
         try:
-            # Validate inputs
-            if not username or len(username) < 3:
-                raise AuthenticationError("Username must be at least 3 characters")
+            # Validate inputs using centralized validators
+            from utils.validators import validate_username, validate_email, validate_password
             
-            if not email or '@' not in email:
-                raise AuthenticationError("Valid email is required")
-            
-            if not password or len(password) < 8:
-                raise AuthenticationError("Password must be at least 8 characters")
+            username = validate_username(username)
+            email = validate_email(email)
+            password = validate_password(password)
             
             # Check if username or email already exists
             existing_user = session.query(User).filter(
-                (User.username == username.lower()) | (User.email == email.lower())
+                (User.username == username) | (User.email == email)
             ).first()
             
             if existing_user:
-                if existing_user.username == username.lower():
+                if existing_user.username == username:
                     raise AuthenticationError("Username already taken")
                 else:
                     raise AuthenticationError("Email already registered")
             
             # Create user
-            email_lower = email.lower()
-            role = UserRole.ADMIN if is_admin or email_lower in Config.ADMIN_EMAIL_ALLOWLIST else UserRole.USER
+            role = UserRole.ADMIN if is_admin or email in Config.ADMIN_EMAIL_ALLOWLIST else UserRole.USER
             user = User(
-                username=username.lower(),
-                email=email_lower,
+                username=username,
+                email=email,
                 password_hash=AuthService.hash_password(password),
                 role=role,
                 is_verified=False,

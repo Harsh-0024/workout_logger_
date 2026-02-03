@@ -2603,9 +2603,48 @@
     </script>
     <script>
         (function() {
+            let loadingTimeout = null;
+            const LOADING_TIMEOUT = 10000; // 10 seconds max loading time
+            
             const hideGlobalLoader = () => {
                 document.body.classList.remove('is-loading');
+                if (loadingTimeout) {
+                    clearTimeout(loadingTimeout);
+                    loadingTimeout = null;
+                }
             };
+
+            const showGlobalLoader = () => {
+                document.body.classList.add('is-loading');
+                
+                // Auto-hide loading state after timeout to prevent stuck loading
+                if (loadingTimeout) {
+                    clearTimeout(loadingTimeout);
+                }
+                loadingTimeout = setTimeout(() => {
+                    console.warn('Loading state timeout - auto-hiding loader');
+                    hideGlobalLoader();
+                }, LOADING_TIMEOUT);
+            };
+
+            // Hide loading on any navigation event
+            const hideLoadingOnNavigation = () => {
+                hideGlobalLoader();
+            };
+
+            // Listen for various navigation events
+            window.addEventListener('beforeunload', hideLoadingOnNavigation);
+            window.addEventListener('pagehide', hideLoadingOnNavigation);
+            window.addEventListener('pageshow', hideLoadingOnNavigation);
+            window.addEventListener('popstate', hideLoadingOnNavigation);
+            
+            // Hide loading on any error
+            window.addEventListener('error', hideLoadingOnNavigation);
+            window.addEventListener('unhandledrejection', hideLoadingOnNavigation);
+
+            // Make showGlobalLoader available globally
+            window.showGlobalLoader = showGlobalLoader;
+            window.hideGlobalLoader = hideGlobalLoader;
 
             const applyLoadingState = (form) => {
                 if (form.dataset.noLoading === 'true') return;

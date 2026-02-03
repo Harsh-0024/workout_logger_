@@ -1,6 +1,8 @@
 import os
 import secrets
 import urllib.parse
+import threading
+import time
 from datetime import datetime
 
 from flask import Flask, render_template, send_from_directory
@@ -11,6 +13,7 @@ from flask_wtf.csrf import CSRFProtect
 from config import Config
 from models import Session, User, initialize_database
 from services.email_service import EmailService
+from services.email_queue import email_queue
 from utils.logger import logger
 
 from .routes.admin import register_admin_routes
@@ -68,8 +71,22 @@ def create_app(config_object=Config, init_db: bool = True):
     mail = Mail(app)
     email_service = EmailService(mail)
 
+    # Start email queue processor in background
+    def process_email_queue():
+        while True:
+            try:
+                with app.app_context():
+                    email_queue.process_queue(email_service)
+                    email_queue.cleanup_old_files()
+            except Exception as e:
+                logger.error(f"Email queue processing error: {e}", exc_info=True)
+            time.sleep(30)  # Process queue every 30 seconds
+
+    if not app.config.get('TESTING'):  # Don't start background thread in tests
+        threading.Thread(target=process_email_queue, daemon=True).start()
+
     register_auth_routes(app, email_service)
-    register_admin_routes(app, email_service)
+    register_admin_routes(app)
     register_workout_routes(app)
     register_stats_routes(app)
     register_plan_routes(app)

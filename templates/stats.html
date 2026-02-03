@@ -573,6 +573,7 @@
             myChart.options.scales.y.ticks.callback = yTickCallback;
             myChart.options.scales.x.min = xMinLabel;
             myChart.options.scales.x.max = xMaxLabel;
+            myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 7;
             myChart.update();
         } else {
             myChart = new Chart(ctx, {
@@ -656,7 +657,7 @@
                                 font: { size: 10, weight: '500' },
                                 padding: 10,
                                 autoSkip: true,
-                                maxTicksLimit: 7,
+                                maxTicksLimit: window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 7,
                                 maxRotation: 0
                             },
                             min: xMinLabel,
@@ -757,6 +758,15 @@
             }
         }
         loadAverageChart();
+    });
+
+    // Handle window resize to update chart tick limits
+    window.addEventListener('resize', function() {
+        if (myChart) {
+            const newTickLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 7;
+            myChart.options.scales.x.ticks.maxTicksLimit = newTickLimit;
+            myChart.update('none'); // Update without animation for better performance
+        }
     });
 </script>
 {% endblock %}
