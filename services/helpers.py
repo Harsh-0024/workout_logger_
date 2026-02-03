@@ -2,12 +2,27 @@ from models import Lift
 
 def get_set_stats(sets):
     peak, strength_sum, volume = 0, 0, 0
-    if not sets or "weights" not in sets: return 0, 0, 0
-    for w, r in zip(sets["weights"], sets["reps"]):
-        est_1rm = w * (1 + r / 30)
+    if not sets or "weights" not in sets:
+        return 0, 0, 0
+    weights = list(sets.get("weights") or [])
+    reps = list(sets.get("reps") or [])
+    if not weights or not reps:
+        return 0, 0, 0
+    if len(weights) != len(reps):
+        if len(weights) < len(reps) and weights:
+            weights = weights + [weights[-1]] * (len(reps) - len(weights))
+        elif len(reps) < len(weights) and reps:
+            reps = reps + [reps[-1]] * (len(weights) - len(reps))
+    for w, r in zip(weights, reps):
+        try:
+            weight = float(w)
+            reps_value = int(r)
+        except (TypeError, ValueError):
+            continue
+        est_1rm = weight * (1 + reps_value / 30)
         if est_1rm > peak: peak = est_1rm
         strength_sum += est_1rm
-        volume += w * r
+        volume += weight * reps_value
     return peak, strength_sum, volume
 
 def find_best_match(db_session, user_id, exercise_name):
