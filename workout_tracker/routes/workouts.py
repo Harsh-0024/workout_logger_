@@ -10,7 +10,7 @@ from sqlalchemy import desc, func
 
 from list_of_exercise import get_workout_days, list_of_exercises
 from models import Session, User, WorkoutLog, UserApiKey
-from parsers.workout import workout_parser
+from parsers.workout import workout_parser, parse_bw_weight
 from services.logging import handle_workout_log
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
@@ -204,7 +204,10 @@ def register_workout_routes(app):
     def get_workout_stats(user):
         try:
             total_workouts = (
-                Session.query(WorkoutLog.date).filter_by(user_id=user.id).distinct().count()
+                Session.query(func.date(WorkoutLog.date))
+                .filter_by(user_id=user.id)
+                .distinct()
+                .count()
             )
 
             total_exercises = (
@@ -334,7 +337,13 @@ def register_workout_routes(app):
                             normalized = s.replace('×', 'x')
                             parts = [p.strip() for p in normalized.split('x')]
                             if len(parts) == 2:
-                                weight = float(parts[0])
+                                weight_token = re.sub(r'\s+', '', parts[0]).lower()
+                                bw_weight = parse_bw_weight(weight_token, user.bodyweight)
+                                if bw_weight is not None:
+                                    weight = bw_weight
+                                else:
+                                    cleaned_weight = re.sub(r'(kg|lbs|lb)', '', parts[0], flags=re.IGNORECASE)
+                                    weight = float(cleaned_weight)
                                 reps = int(parts[1])
                                 total_volume += weight * reps
                         except (ValueError, IndexError):
