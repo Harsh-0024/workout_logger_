@@ -352,12 +352,182 @@
         };
     }
 
+    function hasBooleanOperators(query) {
+        if (!query) return false;
+        if (/\b(?:and|or|not)\b/i.test(query)) return true;
+        if (/[()+*!]/.test(query)) return true;
+        if (/(^|\s)-\w/.test(query) || /\s-\s/.test(query)) return true;
+        return false;
+    }
+
+    function tokenizeBooleanQuery(query) {
+        const raw = String(query || '').trim();
+        if (!raw) return [];
+        const prepared = raw
+            .replace(/([()])/g, ' $1 ')
+            .replace(/([+*])/g, ' $1 ')
+            .replace(/!/g, ' ! ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const parts = prepared ? prepared.split(' ') : [];
+        const tokens = [];
+
+        parts.forEach((part) => {
+            if (!part) return;
+            const lower = part.toLowerCase();
+            if (lower === 'and' || lower === '+') {
+                tokens.push({ type: 'OP', value: 'AND' });
+                return;
+            }
+            if (lower === 'or') {
+                tokens.push({ type: 'OP', value: 'OR' });
+                return;
+            }
+            if (lower === 'not' || lower === '!' || lower === '-') {
+                tokens.push({ type: 'OP', value: 'NOT' });
+                return;
+            }
+            if (lower === '*' ) {
+                tokens.push({ type: 'OP', value: 'AND' });
+                return;
+            }
+            if (part === '(') {
+                tokens.push({ type: 'LPAREN' });
+                return;
+            }
+            if (part === ')') {
+                tokens.push({ type: 'RPAREN' });
+                return;
+            }
+            if (part.startsWith('-') && part.length > 1) {
+                tokens.push({ type: 'OP', value: 'NOT' });
+                tokens.push({ type: 'TERM', value: part.slice(1).toLowerCase() });
+                return;
+            }
+            if (part.startsWith('!') && part.length > 1) {
+                tokens.push({ type: 'OP', value: 'NOT' });
+                tokens.push({ type: 'TERM', value: part.slice(1).toLowerCase() });
+                return;
+            }
+            tokens.push({ type: 'TERM', value: part.toLowerCase() });
+        });
+
+        return tokens;
+    }
+
+    function insertImplicitAnd(tokens) {
+        const result = [];
+        const isTerm = (token) => token && token.type === 'TERM';
+        const isRightGroup = (token) => token && (token.type === 'TERM' || token.type === 'LPAREN' || (token.type === 'OP' && token.value === 'NOT'));
+        const isLeftGroup = (token) => token && (token.type === 'TERM' || token.type === 'RPAREN');
+
+        tokens.forEach((token, idx) => {
+            const prev = result[result.length - 1];
+            if (idx > 0 && isLeftGroup(prev) && isRightGroup(token)) {
+                result.push({ type: 'OP', value: 'AND' });
+            }
+            result.push(token);
+        });
+        return result;
+    }
+
+    function toRpn(tokens) {
+        const output = [];
+        const ops = [];
+        const prec = { OR: 1, AND: 2, NOT: 3 };
+        const rightAssoc = { NOT: true };
+
+        for (const token of tokens) {
+            if (token.type === 'TERM') {
+                output.push(token);
+                continue;
+            }
+            if (token.type === 'OP') {
+                while (ops.length) {
+                    const top = ops[ops.length - 1];
+                    if (top.type !== 'OP') break;
+                    const topPrec = prec[top.value] || 0;
+                    const curPrec = prec[token.value] || 0;
+                    if ((rightAssoc[token.value] && curPrec < topPrec) || (!rightAssoc[token.value] && curPrec <= topPrec)) {
+                        output.push(ops.pop());
+                        continue;
+                    }
+                    break;
+                }
+                ops.push(token);
+                continue;
+            }
+            if (token.type === 'LPAREN') {
+                ops.push(token);
+                continue;
+            }
+            if (token.type === 'RPAREN') {
+                while (ops.length && ops[ops.length - 1].type !== 'LPAREN') {
+                    output.push(ops.pop());
+                }
+                if (!ops.length) return null;
+                ops.pop();
+            }
+        }
+
+        while (ops.length) {
+            const op = ops.pop();
+            if (op.type === 'LPAREN' || op.type === 'RPAREN') return null;
+            output.push(op);
+        }
+        return output;
+    }
+
+    function evalRpn(rpn, text) {
+        const stack = [];
+        for (const token of rpn) {
+            if (token.type === 'TERM') {
+                stack.push(text.includes(token.value));
+                continue;
+            }
+            if (token.type === 'OP') {
+                if (token.value === 'NOT') {
+                    if (!stack.length) return false;
+                    stack.push(!stack.pop());
+                    continue;
+                }
+                if (stack.length < 2) return false;
+                const b = stack.pop();
+                const a = stack.pop();
+                stack.push(token.value === 'AND' ? (a && b) : (a || b));
+            }
+        }
+        return stack.length ? stack[0] : false;
+    }
+
+    function buildBooleanMatcher(query) {
+        const tokens = insertImplicitAnd(tokenizeBooleanQuery(query));
+        if (!tokens.length) return null;
+        if (!tokens.some(token => token.type === 'TERM')) return null;
+        const rpn = toRpn(tokens);
+        if (!rpn) return null;
+        return (value) => evalRpn(rpn, value);
+    }
+
     function getFilteredOptions(filterText) {
         const normalized = filterText.trim().toLowerCase();
         if (!normalized) return exerciseOptions;
-        return exerciseOptions.filter(option => 
-            (option.label || '').toLowerCase().includes(normalized)
-        );
+        if (!hasBooleanOperators(filterText)) {
+            return exerciseOptions.filter(option => 
+                (option.label || '').toLowerCase().includes(normalized)
+            );
+        }
+
+        const matcher = buildBooleanMatcher(filterText);
+        if (!matcher) {
+            return exerciseOptions.filter(option => 
+                (option.label || '').toLowerCase().includes(normalized)
+            );
+        }
+        return exerciseOptions.filter(option => {
+            const haystack = (option.label || option.value || '').toLowerCase();
+            return matcher(haystack);
+        });
     }
 
     function renderSuggestions(filterText = '') {
