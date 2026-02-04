@@ -417,10 +417,16 @@ def get_average_growth_data(db_session, user) -> Dict:
             pct_change = max(-300.0, min(300.0, pct_change))
             per_day_values.setdefault(local_date(log.date), []).append(pct_change)
 
+        if not base:
+            continue
+
         for date_key, values in per_day_values.items():
             if not values:
                 continue
-            by_date.setdefault(date_key, []).append(sum(values) / len(values))
+            day_avg = sum(values) / len(values)
+            entry = by_date.setdefault(date_key, {'weighted_sum': 0.0, 'weight_sum': 0.0})
+            entry['weighted_sum'] += day_avg * base
+            entry['weight_sum'] += base
 
     if not by_date:
         return {
@@ -439,7 +445,11 @@ def get_average_growth_data(db_session, user) -> Dict:
     for date_key in sorted(by_date.keys()):
         values = by_date[date_key]
         labels.append(date_key.isoformat())
-        data_pct.append(sum(values) / len(values) if values else 0)
+        weight_sum = values.get('weight_sum', 0.0)
+        if weight_sum:
+            data_pct.append(values.get('weighted_sum', 0.0) / weight_sum)
+        else:
+            data_pct.append(0)
 
     stats = {}
     if any(value != 0 for value in data_pct):
