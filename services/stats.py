@@ -4,12 +4,15 @@ Statistics and data export services for workout tracking.
 import csv
 import io
 import json
-from typing import Dict, List, Optional
+import re
+from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
 from list_of_exercise import BW_EXERCISES
-from models import WorkoutLog
+from models import WorkoutLog, RepRange
 from services.helpers import get_set_stats
+from services.workout_quality import WorkoutQualityScorer
+from utils.dates import local_date
 
 
 def _serialize_sets_json(sets_json) -> str:
@@ -84,6 +87,45 @@ def _apply_bodyweight(weights, reps, bodyweight):
         return [float(bodyweight)] * len(weights), reps
 
     return weights, reps
+
+
+def _build_rep_range_map(rep_text: str) -> Dict[str, Tuple[int, int]]:
+    mapping: Dict[str, Tuple[int, int]] = {}
+    for line in (rep_text or "").splitlines():
+        if ':' not in line:
+            continue
+        k, v = line.split(':', 1)
+        key = (k or '').strip().lower()
+        value = (v or '').strip()
+        if not key or not value:
+            continue
+        if ',' in value:
+            value = value.split(',', 1)[1].strip()
+        nums = re.findall(r'\d+', value)
+        if len(nums) >= 2:
+            mapping[key] = (int(nums[0]), int(nums[1]))
+        elif len(nums) == 1:
+            n = int(nums[0])
+            mapping[key] = (n, n)
+    return mapping
+
+
+def _get_target_rep_range(db_session, user, exercise_name: str) -> Optional[Tuple[int, int]]:
+    rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
+    rep_text = rep_row.text_content if rep_row else ""
+    rep_map = _build_rep_range_map(rep_text)
+    return rep_map.get((exercise_name or '').strip().lower())
+
+
+def _normalize_sets_for_log(log):
+    weights, reps = _normalize_sets(log.sets_json)
+
+    if _log_uses_bw(log):
+        weights, reps = _apply_bodyweight(weights, reps, log.bodyweight)
+
+    if weights and reps:
+        return {"weights": weights, "reps": reps}
+    return {}
 
 
 def _get_top_weight(weights, reps):
@@ -200,17 +242,42 @@ def get_chart_data(db_session, user, exercise_name):
         WorkoutLog.exercise == exercise_name
     ).order_by(WorkoutLog.date).all()
 
-    labels = []  # Dates
-    data_1rm = []  # 1RM values
-    data_weight = []  # Top weight values
-    data_reps = []  # Reps values
+    labels = []
+    data_1rm = []
+    data_weight = []
+    data_reps = []
+    data_volume = []
+    data_effective_volume = []
+    data_quality = []
+    data_quality_adjusted_1rm = []
+
+    target_rep_range = _get_target_rep_range(db_session, user, exercise_name)
 
     for log in logs:
-        labels.append(log.date.date().isoformat())
+        labels.append(local_date(log.date).isoformat() if log.date else "")
+
         one_rm, top_weight, top_reps = _get_log_metrics(log)
-        data_1rm.append(one_rm)
-        data_weight.append(top_weight)
-        data_reps.append(top_reps)
+        sets_for_quality = _normalize_sets_for_log(log)
+        quality = WorkoutQualityScorer.calculate_workout_score(sets_for_quality, target_rep_range)
+
+        e1rm = quality.get('peak_1rm') or one_rm
+        total_vol = quality.get('total_volume')
+        if total_vol is None:
+            total_vol = 0
+        eff_vol = quality.get('effective_volume')
+        if eff_vol is None:
+            eff_vol = 0
+        q_index = quality.get('quality_index')
+        if q_index is None:
+            q_index = 0
+
+        data_1rm.append(float(e1rm or 0))
+        data_weight.append(float(top_weight or 0))
+        data_reps.append(int(top_reps or 0))
+        data_volume.append(float(total_vol or 0))
+        data_effective_volume.append(float(eff_vol or 0))
+        data_quality.append(float(q_index) * 100.0)
+        data_quality_adjusted_1rm.append(float(e1rm or 0) * float(q_index or 0))
 
     # Calculate statistics
     stats = {}
@@ -228,6 +295,19 @@ def get_chart_data(db_session, user, exercise_name):
         "data": data_1rm,
         "weight": data_weight,
         "reps": data_reps,
+        "volume": data_volume,
+        "effective_volume": data_effective_volume,
+        "quality": data_quality,
+        "quality_adjusted_1rm": data_quality_adjusted_1rm,
+        "series": {
+            "e1rm": data_1rm,
+            "top_weight": data_weight,
+            "top_reps": data_reps,
+            "tonnage": data_volume,
+            "effective_tonnage": data_effective_volume,
+            "quality": data_quality,
+            "quality_adjusted_1rm": data_quality_adjusted_1rm,
+        },
         "exercise": exercise_name,
         "stats": stats
     }
@@ -307,7 +387,7 @@ def get_average_growth_data(db_session, user) -> Dict:
             if not base:
                 continue
             pct_change = ((one_rm - base) / base) * 100.0
-            per_day_values.setdefault(log.date.date(), []).append(pct_change)
+            per_day_values.setdefault(local_date(log.date), []).append(pct_change)
 
         for date_key, values in per_day_values.items():
             if not values:

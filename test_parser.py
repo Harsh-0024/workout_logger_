@@ -2,6 +2,7 @@ import unittest
 # IMPORTS: Assumes you have moved files to 'parsers/workout.py'
 from parsers.workout import workout_parser, parse_weight_x_reps, normalize
 from list_of_exercise import get_workout_days
+from services.workout_quality import WorkoutQualityScorer
 
 
 class TestWorkoutParser(unittest.TestCase):
@@ -218,6 +219,7 @@ class TestPlanParser(unittest.TestCase):
         data = get_workout_days(raw_text)
         self.assertIn("Shoulders", data.get("workout", {}))
         self.assertIn("Shoulders 1", data["workout"]["Shoulders"])
+
         self.assertEqual(data["workout"]["Shoulders"]["Shoulders 1"], ["Wrist Extension - Dumbbell", "Farmer's Walk"])
 
     def test_get_workout_days_ignores_cycle_headings(self):
@@ -245,6 +247,42 @@ class TestPlanParser(unittest.TestCase):
         self.assertEqual(data.get("headings"), ["Cycle 1", "Cycle 2"])
         self.assertEqual(data.get("heading_sessions", {}).get("Cycle 1"), [1])
         self.assertEqual(data.get("heading_sessions", {}).get("Cycle 2"), [2])
+
+
+class TestWorkoutQualityScorer(unittest.TestCase):
+
+    def test_strength_scales_without_hard_cap(self):
+        low = WorkoutQualityScorer.calculate_workout_score({"weights": [100], "reps": [5]}, (4, 6))
+        high = WorkoutQualityScorer.calculate_workout_score({"weights": [200], "reps": [5]}, (4, 6))
+        self.assertGreater(high["peak_1rm"], low["peak_1rm"])
+        self.assertAlmostEqual(high["quality_score"], low["quality_score"], delta=1e-6)
+
+    def test_superman_set_not_penalized_when_high_performance(self):
+        score = WorkoutQualityScorer.calculate_workout_score(
+            {"weights": [120, 120, 120], "reps": [8, 9, 12]},
+            (6, 10),
+        )
+        self.assertGreaterEqual(score["rep_range_adherence"], 0.85)
+
+    def test_drop_set_and_warmup_do_not_destroy_avg_1rm(self):
+        score = WorkoutQualityScorer.calculate_workout_score(
+            {"weights": [20, 100, 100, 60], "reps": [10, 5, 5, 15]},
+            (4, 8),
+        )
+        self.assertGreater(score["avg_1rm"] / (score["peak_1rm"] or 1.0), 0.90)
+
+    def test_pyramid_training_not_flagged_as_inconsistent(self):
+        score = WorkoutQualityScorer.calculate_workout_score(
+            {"weights": [60, 80, 100], "reps": [12, 8, 5]},
+            (5, 12),
+        )
+        self.assertGreater(score["volume_consistency"], 0.55)
+
+    def test_high_rep_1rm_not_inflated_like_epley(self):
+        score_10 = WorkoutQualityScorer.calculate_workout_score({"weights": [50], "reps": [10]})
+        score_20 = WorkoutQualityScorer.calculate_workout_score({"weights": [50], "reps": [20]})
+        self.assertGreater(score_20["peak_1rm"], score_10["peak_1rm"])
+        self.assertLess(score_20["peak_1rm"], score_10["peak_1rm"] * 1.2)
 
 
 if __name__ == '__main__':

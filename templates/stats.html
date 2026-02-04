@@ -13,7 +13,7 @@
             <div class="row mb-4">
                 <div class="col-12">
                     <label class="text-muted mb-2 d-block" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">
-                        <i class="bi bi-search me-2"></i>Search Exercise
+                        <i class="bi bi-search me-2"></i>proeSearch Exercise
                     </label>
                     <div class="position-relative">
                         <input 
@@ -58,6 +58,15 @@
                             <button class="ma-pill active" data-ma="7">7d</button>
                             <button class="ma-pill" data-ma="14">14d</button>
                             <button class="ma-pill" data-ma="30">30d</button>
+                        </div>
+                    </div>
+                    <div id="metricControls" style="display: none;">
+                        <label class="text-muted mb-1 d-block stats-filter-label">Metric</label>
+                        <div class="d-flex gap-2 metric-pill-group">
+                            <button class="metric-pill active" data-metric="e1rm">e1RM</button>
+                            <button class="metric-pill" data-metric="top_weight">Top Weight</button>
+                            <button class="metric-pill" data-metric="tonnage">Tonnage</button>
+                            <button class="metric-pill" data-metric="effective_tonnage">Effective Tonnage</button>
                         </div>
                     </div>
                 </div>
@@ -164,11 +173,12 @@
     }
 
     .range-pill-group,
-    .ma-pill-group {
+    .ma-pill-group,
+    .metric-pill-group {
         flex-wrap: nowrap;
     }
 
-    .range-pill, .ma-pill {
+    .range-pill, .ma-pill, .metric-pill {
         background: rgba(22, 22, 22, 0.7);
         color: var(--text-muted, #b5b5b5);
         border-radius: 999px;
@@ -182,24 +192,25 @@
         text-align: center;
     }
 
-    .ma-pill {
+    .ma-pill, .metric-pill {
         padding: 0.35rem 0.8rem;
         font-size: 0.72rem;
     }
 
     [data-theme="light"] .range-pill,
-    [data-theme="light"] .ma-pill {
+    [data-theme="light"] .ma-pill,
+    [data-theme="light"] .metric-pill {
         background: #fffdf8;
         color: #6b6b6b;
         border-color: rgba(148, 126, 86, 0.35);
     }
 
-    .range-pill:hover, .ma-pill:hover {
+    .range-pill:hover, .ma-pill:hover, .metric-pill:hover {
         background: rgba(212, 175, 55, 0.15);
         color: #D4AF37;
     }
 
-    .range-pill.active, .ma-pill.active {
+    .range-pill.active, .ma-pill.active, .metric-pill.active {
         background: #D4AF37;
         color: #171717;
         font-weight: 600;
@@ -208,7 +219,8 @@
     }
 
     [data-theme="light"] .range-pill.active,
-    [data-theme="light"] .ma-pill.active {
+    [data-theme="light"] .ma-pill.active,
+    [data-theme="light"] .metric-pill.active {
         background: #D4AF37;
         color: #000;
     }
@@ -248,7 +260,8 @@
             gap: 0.3rem;
         }
 
-        .ma-pill-group {
+        .ma-pill-group,
+        .metric-pill-group {
             gap: 0.4rem;
         }
 
@@ -259,7 +272,7 @@
             font-size: 0.68rem;
         }
 
-        .ma-pill {
+        .ma-pill, .metric-pill {
             flex: 1 1 0;
             min-width: 0;
             padding: 0.28rem 0.5rem;
@@ -293,7 +306,49 @@
     let selectedSuggestionIndex = -1;
     let currentDaysRange = 30;
     let currentMAWindow = 7;
+    let currentMetric = 'e1rm';
     let fullChartData = null;
+
+    function getMetricConfig(metricKey, data) {
+        const unit = (data && data.unit) ? data.unit : '';
+        if (unit === 'percent') {
+            return { key: 'data', label: 'Average Change (%)', unit: 'percent', suffix: '%' };
+        }
+
+        const configs = {
+            e1rm: { key: 'e1rm', label: 'Estimated 1RM (kg)', suffix: '' },
+            top_weight: { key: 'top_weight', label: 'Top Weight (kg)', suffix: '' },
+            tonnage: { key: 'tonnage', label: 'Tonnage (kg)', suffix: '' },
+            effective_tonnage: { key: 'effective_tonnage', label: 'Effective Tonnage (kg)', suffix: '' },
+        };
+        return configs[metricKey] || configs.e1rm;
+    }
+
+    function getSeriesValues(data, metricKey) {
+        if (!data) return [];
+        if (data.unit === 'percent') return data.data || [];
+        const series = data.series || {};
+        const config = getMetricConfig(metricKey, data);
+        return series[config.key] || data.data || [];
+    }
+
+    function computeStats(values) {
+        const cleaned = (values || []).map(v => Number(v)).filter(v => Number.isFinite(v));
+        if (!cleaned.length) return {};
+        const first = cleaned[0];
+        const last = cleaned[cleaned.length - 1];
+        const max = Math.max(...cleaned);
+        const min = Math.min(...cleaned);
+        const improvement = last - first;
+        const improvementPct = (first !== 0) ? (improvement / first) * 100 : 0;
+        return {
+            current: last,
+            max,
+            min,
+            improvement,
+            improvement_pct: improvementPct,
+        };
+    }
 
     function getFilteredOptions(filterText) {
         const normalized = filterText.trim().toLowerCase();
@@ -476,7 +531,12 @@
             labels: data.labels.slice(cutoffIndex),
             data: data.data.slice(cutoffIndex),
             weight: data.weight ? data.weight.slice(cutoffIndex) : [],
-            reps: data.reps ? data.reps.slice(cutoffIndex) : []
+            reps: data.reps ? data.reps.slice(cutoffIndex) : [],
+            volume: data.volume ? data.volume.slice(cutoffIndex) : [],
+            effective_volume: data.effective_volume ? data.effective_volume.slice(cutoffIndex) : [],
+            quality: data.quality ? data.quality.slice(cutoffIndex) : [],
+            quality_adjusted_1rm: data.quality_adjusted_1rm ? data.quality_adjusted_1rm.slice(cutoffIndex) : [],
+            series: data.series ? Object.fromEntries(Object.entries(data.series).map(([k, v]) => [k, (v || []).slice(cutoffIndex)])) : {},
         };
     }
 
@@ -493,6 +553,11 @@
         fullChartData = data;
         const filteredData = filterDataByRange(data, currentDaysRange);
         const ctx = document.getElementById('progressChart').getContext('2d');
+
+        const metricControls = document.getElementById('metricControls');
+        if (metricControls) {
+            metricControls.style.display = (currentExercise && filteredData.unit !== 'percent') ? 'block' : 'none';
+        }
 
         const formatShortLabel = (rawLabel) => {
             if (!rawLabel) return '';
@@ -514,25 +579,28 @@
         const rawLabels = data.labels || [];
         const rangeBounds = getRangeBounds(rawLabels, currentDaysRange);
         const shortLabels = rawLabels.map(formatShortLabel);
-        const maValues = movingAverage(data.data || [], currentMAWindow);
-        const xMinLabel = shortLabels[rangeBounds.startIndex] || shortLabels[0];
-        const xMaxLabel = shortLabels[rangeBounds.endIndex] || shortLabels[shortLabels.length - 1];
+
+        const metricConfig = getMetricConfig(currentMetric, data);
+        const primaryValues = getSeriesValues(data, currentMetric);
+        const maValues = movingAverage(primaryValues || [], currentMAWindow);
+        const xMinLabel = shortLabels[rangeBounds.startIndex] || shortLabels[0] || '';
+        const xMaxLabel = shortLabels[rangeBounds.endIndex] || shortLabels[shortLabels.length - 1] || '';
 
         if (document.getElementById('chartPlaceholder')) {
             document.getElementById('chartPlaceholder').style.display = 'none';
         }
 
-        if (filteredData.stats && Object.keys(filteredData.stats).length) {
+        const summary = computeStats(getSeriesValues(filteredData, currentMetric));
+        if (summary && Object.keys(summary).length) {
             const isPercent = filteredData.unit === 'percent';
             document.getElementById('statsSummary').style.display = 'flex';
-            const currentValue = filteredData.stats.current_1rm || 0;
-            const maxValue = filteredData.stats.max_1rm || 0;
-            const improvementValue = filteredData.stats.improvement || 0;
-            const improvementPctValue = filteredData.stats.improvement_pct || 0;
+            const currentValue = summary.current || 0;
+            const maxValue = summary.max || 0;
+            const improvementValue = summary.improvement || 0;
+            const improvementPctValue = summary.improvement_pct || 0;
 
             document.getElementById('current1RM').textContent = isPercent ? `${currentValue.toFixed(1)}%` : currentValue.toFixed(1);
             document.getElementById('max1RM').textContent = isPercent ? `${maxValue.toFixed(1)}%` : maxValue.toFixed(1);
-            const improvement = data.stats.improvement;
             document.getElementById('improvement').textContent = isPercent
                 ? (improvementValue >= 0 ? '+' : '') + improvementValue.toFixed(1) + '%'
                 : (improvementValue >= 0 ? '+' : '') + improvementValue.toFixed(1);
@@ -540,8 +608,8 @@
                 ? (improvementPctValue >= 0 ? '+' : '') + improvementPctValue.toFixed(1) + '%'
                 : (improvementPctValue >= 0 ? '+' : '') + improvementPctValue.toFixed(1) + '%';
 
-            document.getElementById('current1RMLabel').textContent = isPercent ? 'Current Change' : 'Current 1RM';
-            document.getElementById('max1RMLabel').textContent = isPercent ? 'Best Change' : 'Max 1RM';
+            document.getElementById('current1RMLabel').textContent = isPercent ? 'Current Change' : `Current ${metricConfig.label}`;
+            document.getElementById('max1RMLabel').textContent = isPercent ? 'Best Change' : `Max ${metricConfig.label}`;
             document.getElementById('improvementLabel').textContent = isPercent ? 'Net Change' : 'Improvement';
             document.getElementById('improvementPctLabel').textContent = isPercent ? 'Avg Change' : '% Change';
         } else {
@@ -562,18 +630,30 @@
 
         const avgColor = isLightMode ? 'rgba(212, 175, 55, 0.6)' : 'rgba(212, 175, 55, 0.5)';
 
+        const primarySeries = getSeriesValues(data, currentMetric);
+        const qualitySeries = (data && data.quality) ? data.quality : [];
+        const showQuality = !!(qualitySeries && qualitySeries.length);
+
         if (myChart) {
             myChart.data.labels = shortLabels;
-            myChart.data.datasets[0].data = data.data || [];
+            myChart.data.datasets[0].data = primarySeries || [];
             myChart.data.datasets[0].backgroundColor = gradient;
+            myChart.data.datasets[0].label = metricConfig.label;
             if (myChart.data.datasets[1]) {
                 myChart.data.datasets[1].data = maValues;
                 myChart.data.datasets[1].borderColor = avgColor;
             }
+            if (myChart.data.datasets[2]) {
+                myChart.data.datasets[2].data = showQuality ? qualitySeries : [];
+                myChart.data.datasets[2].borderColor = '#2FA772';
+                myChart.data.datasets[2].borderDash = [];
+                myChart.data.datasets[2].borderWidth = 2.5;
+                myChart.data.datasets[2].hidden = !showQuality;
+            }
             myChart.options.scales.y.ticks.callback = yTickCallback;
             myChart.options.scales.x.min = xMinLabel;
             myChart.options.scales.x.max = xMaxLabel;
-            myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 7;
+            myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
             myChart.update();
         } else {
             myChart = new Chart(ctx, {
@@ -582,8 +662,8 @@
                     labels: shortLabels,
                     datasets: [
                         {
-                            label: label || 'Estimated 1RM (kg)',
-                            data: data.data || [],
+                            label: metricConfig.label,
+                            data: primarySeries || [],
                             borderColor: '#D4AF37',
                             backgroundColor: gradient,
                             borderWidth: 3,
@@ -606,6 +686,19 @@
                             tension: 0.35,
                             pointRadius: 0,
                             pointHoverRadius: 0
+                        },
+                        {
+                            label: 'Performance (%)',
+                            data: showQuality ? qualitySeries : [],
+                            borderColor: '#2FA772',
+                            borderWidth: 2.5,
+                            borderDash: [],
+                            fill: false,
+                            tension: 0.35,
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            yAxisID: 'y1',
+                            hidden: !showQuality,
                         }
                     ]
                 },
@@ -650,6 +743,18 @@
                             },
                             beginAtZero: false
                         },
+                        y1: {
+                            position: 'right',
+                            grid: { display: false },
+                            ticks: {
+                                color: tickColor,
+                                font: { size: 10, weight: '500' },
+                                padding: 12,
+                                callback: (value) => `${value}%`,
+                            },
+                            min: 0,
+                            max: 100,
+                        },
                         x: {
                             grid: { display: false },
                             ticks: { 
@@ -657,7 +762,7 @@
                                 font: { size: 10, weight: '500' },
                                 padding: 10,
                                 autoSkip: true,
-                                maxTicksLimit: window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 7,
+                                maxTicksLimit: window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4,
                                 maxRotation: 0
                             },
                             min: xMinLabel,
@@ -673,8 +778,7 @@
         fetch('/stats/data/average')
             .then(response => response.json())
             .then(data => {
-                const chartLabel = data.unit === 'percent' ? 'Average Change (%)' : 'Average 1RM (kg)';
-                renderChart(data, chartLabel);
+                renderChart(data, 'Average Change (%)');
             })
             .catch(error => {
                 console.error('Error loading average chart:', error);
@@ -713,7 +817,7 @@
             .then(response => response.json())
             .then(data => {
                 if (placeholder) placeholder.style.display = 'none';
-                renderChart(data, 'Estimated 1RM (kg)');
+                renderChart(data, '');
             })
             .catch(error => {
                 console.error('Error loading chart:', error);
@@ -744,6 +848,17 @@
         });
     });
 
+    document.querySelectorAll('.metric-pill').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.metric-pill').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            currentMetric = btn.dataset.metric;
+            if (fullChartData) {
+                renderChart(fullChartData, fullChartData.exercise || 'Progress');
+            }
+        });
+    });
+
     // Auto-select exercise from URL parameter
     window.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
@@ -763,7 +878,7 @@
     // Handle window resize to update chart tick limits
     window.addEventListener('resize', function() {
         if (myChart) {
-            const newTickLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 7;
+            const newTickLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
             myChart.options.scales.x.ticks.maxTicksLimit = newTickLimit;
             myChart.update('none'); // Update without animation for better performance
         }

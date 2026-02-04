@@ -87,7 +87,11 @@ def register_plan_routes(app):
         user = current_user
 
         try:
+            # Decode HTML entities first, then sanitize
+            import html
+            category = html.unescape(category)
             category = sanitize_text_input(category, max_length=100)
+            
             raw_text = get_effective_plan_text(Session, user)
             if not raw_text:
                 flash("No workout plan found.", "error")
@@ -121,7 +125,11 @@ def register_plan_routes(app):
         user = current_user
 
         try:
+            # Decode HTML entities first, then sanitize
+            import html
+            category = html.unescape(category)
             category = sanitize_text_input(category, max_length=100)
+            
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
 
             back_to_days_url = None

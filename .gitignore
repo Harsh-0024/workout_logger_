@@ -56,6 +56,9 @@ Thumbs.db
 *.log
 logs/
 
+# Email queue
+email_queue/
+
 # Testing
 .pytest_cache/
 .coverage
