@@ -91,6 +91,7 @@ def register_plan_routes(app):
             import html
             category = html.unescape(category)
             category = sanitize_text_input(category, max_length=100)
+            category = html.unescape(category)
             
             raw_text = get_effective_plan_text(Session, user)
             if not raw_text:
@@ -129,6 +130,7 @@ def register_plan_routes(app):
             import html
             category = html.unescape(category)
             category = sanitize_text_input(category, max_length=100)
+            category = html.unescape(category)
             
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
 

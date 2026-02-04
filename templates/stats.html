@@ -339,12 +339,14 @@
         const last = cleaned[cleaned.length - 1];
         const max = Math.max(...cleaned);
         const min = Math.min(...cleaned);
+        const avg = cleaned.reduce((sum, v) => sum + v, 0) / cleaned.length;
         const improvement = last - first;
         const improvementPct = (first !== 0) ? (improvement / first) * 100 : 0;
         return {
             current: last,
             max,
             min,
+            avg,
             improvement,
             improvement_pct: improvementPct,
         };
@@ -597,7 +599,7 @@
             const currentValue = summary.current || 0;
             const maxValue = summary.max || 0;
             const improvementValue = summary.improvement || 0;
-            const improvementPctValue = summary.improvement_pct || 0;
+            const improvementPctValue = isPercent ? (summary.avg || 0) : (summary.improvement_pct || 0);
 
             document.getElementById('current1RM').textContent = isPercent ? `${currentValue.toFixed(1)}%` : currentValue.toFixed(1);
             document.getElementById('max1RM').textContent = isPercent ? `${maxValue.toFixed(1)}%` : maxValue.toFixed(1);

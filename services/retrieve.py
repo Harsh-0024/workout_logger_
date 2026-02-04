@@ -4,6 +4,7 @@ import re
 from models import Plan, RepRange, User, UserRole, WorkoutLog
 from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
 from parsers.workout import align_sets
+from services.workout_quality import WorkoutQualityScorer
 
 
 def _normalize_text(text: str) -> str:
@@ -124,7 +125,15 @@ def generate_retrieve_output(db_session, user, category, day_id):
 
             target_sets = int(declared_sets) if isinstance(declared_sets, int) and declared_sets > 0 else 3
 
-            sets_line = _build_best_sets_line_from_logs(db_session, user, ex, target_sets=target_sets)
+            target_rep_range = _parse_rep_range(rng)
+
+            sets_line = _build_best_sets_line_from_logs(
+                db_session,
+                user,
+                ex,
+                target_sets=target_sets,
+                target_rep_range=target_rep_range,
+            )
 
             if ex in BW_EXERCISES:
                 if not sets_line:
@@ -164,6 +173,18 @@ def _exercise_candidates(exercise_name: str):
     return list(dict.fromkeys(candidates))
 
 
+def _parse_rep_range(value: str):
+    if not value:
+        return None
+    nums = re.findall(r"\d+", str(value))
+    if len(nums) >= 2:
+        return int(nums[0]), int(nums[1])
+    if len(nums) == 1:
+        n = int(nums[0])
+        return n, n
+    return None
+
+
 def _compress_shorthand_values(values):
     if not values:
         return []
@@ -200,7 +221,13 @@ def _format_weight_token(exercise: str, weight, bodyweight):
     return token
 
 
-def _build_best_sets_line_from_logs(db_session, user, exercise: str, target_sets: int = 3) -> str:
+def _build_best_sets_line_from_logs(
+    db_session,
+    user,
+    exercise: str,
+    target_sets: int = 3,
+    target_rep_range=None,
+) -> str:
     candidates = _exercise_candidates(exercise)
     if not candidates:
         return ""
@@ -216,7 +243,7 @@ def _build_best_sets_line_from_logs(db_session, user, exercise: str, target_sets
         return ""
 
     best_log = None
-    best_peak = None
+    best_score = None
 
     for log in logs:
         sets_json = log.sets_json if isinstance(log.sets_json, dict) else None
@@ -235,21 +262,20 @@ def _build_best_sets_line_from_logs(db_session, user, exercise: str, target_sets
 
         weights, reps = align_sets(weights, reps, target_sets=target_sets)
 
-        peak = None
-        for w, r in zip(weights, reps):
-            if w is None or r is None:
-                continue
-            if r <= 0:
-                continue
-            est = float(w) * (1.0 + float(r) / 30.0)
-            if peak is None or est > peak:
-                peak = est
-
-        if peak is None:
+        quality = WorkoutQualityScorer.calculate_workout_score(
+            {"weights": weights, "reps": reps},
+            target_rep_range,
+        )
+        q_index = float(quality.get("quality_index") or 0.0)
+        avg_1rm = float(quality.get("avg_1rm") or 0.0)
+        score = avg_1rm * q_index
+        if score <= 0:
             continue
 
-        if best_peak is None or peak > best_peak or (peak == best_peak and log.date > getattr(best_log, 'date', log.date)):
-            best_peak = peak
+        if best_score is None or score > best_score or (
+            score == best_score and log.date > getattr(best_log, 'date', log.date)
+        ):
+            best_score = score
             best_log = log
 
     if not best_log:

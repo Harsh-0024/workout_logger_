@@ -164,6 +164,30 @@ def _get_log_metrics(log):
     )
 
 
+def _normalize_exercise_name(exercise: str) -> str:
+    value = str(exercise or '').strip()
+    value = re.sub(r'^\s*\d+\s*[\.)\-:]\s*', '', value)
+    value = re.sub(r'\s+', ' ', value).strip()
+    return value
+
+
+def _get_peak_1rm_for_log(log) -> float:
+    weights, reps = _normalize_sets(log.sets_json)
+
+    if (not weights or not reps) and log.top_weight is not None and log.top_reps is not None:
+        weights = [float(log.top_weight)]
+        reps = [int(log.top_reps)]
+
+    if _log_uses_bw(log):
+        weights, reps = _apply_bodyweight(weights, reps, log.bodyweight)
+
+    if not weights or not reps:
+        return 0.0
+
+    quality = WorkoutQualityScorer.calculate_workout_score({'weights': weights, 'reps': reps}, None)
+    return float(quality.get('peak_1rm') or 0.0)
+
+
 def get_csv_export(db_session, user):
     """Generates a CSV string of all workout history."""
     logs = db_session.query(WorkoutLog).filter_by(
@@ -368,7 +392,10 @@ def get_average_growth_data(db_session, user) -> Dict:
 
     logs_by_exercise = {}
     for log in logs:
-        logs_by_exercise.setdefault(log.exercise, []).append(log)
+        key = _normalize_exercise_name(log.exercise)
+        if not key:
+            continue
+        logs_by_exercise.setdefault(key, []).append(log)
 
     by_date = {}
     for exercise_logs in logs_by_exercise.values():
@@ -379,7 +406,7 @@ def get_average_growth_data(db_session, user) -> Dict:
         for log in exercise_logs:
             if not log.date:
                 continue
-            one_rm, _, _ = _get_log_metrics(log)
+            one_rm = _get_peak_1rm_for_log(log)
             if not one_rm or one_rm <= 0:
                 continue
             if base is None:
@@ -387,6 +414,7 @@ def get_average_growth_data(db_session, user) -> Dict:
             if not base:
                 continue
             pct_change = ((one_rm - base) / base) * 100.0
+            pct_change = max(-300.0, min(300.0, pct_change))
             per_day_values.setdefault(local_date(log.date), []).append(pct_change)
 
         for date_key, values in per_day_values.items():
