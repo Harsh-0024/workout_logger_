@@ -2146,7 +2146,7 @@
         }
     </style>
 </head>
-<body>
+<body data-ai-admin="{{ 'true' if current_user.is_authenticated and current_user.is_admin() else 'false' }}">
     <div class="global-loader" id="globalLoader" aria-live="polite" aria-busy="true">
         <div class="global-loader-content">
             <div class="global-loader-ring"></div>
@@ -2165,6 +2165,12 @@
             </div>
             <div class="mobile-header-actions">
             {% if current_user.is_authenticated %}
+                {% if current_user.is_admin() %}
+                    <button type="button" class="btn btn-sm mobile-header-btn" id="openAiAssistantMobile" aria-keyshortcuts="K">
+                        <i class="bi bi-stars"></i>
+                        <span>AI</span>
+                    </button>
+                {% endif %}
                 <a href="{{ url_for('user_settings') }}" class="btn btn-sm mobile-header-btn">
                     <i class="bi bi-gear"></i>
                     <span>Settings</span>
@@ -2215,6 +2221,12 @@
                             <i class="bi bi-shield-lock"></i>
                             <span class="d-none d-sm-inline ms-2">Admin</span>
                         </a>
+                    {% endif %}
+                    {% if current_user.is_admin() %}
+                        <button type="button" class="btn btn-link nav-link p-0" id="openAiAssistantNav" aria-keyshortcuts="K">
+                            <i class="bi bi-stars"></i>
+                            <span class="d-none d-sm-inline ms-2">AI</span>
+                        </button>
                     {% endif %}
                     <a class="nav-link" href="{{ url_for('user_settings') }}">
                         <i class="bi bi-gear"></i>
@@ -2345,6 +2357,12 @@
                         <span class="shortcut-key">P</span>
                         <span class="text-muted">View stats</span>
                     </div>
+                    {% if current_user.is_authenticated and current_user.is_admin() %}
+                        <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                            <span class="shortcut-key">K</span>
+                            <span class="text-muted">Open AI assistant</span>
+                        </div>
+                    {% endif %}
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
                         <span class="shortcut-key">A</span>
                         <span class="text-muted">Admin panel</span>
@@ -2360,6 +2378,35 @@
             </div>
         </div>
     </div>
+
+    {% if current_user.is_authenticated and current_user.is_admin() %}
+        <div class="modal fade" id="aiAssistantModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg">
+                <div class="modal-content" style="background: var(--card-bg-solid); border: 1px solid var(--border-subtle);">
+                    <div class="modal-header border-0">
+                        <h5 class="modal-title"><i class="bi bi-stars text-gold me-2"></i>AI Assistant</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="text-muted mb-3" style="font-size: var(--fs-xs);">
+                            Examples:
+                            <span class="mono">When did I last hit 100kg squat?</span>
+                            <span class="mx-2">•</span>
+                            <span class="mono">Best pull day in the last 30 days</span>
+                            <span class="mx-2">•</span>
+                            <span class="mono">Why is the graph low on this day?</span>
+                        </div>
+                        <div id="aiAssistantMessages" class="p-3 rounded-3" style="background: rgba(0,0,0,0.18); border: 1px solid var(--border-subtle); max-height: 46vh; overflow-y: auto;"></div>
+                        <div id="aiAssistantError" class="text-danger mt-2" style="display:none; font-size: var(--fs-sm);"></div>
+                        <div class="input-group mt-3">
+                            <input id="aiAssistantInput" type="text" class="form-control" placeholder="Ask about your history..." autocomplete="off">
+                            <button id="aiAssistantSend" type="button" class="btn btn-gold-solid">Send</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 
     <datalist id="email-domain-options"></datalist>
     <script>
@@ -2410,6 +2457,201 @@
             });
         })();
     </script>
+    {% if current_user.is_authenticated and current_user.is_admin() %}
+        <script>
+            (function() {
+                const modalEl = document.getElementById('aiAssistantModal');
+                if (!modalEl) return;
+                const messagesEl = document.getElementById('aiAssistantMessages');
+                const inputEl = document.getElementById('aiAssistantInput');
+                const sendBtn = document.getElementById('aiAssistantSend');
+                const errorEl = document.getElementById('aiAssistantError');
+                const navBtn = document.getElementById('openAiAssistantNav');
+                const mobileBtn = document.getElementById('openAiAssistantMobile');
+                const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
+                const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : null;
+
+                let modalInstance = null;
+                let isSending = false;
+
+                const ensureModal = () => {
+                    if (!modalInstance) {
+                        modalInstance = new bootstrap.Modal(modalEl);
+                    }
+                    return modalInstance;
+                };
+
+                const getContext = () => {
+                    try {
+                        if (typeof window.getAiAssistantContext === 'function') {
+                            const ctx = window.getAiAssistantContext();
+                            if (ctx && typeof ctx === 'object') return ctx;
+                        }
+                    } catch (e) {
+                    }
+                    return { page: window.location.pathname || '' };
+                };
+
+                const setError = (msg) => {
+                    if (!errorEl) return;
+                    if (msg) {
+                        errorEl.textContent = msg;
+                        errorEl.style.display = 'block';
+                    } else {
+                        errorEl.textContent = '';
+                        errorEl.style.display = 'none';
+                    }
+                };
+
+                const scrollToBottom = () => {
+                    if (!messagesEl) return;
+                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                };
+
+                const addMessage = (role, text, opts) => {
+                    if (!messagesEl) return;
+                    const wrap = document.createElement('div');
+                    wrap.className = 'mb-3';
+
+                    const bubble = document.createElement('div');
+                    const isUser = role === 'user';
+                    bubble.style.maxWidth = '92%';
+                    bubble.style.padding = '0.7rem 0.9rem';
+                    bubble.style.borderRadius = '14px';
+                    bubble.style.border = '1px solid var(--border-subtle)';
+                    bubble.style.background = isUser ? 'rgba(212, 175, 55, 0.12)' : 'rgba(255,255,255,0.04)';
+                    bubble.style.marginLeft = isUser ? 'auto' : '0';
+                    bubble.style.marginRight = isUser ? '0' : 'auto';
+
+                    const content = document.createElement('div');
+                    content.style.whiteSpace = 'pre-wrap';
+                    content.textContent = String(text || '');
+                    bubble.appendChild(content);
+
+                    if (opts && opts.linkUrl) {
+                        const linkWrap = document.createElement('div');
+                        linkWrap.className = 'mt-2';
+                        const a = document.createElement('a');
+                        a.href = String(opts.linkUrl);
+                        a.className = 'text-muted text-decoration-none small hover-gold tracking-wide';
+                        a.textContent = opts.linkLabel || 'Open workout';
+                        linkWrap.appendChild(a);
+                        bubble.appendChild(linkWrap);
+                    }
+
+                    wrap.appendChild(bubble);
+                    messagesEl.appendChild(wrap);
+                    scrollToBottom();
+                };
+
+                const setSending = (sending) => {
+                    isSending = sending;
+                    if (sendBtn) sendBtn.disabled = sending;
+                    if (inputEl) inputEl.disabled = sending;
+                    if (sendBtn) {
+                        if (sending) {
+                            sendBtn.dataset.originalLabel = sendBtn.dataset.originalLabel || sendBtn.textContent;
+                            sendBtn.textContent = '...';
+                        } else if (sendBtn.dataset.originalLabel) {
+                            sendBtn.textContent = sendBtn.dataset.originalLabel;
+                        }
+                    }
+                };
+
+                const renderResults = (items) => {
+                    if (!Array.isArray(items) || items.length === 0) return;
+                    const lines = items.slice(0, 6).map((it) => {
+                        if (!it || typeof it !== 'object') return null;
+                        const ex = it.exercise ? String(it.exercise) : '';
+                        const w = (it.top_weight !== undefined && it.top_weight !== null) ? String(it.top_weight) : '';
+                        const r = (it.top_reps !== undefined && it.top_reps !== null) ? String(it.top_reps) : '';
+                        const e1 = (it.estimated_1rm !== undefined && it.estimated_1rm !== null) ? Number(it.estimated_1rm).toFixed(1) : '';
+                        const dt = it.date ? String(it.date) : '';
+                        const right = [w && r ? `${w} x ${r}` : '', e1 ? `e1RM ${e1}` : ''].filter(Boolean).join(' • ');
+                        return [ex || dt, right].filter(Boolean).join(' — ');
+                    }).filter(Boolean);
+                    if (lines.length) {
+                        addMessage('assistant', lines.join('\n'));
+                    }
+                };
+
+                const send = async () => {
+                    if (isSending) return;
+                    const q = (inputEl ? inputEl.value : '').trim();
+                    if (!q) {
+                        setError('Type a question first.');
+                        return;
+                    }
+                    setError('');
+                    addMessage('user', q);
+                    if (inputEl) inputEl.value = '';
+                    setSending(true);
+                    try {
+                        const ctx = getContext();
+                        const headers = { 'Content-Type': 'application/json' };
+                        if (csrfToken) headers['X-CSRFToken'] = csrfToken;
+                        const res = await fetch('/api/history-qa', {
+                            method: 'POST',
+                            headers,
+                            credentials: 'same-origin',
+                            body: JSON.stringify({
+                                question: q,
+                                exercise: ctx.exercise || '',
+                                metric: ctx.metric || 'e1rm',
+                                date: ctx.date || ctx.selected_date || '',
+                                page: ctx.page || '',
+                            }),
+                        });
+
+                        const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                        if (!contentType.includes('application/json')) {
+                            const text = await res.text();
+                            if (String(text || '').toLowerCase().includes('<html')) {
+                                throw new Error('Session expired. Refresh the page and try again.');
+                            }
+                            throw new Error('Unexpected response from server.');
+                        }
+
+                        const data = await res.json();
+                        if (!res.ok || !data || !data.ok) {
+                            throw new Error((data && data.error) ? data.error : 'Unable to answer');
+                        }
+                        addMessage('assistant', String(data.answer || ''), data.workout_url ? { linkUrl: data.workout_url, linkLabel: 'Open workout' } : null);
+                        renderResults(data.results || []);
+                    } catch (e) {
+                        setError(e && e.message ? e.message : 'Unable to answer right now.');
+                    } finally {
+                        setSending(false);
+                    }
+                };
+
+                const open = () => {
+                    ensureModal().show();
+                };
+
+                window.openAiAssistantModal = open;
+
+                if (navBtn) navBtn.addEventListener('click', open);
+                if (mobileBtn) mobileBtn.addEventListener('click', open);
+                if (sendBtn) sendBtn.addEventListener('click', send);
+                if (inputEl) {
+                    inputEl.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            send();
+                        }
+                    });
+                }
+                modalEl.addEventListener('shown.bs.modal', () => {
+                    if (inputEl) {
+                        inputEl.focus();
+                        inputEl.select();
+                    }
+                    scrollToBottom();
+                });
+            })();
+        </script>
+    {% endif %}
     <script>
         (function() {
             const dismissDelay = 4500;
@@ -2558,6 +2800,8 @@
                 openShortcutsModal();
             };
 
+            const isAdminShortcutEnabled = document.body.dataset.aiAdmin === 'true';
+
             document.addEventListener('keydown', (event) => {
                 if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
                 if (isTypingContext(event.target)) return;
@@ -2589,6 +2833,13 @@
                 } else if (key === 'a') {
                     event.preventDefault();
                     window.location.href = '/admin';
+                } else if (key === 'k') {
+                    if (isAdminShortcutEnabled) {
+                        event.preventDefault();
+                        if (typeof window.openAiAssistantModal === 'function') {
+                            window.openAiAssistantModal();
+                        }
+                    }
                 } else if (key === '/') {
                     event.preventDefault();
                     if (!focusSearch()) {

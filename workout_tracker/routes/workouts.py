@@ -774,6 +774,62 @@ def register_workout_routes(app):
         payload, status = _recommend_workout_payload(user, use_cache=True, cache_key_prefix="u:")
         return jsonify(payload), status
 
+    @login_required
+    def history_qa_api():
+        user = current_user
+        try:
+            if not user.is_admin():
+                return jsonify({"ok": False, "error": "AI assistant is currently limited to admins."}), 403
+            body = request.get_json(silent=True)
+            if body is None:
+                body = {}
+            question = body.get('question')
+            context_exercise = body.get('exercise')
+            context_metric = body.get('metric')
+            context_date = body.get('date')
+
+            api_keys = (
+                Session.query(UserApiKey)
+                .filter_by(user_id=user.id, is_active=True)
+                .order_by(UserApiKey.created_at.desc())
+                .all()
+            )
+            api_key_payloads = [
+                {"id": key.id, "api_key": key.api_key, "account_label": key.account_label}
+                for key in api_keys
+                if key.api_key
+            ]
+
+            from services.history_qa import answer_history_question
+
+            exercises = (
+                Session.query(WorkoutLog.exercise)
+                .filter_by(user_id=user.id)
+                .distinct()
+                .order_by(WorkoutLog.exercise)
+                .all()
+            )
+            exercise_options = [e[0] for e in exercises if e and e[0]]
+
+            payload = answer_history_question(
+                Session,
+                user,
+                question=str(question or ''),
+                context_exercise=str(context_exercise or '').strip() or None,
+                context_metric=str(context_metric or '').strip() or None,
+                context_date=str(context_date or '').strip() or None,
+                api_keys=api_key_payloads,
+                exercise_options=exercise_options,
+            )
+
+            if not isinstance(payload, dict):
+                return jsonify({"ok": False, "error": "Unexpected response."}), 500
+            status = 200 if payload.get('ok') else 400
+            return jsonify(payload), status
+        except Exception as e:
+            logger.error(f"History QA failed: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": "Unable to answer right now."}), 500
+
     def _format_reco_label(category: str, day_id: int) -> str:
         cat = str(category or "").strip()
         if not cat:
@@ -1069,3 +1125,4 @@ def register_workout_routes(app):
     app.add_url_rule('/workout/<date_str>/delete', endpoint='delete_workout', view_func=delete_workout, methods=['POST'])
     app.add_url_rule('/log', endpoint='log_workout', view_func=log_workout, methods=['GET', 'POST'])
     app.add_url_rule('/api/recommend-workout', endpoint='recommend_workout_api', view_func=recommend_workout_api, methods=['GET'])
+    app.add_url_rule('/api/history-qa', endpoint='history_qa_api', view_func=history_qa_api, methods=['POST'])

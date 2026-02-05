@@ -308,6 +308,7 @@
     let currentMAWindow = 7;
     let currentMetric = 'e1rm';
     let fullChartData = null;
+    let aiAssistantSelectedDate = '';
 
     function getMetricConfig(metricKey, data) {
         const unit = (data && data.unit) ? data.unit : '';
@@ -826,6 +827,11 @@
             myChart.options.scales.x.min = xMinLabel;
             myChart.options.scales.x.max = xMaxLabel;
             myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
+            myChart.options.onClick = (evt, elements) => {
+                if (!elements || !elements.length) return;
+                const idx = elements[0].index;
+                aiAssistantSelectedDate = rawLabels[idx] || '';
+            };
             myChart.update();
         } else {
             myChart = new Chart(ctx, {
@@ -877,6 +883,11 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (evt, elements) => {
+                        if (!elements || !elements.length) return;
+                        const idx = elements[0].index;
+                        aiAssistantSelectedDate = rawLabels[idx] || '';
+                    },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -1054,6 +1065,13 @@
             myChart.options.scales.x.ticks.maxTicksLimit = newTickLimit;
             myChart.update('none'); // Update without animation for better performance
         }
+    });
+
+    window.getAiAssistantContext = () => ({
+        page: 'stats',
+        exercise: currentExercise || '',
+        metric: currentMetric || 'e1rm',
+        date: aiAssistantSelectedDate || '',
     });
 </script>
 {% endblock %}

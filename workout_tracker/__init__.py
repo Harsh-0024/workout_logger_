@@ -5,10 +5,10 @@ import threading
 import time
 from datetime import datetime
 
-from flask import Flask, render_template, send_from_directory
+from flask import Flask, render_template, send_from_directory, jsonify, request
 from flask_login import LoginManager
 from flask_mail import Mail
-from flask_wtf.csrf import CSRFProtect
+from flask_wtf.csrf import CSRFProtect, CSRFError
 
 from config import Config
 from models import Session, User, initialize_database
@@ -115,6 +115,21 @@ def create_app(config_object=Config, init_db: bool = True):
     @app.errorhandler(404)
     def not_found(error):
         return render_template('error.html', error_code=404, error_message="Page not found"), 404
+
+    @app.errorhandler(CSRFError)
+    def handle_csrf_error(error):
+        try:
+            if request.path.startswith('/api/'):
+                return (
+                    jsonify({
+                        'ok': False,
+                        'error': 'CSRF token missing or invalid. Refresh the page and try again.',
+                    }),
+                    400,
+                )
+        except Exception:
+            pass
+        return render_template('error.html', error_code=400, error_message="Invalid request"), 400
 
     @app.errorhandler(500)
     def internal_error(error):
