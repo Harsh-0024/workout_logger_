@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="row justify-content-center retrieve-step" style="min-height: 80vh; align-items: center;">
-    <div class="col-12 col-md-6 col-lg-5">
+    <div class="col-12 col-md-8 col-lg-6">
         <div class="card text-center">
             <div class="d-flex justify-content-center gap-2 mb-4 flex-wrap step-badges">
                 <a href="{{ url_for('retrieve_categories') }}" class="badge bg-primary step-badge step-badge-link"><span class="step-number">1.</span> Category</a>
@@ -53,6 +53,12 @@
     </div>
 </div>
 <style>
+    .retrieve-step .card {
+        max-width: 640px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
     .step-badge {
         padding: 8px 16px;
         font-size: 0.75rem;

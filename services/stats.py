@@ -165,10 +165,26 @@ def _get_log_metrics(log):
 
 
 def _normalize_exercise_name(exercise: str) -> str:
-    value = str(exercise or '').strip()
+    value = str(exercise or '').strip().lower()
     value = re.sub(r'^\s*\d+\s*[\.)\-:]\s*', '', value)
+    value = re.sub(r'[-–—]+', ' ', value)
+    value = re.sub(r'[^a-z0-9\s]+', ' ', value)
     value = re.sub(r'\s+', ' ', value).strip()
     return value
+
+
+def _resolve_exercise_aliases(db_session, user, exercise_name: str) -> List[str]:
+    key = _normalize_exercise_name(exercise_name)
+    if not key:
+        return []
+    exercises = (
+        db_session.query(WorkoutLog.exercise)
+        .filter(WorkoutLog.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    aliases = [ex[0] for ex in exercises if _normalize_exercise_name(ex[0]) == key]
+    return aliases or [exercise_name]
 
 
 def _get_peak_1rm_for_log(log) -> float:
@@ -261,10 +277,14 @@ def get_json_export(db_session, user) -> Dict:
 
 def get_chart_data(db_session, user, exercise_name):
     """Fetches date vs 1RM data for a specific exercise with additional metrics."""
-    logs = db_session.query(WorkoutLog).filter(
-        WorkoutLog.user_id == user.id,
-        WorkoutLog.exercise == exercise_name
-    ).order_by(WorkoutLog.date).all()
+    aliases = _resolve_exercise_aliases(db_session, user, exercise_name)
+    if not aliases:
+        logs = []
+    else:
+        logs = db_session.query(WorkoutLog).filter(
+            WorkoutLog.user_id == user.id,
+            WorkoutLog.exercise.in_(aliases)
+        ).order_by(WorkoutLog.date).all()
 
     labels = []
     data_1rm = []

@@ -323,7 +323,7 @@
     let myChart = null;
 
     const exerciseOptionsEl = document.getElementById('exerciseOptionsData');
-    const exerciseOptions = exerciseOptionsEl ? JSON.parse(exerciseOptionsEl.textContent || '[]') : [];
+    let exerciseOptions = exerciseOptionsEl ? JSON.parse(exerciseOptionsEl.textContent || '[]') : [];
     let currentExercise = '';
     let selectedSuggestionIndex = -1;
     let currentDaysRange = 30;
@@ -331,6 +331,27 @@
     let currentMetric = 'e1rm';
     let fullChartData = null;
     let aiAssistantSelectedDate = '';
+
+    function normalizeSearchValue(value) {
+        return String(value || '')
+            .toLowerCase()
+            .replace(/[-–—]+/g, ' ')
+            .replace(/[^a-z0-9\s]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    if (exerciseOptions.length) {
+        const seenOptionKeys = new Set();
+        exerciseOptions = exerciseOptions.filter(option => {
+            const key = normalizeSearchValue(option.label || option.value);
+            if (!key || seenOptionKeys.has(key)) {
+                return false;
+            }
+            seenOptionKeys.add(key);
+            return true;
+        });
+    }
 
     function getMetricConfig(metricKey, data) {
         const unit = (data && data.unit) ? data.unit : '';
@@ -533,18 +554,18 @@
     }
 
     function getFilteredOptions(filterText) {
-        const normalized = filterText.trim().toLowerCase();
+        const normalized = normalizeSearchValue(filterText);
         if (!normalized) return exerciseOptions;
         if (!hasBooleanOperators(filterText)) {
-            return exerciseOptions.filter(option => 
-                (option.label || '').toLowerCase().includes(normalized)
+            return exerciseOptions.filter(option =>
+                normalizeSearchValue(option.label || option.value).includes(normalized)
             );
         }
 
         const matcher = buildBooleanMatcher(filterText);
         if (!matcher) {
             return exerciseOptions.filter(option => 
-                (option.label || '').toLowerCase().includes(normalized)
+                normalizeSearchValue(option.label || option.value).includes(normalized)
             );
         }
         return exerciseOptions.filter(option => {

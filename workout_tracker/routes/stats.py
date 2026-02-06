@@ -10,6 +10,7 @@ from sqlalchemy import desc
 
 from models import Session, WorkoutLog
 from services.stats import (
+    _normalize_exercise_name,
     backfill_log_bodyweight,
     get_average_growth_data,
     get_chart_data,
@@ -38,11 +39,17 @@ def register_stats_routes(app):
             )
             exercises = [e[0] for e in exercises]
             exercise_options = []
+            seen_keys = set()
             for ex in exercises:
                 cleaned = re.sub(r'^\s*\d+\s*[\.)]\s*', '', ex).strip()
+                label = cleaned or ex
+                key = _normalize_exercise_name(label)
+                if not key or key in seen_keys:
+                    continue
+                seen_keys.add(key)
                 exercise_options.append({
-                    'value': ex,
-                    'label': cleaned or ex,
+                    'value': label,
+                    'label': label,
                 })
 
             logs = (
