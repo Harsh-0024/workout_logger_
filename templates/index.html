@@ -107,13 +107,18 @@
 
         const items = Array.from(list.querySelectorAll('.recent-item'));
 
-        const applyFilter = () => {
-            const q = (input.value || '').toLowerCase().trim();
-            const terms = q
-                ? q.split(',').map(t => t.trim()).filter(Boolean)
-                : [];
+        const normalizeSearchValue = (value) => String(value || '')
+            .toLowerCase()
+            .replace(/[-–—]+/g, ' ')
+            .replace(/[^a-z0-9\s]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
 
-            if (terms.length === 0) {
+        const applyFilter = () => {
+            const raw = input.value || '';
+            const rawTerms = raw ? raw.split(',').map(t => t.trim()).filter(Boolean) : [];
+
+            if (rawTerms.length === 0) {
                 for (const el of items) {
                     el.style.display = '';
                 }
@@ -123,18 +128,20 @@
 
             const include = [];
             const exclude = [];
-            for (const term of terms) {
-                if (term.startsWith('not ') || term.startsWith('no ')) {
-                    const ex = term.replace(/^(not|no)\s+/, '').trim();
+            for (const term of rawTerms) {
+                const normalizedTerm = term.trim();
+                if (normalizedTerm.startsWith('not ') || normalizedTerm.startsWith('no ')) {
+                    const ex = normalizeSearchValue(normalizedTerm.replace(/^(not|no)\s+/, '').trim());
                     if (ex) exclude.push(ex);
                 } else {
-                    include.push(term);
+                    const normalized = normalizeSearchValue(normalizedTerm);
+                    if (normalized) include.push(normalized);
                 }
             }
 
             let shown = 0;
             for (const el of items) {
-                const hay = (el.getAttribute('data-search') || '').toLowerCase();
+                const hay = normalizeSearchValue(el.getAttribute('data-search') || '');
 
                 const hasExcluded = exclude.some(ex => hay.includes(ex));
                 if (hasExcluded) {

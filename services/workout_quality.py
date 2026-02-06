@@ -162,9 +162,9 @@ class WorkoutQualityScorer:
     def _working_set_weight(intensity_ratio: float) -> float:
         if intensity_ratio <= 0:
             return 0.0
-        x = (intensity_ratio - 0.60) / 0.40
+        x = (intensity_ratio - 0.50) / 0.50
         x = max(0.0, min(1.0, x))
-        return x * x
+        return x
 
     @staticmethod
     def _rep_adherence_score(reps: int, target_range: Tuple[int, int] = None, intensity_ratio: float = 0.0) -> float:

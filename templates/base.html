@@ -1672,7 +1672,7 @@
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                padding: 7px 12px;
+                padding: 7px 16px;
                 font-size: 0.72rem;
                 font-weight: 600;
                 text-transform: uppercase;
@@ -2771,7 +2771,9 @@
             };
 
             const focusSearch = () => {
-                const searchInput = document.getElementById('historySearch') || document.getElementById('recentSearch');
+                const searchInput = document.getElementById('historySearch')
+                    || document.getElementById('recentSearch')
+                    || document.getElementById('exerciseSearch');
                 if (searchInput) {
                     searchInput.focus();
                     searchInput.select();
@@ -2851,11 +2853,9 @@
                             window.openAiAssistantModal();
                         }
                     }
-                } else if (key === '/') {
+                } else if (key === '/' && !event.shiftKey) {
                     event.preventDefault();
-                    if (!focusSearch()) {
-                        openShortcutsModal();
-                    }
+                    focusSearch();
                 } else if (key === '?' || (event.shiftKey && event.key === '/')) {
                     event.preventDefault();
                     toggleShortcutsModal();
