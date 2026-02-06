@@ -99,13 +99,13 @@ def generate_retrieve_output(db_session, user, category, day_id):
 
     ist_offset = timedelta(hours=5, minutes=30)
     today_str = (datetime.utcnow() + ist_offset).strftime("%d/%m")
-    header_line = f"{today_str} {day_key}"
+    header_line = f"{today_str} - {day_key}"
     if str(category).strip().lower() == "session":
         titles = all_plans.get("session_titles") if isinstance(all_plans, dict) else None
         if isinstance(titles, dict):
             session_title = titles.get(str(day_id))
             if session_title:
-                header_line = f"Session {day_id} - {session_title}"
+                header_line = f"{today_str} - Session {day_id} - {session_title}"
     output_lines = [header_line, ""]
 
     try:

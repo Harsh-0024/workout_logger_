@@ -2,6 +2,7 @@
 Workout text parser for converting raw workout text into structured data.
 """
 import re
+import html
 from datetime import datetime
 from typing import Optional, Dict, List, Tuple
 
@@ -358,7 +359,10 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
     workout_name = title_line
     if len(date_nums) >= 2:
         parts = title_line.split(' ', 1)
-        if len(parts) > 1: workout_name = parts[1].strip()
+        if len(parts) > 1:
+            workout_name = parts[1].strip()
+    workout_name = html.unescape(workout_name)
+    workout_name = workout_name.lstrip('-–—').strip()
 
     workout_day = {"date": date_obj, "workout_name": workout_name, "exercises": []}
 

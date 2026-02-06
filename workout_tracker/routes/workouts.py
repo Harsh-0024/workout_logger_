@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import html
 import re
 import threading
 import time
@@ -100,8 +101,13 @@ def register_workout_routes(app):
         s = s.replace("•", " ")
         s = re.sub(r"\bday\b", " ", s, flags=re.IGNORECASE)
         s = re.sub(r"[^a-z0-9&]+", " ", s)
-        s = re.sub(r"\s+", " ", s).strip()
         return s
+
+    def _clean_workout_title(title: str) -> str:
+        cleaned = html.unescape(str(title or "").strip())
+        cleaned = cleaned.lstrip('-–—').strip()
+        cleaned = re.sub(r"\s+", " ", cleaned)
+        return cleaned or "Workout"
 
     def _contains_phrase(haystack: str, needle: str) -> bool:
         if not haystack or not needle:
@@ -176,7 +182,7 @@ def register_workout_routes(app):
                 if date_key not in by_date:
                     by_date[date_key] = {
                         'date': log.date,
-                        'title': log.workout_name or "Workout",
+                        'title': _clean_workout_title(log.workout_name or "Workout"),
                         'exercises': set(),
                         'logs': [],
                     }
@@ -307,7 +313,7 @@ def register_workout_routes(app):
                 flash("Workout not found.", "error")
                 return redirect(url_for('user_dashboard', username=user.username))
 
-            workout_name = logs[0].workout_name or "Workout"
+            workout_name = _clean_workout_title(logs[0].workout_name or "Workout")
             header_date = workout_date.strftime('%d/%m')
             workout_text = build_exercise_text(logs)
             workout_text = f"{header_date} {workout_name}\n\n{workout_text}".strip()

@@ -1615,6 +1615,8 @@
                 justify-content: space-between;
                 gap: 12px;
                 padding: 14px 0;
+                flex-wrap: wrap;
+                row-gap: 8px;
             }
 
             .mobile-brand {
@@ -1661,21 +1663,30 @@
                 display: flex;
                 align-items: center;
                 gap: 8px;
+                flex-wrap: wrap;
+                justify-content: flex-end;
+                row-gap: 6px;
             }
 
             .mobile-header-btn {
                 display: inline-flex;
                 align-items: center;
                 gap: 6px;
-                padding: 6px 12px;
-                font-size: 0.7rem;
+                padding: 6px 10px;
+                font-size: 0.68rem;
                 font-weight: 600;
                 text-transform: uppercase;
-                letter-spacing: 1px;
+                letter-spacing: 0.8px;
                 background: rgba(212, 175, 55, 0.08);
                 border: 1px solid rgba(212, 175, 55, 0.25);
                 color: var(--gold-primary);
                 border-radius: 999px;
+            }
+
+            @media (max-width: 420px) {
+                .mobile-header-btn span {
+                    display: none;
+                }
             }
 
             .mobile-header-btn i {
