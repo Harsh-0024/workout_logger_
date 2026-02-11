@@ -339,6 +339,7 @@ def get_chart_data(db_session, user, exercise_name):
     return {
         "labels": labels,
         "data": data_1rm,
+        "workout_days": labels,
         "weight": data_weight,
         "reps": data_reps,
         "volume": data_volume,
@@ -405,6 +406,7 @@ def get_average_growth_data(db_session, user) -> Dict:
         return {
             "labels": [],
             "data": [],
+            "workout_days": [],
             "weight": [],
             "reps": [],
             "exercise": "Overall Progress",
@@ -454,6 +456,7 @@ def get_average_growth_data(db_session, user) -> Dict:
         return {
             "labels": [],
             "data": [],
+            "workout_days": [],
             "weight": [],
             "reps": [],
             "exercise": "Overall Progress",
@@ -487,6 +490,7 @@ def get_average_growth_data(db_session, user) -> Dict:
     return {
         "labels": labels,
         "data": data_pct,
+        "workout_days": labels,
         "weight": [],
         "reps": [],
         "exercise": "Overall Progress",
@@ -532,6 +536,7 @@ def get_overall_progress_data(
             'labels': [],
             'data': [],
             'log_data': [],
+            'workout_days': [],
             'weight': [],
             'reps': [],
             'exercise': 'Overall',
@@ -562,6 +567,7 @@ def get_overall_progress_data(
             'labels': [],
             'data': [],
             'log_data': [],
+            'workout_days': [],
             'weight': [],
             'reps': [],
             'exercise': 'Overall',
@@ -603,6 +609,7 @@ def get_overall_progress_data(
             'labels': [],
             'data': [],
             'log_data': [],
+            'workout_days': [],
             'weight': [],
             'reps': [],
             'exercise': 'Overall',
@@ -713,6 +720,7 @@ def get_overall_progress_data(
         'labels': labels,
         'data': series,
         'log_data': log_series,
+        'workout_days': [d.isoformat() for d in workout_days_sorted],
         'weight': [],
         'reps': [],
         'exercise': title,

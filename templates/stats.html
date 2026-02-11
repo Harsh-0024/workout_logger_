@@ -51,6 +51,32 @@
                 <div id="chartPlaceholder" class="position-absolute top-0 start-0 w-100 h-100" style="pointer-events: none;"></div>
             </div>
 
+            <div id="chartPointDetails" class="chart-point-details" style="display: none;">
+                <div class="chart-point-header">
+                    <span id="chartPointDate">-</span>
+                    <button type="button" class="chart-point-close" id="chartPointClose" aria-label="Close">×</button>
+                </div>
+                <div class="chart-point-body">
+                    <div class="chart-point-row">
+                        <span class="chart-point-label">Value</span>
+                        <span id="chartPointValue">-</span>
+                    </div>
+                    <div class="chart-point-row">
+                        <span class="chart-point-label">Change</span>
+                        <span id="chartPointChange">-</span>
+                    </div>
+                    <div class="chart-point-row" id="chartPointTopSetRow" style="display: none;">
+                        <span class="chart-point-label">Top set</span>
+                        <span id="chartPointTopSet">-</span>
+                    </div>
+                    <div class="chart-point-row" id="chartPointTonnageRow" style="display: none;">
+                        <span class="chart-point-label">Tonnage</span>
+                        <span id="chartPointTonnage">-</span>
+                    </div>
+                </div>
+                <a id="chartPointLink" class="chart-point-link" href="#">Open workout</a>
+            </div>
+
             <!-- Filters below chart -->
             <div class="stats-filters mb-3">
                 <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3">
@@ -203,6 +229,91 @@
         box-shadow: 0 8px 24px rgba(148, 126, 86, 0.08);
     }
 
+    .chart-point-details {
+        margin-bottom: 0.8rem;
+        padding: 0.75rem 0.9rem;
+        border-radius: 16px;
+        border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.22));
+        background: var(--card-bg, #141414);
+        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+    }
+
+    [data-theme="light"] .chart-point-details {
+        background: #ffffff;
+        border-color: rgba(148, 126, 86, 0.35);
+        box-shadow: 0 10px 24px rgba(148, 126, 86, 0.08);
+    }
+
+    .chart-point-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        color: var(--text-muted, #a8a8a8);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        font-weight: 600;
+        margin-bottom: 0.45rem;
+    }
+
+    .chart-point-close {
+        background: transparent;
+        border: none;
+        color: inherit;
+        font-size: 1rem;
+        line-height: 1;
+        padding: 0;
+        cursor: pointer;
+        opacity: 0.7;
+    }
+
+    .chart-point-close:hover {
+        opacity: 1;
+    }
+
+    .chart-point-body {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.4rem 0.75rem;
+        font-size: 0.78rem;
+    }
+
+    .chart-point-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.6rem;
+    }
+
+    .chart-point-label {
+        color: var(--text-muted, #a8a8a8);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-size: 0.64rem;
+        font-weight: 600;
+    }
+
+    .chart-point-link {
+        margin-top: 0.6rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.35rem;
+        padding: 0.45rem 0.85rem;
+        border-radius: 999px;
+        background: #D4AF37;
+        color: #141414;
+        text-decoration: none;
+        font-size: 0.72rem;
+        font-weight: 600;
+        border: 1px solid rgba(212, 175, 55, 0.6);
+        box-shadow: 0 6px 16px rgba(212, 175, 55, 0.3);
+    }
+
+    .chart-point-link:hover {
+        color: #141414;
+        filter: brightness(0.98);
+    }
+
     .range-pill-group,
     .ma-pill-group,
     .metric-pill-group {
@@ -335,6 +446,10 @@
             line-height: 1.1;
         }
 
+        .chart-point-body {
+            grid-template-columns: 1fr;
+        }
+
         .stats-summary .stat-card {
             padding: 12px;
             border-radius: 14px;
@@ -406,6 +521,95 @@
             btn.dataset.overall = currentOverallMode;
             btn.classList.add('active');
         });
+    }
+
+    function isTouchUI() {
+        return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+    }
+
+    function formatDateLabel(rawLabel, options) {
+        if (!rawLabel) return '';
+        const parts = String(rawLabel).split('-');
+        if (parts.length === 3) {
+            const year = Number(parts[0]);
+            const month = Number(parts[1]);
+            const day = Number(parts[2]);
+            if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+                return new Date(year, month - 1, day).toLocaleDateString('en-US', options);
+            }
+        }
+        return rawLabel;
+    }
+
+    function getLoggedIndexSet(rawLabels, data) {
+        const labels = Array.isArray(rawLabels) ? rawLabels : [];
+        const workoutDays = (data && Array.isArray(data.workout_days)) ? data.workout_days : [];
+        const loggedDaySet = new Set(workoutDays.length ? workoutDays : labels);
+        const loggedIndexSet = new Set();
+        labels.forEach((label, idx) => {
+            if (loggedDaySet.has(label)) {
+                loggedIndexSet.add(idx);
+            }
+        });
+        return loggedIndexSet;
+    }
+
+    function getLoggedIndicesFromSet(loggedIndexSet) {
+        return Array.from(loggedIndexSet || []).sort((a, b) => a - b);
+    }
+
+    function getPreviousLoggedIndex(currentIndex, loggedIndices) {
+        if (!Array.isArray(loggedIndices) || loggedIndices.length === 0) return null;
+        for (let i = loggedIndices.length - 1; i >= 0; i -= 1) {
+            if (loggedIndices[i] < currentIndex) return loggedIndices[i];
+        }
+        return null;
+    }
+
+    function setChartPointDetailsVisible(visible) {
+        const details = document.getElementById('chartPointDetails');
+        if (!details) return;
+        details.style.display = visible ? 'block' : 'none';
+    }
+
+    function populateChartPointDetails(payload) {
+        const details = document.getElementById('chartPointDetails');
+        if (!details || !payload) return;
+
+        const dateEl = document.getElementById('chartPointDate');
+        const valueEl = document.getElementById('chartPointValue');
+        const changeEl = document.getElementById('chartPointChange');
+        const topSetRow = document.getElementById('chartPointTopSetRow');
+        const topSetEl = document.getElementById('chartPointTopSet');
+        const tonnageRow = document.getElementById('chartPointTonnageRow');
+        const tonnageEl = document.getElementById('chartPointTonnage');
+        const linkEl = document.getElementById('chartPointLink');
+
+        if (dateEl) dateEl.textContent = payload.date || '-';
+        if (valueEl) valueEl.textContent = payload.value || '-';
+        if (changeEl) changeEl.textContent = payload.change || '-';
+
+        if (topSetRow && topSetEl) {
+            if (payload.topSet) {
+                topSetEl.textContent = payload.topSet;
+                topSetRow.style.display = 'flex';
+            } else {
+                topSetRow.style.display = 'none';
+            }
+        }
+
+        if (tonnageRow && tonnageEl) {
+            if (payload.tonnage) {
+                tonnageEl.textContent = payload.tonnage;
+                tonnageRow.style.display = 'flex';
+            } else {
+                tonnageRow.style.display = 'none';
+            }
+        }
+
+        if (linkEl) {
+            linkEl.href = payload.link || '#';
+        }
     }
 
     function normalizeSearchValue(value) {
@@ -844,6 +1048,7 @@
 
     function renderChart(data, label) {
         fullChartData = data;
+        setChartPointDetailsVisible(false);
         const filteredData = filterDataByRange(data, currentDaysRange);
         const ctx = document.getElementById('progressChart').getContext('2d');
 
@@ -860,24 +1065,11 @@
             }
         });
 
-        const formatShortLabel = (rawLabel) => {
-            if (!rawLabel) return '';
-            const parts = String(rawLabel).split('-');
-            if (parts.length === 3) {
-                const year = Number(parts[0]);
-                const month = Number(parts[1]);
-                const day = Number(parts[2]);
-                if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
-                    return new Date(year, month - 1, day).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric'
-                    });
-                }
-            }
-            return rawLabel;
-        };
+        const formatShortLabel = (rawLabel) => formatDateLabel(rawLabel, { month: 'short', day: 'numeric' });
 
         const rawLabels = data.labels || [];
+        const loggedIndexSet = getLoggedIndexSet(rawLabels, data);
+        const loggedIndices = getLoggedIndicesFromSet(loggedIndexSet);
         const rangeBounds = getRangeBounds(rawLabels, currentDaysRange);
         const shortLabels = rawLabels.map(formatShortLabel);
 
@@ -944,9 +1136,20 @@
         const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
         const pointBorderColor = isLightMode ? '#FFFFFF' : '#000000';
         const pointHoverBorderColor = isLightMode ? '#F5F3F0' : '#FFFFFF';
+        const primaryPointRadius = 4;
+        const primaryPointHoverRadius = 7;
+        const pointRadiusFn = (ctx) => {
+            const set = ctx.chart && ctx.chart.$loggedIndexSet;
+            return set && set.has(ctx.dataIndex) ? primaryPointRadius : 0;
+        };
+        const pointHoverRadiusFn = (ctx) => {
+            const set = ctx.chart && ctx.chart.$loggedIndexSet;
+            return set && set.has(ctx.dataIndex) ? primaryPointHoverRadius : 0;
+        };
         const isPercent = filteredData.unit === 'percent';
         const isRateMode = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
         const percentSuffix = '%';
+        const tooltipPrimaryLabel = isPercent ? 'Strength' : metricConfig.label;
         const formatTickNumber = (raw) => {
             const num = Number(raw);
             if (!Number.isFinite(num)) return raw;
@@ -963,8 +1166,34 @@
             return formatTickNumber(value);
         };
         const tooltipValueSuffix = isPercent ? percentSuffix : '';
+        const valueSuffix = metricConfig.suffix || tooltipValueSuffix;
+        const formatValueText = (value) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return '-';
+            return `${formatTickNumber(num)}${valueSuffix}`;
+        };
+        const formatDeltaText = (delta, prev) => {
+            if (delta === null || delta === undefined) return '-';
+            const num = Number(delta);
+            if (!Number.isFinite(num)) return '-';
+            const sign = num >= 0 ? '+' : '';
+            return `${sign}${formatTickNumber(num)}${valueSuffix}`;
+        };
         const tickColor = isLightMode ? '#6B7280' : '#9CA3AF';
         const gridColor = isLightMode ? 'rgba(148, 163, 184, 0.25)' : 'rgba(148, 163, 184, 0.18)';
+        const tooltipStyles = isLightMode
+            ? {
+                backgroundColor: 'rgba(255, 251, 242, 0.98)',
+                titleColor: '#8A6D1D',
+                bodyColor: '#2D2B27',
+                borderColor: 'rgba(212, 175, 55, 0.7)',
+            }
+            : {
+                backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                titleColor: '#D4AF37',
+                bodyColor: '#FFFFFF',
+                borderColor: '#D4AF37',
+            };
         const gradient = ctx.createLinearGradient(0, 0, 0, 320);
         gradient.addColorStop(0, 'rgba(212, 175, 55, 0.35)');
         gradient.addColorStop(1, 'rgba(212, 175, 55, 0.05)');
@@ -984,11 +1213,108 @@
         const suggestedMin = (showBaseline100 && dataMin !== null && dataMin > 100) ? 100 : undefined;
         const suggestedMax = (showBaseline100 && dataMax !== null && dataMax < 100) ? 100 : undefined;
 
+        const buildDetailPayload = (idx) => {
+            const rawDate = rawLabels[idx] || '';
+            if (!rawDate) return null;
+            const value = primarySeries[idx];
+            const prevIdx = getPreviousLoggedIndex(idx, loggedIndices);
+            const prevValue = prevIdx !== null ? primarySeries[prevIdx] : null;
+            const delta = (prevIdx !== null && Number.isFinite(Number(value)) && Number.isFinite(Number(prevValue)))
+                ? Number(value) - Number(prevValue)
+                : null;
+
+            let topSet = '';
+            const weightVal = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : null;
+            const repsVal = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : null;
+            if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
+                topSet = `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`;
+            }
+
+            let tonnage = '';
+            const tonnageVal = (data && Array.isArray(data.volume)) ? Number(data.volume[idx]) : null;
+            if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
+                tonnage = `${formatTickNumber(tonnageVal)}kg`;
+            }
+
+            return {
+                date: formatDateLabel(rawDate, { month: 'short', day: 'numeric', year: 'numeric' }),
+                value: formatValueText(value),
+                change: prevIdx !== null ? formatDeltaText(delta, prevValue) : '-',
+                topSet,
+                tonnage,
+                link: `/workout/${encodeURIComponent(rawDate)}`
+            };
+        };
+
+        const tooltipFilter = (context) => {
+            if (context.datasetIndex !== 0) return false;
+            return loggedIndexSet.has(context.dataIndex);
+        };
+
+        const tooltipCallbacks = {
+            title: (items) => {
+                if (!items || !items.length) return '';
+                const idx = items[0].dataIndex;
+                return formatDateLabel(rawLabels[idx], { month: 'short', day: 'numeric', year: 'numeric' });
+            },
+            label: (context) => {
+                const value = context.parsed.y;
+                if (value === null || value === undefined) return '';
+                return `${tooltipPrimaryLabel}: ${formatValueText(value)}`;
+            },
+            afterLabel: (context) => {
+                const idx = context.dataIndex;
+                const prevIdx = getPreviousLoggedIndex(idx, loggedIndices);
+                const prevValue = prevIdx !== null ? primarySeries[prevIdx] : null;
+                const value = context.parsed.y;
+                const delta = (prevIdx !== null && Number.isFinite(Number(value)) && Number.isFinite(Number(prevValue)))
+                    ? Number(value) - Number(prevValue)
+                    : null;
+                const lines = [];
+                if (prevIdx !== null) {
+                    lines.push(`Change: ${formatDeltaText(delta, prevValue)}`);
+                }
+
+                const weightVal = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : null;
+                const repsVal = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : null;
+                if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
+                    lines.push(`Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`);
+                }
+
+                const tonnageVal = (data && Array.isArray(data.volume)) ? Number(data.volume[idx]) : null;
+                if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
+                    lines.push(`Tonnage: ${formatTickNumber(tonnageVal)}kg`);
+                }
+                return lines;
+            }
+        };
+
+        const handlePointClick = (idx) => {
+            if (!loggedIndexSet.has(idx)) return;
+            const rawDate = rawLabels[idx] || '';
+            if (!rawDate) return;
+            aiAssistantSelectedDate = rawDate;
+            if (isTouchUI()) {
+                const payload = buildDetailPayload(idx);
+                if (!payload) return;
+                populateChartPointDetails(payload);
+                setChartPointDetailsVisible(true);
+            } else {
+                window.location.href = `/workout/${encodeURIComponent(rawDate)}`;
+            }
+        };
+
         if (myChart) {
             myChart.$showBaseline100 = showBaseline100;
             myChart.$baselineLabel = 'Baseline';
             myChart.$baselineStroke = gridColor;
             myChart.$baselineText = tickColor;
+            myChart.$rawData = data;
+            myChart.$rawLabels = rawLabels;
+            myChart.$loggedIndexSet = loggedIndexSet;
+            myChart.$loggedIndices = loggedIndices;
+            myChart.$metricConfig = metricConfig;
+            myChart.$primarySeries = primarySeries;
 
             myChart.data.labels = shortLabels;
             myChart.data.datasets[0].data = primarySeries || [];
@@ -998,8 +1324,14 @@
             myChart.data.datasets[0].borderWidth = 2;
             myChart.data.datasets[0].borderDash = [6, 6];
             myChart.data.datasets[0].fill = false;
-            myChart.data.datasets[0].pointRadius = 0;
-            myChart.data.datasets[0].pointHoverRadius = 0;
+            myChart.data.datasets[0].pointRadius = pointRadiusFn;
+            myChart.data.datasets[0].pointHoverRadius = pointHoverRadiusFn;
+            myChart.data.datasets[0].pointHitRadius = 12;
+            myChart.data.datasets[0].pointBackgroundColor = '#D4AF37';
+            myChart.data.datasets[0].pointBorderColor = pointBorderColor;
+            myChart.data.datasets[0].pointHoverBorderColor = pointHoverBorderColor;
+            myChart.data.datasets[0].pointHoverBackgroundColor = '#F4D03F';
+            myChart.data.datasets[0].pointBorderWidth = 1;
             if (myChart.data.datasets[1]) {
                 myChart.data.datasets[1].data = maValues;
                 myChart.data.datasets[1].borderColor = '#D4AF37';
@@ -1007,12 +1339,9 @@
                 myChart.data.datasets[1].borderWidth = 3;
                 myChart.data.datasets[1].borderDash = [];
                 myChart.data.datasets[1].fill = true;
-                myChart.data.datasets[1].pointRadius = 2;
-                myChart.data.datasets[1].pointHoverRadius = 5;
-                myChart.data.datasets[1].pointBackgroundColor = '#D4AF37';
-                myChart.data.datasets[1].pointBorderWidth = 0;
-                myChart.data.datasets[1].pointHoverBackgroundColor = '#F4D03F';
-                myChart.data.datasets[1].pointHoverBorderWidth = 0;
+                myChart.data.datasets[1].pointRadius = 0;
+                myChart.data.datasets[1].pointHoverRadius = 0;
+                myChart.data.datasets[1].pointHitRadius = 0;
             }
             if (myChart.data.datasets[2]) {
                 myChart.data.datasets[2].data = showQuality ? qualitySeries : [];
@@ -1023,6 +1352,15 @@
             }
             if (myChart.options.scales.y1) {
                 myChart.options.scales.y1.display = showQuality;
+            }
+            if (!myChart.options.interaction) {
+                myChart.options.interaction = {};
+            }
+            myChart.options.interaction.mode = 'nearest';
+            myChart.options.interaction.intersect = true;
+            if (myChart.options.plugins && myChart.options.plugins.tooltip) {
+                myChart.options.plugins.tooltip.filter = tooltipFilter;
+                myChart.options.plugins.tooltip.callbacks = tooltipCallbacks;
             }
             myChart.options.scales.y.ticks.callback = yTickCallback;
             if (showBaseline100) {
@@ -1036,9 +1374,15 @@
             myChart.options.scales.x.max = xMaxLabel;
             myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
             myChart.options.onClick = (evt, elements) => {
-                if (!elements || !elements.length) return;
-                const idx = elements[0].index;
-                aiAssistantSelectedDate = rawLabels[idx] || '';
+                if (!elements || !elements.length) {
+                    if (isTouchUI()) {
+                        setChartPointDetailsVisible(false);
+                    }
+                    return;
+                }
+                const hit = elements.find(el => el.datasetIndex === 0) || elements[0];
+                if (!hit) return;
+                handlePointClick(hit.index);
             };
             myChart.update();
         } else {
@@ -1057,8 +1401,14 @@
                             borderDash: [6, 6],
                             tension: 0.35,
                             fill: false,
-                            pointRadius: 0,
-                            pointHoverRadius: 0
+                            pointRadius: pointRadiusFn,
+                            pointHoverRadius: pointHoverRadiusFn,
+                            pointHitRadius: 12,
+                            pointBackgroundColor: '#D4AF37',
+                            pointBorderColor: pointBorderColor,
+                            pointHoverBorderColor: pointHoverBorderColor,
+                            pointHoverBackgroundColor: '#F4D03F',
+                            pointBorderWidth: 1
                         },
                         {
                             label: `Moving avg (${currentMAWindow}d)`,
@@ -1069,12 +1419,9 @@
                             fill: true,
                             backgroundColor: gradient,
                             tension: 0.35,
-                            pointRadius: 2,
-                            pointHoverRadius: 5,
-                            pointBackgroundColor: '#D4AF37',
-                            pointBorderWidth: 0,
-                            pointHoverBackgroundColor: '#F4D03F',
-                            pointHoverBorderWidth: 0
+                            pointRadius: 0,
+                            pointHoverRadius: 0,
+                            pointHitRadius: 0
                         },
                         {
                             label: 'Performance (%)',
@@ -1094,10 +1441,20 @@
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'nearest',
+                        intersect: true
+                    },
                     onClick: (evt, elements) => {
-                        if (!elements || !elements.length) return;
-                        const idx = elements[0].index;
-                        aiAssistantSelectedDate = rawLabels[idx] || '';
+                        if (!elements || !elements.length) {
+                            if (isTouchUI()) {
+                                setChartPointDetailsVisible(false);
+                            }
+                            return;
+                        }
+                        const hit = elements.find(el => el.datasetIndex === 0) || elements[0];
+                        if (!hit) return;
+                        handlePointClick(hit.index);
                     },
                     plugins: {
                         legend: { display: false },
@@ -1114,13 +1471,8 @@
                             cornerRadius: 12,
                             titleSpacing: 8,
                             bodySpacing: 6,
-                            callbacks: {
-                                label: (context) => {
-                                    const value = context.parsed.y;
-                                    if (value === null || value === undefined) return '';
-                                    return `${value.toFixed(1)}${tooltipValueSuffix}`;
-                                }
-                            }
+                            filter: tooltipFilter,
+                            callbacks: tooltipCallbacks
                         }
                     },
                     scales: {
@@ -1173,6 +1525,13 @@
             myChart.$baselineLabel = 'Baseline';
             myChart.$baselineStroke = gridColor;
             myChart.$baselineText = tickColor;
+            myChart.$rawData = data;
+            myChart.$rawLabels = rawLabels;
+            myChart.$loggedIndexSet = loggedIndexSet;
+            myChart.$loggedIndices = loggedIndices;
+            myChart.$metricConfig = metricConfig;
+            myChart.$primarySeries = primarySeries;
+            myChart.update();
         }
     }
 
@@ -1284,6 +1643,11 @@
         const urlParams = new URLSearchParams(window.location.search);
         const exerciseParam = urlParams.get('exercise');
         renderSuggestions();
+
+        const detailsCloseBtn = document.getElementById('chartPointClose');
+        if (detailsCloseBtn) {
+            detailsCloseBtn.addEventListener('click', () => setChartPointDetailsVisible(false));
+        }
         
         if (exerciseParam) {
             const option = exerciseOptions.find(opt => opt.value === exerciseParam);
