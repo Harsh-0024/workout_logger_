@@ -236,6 +236,7 @@
         border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.22));
         background: var(--card-bg, #141414);
         box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+        cursor: pointer;
     }
 
     [data-theme="light"] .chart-point-details {
@@ -607,8 +608,10 @@
             }
         }
 
+        const linkHref = payload.link || '#';
+        details.dataset.link = linkHref;
         if (linkEl) {
-            linkEl.href = payload.link || '#';
+            linkEl.href = linkHref;
         }
     }
 
@@ -1327,11 +1330,12 @@
             myChart.data.datasets[0].pointRadius = pointRadiusFn;
             myChart.data.datasets[0].pointHoverRadius = pointHoverRadiusFn;
             myChart.data.datasets[0].pointHitRadius = 12;
-            myChart.data.datasets[0].pointBackgroundColor = '#D4AF37';
+            myChart.data.datasets[0].pointBackgroundColor = avgColor;
             myChart.data.datasets[0].pointBorderColor = pointBorderColor;
             myChart.data.datasets[0].pointHoverBorderColor = pointHoverBorderColor;
-            myChart.data.datasets[0].pointHoverBackgroundColor = '#F4D03F';
-            myChart.data.datasets[0].pointBorderWidth = 1;
+            myChart.data.datasets[0].pointHoverBackgroundColor = avgColor;
+            myChart.data.datasets[0].pointBorderWidth = 0;
+            myChart.data.datasets[0].pointHoverBorderWidth = 0;
             if (myChart.data.datasets[1]) {
                 myChart.data.datasets[1].data = maValues;
                 myChart.data.datasets[1].borderColor = '#D4AF37';
@@ -1359,6 +1363,10 @@
             myChart.options.interaction.mode = 'nearest';
             myChart.options.interaction.intersect = true;
             if (myChart.options.plugins && myChart.options.plugins.tooltip) {
+                myChart.options.plugins.tooltip.backgroundColor = tooltipStyles.backgroundColor;
+                myChart.options.plugins.tooltip.titleColor = tooltipStyles.titleColor;
+                myChart.options.plugins.tooltip.bodyColor = tooltipStyles.bodyColor;
+                myChart.options.plugins.tooltip.borderColor = tooltipStyles.borderColor;
                 myChart.options.plugins.tooltip.filter = tooltipFilter;
                 myChart.options.plugins.tooltip.callbacks = tooltipCallbacks;
             }
@@ -1404,11 +1412,12 @@
                             pointRadius: pointRadiusFn,
                             pointHoverRadius: pointHoverRadiusFn,
                             pointHitRadius: 12,
-                            pointBackgroundColor: '#D4AF37',
+                            pointBackgroundColor: avgColor,
                             pointBorderColor: pointBorderColor,
                             pointHoverBorderColor: pointHoverBorderColor,
-                            pointHoverBackgroundColor: '#F4D03F',
-                            pointBorderWidth: 1
+                            pointHoverBackgroundColor: avgColor,
+                            pointBorderWidth: 0,
+                            pointHoverBorderWidth: 0
                         },
                         {
                             label: `Moving avg (${currentMAWindow}d)`,
@@ -1459,10 +1468,10 @@
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                            titleColor: '#D4AF37',
-                            bodyColor: '#FFFFFF',
-                            borderColor: '#D4AF37',
+                            backgroundColor: tooltipStyles.backgroundColor,
+                            titleColor: tooltipStyles.titleColor,
+                            bodyColor: tooltipStyles.bodyColor,
+                            borderColor: tooltipStyles.borderColor,
                             borderWidth: 2,
                             padding: 16,
                             displayColors: false,
@@ -1644,10 +1653,33 @@
         const exerciseParam = urlParams.get('exercise');
         renderSuggestions();
 
+        const detailsPanel = document.getElementById('chartPointDetails');
         const detailsCloseBtn = document.getElementById('chartPointClose');
         if (detailsCloseBtn) {
-            detailsCloseBtn.addEventListener('click', () => setChartPointDetailsVisible(false));
+            detailsCloseBtn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                setChartPointDetailsVisible(false);
+            });
         }
+        if (detailsPanel) {
+            detailsPanel.addEventListener('click', (event) => {
+                if (event.target.closest('#chartPointClose')) return;
+                const link = detailsPanel.dataset.link;
+                if (link && link !== '#') {
+                    window.location.href = link;
+                }
+            });
+        }
+
+        document.addEventListener('click', (event) => {
+            if (!isTouchUI()) return;
+            const panel = document.getElementById('chartPointDetails');
+            if (!panel || panel.style.display === 'none') return;
+            const chartCanvas = document.getElementById('progressChart');
+            if (panel.contains(event.target)) return;
+            if (chartCanvas && chartCanvas.contains(event.target)) return;
+            setChartPointDetailsVisible(false);
+        });
         
         if (exerciseParam) {
             const option = exerciseOptions.find(opt => opt.value === exerciseParam);
