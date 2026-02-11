@@ -84,6 +84,12 @@
                                         {% if log.total_volume %}
                                             <span>Volume: {{ "%.0f"|format(log.total_volume) }}kg</span>
                                         {% endif %}
+                                        {% if log.improvement_pct is not none %}
+                                            {% set delta = log.improvement_pct %}
+                                            <span class="{% if delta > 0 %}text-success{% elif delta < 0 %}text-danger{% else %}text-muted{% endif %}">
+                                                Δ e1RM: {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
+                                            </span>
+                                        {% endif %}
                                     </div>
                                     {% if log.exercise in missing_bw_exercises %}
                                         <div class="text-warning mt-2" style="font-size: var(--fs-xs);">

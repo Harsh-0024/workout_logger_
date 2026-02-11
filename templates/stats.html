@@ -15,27 +15,38 @@
                     <label class="text-muted mb-2 d-block" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">
                         <i class="bi bi-search me-2"></i>proeSearch Exercise
                     </label>
-                    <div class="position-relative">
-                        <input 
-                            id="exerciseSearch" 
-                            class="form-control" 
-                            type="text" 
-                            placeholder="Type to search exercises..." 
-                            autocomplete="off"
-                            oninput="handleSearchInput()" 
-                            onfocus="showSuggestions()" 
-                            onkeydown="handleKeyDown(event)"
-                            style="font-size: var(--fs-sm);"
-                        >
-                        <div id="suggestionsList" class="position-absolute w-100 border rounded-2 mt-1" style="display: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
+                    <div class="stats-search-bar d-flex flex-column flex-md-row gap-2">
+                        <div class="position-relative flex-grow-1 stats-search-input">
+                            <input 
+                                id="exerciseSearch" 
+                                class="form-control" 
+                                type="text" 
+                                placeholder="Type to search exercises..." 
+                                autocomplete="off"
+                                oninput="handleSearchInput()" 
+                                onfocus="showSuggestions()" 
+                                onkeydown="handleKeyDown(event)"
+                                style="font-size: var(--fs-sm);"
+                            >
+                            <div id="suggestionsList" class="position-absolute w-100 border rounded-2 mt-1" style="display: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
+                            </div>
                         </div>
+                        <button type="button" id="overallToggleBtnDesktop" class="overall-pill overall-toggle-btn d-none d-md-inline-flex align-items-center justify-content-center" data-overall="index">
+                            Strength Index
+                        </button>
                     </div>
                     <script type="application/json" id="exerciseOptionsData">{{ exercise_options | tojson }}</script>
                 </div>
             </div>
 
+            <div id="overallControlsMobile" class="d-md-none mb-2">
+                <button type="button" class="overall-pill overall-toggle-btn w-100" data-overall="index">
+                    Strength Index
+                </button>
+            </div>
+
             <!-- Chart Container -->
-            <div class="chart-container mb-3" style="position: relative; height: clamp(240px, 38vh, 400px); width:100%; min-height: 240px;">
+            <div class="chart-container mb-3" style="position: relative; height: clamp(220px, 35vh, 360px); width:100%; min-height: 220px;">
                 <canvas id="progressChart"></canvas>
                 <div id="chartPlaceholder" class="position-absolute top-0 start-0 w-100 h-100" style="pointer-events: none;"></div>
             </div>
@@ -61,20 +72,13 @@
                             <button class="ma-pill" data-ma="48">48d</button>
                         </div>
                     </div>
-                    <div id="overallControls">
-                        <label class="text-muted mb-1 d-block stats-filter-label">Overall view</label>
-                        <div class="d-flex gap-2 overall-pill-group">
-                            <button class="overall-pill active" data-overall="index">Strength Index</button>
-                            <button class="overall-pill" data-overall="rate">Improvement Rate</button>
-                        </div>
-                    </div>
                     <div id="metricControls" style="display: none;">
                         <label class="text-muted mb-1 d-block stats-filter-label">Metric</label>
                         <div class="d-flex gap-2 metric-pill-group">
                             <button class="metric-pill active" data-metric="e1rm">e1RM</button>
                             <button class="metric-pill" data-metric="top_weight">Top Weight</button>
                             <button class="metric-pill" data-metric="tonnage">Tonnage</button>
-                            <button class="metric-pill" data-metric="effective_tonnage">Effective Tonnage</button>
+                            <button class="metric-pill" data-metric="effective_tonnage">Eff. Ton.</button>
                         </div>
                     </div>
                 </div>
@@ -154,6 +158,21 @@
         border-color: #e5e7eb !important;
     }
 
+    .stats-search-input {
+        width: 100%;
+    }
+
+    @media (min-width: 768px) {
+        .stats-search-input {
+            flex: 1;
+            max-width: none;
+        }
+        
+        .stats-search-bar {
+            max-width: 100%;
+        }
+    }
+
     .chart-container {
         background: var(--card-bg, #141414);
         border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.2));
@@ -186,7 +205,6 @@
 
     .range-pill-group,
     .ma-pill-group,
-    .overall-pill-group,
     .metric-pill-group {
         flex-wrap: wrap;
     }
@@ -205,9 +223,12 @@
         text-align: center;
     }
 
-    .ma-pill, .overall-pill, .metric-pill {
-        padding: 0.35rem 0.8rem;
-        font-size: 0.72rem;
+    .overall-toggle-btn {
+        min-width: 180px;
+    }
+
+    .overall-toggle-hidden {
+        display: none !important;
     }
 
     [data-theme="light"] .range-pill,
@@ -247,6 +268,16 @@
         font-weight: 600;
     }
 
+    @media (max-width: 576px) {
+        .stats-filters {
+            margin-top: 0.75rem;
+        }
+        
+        #overallControlsMobile {
+            margin-bottom: 3rem;
+        }
+    }
+
     .stats-summary .stat-card {
         border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.2));
         background: var(--card-bg, #141414);
@@ -272,8 +303,6 @@
         .chart-container {
             padding: 10px;
             border-radius: 18px;
-            height: min(70vw, 360px) !important;
-            min-height: 260px;
         }
 
         .stats-filters {
@@ -283,32 +312,27 @@
 
         .range-pill-group {
             gap: 0.3rem;
+            flex-wrap: nowrap !important;
         }
 
         .ma-pill-group,
         .metric-pill-group {
             gap: 0.4rem;
+            flex-wrap: nowrap !important;
         }
 
-        .range-pill {
-            flex: 1 1 calc(25% - 0.3rem);
-            min-width: 0;
-            padding: 0.3rem 0.5rem;
-            font-size: 0.68rem;
-        }
-
-        .ma-pill {
-            flex: 1 1 calc(25% - 0.3rem);
-            min-width: 0;
-            padding: 0.28rem 0.5rem;
-            font-size: 0.65rem;
-        }
-
+        .range-pill,
+        .ma-pill,
         .metric-pill {
-            flex: 1 1 calc(50% - 0.3rem);
+            flex: 0 0 calc(25% - 0.3rem);
             min-width: 0;
-            padding: 0.28rem 0.5rem;
-            font-size: 0.65rem;
+            padding: 0.4rem 0.15rem;
+            font-size: 0.58rem;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.1;
         }
 
         .stats-summary .stat-card {
@@ -342,6 +366,15 @@
     let currentOverallMode = 'index';
     let fullChartData = null;
     let aiAssistantSelectedDate = '';
+
+    function updateOverallToggleLabels() {
+        const label = currentOverallMode === 'rate' ? 'Improvement Rate' : 'Strength Index';
+        document.querySelectorAll('.overall-toggle-btn').forEach(btn => {
+            btn.textContent = label;
+            btn.dataset.overall = currentOverallMode;
+            btn.classList.add('active');
+        });
+    }
 
     function normalizeSearchValue(value) {
         return String(value || '')
@@ -787,10 +820,13 @@
             metricControls.style.display = (currentExercise && filteredData.unit !== 'percent') ? 'block' : 'none';
         }
 
-        const overallControls = document.getElementById('overallControls');
-        if (overallControls) {
-            overallControls.style.display = currentExercise ? 'none' : 'block';
-        }
+        document.querySelectorAll('.overall-toggle-btn').forEach(btn => {
+            if (currentExercise) {
+                btn.classList.add('overall-toggle-hidden');
+            } else {
+                btn.classList.remove('overall-toggle-hidden');
+            }
+        });
 
         const formatShortLabel = (rawLabel) => {
             if (!rawLabel) return '';
@@ -896,11 +932,27 @@
         if (myChart) {
             myChart.data.labels = shortLabels;
             myChart.data.datasets[0].data = primarySeries || [];
-            myChart.data.datasets[0].backgroundColor = gradient;
             myChart.data.datasets[0].label = metricConfig.label;
+            myChart.data.datasets[0].borderColor = avgColor;
+            myChart.data.datasets[0].backgroundColor = 'transparent';
+            myChart.data.datasets[0].borderWidth = 2;
+            myChart.data.datasets[0].borderDash = [6, 6];
+            myChart.data.datasets[0].fill = false;
+            myChart.data.datasets[0].pointRadius = 0;
+            myChart.data.datasets[0].pointHoverRadius = 0;
             if (myChart.data.datasets[1]) {
                 myChart.data.datasets[1].data = maValues;
-                myChart.data.datasets[1].borderColor = avgColor;
+                myChart.data.datasets[1].borderColor = '#D4AF37';
+                myChart.data.datasets[1].backgroundColor = gradient;
+                myChart.data.datasets[1].borderWidth = 3;
+                myChart.data.datasets[1].borderDash = [];
+                myChart.data.datasets[1].fill = true;
+                myChart.data.datasets[1].pointRadius = 2;
+                myChart.data.datasets[1].pointHoverRadius = 5;
+                myChart.data.datasets[1].pointBackgroundColor = '#D4AF37';
+                myChart.data.datasets[1].pointBorderWidth = 0;
+                myChart.data.datasets[1].pointHoverBackgroundColor = '#F4D03F';
+                myChart.data.datasets[1].pointHoverBorderWidth = 0;
             }
             if (myChart.data.datasets[2]) {
                 myChart.data.datasets[2].data = showQuality ? qualitySeries : [];
@@ -931,28 +983,30 @@
                         {
                             label: metricConfig.label,
                             data: primarySeries || [],
-                            borderColor: '#D4AF37',
-                            backgroundColor: gradient,
-                            borderWidth: 3,
+                            borderColor: avgColor,
+                            backgroundColor: 'transparent',
+                            borderWidth: 2,
+                            borderDash: [6, 6],
                             tension: 0.35,
+                            fill: false,
+                            pointRadius: 0,
+                            pointHoverRadius: 0
+                        },
+                        {
+                            label: `Moving avg (${currentMAWindow}d)`,
+                            data: maValues,
+                            borderColor: '#D4AF37',
+                            borderWidth: 3,
+                            borderDash: [],
                             fill: true,
+                            backgroundColor: gradient,
+                            tension: 0.35,
                             pointRadius: 2,
                             pointHoverRadius: 5,
                             pointBackgroundColor: '#D4AF37',
                             pointBorderWidth: 0,
                             pointHoverBackgroundColor: '#F4D03F',
                             pointHoverBorderWidth: 0
-                        },
-                        {
-                            label: `Moving avg (${currentMAWindow}d)`,
-                            data: maValues,
-                            borderColor: avgColor,
-                            borderWidth: 2,
-                            borderDash: [6, 6],
-                            fill: false,
-                            tension: 0.35,
-                            pointRadius: 0,
-                            pointHoverRadius: 0
                         },
                         {
                             label: 'Performance (%)',
@@ -1139,11 +1193,11 @@
         });
     });
 
-    document.querySelectorAll('.overall-pill').forEach(btn => {
+    updateOverallToggleLabels();
+    document.querySelectorAll('.overall-toggle-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.overall-pill').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentOverallMode = btn.dataset.overall || 'index';
+            currentOverallMode = currentOverallMode === 'rate' ? 'index' : 'rate';
+            updateOverallToggleLabels();
             if (!currentExercise) {
                 loadAverageChart();
             }

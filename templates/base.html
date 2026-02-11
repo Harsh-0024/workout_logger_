@@ -2365,7 +2365,7 @@
                         <span class="text-muted">Settings</span>
                     </div>
                     <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
-                        <span class="shortcut-key">P</span>
+                        <span class="shortcut-key">G</span>
                         <span class="text-muted">View stats</span>
                     </div>
                     {% if current_user.is_authenticated and current_user.is_admin() %}
@@ -2840,7 +2840,7 @@
                 } else if (key === 's') {
                     event.preventDefault();
                     window.location.href = '/settings';
-                } else if (key === 'p') {
+                } else if (key === 'g') {
                     event.preventDefault();
                     window.location.href = '/stats';
                 } else if (key === 'a') {
@@ -3114,7 +3114,7 @@
                 } else if (key === 's') {
                     event.preventDefault();
                     window.location.href = '/settings';
-                } else if (key === 'p') {
+                } else if (key === 'g') {
                     event.preventDefault();
                     window.location.href = '/stats';
                 } else if (key === 'a') {

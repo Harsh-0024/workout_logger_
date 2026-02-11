@@ -197,10 +197,12 @@ def _compress_shorthand_values(values):
     return list(values)
 
 
-def _format_weight_token(exercise: str, weight, bodyweight):
+def _format_weight_token(exercise: str, weight, bodyweight, *, force_bw: bool = False):
     token = _format_value(weight)
     if exercise not in BW_EXERCISES:
         return token
+    if force_bw:
+        return 'bw'
     if bodyweight is None:
         return token
     try:
@@ -281,10 +283,12 @@ def _build_best_sets_line_from_logs(
     if not best_log:
         return ""
 
+    use_bw_format = False
     if best_log.exercise_string and "bw" in best_log.exercise_string.lower():
         extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
         if extracted:
             return _normalize_bw(extracted)
+        use_bw_format = True
 
     sets_json = best_log.sets_json if isinstance(best_log.sets_json, dict) else None
     if not sets_json:
@@ -322,7 +326,15 @@ def _build_best_sets_line_from_logs(
         reps_top = reps_top[: int(target_sets)]
 
     log_bodyweight = getattr(best_log, "bodyweight", None)
-    weight_tokens = [_format_weight_token(exercise, w, log_bodyweight or getattr(user, "bodyweight", None)) for w in weights_top]
+    weight_tokens = [
+        _format_weight_token(
+            exercise,
+            w,
+            log_bodyweight or getattr(user, "bodyweight", None),
+            force_bw=use_bw_format,
+        )
+        for w in weights_top
+    ]
     rep_tokens = [str(int(r)) for r in reps_top]
 
     weight_tokens = _compress_shorthand_values(weight_tokens)
