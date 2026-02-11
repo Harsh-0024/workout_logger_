@@ -905,7 +905,7 @@
         if (summary && Object.keys(summary).length) {
             const isPercent = filteredData.unit === 'percent';
             const isOverallPercentRate = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
-            const percentTextSuffix = isOverallPercentRate ? '%/day' : '%';
+            const percentTextSuffix = '%';
             document.getElementById('statsSummary').style.display = 'flex';
             const currentValue = summary.current || 0;
             const maxValue = summary.max || 0;
@@ -946,8 +946,22 @@
         const pointHoverBorderColor = isLightMode ? '#F5F3F0' : '#FFFFFF';
         const isPercent = filteredData.unit === 'percent';
         const isRateMode = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
-        const percentSuffix = isRateMode ? '%/day' : '%';
-        const yTickCallback = (value) => isPercent ? `${value}${percentSuffix}` : value;
+        const percentSuffix = '%';
+        const formatTickNumber = (raw) => {
+            const num = Number(raw);
+            if (!Number.isFinite(num)) return raw;
+            const abs = Math.abs(num);
+            let decimals;
+            if (abs >= 100) decimals = 0;
+            else if (abs >= 10) decimals = 1;
+            else decimals = 2;
+            const rounded = Number(num.toFixed(decimals));
+            return String(rounded);
+        };
+        const yTickCallback = (value) => {
+            if (isPercent) return `${formatTickNumber(value)}${percentSuffix}`;
+            return formatTickNumber(value);
+        };
         const tooltipValueSuffix = isPercent ? percentSuffix : '';
         const tickColor = isLightMode ? '#6B7280' : '#9CA3AF';
         const gridColor = isLightMode ? 'rgba(148, 163, 184, 0.25)' : 'rgba(148, 163, 184, 0.18)';
