@@ -363,9 +363,41 @@
     let currentDaysRange = 30;
     let currentMAWindow = 7;
     let currentMetric = 'e1rm';
-    let currentOverallMode = 'index';
     let fullChartData = null;
     let aiAssistantSelectedDate = '';
+
+    let currentOverallMode = 'index';
+
+    const baseline100Plugin = {
+        id: 'baseline100',
+        beforeDatasetsDraw(chart) {
+            if (!chart || !chart.$showBaseline100) return;
+            const yScale = chart.scales && chart.scales.y;
+            if (!yScale) return;
+            const area = chart.chartArea;
+            if (!area) return;
+
+            const y = yScale.getPixelForValue(100);
+            if (!Number.isFinite(y)) return;
+
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.strokeStyle = chart.$baselineStroke || 'rgba(148, 163, 184, 0.18)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.moveTo(area.left, y);
+            ctx.lineTo(area.right, y);
+            ctx.stroke();
+
+            const label = chart.$baselineLabel || 'Baseline';
+            ctx.fillStyle = chart.$baselineText || 'rgba(148, 163, 184, 0.9)';
+            ctx.font = '600 10px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.textBaseline = 'bottom';
+            ctx.fillText(label, area.right - 2, Math.max(area.top + 10, y - 4));
+            ctx.restore();
+        }
+    };
 
     function updateOverallToggleLabels() {
         const label = currentOverallMode === 'rate' ? 'Improvement Rate' : 'Strength Index';
@@ -929,7 +961,21 @@
         const qualitySeries = (data && data.quality) ? data.quality : [];
         const showQuality = !!(qualitySeries && qualitySeries.length) && filteredData.unit !== 'percent';
 
+        const showBaseline100 = isPercent && !isRateMode;
+        const filteredPrimary = getSeriesValues(filteredData, currentMetric) || [];
+        const filteredMa = maValues || [];
+        const combined = [...filteredPrimary, ...filteredMa].filter(v => v !== null && v !== undefined && Number.isFinite(Number(v))).map(v => Number(v));
+        const dataMin = combined.length ? Math.min(...combined) : null;
+        const dataMax = combined.length ? Math.max(...combined) : null;
+        const suggestedMin = (showBaseline100 && dataMin !== null && dataMin > 100) ? 100 : undefined;
+        const suggestedMax = (showBaseline100 && dataMax !== null && dataMax < 100) ? 100 : undefined;
+
         if (myChart) {
+            myChart.$showBaseline100 = showBaseline100;
+            myChart.$baselineLabel = 'Baseline';
+            myChart.$baselineStroke = gridColor;
+            myChart.$baselineText = tickColor;
+
             myChart.data.labels = shortLabels;
             myChart.data.datasets[0].data = primarySeries || [];
             myChart.data.datasets[0].label = metricConfig.label;
@@ -965,6 +1011,13 @@
                 myChart.options.scales.y1.display = showQuality;
             }
             myChart.options.scales.y.ticks.callback = yTickCallback;
+            if (showBaseline100) {
+                myChart.options.scales.y.suggestedMin = suggestedMin;
+                myChart.options.scales.y.suggestedMax = suggestedMax;
+            } else {
+                delete myChart.options.scales.y.suggestedMin;
+                delete myChart.options.scales.y.suggestedMax;
+            }
             myChart.options.scales.x.min = xMinLabel;
             myChart.options.scales.x.max = xMaxLabel;
             myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
@@ -976,6 +1029,7 @@
             myChart.update();
         } else {
             myChart = new Chart(ctx, {
+                plugins: [baseline100Plugin],
                 type: 'line',
                 data: {
                     labels: shortLabels,
@@ -1067,7 +1121,9 @@
                                 padding: 12,
                                 callback: yTickCallback
                             },
-                            beginAtZero: false
+                            beginAtZero: false,
+                            suggestedMin: suggestedMin,
+                            suggestedMax: suggestedMax
                         },
                         y1: {
                             display: showQuality,
@@ -1098,6 +1154,11 @@
                     }
                 }
             });
+
+            myChart.$showBaseline100 = showBaseline100;
+            myChart.$baselineLabel = 'Baseline';
+            myChart.$baselineStroke = gridColor;
+            myChart.$baselineText = tickColor;
         }
     }
 
