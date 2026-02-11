@@ -4,7 +4,7 @@ import csv
 import io
 import json
 
-from flask import Response, flash, jsonify, redirect, render_template, url_for
+from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 from sqlalchemy import desc
 
@@ -15,6 +15,7 @@ from services.stats import (
     get_average_growth_data,
     get_chart_data,
     get_csv_export,
+    get_overall_progress_data,
     get_json_export,
 )
 from utils.logger import logger
@@ -115,6 +116,25 @@ def register_stats_routes(app):
             updated = backfill_log_bodyweight(Session, user)
             if updated:
                 Session.commit()
+
+            mode = (request.args.get('mode') or '').strip().lower()
+            if mode in {'index', 'rate'}:
+                baseline_days = request.args.get('baseline_days', type=int) or 24
+                min_sessions = request.args.get('min_sessions', type=int) or 3
+                fade_start_days = request.args.get('fade_start_days', type=int) or 60
+                fade_end_days = request.args.get('fade_end_days', type=int) or 90
+                return jsonify(
+                    get_overall_progress_data(
+                        Session,
+                        user,
+                        mode=mode,
+                        baseline_days_target=baseline_days,
+                        min_sessions=min_sessions,
+                        fade_start_days=fade_start_days,
+                        fade_end_days=fade_end_days,
+                    )
+                )
+
             return jsonify(get_average_growth_data(Session, user))
         except Exception as e:
             logger.error(f"Error getting average stats data: {e}", exc_info=True)

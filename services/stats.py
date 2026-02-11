@@ -4,7 +4,9 @@ Statistics and data export services for workout tracking.
 import csv
 import io
 import json
+import math
 import re
+from statistics import median
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy import func, desc
@@ -490,6 +492,235 @@ def get_average_growth_data(db_session, user) -> Dict:
         "exercise": "Overall Progress",
         "stats": stats,
         "unit": "percent",
+    }
+
+
+def _date_range(start, end):
+    current = start
+    while current <= end:
+        yield current
+        current += timedelta(days=1)
+
+
+def _fade_multiplier(days_since_last: int, fade_start_days: int, fade_end_days: int) -> float:
+    if days_since_last <= fade_start_days:
+        return 1.0
+    if days_since_last >= fade_end_days:
+        return 0.0
+    span = float(fade_end_days - fade_start_days)
+    return max(0.0, min(1.0, (fade_end_days - float(days_since_last)) / span))
+
+
+def get_overall_progress_data(
+    db_session,
+    user,
+    mode: str = 'index',
+    baseline_days_target: int = 24,
+    min_sessions: int = 3,
+    fade_start_days: int = 60,
+    fade_end_days: int = 90,
+) -> Dict:
+    logs = (
+        db_session.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user.id)
+        .order_by(WorkoutLog.date)
+        .all()
+    )
+
+    if not logs:
+        return {
+            'labels': [],
+            'data': [],
+            'log_data': [],
+            'weight': [],
+            'reps': [],
+            'exercise': 'Overall',
+            'stats': {},
+            'unit': 'percent',
+            'overall_mode': mode,
+        }
+
+    exercise_day_values: Dict[str, Dict] = {}
+    workout_days = set()
+
+    for log in logs:
+        if not log.date:
+            continue
+        key = _normalize_exercise_name(log.exercise)
+        if not key:
+            continue
+        day = local_date(log.date)
+        workout_days.add(day)
+        value = _get_peak_1rm_for_log(log)
+        if not value or value <= 0:
+            continue
+        per_day = exercise_day_values.setdefault(key, {})
+        per_day[day] = max(float(per_day.get(day, 0.0)), float(value))
+
+    if not exercise_day_values or not workout_days:
+        return {
+            'labels': [],
+            'data': [],
+            'log_data': [],
+            'weight': [],
+            'reps': [],
+            'exercise': 'Overall',
+            'stats': {},
+            'unit': 'percent',
+            'overall_mode': mode,
+        }
+
+    workout_days_sorted = sorted(workout_days)
+    start_day = workout_days_sorted[0]
+    end_day = workout_days_sorted[-1]
+    baseline_days_actual = min(int(baseline_days_target), len(workout_days_sorted))
+    baseline_end_day = workout_days_sorted[baseline_days_actual - 1]
+
+    baseline_by_exercise: Dict[str, float] = {}
+    sessions_by_exercise: Dict[str, int] = {}
+
+    for key, day_map in exercise_day_values.items():
+        session_items = sorted(day_map.items())
+        sessions_by_exercise[key] = len(session_items)
+        samples = [v for d, v in session_items if d <= baseline_end_day and v and v > 0]
+        if not samples:
+            continue
+        if len(samples) >= 3:
+            base = float(median(samples))
+        else:
+            base = float(sum(samples) / len(samples))
+        if base > 0:
+            baseline_by_exercise[key] = base
+
+    universe = [
+        key
+        for key in baseline_by_exercise.keys()
+        if sessions_by_exercise.get(key, 0) >= int(min_sessions)
+    ]
+
+    if not universe:
+        return {
+            'labels': [],
+            'data': [],
+            'log_data': [],
+            'weight': [],
+            'reps': [],
+            'exercise': 'Overall',
+            'stats': {},
+            'unit': 'percent',
+            'overall_mode': mode,
+        }
+
+    timelines = {}
+    for key in universe:
+        items = sorted(exercise_day_values.get(key, {}).items())
+        timelines[key] = {
+            'days': [d for d, _ in items],
+            'values': [float(v) for _, v in items],
+        }
+
+    labels = []
+    series = []
+    log_series = []
+    pointers = {key: -1 for key in universe}
+    last_values = {key: None for key in universe}
+    last_session_days = {key: None for key in universe}
+    rate_segment = {key: 0 for key in universe}
+
+    for day in _date_range(start_day, end_day):
+        labels.append(day.isoformat())
+        weighted_sum = 0.0
+        weight_sum = 0.0
+        daily_log_sum = 0.0
+        daily_log_weight_sum = 0.0
+
+        for key in universe:
+            timeline = timelines[key]
+            days = timeline['days']
+            values = timeline['values']
+
+            idx = pointers[key]
+            while idx + 1 < len(days) and days[idx + 1] <= day:
+                idx += 1
+                last_values[key] = values[idx]
+                last_session_days[key] = days[idx]
+            pointers[key] = idx
+
+            last_val = last_values.get(key)
+            last_session_day = last_session_days.get(key)
+            if last_val is None or not last_session_day:
+                continue
+
+            days_since = (day - last_session_day).days
+            fade = _fade_multiplier(days_since, int(fade_start_days), int(fade_end_days))
+            if fade <= 0:
+                continue
+
+            base = baseline_by_exercise.get(key) or 0.0
+            if base <= 0:
+                continue
+
+            weight = base * fade
+
+            if mode == 'rate':
+                seg = rate_segment[key]
+                while seg + 1 < len(days) and day > days[seg + 1]:
+                    seg += 1
+                rate_segment[key] = seg
+
+                daily_L = 0.0
+                if seg + 1 < len(days):
+                    d1 = days[seg]
+                    d2 = days[seg + 1]
+                    v1 = values[seg]
+                    v2 = values[seg + 1]
+                    day_span = (d2 - d1).days
+                    if day_span > 0 and v1 > 0 and v2 > 0 and day > d1 and day <= d2:
+                        ratio = v2 / v1
+                        if ratio > 0:
+                            daily_L = math.log(ratio) / float(day_span)
+
+                daily_log_sum += daily_L * weight
+                daily_log_weight_sum += weight
+            else:
+                index_value = (last_val / base) * 100.0
+                weighted_sum += index_value * weight
+                weight_sum += weight
+
+        if mode == 'rate':
+            overall_L = (daily_log_sum / daily_log_weight_sum) if daily_log_weight_sum else 0.0
+            log_series.append(overall_L)
+            series.append((math.exp(overall_L) - 1.0) * 100.0)
+        else:
+            log_series.append(0.0)
+            series.append((weighted_sum / weight_sum) if weight_sum else 0.0)
+
+    stats = {}
+    if any(value != 0 for value in series):
+        cleaned = [float(v) for v in series]
+        avg_value = sum(cleaned) / len(cleaned) if cleaned else 0
+        stats = {
+            'current_1rm': cleaned[-1] if cleaned else 0,
+            'max_1rm': max(cleaned) if cleaned else 0,
+            'min_1rm': min(cleaned) if cleaned else 0,
+            'improvement': cleaned[-1] - cleaned[0] if len(cleaned) > 1 else 0,
+            'improvement_pct': avg_value,
+        }
+
+    title = 'Strength Index (vs baseline)' if mode != 'rate' else 'Improvement Rate (per day)'
+
+    return {
+        'labels': labels,
+        'data': series,
+        'log_data': log_series,
+        'weight': [],
+        'reps': [],
+        'exercise': title,
+        'stats': stats,
+        'unit': 'percent',
+        'overall_mode': mode,
+        'baseline_days': baseline_days_actual,
+        'min_sessions': int(min_sessions),
     }
 
 
