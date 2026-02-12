@@ -193,6 +193,7 @@
                 const category = data.category;
                 const dayId = data.day_id;
                 const url = data.url;
+                const label = data.label;
                 const reasons = Array.isArray(data.reasons) ? data.reasons : [];
                 const warning = data.warning;
                 const source = data.source;
@@ -214,7 +215,9 @@
 
                 link.style.display = 'block';
                 link.href = url;
-                link.textContent = `${String(category).toUpperCase()} • DAY ${dayId}`;
+                link.textContent = (label && String(label).trim())
+                    ? String(label).trim()
+                    : `${String(category).toUpperCase()} • DAY ${dayId}`;
                 card.style.display = 'block';
 
                 const y = card.getBoundingClientRect().top + window.scrollY - 120;

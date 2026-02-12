@@ -103,6 +103,35 @@
                     </button>
                 </form>
             </div>
+
+            <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
+                <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-journal-plus text-gold"></i>
+                    <h6 class="mb-0 fw-semibold">Bulk Add Workouts</h6>
+                </div>
+                <form method="POST" action="{{ url_for('user_settings') }}">
+                    <input type="hidden" name="form_type" value="bulk_workouts">
+                    <div class="mb-3">
+                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                            Paste workout days
+                        </label>
+                        <textarea
+                            name="bulk_workouts_text"
+                            class="form-control"
+                            rows="12"
+                            style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6;"
+                            spellcheck="false"
+                            placeholder="03/02 Back & Chest\nIncline Dumbbell Press - [6–10]\n27 25, 9 10\n\n04/02 Back & Biceps\nLat Pulldown - [8–12]\n55 50, 9 12"
+                        ></textarea>
+                        <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                            <i class="bi bi-info-circle me-1"></i>Each workout day must start with a date like 03/02.
+                        </small>
+                    </div>
+                    <button type="submit" class="btn btn-gold-solid w-100">
+                        <i class="bi bi-upload me-2"></i>Import Workouts
+                    </button>
+                </form>
+            </div>
         </div>
 
         <div class="card mb-4" id="profile-appearance">

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import re
 import json
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
@@ -7,6 +8,9 @@ from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import login_required, login_user, logout_user, current_user
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
+
+from parsers.workout import workout_parser
+from services.logging import handle_workout_log
 
 from config import Config
 from models import Session, User, UserRole, UserApiKey, WorkoutLog
@@ -583,6 +587,90 @@ def register_auth_routes(app, email_service):
                         logger.error(f"Bodyweight update failed: {e}", exc_info=True)
                         flash("Failed to update bodyweight. Please try again.", "error")
                     return redirect(url_for('user_settings'))
+
+                if form_type == 'bulk_workouts':
+                    raw_text = request.form.get('bulk_workouts_text', '') or ''
+                    raw_text = raw_text.strip()
+
+                    if not raw_text:
+                        flash('Paste your bulk workout text first.', 'error')
+                        return redirect(url_for('user_settings') + '#quick-actions')
+
+                    lines = [ln.rstrip() for ln in raw_text.splitlines()]
+
+                    header_re = re.compile(r'^\s*(\d{1,2})\s*/\s*(\d{1,2})\b')
+                    blocks = []
+                    current = []
+                    for line in lines:
+                        if header_re.match(line) and current:
+                            blocks.append("\n".join(current).strip())
+                            current = [line]
+                        else:
+                            current.append(line)
+                    if current:
+                        blocks.append("\n".join(current).strip())
+
+                    blocks = [b for b in blocks if b.strip()]
+                    if not blocks:
+                        flash('No workout days found. Make sure each day starts with a date like 03/02.', 'error')
+                        return redirect(url_for('user_settings') + '#quick-actions')
+
+                    successes = []
+                    skipped = []
+                    failures = []
+
+                    for block in blocks:
+                        parsed = None
+                        try:
+                            parsed = workout_parser(block, bodyweight=user.bodyweight)
+                        except Exception as e:
+                            parsed = None
+
+                        if not parsed or not parsed.get('date'):
+                            first_line = (block.splitlines()[0] if block.splitlines() else '').strip()
+                            failures.append(f"{first_line or 'Unknown day'}: could not parse")
+                            continue
+
+                        workout_dt = parsed['date']
+                        workout_date = workout_dt.date()
+                        start_dt = datetime.combine(workout_date, datetime.min.time())
+                        end_dt = start_dt + timedelta(days=1)
+
+                        conflict = (
+                            Session.query(WorkoutLog)
+                            .filter_by(user_id=user.id)
+                            .filter(WorkoutLog.date >= start_dt)
+                            .filter(WorkoutLog.date < end_dt)
+                            .first()
+                        )
+                        if conflict:
+                            skipped.append(workout_date.strftime('%Y-%m-%d'))
+                            continue
+
+                        parsed['date'] = start_dt
+
+                        try:
+                            handle_workout_log(Session, user, parsed)
+                            Session.commit()
+                            successes.append(workout_date.strftime('%Y-%m-%d'))
+                        except Exception as e:
+                            Session.rollback()
+                            failures.append(f"{workout_date.strftime('%Y-%m-%d')}: {str(e)}")
+
+                    if successes:
+                        flash(f"Imported {len(successes)} workout day(s).", 'success')
+                    if skipped:
+                        flash(
+                            f"Skipped {len(skipped)} day(s) because they already exist: {', '.join(skipped[:6])}{'…' if len(skipped) > 6 else ''}",
+                            'info',
+                        )
+                    if failures:
+                        flash(
+                            f"Failed to import {len(failures)} day(s): {failures[0]}",
+                            'error',
+                        )
+
+                    return redirect(url_for('user_settings') + '#quick-actions')
 
                 if form_type in {'profile', 'profile_otp'}:
                     full_name = sanitize_text_input(request.form.get('full_name', ''), max_length=100)
