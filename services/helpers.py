@@ -33,7 +33,8 @@ def find_best_match(db_session, user_id, exercise_name):
         name, name.title(),
         name.replace("'", "’"), name.replace("'", "’").title(),
         name.replace("’", "'"), name.replace("’", "'").title(),
-        name.replace("-", "–"), name.replace("–", "-")
+        name.replace("-", "–"), name.replace("–", "-"),
+        name.replace("-", " "), name.replace("–", " ")
     ]
     candidates = list(dict.fromkeys(candidates))
 

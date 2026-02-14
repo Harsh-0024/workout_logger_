@@ -111,11 +111,25 @@
 <script>
     (function() {
         const textarea = document.querySelector('textarea[name="workout_text"]');
+        const saveBtn = document.querySelector('button[type="submit"].btn.btn-gold-solid');
         const counter = document.getElementById('lineCount');
         const suggestionBox = document.getElementById('exerciseSuggestions');
         const exerciseData = document.getElementById('exerciseData');
         const exerciseList = exerciseData ? JSON.parse(exerciseData.textContent || '[]') : [];
         if (!textarea || !counter) return;
+
+        document.addEventListener('keydown', function(e) {
+            if (!e || !e.metaKey) return;
+            const key = (e.key || '').toLowerCase();
+            if (key !== 'enter') return;
+            if (!saveBtn) return;
+            e.preventDefault();
+            try {
+                saveBtn.click();
+            } catch (err) {
+                // no-op
+            }
+        });
 
         const stripListNumbering = (line) => {
             const trimmed = (line || '').trim();

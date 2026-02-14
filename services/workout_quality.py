@@ -159,6 +159,13 @@ class WorkoutQualityScorer:
         return weight * (float(reps) ** 0.10)
 
     @staticmethod
+    def estimate_1rm(weight: float, reps: int) -> float:
+        """
+        Public alias so other modules can use the same estimator consistently.
+        """
+        return WorkoutQualityScorer._estimate_1rm(weight, reps)
+
+    @staticmethod
     def _working_set_weight(intensity_ratio: float) -> float:
         if intensity_ratio <= 0:
             return 0.0

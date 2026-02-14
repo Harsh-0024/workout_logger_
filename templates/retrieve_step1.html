@@ -72,6 +72,12 @@
         gap: 4px;
     }
 
+    .step-badge:not(.bg-primary) {
+        background: transparent !important;
+        border: 1px solid var(--border-subtle) !important;
+        color: inherit;
+    }
+
     .step-number {
         font-weight: 700;
         opacity: 0.9;
@@ -87,6 +93,20 @@
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
         color: inherit;
+    }
+
+    @media (min-width: 577px) {
+        .step-badges {
+            flex-wrap: nowrap;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .step-badges .badge {
+            flex: 1 1 0;
+            min-width: 0;
+        }
     }
 
     @media (max-width: 576px) {

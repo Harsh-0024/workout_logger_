@@ -3,8 +3,9 @@ import re
 
 from models import Plan, RepRange, User, UserRole, WorkoutLog
 from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
-from parsers.workout import align_sets
+from services.best_scoring import best_workout_strength_score, coerce_equal_len_sets
 from services.workout_quality import WorkoutQualityScorer
+from services.exercise_matching import build_name_index, resolve_equivalent_names
 
 
 def _normalize_text(text: str) -> str:
@@ -77,6 +78,15 @@ def generate_retrieve_output(db_session, user, category, day_id):
         return "Plan not found.", 0, 0
 
     all_plans = get_workout_days(plan_text)
+    # Build once per request so we can do conservative aliasing like
+    # "Standing Calf Raises" <-> "Calf Raises Standing" (only when unambiguous).
+    distinct_logged = (
+        db_session.query(WorkoutLog.exercise)
+        .filter(WorkoutLog.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    logged_exercise_index = build_name_index([row[0] for row in distinct_logged or []])
 
     rep_text = get_effective_rep_ranges_text(db_session, user)
     custom_ranges = {}
@@ -133,6 +143,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
                 ex,
                 target_sets=target_sets,
                 target_rep_range=target_rep_range,
+                logged_exercise_index=logged_exercise_index,
             )
 
             if ex in BW_EXERCISES:
@@ -169,6 +180,8 @@ def _exercise_candidates(exercise_name: str):
         name.replace("’", "'").title(),
         name.replace("-", "–"),
         name.replace("–", "-"),
+        name.replace("-", " "),
+        name.replace("–", " "),
     ]
     return list(dict.fromkeys(candidates))
 
@@ -229,8 +242,11 @@ def _build_best_sets_line_from_logs(
     exercise: str,
     target_sets: int = 3,
     target_rep_range=None,
+    logged_exercise_index=None,
 ) -> str:
-    candidates = _exercise_candidates(exercise)
+    candidates = resolve_equivalent_names(exercise, logged_exercise_index) if logged_exercise_index else []
+    if not candidates:
+        candidates = _exercise_candidates(exercise)
     if not candidates:
         return ""
 
@@ -244,8 +260,9 @@ def _build_best_sets_line_from_logs(
     if not logs:
         return ""
 
-    best_log = None
-    best_score = None
+    required_sets = int(target_sets) if isinstance(target_sets, int) and target_sets > 0 else 3
+    preferred = []
+    fallback = []
 
     for log in logs:
         sets_json = log.sets_json if isinstance(log.sets_json, dict) else None
@@ -256,53 +273,48 @@ def _build_best_sets_line_from_logs(
         if not weights and not reps:
             continue
 
-        try:
-            weights = [float(w) for w in weights]
-            reps = [int(r) for r in reps]
-        except Exception:
-            continue
-
-        weights, reps = align_sets(weights, reps, target_sets=target_sets)
-
-        quality = WorkoutQualityScorer.calculate_workout_score(
-            {"weights": weights, "reps": reps},
-            target_rep_range,
-        )
-        q_index = float(quality.get("quality_index") or 0.0)
-        avg_1rm = float(quality.get("avg_1rm") or 0.0)
-        score = avg_1rm * q_index
+        metrics = best_workout_strength_score(sets_json, top_n=required_sets)
+        score = float(metrics.get("score") or 0.0)
+        set_count = int(metrics.get("set_count") or 0)
         if score <= 0:
             continue
 
-        if best_score is None or score > best_score or (
-            score == best_score and log.date > getattr(best_log, 'date', log.date)
-        ):
-            best_score = score
-            best_log = log
+        row = (log, score, set_count)
+        if set_count >= required_sets:
+            preferred.append(row)
+        else:
+            fallback.append(row)
 
-    if not best_log:
+    pool = preferred if preferred else fallback
+    if not pool:
         return ""
+    best_log, _, _ = max(
+        pool,
+        key=lambda row: (
+            row[1],
+            row[2],
+            getattr(row[0], "date", datetime.min),
+        ),
+    )
 
     use_bw_format = False
     if best_log.exercise_string and "bw" in best_log.exercise_string.lower():
-        extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
-        if extracted:
-            return _normalize_bw(extracted)
         use_bw_format = True
 
     sets_json = best_log.sets_json if isinstance(best_log.sets_json, dict) else None
     if not sets_json:
+        if use_bw_format and best_log.exercise_string:
+            extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
+            return _normalize_bw(extracted) if extracted else ""
         return ""
     weights = sets_json.get("weights") or []
     reps = sets_json.get("reps") or []
-
-    try:
-        weights = [float(w) for w in weights]
-        reps = [int(r) for r in reps]
-    except Exception:
+    weights, reps = coerce_equal_len_sets(weights, reps)
+    if not weights or not reps:
+        if use_bw_format and best_log.exercise_string:
+            extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
+            return _normalize_bw(extracted) if extracted else ""
         return ""
-
-    weights, reps = align_sets(weights, reps, target_sets=target_sets)
 
     scored = []
     for w, r in zip(weights, reps):
@@ -310,20 +322,18 @@ def _build_best_sets_line_from_logs(
             continue
         if r <= 0:
             continue
-        est = float(w) * (1.0 + float(r) / 30.0)
+        est = WorkoutQualityScorer.estimate_1rm(float(w), int(r))
         scored.append((est, float(w), int(r)))
 
     if not scored:
         return ""
 
-    scored.sort(key=lambda t: (t[0], t[1], t[2]), reverse=True)
-    top = scored[: max(3, int(target_sets) if target_sets else 3)]
+    # Display order should be intuitive for progression: heaviest to lightest.
+    # For same weight, higher reps first.
+    scored.sort(key=lambda t: (t[1], t[2], t[0]), reverse=True)
+    top = scored[: min(required_sets, len(scored))]
     weights_top = [t[1] for t in top]
     reps_top = [t[2] for t in top]
-    weights_top, reps_top = align_sets(weights_top, reps_top, target_sets=target_sets)
-    if target_sets:
-        weights_top = weights_top[: int(target_sets)]
-        reps_top = reps_top[: int(target_sets)]
 
     log_bodyweight = getattr(best_log, "bodyweight", None)
     weight_tokens = [
@@ -377,8 +387,12 @@ def _extract_sets_line(best_string: str, exercise: str) -> str:
     if not trimmed:
         return ""
     lines = [line.strip() for line in trimmed.splitlines() if line.strip()]
+    data_like = lambda s: bool(re.match(r'^(?:bw|,|-?\d)', (s or "").strip().lower()))
+    if len(lines) >= 3 and data_like(lines[-2]) and data_like(lines[-1]) and "," not in lines[-2]:
+        return f"{lines[-2]}, {lines[-1]}".strip()
     if len(lines) >= 2:
-        return lines[-1]
+        if data_like(lines[-1]):
+            return lines[-1]
     if " - [" in trimmed and "]" in trimmed:
         tail = trimmed.split("]", 1)[1].strip()
         tail = tail.lstrip("-:").strip()

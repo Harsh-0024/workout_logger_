@@ -12,7 +12,7 @@
                 {% endif %}
                 <span class="badge bg-primary step-badge"><span class="step-number">3.</span> Result</span>
             </div>
-            <div class="mb-3 mb-md-5">
+            <div class="retrieve-success-icon">
                 <i class="bi bi-check-circle-fill" style="font-size: clamp(4rem, 12vw, 5rem); color: var(--gold-primary); opacity: 0.8;"></i>
             </div>
 
@@ -89,6 +89,21 @@
             btn.style.borderColor = "";
         }, 2000);
     }
+
+    document.addEventListener('keydown', function(e) {
+        if (!e || !e.metaKey) return;
+        const key = (e.key || '').toLowerCase();
+        if (key !== 'c') return;
+
+        const btn = document.getElementById('copyBtn');
+        if (!btn) return;
+        e.preventDefault();
+        try {
+            btn.click();
+        } catch (err) {
+            // no-op
+        }
+    });
 </script>
 <style>
     .step-badge {
@@ -104,14 +119,20 @@
         gap: 4px;
     }
 
+    .step-badge:not(.bg-primary) {
+        background: transparent !important;
+        border: 1px solid var(--border-subtle) !important;
+        color: inherit;
+    }
+
+    .retrieve-success-icon {
+        margin-top: 12px;
+        margin-bottom: 24px;
+    }
+
     .step-number {
         font-weight: 700;
         opacity: 0.9;
-    }
-
-    .step-badge.step-badge-link {
-        background: transparent !important;
-        border: 1px solid var(--border-subtle) !important;
     }
 
     .result-stats {
@@ -137,6 +158,20 @@
     .step-badge-link:hover {
         transform: translateY(-1px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    @media (min-width: 577px) {
+        .step-badges {
+            flex-wrap: nowrap;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .step-badges .badge {
+            flex: 1 1 0;
+            min-width: 0;
+        }
     }
 
     @media (max-width: 576px) {
