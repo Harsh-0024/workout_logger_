@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-md-10 col-lg-9">
+        <div class="card">
+            <div class="text-center mb-4 mb-md-5">
+                <div class="mb-3 mb-md-4">
+                    <i class="bi bi-box-arrow-in-down" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
+                </div>
+                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 5vw, 2rem);">Bulk Import Workouts</h2>
+                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Paste multiple workout days at once</p>
+            </div>
+
+            <div class="mb-4">
+                <button type="button" class="btn btn-link p-0 text-muted text-decoration-none d-flex align-items-center gap-2" style="font-size: var(--fs-xs); letter-spacing: 1px; text-transform: uppercase; font-weight: 600;" onclick="toggleFormatGuide()">
+                    <i class="bi bi-exclamation-circle text-gold"></i>Format Guide
+                    <i class="bi bi-chevron-down" id="formatGuideChevron" style="font-size: 0.65rem; transition: transform 0.2s;"></i>
+                </button>
+                <div id="formatGuide" class="d-none mt-2 p-3 rounded" style="background: var(--gold-subtle); border: 1px solid var(--border-gold);">
+                    <div class="text-muted" style="font-size: var(--fs-xs); font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; line-height: 1.8;">
+                        03/02 Back &amp; Biceps<br>
+                        Pull-Ups - [6–10]<br>
+                        bw, 10 8 6<br>
+                        <br>
+                        04/02 Chest &amp; Shoulders<br>
+                        Bench Press - [6–10]<br>
+                        80 75, 8 10
+                    </div>
+                    <small class="text-muted d-block mt-2" style="font-size: var(--fs-xs);">Each workout day must start with a date like <strong>03/02</strong>. Existing days will be skipped.</small>
+                </div>
+            </div>
+
+            <form method="POST" action="{{ url_for('bulk_import') }}">
+                <div class="mb-3 mb-md-4">
+                    <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                        <i class="bi bi-code-square me-2"></i>Workout Data
+                    </label>
+                    <textarea
+                        name="bulk_workouts_text"
+                        class="form-control"
+                        rows="20"
+                        style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6;"
+                        spellcheck="false"
+                        placeholder="03/02 Back &amp; Biceps&#10;Pull-Ups - [6–10]&#10;bw, 10 8 6&#10;&#10;04/02 Chest &amp; Shoulders&#10;Bench Press - [6–10]&#10;80 75, 8 10"
+                    >{{ prefill or '' }}</textarea>
+                </div>
+                <button type="submit" class="btn btn-gold-solid w-100 mb-3">
+                    <i class="bi bi-upload me-2"></i>Import Workouts
+                </button>
+            </form>
+
+            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
+                <a href="{{ url_for('user_settings') }}" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                    <i class="bi bi-arrow-left me-1"></i>Back to Settings
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function toggleFormatGuide() {
+    const guide = document.getElementById('formatGuide');
+    const chevron = document.getElementById('formatGuideChevron');
+    if (!guide || !chevron) return;
+    const isHidden = guide.classList.contains('d-none');
+    guide.classList.toggle('d-none', !isHidden);
+    chevron.style.transform = isHidden ? 'rotate(180deg)' : '';
+}
+</script>
+{% endblock %}

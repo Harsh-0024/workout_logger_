@@ -92,6 +92,22 @@ def register_workout_routes(app):
         # Normalize hyphens to spaces so "pull-ups" and "pull ups" match.
         s = s.replace("-", " ")
         s = s.replace("’", "'").replace("‘", "'")
+        try:
+            s = re.sub(r"\bcurls\b", "curl", s)
+            s = re.sub(r"\brows\b", "row", s)
+            s = re.sub(r"\bpulldowns\b", "pulldown", s)
+            s = re.sub(r"\bextensions\b", "extension", s)
+            s = re.sub(r"\braises\b", "raise", s)
+            s = re.sub(r"\bpulldown\b", "pull down", s)
+            s = re.sub(r"\bpushdown\b", "push down", s)
+            s = re.sub(r"\bpullups\b", "pull ups", s)
+            s = re.sub(r"\bpullup\b", "pull up", s)
+            s = re.sub(r"\bchinups\b", "chin ups", s)
+            s = re.sub(r"\bchinup\b", "chin up", s)
+            s = re.sub(r"\bpull up\b", "pull ups", s)
+            s = re.sub(r"\bchin up\b", "chin ups", s)
+        except Exception:
+            pass
         s = re.sub(r"\s*\([^)]*\)\s*", " ", s)
         s = re.sub(r"^\s*\d+\s*[\).:-]\s*", "", s)
         s = re.sub(r"\s+", " ", s)
@@ -414,7 +430,14 @@ def register_workout_routes(app):
     def workout_history():
         return redirect(url_for('user_dashboard', username=current_user.username))
 
-    def _recommend_workout_payload(user, *, use_cache: bool = True, cache_key_prefix: str = "u:"):
+    def _recommend_workout_payload(
+        user,
+        *,
+        use_cache: bool = True,
+        cache_key_prefix: str = "u:",
+        use_ai: bool = True,
+        debug: bool = False,
+    ):
         now = time.time()
         cache_key = f"{cache_key_prefix}{user.id}"
         if use_cache:
@@ -469,6 +492,19 @@ def register_workout_routes(app):
                 ex_set = {_norm_ex_name(x) for x in (d.get("exercises") or []) if _norm_ex_name(x)}
                 plan_days_by_cat.setdefault(cat.strip().lower(), []).append((d, ex_set))
 
+            plan_ex_freq: dict[str, int] = {}
+            for _cat_key, days in plan_days_by_cat.items():
+                for _day, day_ex in days:
+                    for ex in (day_ex or set()):
+                        plan_ex_freq[ex] = plan_ex_freq.get(ex, 0) + 1
+            plan_ex_weight: dict[str, float] = {}
+            for ex, freq in plan_ex_freq.items():
+                try:
+                    f = max(int(freq), 1)
+                except Exception:
+                    f = 1
+                plan_ex_weight[ex] = 1.0 / (float(f) ** 0.5)
+
             # --- Session detection: exercise-first with optional title hint as a *small* boost. ---
             session_days: list[tuple[dict, set[str]]] = plan_days_by_cat.get("session") or []
             session_day_ex_by_id: dict[int, set[str]] = {}
@@ -484,6 +520,59 @@ def register_workout_routes(app):
                 nm = day.get("name")
                 if isinstance(nm, str) and nm.strip():
                     session_day_name_by_id[did] = nm
+
+            for did in list(session_day_ex_by_id.keys()):
+                nm0 = session_day_name_by_id.get(int(did)) or ""
+                try:
+                    s0 = str(nm0 or "").lower()
+                except Exception:
+                    s0 = ""
+                has_tag_word = bool(
+                    ("chest" in s0)
+                    or ("shoulder" in s0)
+                    or ("back" in s0)
+                    or ("leg" in s0)
+                    or ("bicep" in s0)
+                    or ("tricep" in s0)
+                    or ("forearm" in s0)
+                    or ("abs" in s0)
+                )
+                if not has_tag_word:
+                    extracted = _extract_session_title(plan_text, int(did))
+                    if extracted:
+                        session_day_name_by_id[int(did)] = extracted
+
+            session_day_tags: dict[int, set[str]] = {}
+            for did, nm in session_day_name_by_id.items():
+                try:
+                    s = str(nm or "").lower()
+                except Exception:
+                    s = ""
+                tags: set[str] = set()
+                if "chest" in s:
+                    tags.add("chest")
+                if "shoulder" in s:
+                    tags.add("shoulders")
+                if "back" in s:
+                    tags.add("back")
+                if "leg" in s:
+                    tags.add("legs")
+                if "bicep" in s:
+                    tags.add("biceps")
+                if "tricep" in s:
+                    tags.add("triceps")
+                if "forearm" in s:
+                    tags.add("forearms")
+                if "abs" in s:
+                    tags.add("abs")
+                if tags:
+                    session_day_tags[int(did)] = tags
+
+            tag_to_exercises: dict[str, set[str]] = {}
+            for did, tags in session_day_tags.items():
+                exs = session_day_ex_by_id.get(int(did)) or set()
+                for t in (tags or set()):
+                    tag_to_exercises.setdefault(str(t), set()).update(exs)
 
             # Down-weight exercises that appear in many session days (accessories) so they don't dominate matches.
             session_ex_freq: dict[str, int] = {}
@@ -503,7 +592,107 @@ def register_workout_routes(app):
             session_anchors: dict[int, set[str]] = {}
             for did, exs in session_day_ex_by_id.items():
                 ranked = sorted(exs, key=lambda e: session_ex_weight.get(e, 1.0), reverse=True)
-                session_anchors[did] = set(ranked[:2])
+                session_anchors[did] = set(ranked[:4])
+
+            session_plan_ex_tokens_by_key: dict[str, set[str]] = {}
+            for _did, exs in session_day_ex_by_id.items():
+                for ex in (exs or set()):
+                    try:
+                        toks = {t for t in str(ex).split(" ") if t}
+                    except Exception:
+                        toks = set()
+                    if toks:
+                        session_plan_ex_tokens_by_key[str(ex)] = toks
+            session_plan_key_set = set(session_plan_ex_tokens_by_key.keys())
+
+            def _map_workout_ex_to_session_keys(workout_ex: set[str]) -> set[str]:
+                if not workout_ex:
+                    return set()
+                muscle_tokens = {
+                    "back",
+                    "chest",
+                    "shoulder",
+                    "shoulders",
+                    "leg",
+                    "legs",
+                    "glute",
+                    "glutes",
+                    "quad",
+                    "quads",
+                    "hamstring",
+                    "hamstrings",
+                    "calf",
+                    "calves",
+                    "bicep",
+                    "biceps",
+                    "tricep",
+                    "triceps",
+                    "forearm",
+                    "forearms",
+                    "abs",
+                    "core",
+                }
+                singleton_ok = {
+                    "curl",
+                    "extension",
+                    "pulldown",
+                    "pushdown",
+                    "pull",
+                    "push",
+                    "dip",
+                    "pullup",
+                    "pullups",
+                    "chinup",
+                    "chinups",
+                    "deadlift",
+                    "squat",
+                    "lunge",
+                    "shrug",
+                }
+                mapped: set[str] = set()
+                for wkey in workout_ex:
+                    if not wkey:
+                        continue
+                    if wkey in session_plan_key_set:
+                        mapped.add(wkey)
+                        continue
+
+                    try:
+                        wtok = {t for t in str(wkey).split(" ") if t}
+                    except Exception:
+                        wtok = set()
+                    if not wtok:
+                        mapped.add(wkey)
+                        continue
+
+                    best = None
+                    best_score = -1
+                    for pkey, ptok in session_plan_ex_tokens_by_key.items():
+                        if not ptok:
+                            continue
+                        # Only map when the plan exercise is a subset of the workout tokens.
+                        # This lets variants like "wide grip seated row" map to "seated row",
+                        # but prevents mapping "seated row" to "barbell seated row".
+                        ptok0 = set(ptok)
+                        pmus = ptok0.intersection(muscle_tokens)
+                        wmus = set(wtok).intersection(muscle_tokens)
+                        if pmus and wmus and not set(wmus).issubset(set(pmus)):
+                            continue
+                        ptok_core = set(ptok0).difference(muscle_tokens)
+                        if not ptok_core:
+                            continue
+                        if not set(ptok_core).issubset(set(wtok)):
+                            continue
+                        if len(ptok_core) < 2:
+                            t0 = next(iter(ptok_core))
+                            if str(t0) not in singleton_ok:
+                                continue
+                        score = len(ptok_core)
+                        if score > best_score:
+                            best_score = score
+                            best = pkey
+                    mapped.add(best if best else wkey)
+                return mapped
 
             def _session_title_hint_id(title_str: str) -> int | None:
                 if not isinstance(title_str, str) or not title_str:
@@ -547,9 +736,18 @@ def register_workout_routes(app):
                     return {"accepted": None, "evidence": None}
                 allow_classify = len(workout_ex) >= 3
 
+                workout_ex = _map_workout_ex_to_session_keys(workout_ex)
+
+                workout_has_biceps = any("curl" in str(ex) for ex in (workout_ex or set()))
+                workout_has_triceps = any(
+                    any(k in str(ex) for k in ("pushdown", "skull", "extension"))
+                    for ex in (workout_ex or set())
+                )
+
                 best_accept = None
                 second_accept = None
                 best_partial = None
+                evidence_list: list[dict] = []
                 for did in session_day_ex_by_id.keys():
                     s = _score_session_day(workout_ex=workout_ex, day_id=did)
                     # Base acceptance: exercise evidence required.
@@ -559,17 +757,53 @@ def register_workout_routes(app):
                         allow_classify
                         and (
                             oc >= 4
-                            or (oc >= 3 and wf1 >= 0.5)
-                            or (s["anchor_hit"] and oc >= 3 and wf1 >= 0.55)
+                            or (oc >= 3 and wf1 >= 0.47)
+                            or (s["anchor_hit"] and oc >= 3 and wf1 >= 0.52)
                         )
                     )
-                    is_partial = bool(s["anchor_hit"] and oc >= 2 and wf1 >= 0.45)
+                    is_partial = bool(s["anchor_hit"] and oc >= 2 and wf1 >= 0.33)
+
+                    if is_accept or is_partial:
+                        creditable0 = bool(
+                            s["overlap_count"] >= 4
+                            or (s["anchor_hit"] and s["overlap_count"] >= 3 and s["wf1"] >= 0.50)
+                        )
+                        try:
+                            overlap_ex0 = {str(x) for x in (s.get("overlap_ex") or set()) if x}
+                        except Exception:
+                            overlap_ex0 = set()
+                        evidence_list.append(
+                            {
+                                "day_id": int(did),
+                                "creditable": bool(creditable0),
+                                "partial": not bool(creditable0),
+                                "overlap_ex": sorted(list(overlap_ex0)),
+                                "overlap_count": int(s.get("overlap_count") or 0),
+                                "wf1": float(s.get("wf1") or 0.0),
+                                "anchor_hit": bool(s.get("anchor_hit")),
+                                "overlap_w": float(s.get("overlap_w") or 0.0),
+                            }
+                        )
 
                     if is_accept:
                         bonus = 0.0
                         if title_hint_id is not None and int(title_hint_id) == int(did):
                             # Title is a hint only; add a small controlled bias if the exercise match is already strong.
                             bonus = 0.03
+
+                        # Exercise-driven tie-break: if the workout clearly contains biceps vs triceps movements,
+                        # bias toward plan days whose label matches (does NOT use workout titles).
+                        try:
+                            nm0 = str(session_day_name_by_id.get(int(did)) or "").lower()
+                        except Exception:
+                            nm0 = ""
+                        day_has_biceps = "bicep" in nm0
+                        day_has_triceps = "tricep" in nm0
+                        if workout_has_biceps and not workout_has_triceps and day_has_biceps and not day_has_triceps:
+                            bonus += 0.02
+                        elif workout_has_triceps and not workout_has_biceps and day_has_triceps and not day_has_biceps:
+                            bonus += 0.02
+
                         score_tup = (min(wf1 + bonus, 1.0), s["overlap_w"], s["overlap_count"])
                         cand = {"day_id": int(did), "score": score_tup, "raw": s}
                         if best_accept is None or cand["score"] > best_accept["score"]:
@@ -581,7 +815,18 @@ def register_workout_routes(app):
 
                     if is_partial:
                         # For partial evidence we do NOT apply title bonus; exercises are the foundation.
-                        score_tup = (wf1, s["overlap_w"], s["overlap_count"])
+                        bonus = 0.0
+                        try:
+                            nm0 = str(session_day_name_by_id.get(int(did)) or "").lower()
+                        except Exception:
+                            nm0 = ""
+                        day_has_biceps = "bicep" in nm0
+                        day_has_triceps = "tricep" in nm0
+                        if workout_has_biceps and not workout_has_triceps and day_has_biceps and not day_has_triceps:
+                            bonus += 0.01
+                        elif workout_has_triceps and not workout_has_biceps and day_has_triceps and not day_has_biceps:
+                            bonus += 0.01
+                        score_tup = (min(wf1 + bonus, 1.0), s["overlap_w"], s["overlap_count"])
                         cand = {"day_id": int(did), "score": score_tup, "raw": s}
                         if best_partial is None or cand["score"] > best_partial["score"]:
                             best_partial = cand
@@ -589,16 +834,23 @@ def register_workout_routes(app):
                 if not best_accept and not best_partial:
                     return {"accepted": None, "evidence": None}
 
-                    # Ambiguity guard: if top two are very close, don't auto-classify/credit.
-                    if best_accept and second_accept:
-                        best_primary = float(best_accept["score"][0])  # includes optional title hint bonus
-                        second_primary = float(second_accept["score"][0])
-                        if (
-                            abs(best_primary - second_primary) < 0.04
-                            and abs(best_accept["raw"]["overlap_count"] - second_accept["raw"]["overlap_count"]) <= 1
-                        ):
-                            # If the title hint breaks a near-tie (and exercises are already strong),
-                            # allow it as a controlled bias instead of calling it ambiguous.
+                if best_accept and second_accept:
+                    best_primary = float(best_accept["score"][0])
+                    second_primary = float(second_accept["score"][0])
+                    if (
+                        abs(best_primary - second_primary) < 0.04
+                        and abs(best_accept["raw"]["overlap_count"] - second_accept["raw"]["overlap_count"]) <= 1
+                    ):
+                        try:
+                            best_ow = float(best_accept["raw"].get("overlap_w") or 0.0)
+                            second_ow = float(second_accept["raw"].get("overlap_w") or 0.0)
+                        except Exception:
+                            best_ow = 0.0
+                            second_ow = 0.0
+                        best_anchor = bool(best_accept["raw"].get("anchor_hit"))
+                        second_anchor = bool(second_accept["raw"].get("anchor_hit"))
+                        keep = bool((best_anchor and not second_anchor) or (abs(best_ow - second_ow) >= 0.35))
+                        if not keep:
                             if (
                                 title_hint_id is not None
                                 and int(title_hint_id) == int(best_accept["day_id"])
@@ -606,7 +858,36 @@ def register_workout_routes(app):
                             ):
                                 pass
                             else:
-                                return {"accepted": None, "evidence": None}
+                                raw0 = best_accept.get("raw") or {}
+                                try:
+                                    overlap_ex0 = {str(x) for x in (raw0.get("overlap_ex") or set()) if x}
+                                except Exception:
+                                    overlap_ex0 = set()
+                                evidence0 = {
+                                    "day_id": int(best_accept["day_id"]),
+                                    "creditable": False,
+                                    "partial": True,
+                                    "overlap_ex": sorted(list(overlap_ex0)),
+                                    "overlap_count": int(raw0.get("overlap_count") or 0),
+                                    "wf1": float(raw0.get("wf1") or 0.0),
+                                    "anchor_hit": bool(raw0.get("anchor_hit")),
+                                    "ambiguous": True,
+                                }
+                                try:
+                                    evidence_list = sorted(
+                                        evidence_list,
+                                        key=lambda x: (
+                                            float(x.get("wf1") or 0.0),
+                                            float(x.get("overlap_w") or 0.0),
+                                            int(x.get("overlap_count") or 0),
+                                        ),
+                                        reverse=True,
+                                    )
+                                except Exception:
+                                    pass
+                                if evidence_list:
+                                    evidence_list = evidence_list[:4]
+                                return {"accepted": None, "evidence": evidence0, "evidence_list": evidence_list}
 
                 if best_accept:
                     did = int(best_accept["day_id"])
@@ -621,7 +902,7 @@ def register_workout_routes(app):
                     # Cycle credit should be a bit stricter than classification.
                     creditable = bool(
                         raw["overlap_count"] >= 4
-                        or (raw["anchor_hit"] and raw["overlap_count"] >= 3 and raw["wf1"] >= 0.55)
+                        or (raw["anchor_hit"] and raw["overlap_count"] >= 3 and raw["wf1"] >= 0.50)
                     )
                     evidence = {
                         "day_id": did,
@@ -632,7 +913,21 @@ def register_workout_routes(app):
                         "wf1": raw["wf1"],
                         "anchor_hit": raw["anchor_hit"],
                     }
-                    return {"accepted": match, "evidence": evidence}
+                    try:
+                        evidence_list = sorted(
+                            evidence_list,
+                            key=lambda x: (
+                                float(x.get("wf1") or 0.0),
+                                float(x.get("overlap_w") or 0.0),
+                                int(x.get("overlap_count") or 0),
+                            ),
+                            reverse=True,
+                        )
+                    except Exception:
+                        pass
+                    if evidence_list:
+                        evidence_list = evidence_list[:4]
+                    return {"accepted": match, "evidence": evidence, "evidence_list": evidence_list}
 
                 did = int(best_partial["day_id"])
                 raw = best_partial["raw"]
@@ -645,43 +940,36 @@ def register_workout_routes(app):
                     "wf1": raw["wf1"],
                     "anchor_hit": raw["anchor_hit"],
                 }
-                return {"accepted": None, "evidence": evidence}
+                try:
+                    evidence_list = sorted(
+                        evidence_list,
+                        key=lambda x: (
+                            float(x.get("wf1") or 0.0),
+                            float(x.get("overlap_w") or 0.0),
+                            int(x.get("overlap_count") or 0),
+                        ),
+                        reverse=True,
+                    )
+                except Exception:
+                    pass
+                if evidence_list:
+                    evidence_list = evidence_list[:4]
+                return {"accepted": None, "evidence": evidence, "evidence_list": evidence_list}
 
-            recent = get_recent_workouts(user, limit=20)
+            recent = get_recent_workouts(user, limit=60)
             recent_context: list[dict] = []
 
             for w in recent:
                 dt = w.get("date")
                 title = w.get("title") or "Workout"
-                title_key = _norm_day_title_key(title)
                 workout_ex = {_norm_ex_name(x) for x in (w.get("exercise_list") or []) if _norm_ex_name(x)}
-                title_hint_session_id = _session_title_hint_id(title)
 
                 session_evidence = None
                 day_matches: list[dict] = []
 
-                # Title-based matches (non-session only). Never allow title-only Session classification.
-                for day in plan_days:
-                    cat_name = day.get("category")
-                    if isinstance(cat_name, str) and cat_name.strip().lower() == "session":
-                        continue
-                    day_name = day.get("name")
-                    if not isinstance(day_name, str) or not day_name.strip():
-                        continue
-                    day_key = _norm_day_title_key(day_name)
-                    if _contains_phrase(title_key, day_key):
-                        day_matches.append(
-                            {
-                                "category": day.get("category"),
-                                "day_id": day.get("day_id"),
-                                "day_name": day_name,
-                                "source": "title",
-                            }
-                        )
-
                 # Exercise-based best match per category (non-session).
                 if workout_ex:
-                    workout_len = len(workout_ex)
+                    workout_w = sum(plan_ex_weight.get(e, 0.7) for e in workout_ex) or 0.0
                     best_by_cat: dict[str, dict] = {}
                     for cat_key, days in plan_days_by_cat.items():
                         if cat_key == "session":
@@ -691,19 +979,22 @@ def register_workout_routes(app):
                         for day, day_ex in days:
                             if not day_ex:
                                 continue
-                            overlap = len(workout_ex.intersection(day_ex))
-                            if overlap < 2 or not workout_len:
+                            overlap_set = workout_ex.intersection(day_ex)
+                            overlap = len(overlap_set)
+                            if overlap < 2:
                                 continue
-                            precision = overlap / float(workout_len)
-                            recall = overlap / float(max(len(day_ex), 1))
+                            overlap_w = sum(plan_ex_weight.get(e, 1.0) for e in overlap_set)
+                            day_w = sum(plan_ex_weight.get(e, 1.0) for e in day_ex) or 0.0
+                            precision = (overlap_w / workout_w) if workout_w else 0.0
+                            recall = (overlap_w / day_w) if day_w else 0.0
                             f1 = (2 * precision * recall / (precision + recall)) if (precision + recall) else 0.0
-                            score = (f1, overlap, precision)
+                            score = (f1, overlap_w, overlap)
                             if best_score is None or score > best_score:
                                 best_score = score
                                 best = day
                         if best and best_score is not None:
-                            f1, overlap, _precision = best_score
-                            if overlap >= 4 or (overlap >= 3 and f1 >= 0.5):
+                            f1, overlap_w, overlap = best_score
+                            if overlap >= 4 or (overlap >= 3 and f1 >= 0.5) or (overlap >= 2 and overlap_w >= 2.6 and f1 >= 0.58):
                                 best_by_cat[cat_key] = {
                                     "category": best.get("category"),
                                     "day_id": best.get("day_id"),
@@ -714,7 +1005,7 @@ def register_workout_routes(app):
 
                 # Session match: exercise-first, title is only a small hint boost.
                 if workout_ex and session_day_ex_by_id:
-                    sm = _best_session_match(workout_ex=workout_ex, title_hint_id=title_hint_session_id)
+                    sm = _best_session_match(workout_ex=workout_ex, title_hint_id=None)
                     if isinstance(sm, dict):
                         accepted = sm.get("accepted")
                         if isinstance(accepted, dict):
@@ -722,6 +1013,18 @@ def register_workout_routes(app):
                         ev = sm.get("evidence")
                         if isinstance(ev, dict):
                             session_evidence = ev
+                        evl = sm.get("evidence_list")
+                        if isinstance(evl, list) and evl:
+                            try:
+                                session_evidence_list = [x for x in evl if isinstance(x, dict) and isinstance(x.get("day_id"), int)]
+                            except Exception:
+                                session_evidence_list = []
+                        else:
+                            session_evidence_list = []
+                    else:
+                        session_evidence_list = []
+                else:
+                    session_evidence_list = []
 
                 # Deduplicate: one match per category, prefer exercise-based.
                 dedup: dict[str, dict] = {}
@@ -745,13 +1048,16 @@ def register_workout_routes(app):
                         for _day, day_ex in days:
                             if not day_ex:
                                 continue
-                            overlap = len(workout_ex.intersection(day_ex))
+                            overlap_set = workout_ex.intersection(day_ex)
+                            overlap = len(overlap_set)
                             if overlap < 2:
                                 continue
-                            score = overlap / float(max(len(day_ex), 1))
+                            overlap_w = sum(plan_ex_weight.get(e, 1.0) for e in overlap_set)
+                            day_w = sum(plan_ex_weight.get(e, 1.0) for e in day_ex) or 0.0
+                            score = (overlap_w / day_w) if day_w else 0.0
                             if score > best_score:
                                 best_score = score
-                        if best_score >= 0.35:
+                        if best_score >= 0.30:
                             for c in categories:
                                 nm = c.get("name") if isinstance(c, dict) else None
                                 if isinstance(nm, str) and nm.strip().lower() == cat_key:
@@ -761,16 +1067,14 @@ def register_workout_routes(app):
                 for m in day_matches:
                     cat = m.get("category")
                     if isinstance(cat, str) and cat.strip():
-                        trained_categories.add(cat.strip())
+                        if m.get("source") == "exercises":
+                            trained_categories.add(cat.strip())
 
                 # Primary: prefer exercises for the UI label + per-workout day_id.
                 primary = None
-                for preferred in ("exercises", "title"):
-                    for m in day_matches:
-                        if m.get("source") == preferred:
-                            primary = m
-                            break
-                    if primary:
+                for m in day_matches:
+                    if m.get("source") == "exercises":
+                        primary = m
                         break
                 if not primary and day_matches:
                     primary = day_matches[0]
@@ -778,15 +1082,16 @@ def register_workout_routes(app):
                 matched_day = None
                 matched_source = None
                 if primary:
-                    for d in plan_days:
-                        if (
-                            str(d.get("category") or "").strip().lower()
-                            == str(primary.get("category") or "").strip().lower()
-                            and d.get("day_id") == primary.get("day_id")
-                        ):
-                            matched_day = d
-                            matched_source = primary.get("source")
-                            break
+                    if primary.get("source") == "exercises":
+                        for d in plan_days:
+                            if (
+                                str(d.get("category") or "").strip().lower()
+                                == str(primary.get("category") or "").strip().lower()
+                                and d.get("day_id") == primary.get("day_id")
+                            ):
+                                matched_day = d
+                                matched_source = primary.get("source")
+                                break
 
                 recent_context.append(
                     {
@@ -796,6 +1101,7 @@ def register_workout_routes(app):
                         "exercise_list": w.get("exercise_list") or [],
                         "exercise_details": w.get("exercise_details") or "",
                         "session_evidence": session_evidence,
+                        "session_evidence_list": session_evidence_list,
                         "category": matched_day["category"] if matched_day else None,
                         "day_id": matched_day["day_id"] if matched_day else None,
                         "day_name": matched_day["name"] if matched_day else None,
@@ -828,8 +1134,18 @@ def register_workout_routes(app):
                             category_trained[key] = d
 
                 ev = item.get("session_evidence")
+                best_ev = None
                 if isinstance(ev, dict) and isinstance(ev.get("day_id"), int):
-                    session_evidence_items.append((d, ev))
+                    best_ev = ev
+                else:
+                    evl = item.get("session_evidence_list")
+                    if isinstance(evl, list) and evl:
+                        for ev1 in evl:
+                            if isinstance(ev1, dict) and isinstance(ev1.get("day_id"), int):
+                                best_ev = ev1
+                                break
+                if isinstance(best_ev, dict):
+                    session_evidence_items.append((d, best_ev))
 
                 matches = item.get("day_matches")
                 if isinstance(matches, list):
@@ -843,7 +1159,7 @@ def register_workout_routes(app):
                             continue
                         if not isinstance(day_id, int):
                             continue
-                        if src not in ("title", "exercises"):
+                        if src != "exercises":
                             continue
                         cat_key = cat.strip().lower()
                         if cat_key == "session":
@@ -916,11 +1232,21 @@ def register_workout_routes(app):
                 recall = (overlap_w / day_w) if day_w else 0.0
                 anchors = session_anchors.get(int(day_id)) or set()
                 anchor_hit = bool(anchors.intersection(covered))
-                return bool(anchor_hit and oc >= 3 and recall >= 0.6)
+                anchor_cov = 0
+                try:
+                    anchor_cov = len(set(anchors).intersection(covered))
+                except Exception:
+                    anchor_cov = 0
+                return bool(
+                    (anchor_hit and oc >= 3 and recall >= 0.45)
+                    or (anchor_cov >= 2 and oc >= 3 and recall >= 0.42)
+                    or (anchor_hit and oc >= 3 and overlap_w >= 2.6)
+                    or (anchor_cov >= 2 and oc >= 3 and overlap_w >= 2.4)
+                )
 
             session_credit_events: list[tuple[datetime.date, int]] = []
             pending: dict[int, dict] = {}
-            window_days = 3
+            window_days = 35
             for d, ev in session_evidence_items:
                 try:
                     sid = int(ev.get("day_id"))
@@ -951,6 +1277,126 @@ def register_workout_routes(app):
                     session_credit_events.append((d, sid))
                     pending.pop(sid, None)
 
+            last_workout_ex0: set[str] = set()
+            last_workout_date0: datetime.date | None = None
+            try:
+                if recent_context:
+                    last_workout_ex0 = {
+                        _norm_ex_name(x)
+                        for x in (recent_context[0].get("exercise_list") or [])
+                        if _norm_ex_name(x)
+                    }
+                    last_workout_date0 = datetime.strptime(
+                        str(recent_context[0].get("date"))[:10], "%Y-%m-%d"
+                    ).date()
+            except Exception:
+                last_workout_ex0 = set()
+                last_workout_date0 = None
+
+            last_done_by_session_id: dict[int, datetime.date] = {}
+            tag_last_done: dict[str, datetime.date] = {}
+            for d0, sid0 in session_credit_events:
+                try:
+                    sid_i = int(sid0)
+                except Exception:
+                    continue
+                prev = last_done_by_session_id.get(sid_i)
+                if prev is None or d0 > prev:
+                    last_done_by_session_id[sid_i] = d0
+                for tag in (session_day_tags.get(sid_i) or set()):
+                    prevt = tag_last_done.get(tag)
+                    if prevt is None or d0 > prevt:
+                        tag_last_done[tag] = d0
+
+            if session_day_tags and recent_context:
+                try:
+                    scan_window_days = 12
+                    max_scan_workouts = 30
+                    for it in (recent_context[:max_scan_workouts] if isinstance(recent_context, list) else []):
+                        date_str = it.get("date")
+                        try:
+                            d_it = datetime.strptime(str(date_str)[:10], "%Y-%m-%d").date()
+                        except Exception:
+                            continue
+                        try:
+                            if (today - d_it).days > int(scan_window_days):
+                                continue
+                        except Exception:
+                            continue
+
+                        ev_candidates: list[dict] = []
+                        evl = it.get("session_evidence_list")
+                        if isinstance(evl, list) and evl:
+                            for ev0 in evl:
+                                if isinstance(ev0, dict) and isinstance(ev0.get("day_id"), int):
+                                    ev_candidates.append(ev0)
+                        ev1 = it.get("session_evidence")
+                        if isinstance(ev1, dict) and isinstance(ev1.get("day_id"), int):
+                            ev_candidates.append(ev1)
+                        if not ev_candidates:
+                            continue
+
+                        strong: list[tuple[tuple, dict]] = []
+                        for ev in ev_candidates:
+                            try:
+                                did = int(ev.get("day_id"))
+                            except Exception:
+                                continue
+                            if did <= 0:
+                                continue
+                            creditable = bool(ev.get("creditable"))
+                            try:
+                                overlap_w = float(ev.get("overlap_w") or 0.0)
+                            except Exception:
+                                overlap_w = 0.0
+                            try:
+                                wf1 = float(ev.get("wf1") or 0.0)
+                            except Exception:
+                                wf1 = 0.0
+                            try:
+                                oc = int(ev.get("overlap_count") or 0)
+                            except Exception:
+                                oc = 0
+                            anchor_hit = bool(ev.get("anchor_hit"))
+
+                            is_strong = bool(
+                                creditable
+                                or oc >= 4
+                                or (anchor_hit and oc >= 3 and wf1 >= 0.45)
+                                or (overlap_w >= 2.8 and wf1 >= 0.42)
+                            )
+                            if not is_strong:
+                                continue
+                            score = (
+                                int(creditable),
+                                float(overlap_w),
+                                float(wf1),
+                                int(oc),
+                            )
+                            strong.append((score, ev))
+
+                        if not strong:
+                            continue
+                        try:
+                            strong = sorted(strong, key=lambda x: x[0], reverse=True)
+                        except Exception:
+                            pass
+
+                        for _score, ev in strong[:2]:
+                            try:
+                                did = int(ev.get("day_id"))
+                            except Exception:
+                                continue
+                            tags = session_day_tags.get(int(did)) or set()
+                            if not tags:
+                                continue
+                            for tag in tags:
+                                prevt = tag_last_done.get(str(tag))
+                                if prevt is None or d_it > prevt:
+                                    tag_last_done[str(tag)] = d_it
+                except Exception:
+                    pass
+
             # Simulate cycle progression from credited session events.
             session_done_set: set[int] = set()
             session_missing: list[int] = []
@@ -958,27 +1404,162 @@ def register_workout_routes(app):
             session_cycle_label = None
             last_session_date = None
 
+            session_choice_reason = None
+            session_base_cycle_idx = None
+            session_last_sid_in_cycle = None
+            session_candidate_order: list[int] = []
+            session_candidate_scan: list[dict] = []
+            done_by_cycle: list[set[int]] = []
+            last_sid_by_cycle: list[int | None] = []
+
             if cycles:
                 cur_cycle_idx = 0
-                done: set[int] = set()
                 cycle_sets = [set(ids) for ids in cycles]
-                for d, sid in session_credit_events:
+                done_by_cycle: list[set[int]] = [set() for _ in cycles]
+                last_sid_by_cycle: list[int | None] = [None for _ in cycles]
+                last_event_cycle_idx: int | None = None
+                advance_cycle_idx: int | None = None
+
+                try:
+                    session_credit_events0 = sorted(session_credit_events, key=lambda x: x[0])
+                except Exception:
+                    session_credit_events0 = list(session_credit_events)
+
+                for d, sid in session_credit_events0:
                     idx = day_to_cycle_index.get(int(sid))
                     if idx is None:
                         continue
-                    if idx != cur_cycle_idx:
-                        cur_cycle_idx = int(idx)
-                        done = set()
-                    done.add(int(sid))
+                    idx = int(idx)
+                    done_by_cycle[idx].add(int(sid))
+                    last_sid_by_cycle[idx] = int(sid)
                     last_session_date = d
-                    if done.issuperset(cycle_sets[cur_cycle_idx]):
-                        done = set()
-                        cur_cycle_idx = (cur_cycle_idx + 1) % len(cycles)
+                    last_event_cycle_idx = idx
+                    if done_by_cycle[idx].issuperset(cycle_sets[idx]):
+                        done_by_cycle[idx] = set()
+                        last_sid_by_cycle[idx] = None
+                        advance_cycle_idx = (idx + 1) % len(cycles)
 
-                current_cycle_ids = cycles[cur_cycle_idx]
-                session_done_set = set(done)
+                if advance_cycle_idx is not None:
+                    cur_cycle_idx = int(advance_cycle_idx)
+                elif last_event_cycle_idx is not None:
+                    cur_cycle_idx = int(last_event_cycle_idx)
+
+                base_cycle_idx = int(cur_cycle_idx)
+                session_base_cycle_idx = int(base_cycle_idx)
+
+                cur_cycle_idx = int(base_cycle_idx)
+                current_cycle_ids = cycles[cur_cycle_idx] if 0 <= cur_cycle_idx < len(cycles) else []
+                session_done_set = set(done_by_cycle[cur_cycle_idx] or set()) if 0 <= cur_cycle_idx < len(cycles) else set()
                 session_missing = [i for i in current_cycle_ids if i not in session_done_set]
-                session_next_day = int(min(session_missing)) if session_missing else int(min(current_cycle_ids))
+                if not session_missing:
+                    session_missing = list(current_cycle_ids)
+
+                session_last_sid_in_cycle = (
+                    last_sid_by_cycle[cur_cycle_idx]
+                    if 0 <= cur_cycle_idx < len(last_sid_by_cycle)
+                    else None
+                )
+
+                tag_min_rest_days = {
+                    "back": 2,
+                    "legs": 2,
+                    "chest": 2,
+                    "shoulders": 2,
+                    "biceps": 1,
+                    "triceps": 1,
+                    "forearms": 0,
+                    "abs": 0,
+                }
+
+                scan_ids: list[int] = []
+                if current_cycle_ids:
+                    start_idx = 0
+                    if session_last_sid_in_cycle in current_cycle_ids:
+                        try:
+                            start_idx = (
+                                int(current_cycle_ids.index(int(session_last_sid_in_cycle))) + 1
+                            ) % len(current_cycle_ids)
+                        except Exception:
+                            start_idx = 0
+                    scan_ids = list(current_cycle_ids[start_idx:]) + list(current_cycle_ids[:start_idx])
+
+                missing_set = set(int(x) for x in (session_missing or []) if isinstance(x, int))
+                if missing_set and scan_ids:
+                    scan_ids = [int(x) for x in scan_ids if int(x) in missing_set]
+                elif missing_set:
+                    scan_ids = [int(x) for x in (session_missing or []) if isinstance(x, int)]
+                else:
+                    scan_ids = [int(x) for x in (current_cycle_ids or []) if isinstance(x, int)]
+
+                session_candidate_order = list(scan_ids)
+
+                session_next_day = int(min(current_cycle_ids)) if current_cycle_ids else 1
+                session_choice_reason = "cycle_empty" if not scan_ids else None
+                first_missing_sid = None
+                chosen_ready_sid = None
+
+                for cand_sid in scan_ids:
+                    try:
+                        cand_sid_i = int(cand_sid)
+                    except Exception:
+                        continue
+                    if cand_sid_i in (session_done_set or set()):
+                        continue
+                    if first_missing_sid is None:
+                        first_missing_sid = int(cand_sid_i)
+
+                    tags = session_day_tags.get(int(cand_sid_i)) or set()
+                    ready = True
+                    min_days_since_tag = 999
+                    rest_failures: list[dict] = []
+
+                    if tags:
+                        for t in tags:
+                            td = tag_last_done.get(str(t))
+                            ds = 999
+                            if td:
+                                try:
+                                    ds = max((today - td).days, 0)
+                                except Exception:
+                                    ds = 999
+                            min_days_since_tag = min(min_days_since_tag, int(ds))
+                            need = int(tag_min_rest_days.get(str(t), 1))
+                            if td and int(ds) < int(need):
+                                ready = False
+                                if debug:
+                                    rest_failures.append(
+                                        {
+                                            "tag": str(t),
+                                            "days_since": int(ds),
+                                            "min_rest": int(need),
+                                            "last_done": td.isoformat() if hasattr(td, "isoformat") else str(td),
+                                        }
+                                    )
+
+                    if debug:
+                        session_candidate_scan.append(
+                            {
+                                "sid": int(cand_sid_i),
+                                "tags": sorted([str(x) for x in (tags or set()) if x]),
+                                "ready": bool(ready),
+                                "min_days_since_tag": int(min_days_since_tag),
+                                "rest_failures": rest_failures,
+                            }
+                        )
+
+                    if ready:
+                        chosen_ready_sid = int(cand_sid_i)
+                        break
+
+                if chosen_ready_sid is not None:
+                    session_next_day = int(chosen_ready_sid)
+                    session_choice_reason = "forward_first_ready"
+                elif first_missing_sid is not None:
+                    session_next_day = int(first_missing_sid)
+                    session_choice_reason = "forward_fallback_not_ready"
+                elif not session_choice_reason:
+                    session_choice_reason = "no_candidates"
+
                 if isinstance(session_headings, list) and len(session_headings) == len(cycles):
                     session_cycle_label = session_headings[cur_cycle_idx]
 
@@ -1020,6 +1601,34 @@ def register_workout_routes(app):
             chosen_next_day = 1
             best_score = None
 
+            total_plan_days = 0
+            try:
+                total_plan_days = sum(int(c.get("num_days") or 0) for c in categories if isinstance(c, dict))
+            except Exception:
+                total_plan_days = 0
+            if total_plan_days <= 0:
+                total_plan_days = 1
+
+            last_any_workout_date = None
+            last_workout_ex = set()
+            try:
+                if recent_context:
+                    last_any_workout_date = datetime.strptime(str(recent_context[0].get("date"))[:10], "%Y-%m-%d").date()
+                    last_workout_ex = {
+                        _norm_ex_name(x)
+                        for x in (recent_context[0].get("exercise_list") or [])
+                        if _norm_ex_name(x)
+                    }
+            except Exception:
+                last_any_workout_date = None
+                last_workout_ex = set()
+            days_since_any = 999
+            try:
+                if last_any_workout_date:
+                    days_since_any = max((today - last_any_workout_date).days, 0)
+            except Exception:
+                days_since_any = 999
+
             for c in categories:
                 if not isinstance(c, dict):
                     continue
@@ -1043,7 +1652,40 @@ def register_workout_routes(app):
                 except Exception:
                     missing_count = 0
 
-                score = (days_since, missing_count, -nd)
+                expected_spacing = float(total_plan_days) / float(max(nd, 1))
+                behind = float(days_since) / float(max(expected_spacing, 1.0))
+                if days_since <= 1:
+                    behind -= 0.75
+
+                overlap_ratio = 0.0
+                try:
+                    if last_workout_ex:
+                        day_ex = None
+                        for d0, ex0 in (plan_days_by_cat.get(name.strip().lower()) or []):
+                            if int(d0.get("day_id") or 0) == int(next_day):
+                                day_ex = ex0
+                                break
+                        if isinstance(day_ex, set) and day_ex:
+                            overlap_set = last_workout_ex.intersection(day_ex)
+                            overlap_w = sum(plan_ex_weight.get(e, 1.0) for e in overlap_set)
+                            day_w = sum(plan_ex_weight.get(e, 1.0) for e in day_ex) or 0.0
+                            overlap_ratio = (overlap_w / day_w) if day_w else 0.0
+                except Exception:
+                    overlap_ratio = 0.0
+                behind -= min(max(float(overlap_ratio), 0.0), 1.0) * 0.6
+
+                next_day_len = 0
+                try:
+                    for d0, ex0 in (plan_days_by_cat.get(name.strip().lower()) or []):
+                        if int(d0.get("day_id") or 0) == int(next_day):
+                            next_day_len = len(ex0 or set())
+                            break
+                except Exception:
+                    next_day_len = 0
+                if days_since_any >= 7 and next_day_len:
+                    behind += max(0.0, (8.0 - float(next_day_len)) * 0.02)
+
+                score = (behind, days_since, missing_count, -nd)
                 if best_score is None or score > best_score:
                     best_score = score
                     chosen_category = name.strip()
@@ -1076,39 +1718,33 @@ def register_workout_routes(app):
                 "model": "heuristic",
             }
 
-            categories_one = [
-                c
-                for c in categories
-                if isinstance(c, dict)
-                and str(c.get("name") or "").strip().lower() == str(chosen_category).strip().lower()
-            ]
-            plan_days_one = [
-                d
-                for d in plan_days
-                if isinstance(d, dict)
-                and str(d.get("category") or "").strip().lower() == str(chosen_category).strip().lower()
-            ]
-
-            try:
-                reco_ai = GeminiService.recommend_workout(
-                    categories=categories_one or categories,
-                    recent_workouts=recent_context,
-                    plan_days=plan_days_one or plan_days,
-                    api_keys=api_key_payloads,
-                )
-                if isinstance(reco_ai, dict) and isinstance(reco_ai.get("reasons"), list):
-                    reco["reasons"] = reco_ai.get("reasons") or []
-                reco["model"] = reco_ai.get("model") if isinstance(reco_ai, dict) else reco.get("model")
-                key_id = reco_ai.get("key_id") if isinstance(reco_ai, dict) else None
-                if key_id:
-                    key_row = Session.query(UserApiKey).filter_by(id=key_id, user_id=user.id).first()
-                    if key_row:
-                        key_row.last_used_at = datetime.utcnow()
-                        Session.commit()
-                source = "gemini"
-            except GeminiServiceError as e:
-                logger.warning(f"Gemini unavailable, using fallback: {e}")
-                fallback_warning = "Gemini is busy right now. Showing a smart fallback suggestion."
+            if use_ai:
+                try:
+                    reco_ai = GeminiService.recommend_workout(
+                        categories=categories,
+                        recent_workouts=recent_context,
+                        plan_days=plan_days,
+                        api_keys=api_key_payloads,
+                    )
+                    if isinstance(reco_ai, dict) and isinstance(reco_ai.get("category"), str) and reco_ai.get("category").strip():
+                        reco["category"] = reco_ai.get("category").strip()
+                    if isinstance(reco_ai, dict) and isinstance(reco_ai.get("day_id"), int):
+                        reco["day_id"] = int(reco_ai.get("day_id"))
+                    if isinstance(reco_ai, dict) and isinstance(reco_ai.get("reasons"), list):
+                        reco["reasons"] = reco_ai.get("reasons") or []
+                    reco["model"] = reco_ai.get("model") if isinstance(reco_ai, dict) else reco.get("model")
+                    key_id = reco_ai.get("key_id") if isinstance(reco_ai, dict) else None
+                    if key_id:
+                        key_row = Session.query(UserApiKey).filter_by(id=key_id, user_id=user.id).first()
+                        if key_row:
+                            key_row.last_used_at = datetime.utcnow()
+                            Session.commit()
+                    source = "gemini"
+                except GeminiServiceError as e:
+                    logger.warning(f"Gemini unavailable, using fallback: {e}")
+                    fallback_warning = "Gemini is busy right now. Showing a smart fallback suggestion."
+            else:
+                source = "heuristic"
 
             if not isinstance(reco.get("reasons"), list) or len(reco.get("reasons") or []) < 3:
                 try:
@@ -1177,6 +1813,46 @@ def register_workout_routes(app):
                 "warning": fallback_warning,
             }
 
+            if debug:
+                try:
+                    sess_evidence_tail = []
+                    for dd, ev in (session_evidence_items[-25:] if isinstance(session_evidence_items, list) else []):
+                        if not isinstance(ev, dict):
+                            continue
+                        row = dict(ev)
+                        row["date"] = dd.isoformat() if hasattr(dd, "isoformat") else str(dd)
+                        sess_evidence_tail.append(row)
+                except Exception:
+                    sess_evidence_tail = []
+                try:
+                    sess_credit = [
+                        ((d0.isoformat() if hasattr(d0, "isoformat") else str(d0)), int(sid0))
+                        for d0, sid0 in (session_credit_events or [])
+                    ]
+                except Exception:
+                    sess_credit = []
+                payload["debug"] = {
+                    "session_next_day": int(session_next_day or 1),
+                    "session_cycle_label": session_cycle_label,
+                    "session_base_cycle_idx": session_base_cycle_idx,
+                    "session_last_sid_in_cycle": session_last_sid_in_cycle,
+                    "session_choice_reason": session_choice_reason,
+                    "session_candidate_order": [int(x) for x in (session_candidate_order or []) if isinstance(x, int)],
+                    "session_candidate_scan": session_candidate_scan,
+                    "session_cycles": [[int(x) for x in ids] for ids in (cycles or []) if isinstance(ids, list)],
+                    "session_done_by_cycle": [sorted([int(x) for x in (s or set())]) for s in (done_by_cycle or [])],
+                    "session_last_sid_by_cycle": [int(x) if isinstance(x, int) else None for x in (last_sid_by_cycle or [])],
+                    "session_done_day_ids": sorted([int(x) for x in (session_done_set or set())]),
+                    "session_missing_day_ids": [int(x) for x in (session_missing or [])],
+                    "session_credit_events": sess_credit,
+                    "session_evidence_tail": sess_evidence_tail,
+                    "tag_last_done": {
+                        str(k): (v.isoformat() if hasattr(v, "isoformat") else str(v))
+                        for k, v in (tag_last_done or {}).items()
+                        if k and v
+                    },
+                }
+
             if use_cache:
                 with _reco_cache_lock:
                     ttl = 60 if source == "fallback" else 120
@@ -1190,7 +1866,17 @@ def register_workout_routes(app):
     @login_required
     def recommend_workout_api():
         user = current_user
-        payload, status = _recommend_workout_payload(user, use_cache=True, cache_key_prefix="u:")
+        nocache = str(request.args.get("nocache") or "").strip().lower() in {"1", "true", "yes"}
+        debug = str(request.args.get("debug") or "").strip().lower() in {"1", "true", "yes"}
+        ai_arg = str(request.args.get("ai") or "").strip().lower()
+        use_ai = ai_arg not in {"0", "false", "no", "off"}
+        payload, status = _recommend_workout_payload(
+            user,
+            use_cache=not nocache,
+            cache_key_prefix="u:",
+            use_ai=use_ai,
+            debug=debug,
+        )
         return jsonify(payload), status
 
     @login_required

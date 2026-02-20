@@ -26,6 +26,7 @@
                         required 
                         class="form-control"
                         placeholder="Enter your full name"
+                        value="{{ prefill_name or '' }}"
                     >
                 </div>
 
@@ -43,6 +44,7 @@
                         data-pattern-message="Use only letters, numbers, underscore, or dash."
                         class="form-control"
                         placeholder="Choose a username (letters, numbers, _, -)"
+                        value="{{ prefill_username or '' }}"
                     >
                     <div class="form-text text-muted" style="font-size: var(--fs-xs);">
                         Minimum 3 characters, only letters, numbers, underscore, and dash
@@ -61,6 +63,7 @@
                         required 
                         class="form-control"
                         placeholder="your.email@example.com"
+                        value="{{ prefill_email or '' }}"
                     >
                     <div class="email-domain-grid mt-2">
                         <button type="button" class="email-domain-chip" data-email-domain="gmail.com">@gmail.com</button>
@@ -86,7 +89,10 @@
                         class="form-control"
                         placeholder="Create a strong password"
                     >
-                    <div class="form-text text-muted" style="font-size: var(--fs-xs);">Minimum 8 characters</div>
+                    <div class="mt-2" id="passwordRequirements" style="font-size: var(--fs-xs);">
+                        <div id="req-length" class="text-muted"><i class="bi bi-circle me-1"></i>At least 8 characters</div>
+                        <div id="req-number" class="text-muted"><i class="bi bi-circle me-1"></i>At least 1 number</div>
+                    </div>
                 </div>
 
                 <div class="mb-4">
@@ -164,7 +170,31 @@
         const passwordInput = document.getElementById('password');
         const confirmInput = document.getElementById('confirm_password');
         const errorEl = document.getElementById('confirmPasswordError');
+        const reqLength = document.getElementById('req-length');
+        const reqNumber = document.getElementById('req-number');
         if (!form || !passwordInput || !confirmInput || !errorEl) return;
+
+        const setReq = (el, met) => {
+            if (!el) return;
+            el.className = met ? 'text-success' : 'text-muted';
+            const icon = el.querySelector('i');
+            if (icon) {
+                icon.className = met ? 'bi bi-check-circle-fill me-1' : 'bi bi-circle me-1';
+            }
+        };
+
+        const validatePassword = () => {
+            const pw = passwordInput.value;
+            const hasLength = pw.length >= 8;
+            const hasNumber = /\d/.test(pw);
+            setReq(reqLength, hasLength);
+            setReq(reqNumber, hasNumber);
+            if (!hasLength || !hasNumber) {
+                passwordInput.setCustomValidity('Password must be at least 8 characters and contain at least 1 number.');
+            } else {
+                passwordInput.setCustomValidity('');
+            }
+        };
 
         const validateMatch = () => {
             const password = passwordInput.value;
@@ -178,9 +208,16 @@
             }
         };
 
-        passwordInput.addEventListener('input', validateMatch);
+        passwordInput.addEventListener('input', () => { validatePassword(); validateMatch(); });
         confirmInput.addEventListener('input', validateMatch);
-        form.addEventListener('submit', validateMatch);
+        form.addEventListener('submit', (e) => {
+            validatePassword();
+            validateMatch();
+            if (!form.checkValidity()) {
+                e.preventDefault();
+                form.reportValidity();
+            }
+        });
     })();
 
     (function() {

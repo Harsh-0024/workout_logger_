@@ -87,6 +87,8 @@
                             <button class="range-pill" data-range="30">30 days</button>
                             <button class="range-pill" data-range="90">90 days</button>
                             <button class="range-pill" data-range="180">180 days</button>
+                            <button class="range-pill" data-range="365">365 days</button>
+                            <button class="range-pill active" data-range="all">All</button>
                         </div>
                     </div>
                     <div>
@@ -335,6 +337,14 @@
         text-align: center;
     }
 
+    .range-pill-group .range-pill {
+        width: 96px;
+    }
+
+    .ma-pill-group .ma-pill {
+        width: 72px;
+    }
+
     .overall-toggle-btn {
         min-width: 180px;
     }
@@ -423,21 +433,34 @@
         }
 
         .range-pill-group {
-            gap: 0.3rem;
-            flex-wrap: nowrap !important;
+            display: grid !important;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 0.35rem;
+            width: 100%;
         }
 
         .ma-pill-group,
         .metric-pill-group {
+            display: grid !important;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
             gap: 0.4rem;
-            flex-wrap: nowrap !important;
+            width: 100%;
         }
 
-        .range-pill,
+        .range-pill {
+            width: 100%;
+            padding: 0.4rem 0.2rem;
+            font-size: 0.62rem;
+            height: 34px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1.1;
+        }
+
         .ma-pill,
         .metric-pill {
-            flex: 0 0 calc(25% - 0.3rem);
-            min-width: 0;
+            width: 100%;
             padding: 0.4rem 0.15rem;
             font-size: 0.58rem;
             height: 32px;
@@ -476,7 +499,7 @@
     let exerciseOptions = exerciseOptionsEl ? JSON.parse(exerciseOptionsEl.textContent || '[]') : [];
     let currentExercise = '';
     let selectedSuggestionIndex = -1;
-    let currentDaysRange = 30;
+    let currentDaysRange = 'all';
     let currentMAWindow = 14;
     let currentMetric = 'e1rm';
     let fullChartData = null;
@@ -1063,22 +1086,42 @@
         return Math.max(0, days) + 1;
     }
 
-    function _pickDefaultRangeFromLabels(labels) {
-        const arr = Array.isArray(labels) ? labels : [];
-        if (arr.length < 2) return 30;
-        const spanDays = _daysBetweenInclusive(arr[0], arr[arr.length - 1]);
-        if (!spanDays) return 30;
-        const presets = [7, 30, 90, 180];
-        for (const p of presets) {
-            if (spanDays <= p) return p;
+    function _normalizeRangeValue(value) {
+        const raw = String(value ?? '').trim().toLowerCase();
+        if (raw === 'all') return 'all';
+        const parsed = Number(raw);
+        return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '30';
+    }
+
+    function _pickDefaultMAWindowForDays(days) {
+        const span = Number(days) || 0;
+        if (span <= 30) return 7;
+        if (span <= 90) return 14;
+        if (span <= 365) return 30;
+        return 48;
+    }
+
+    function _getRangeDaysForData(data) {
+        const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
+        const rangeValue = _normalizeRangeValue(currentDaysRange);
+        if (rangeValue === 'all') {
+            return labels.length || 0;
         }
-        return presets[presets.length - 1];
+        const numeric = Number(rangeValue);
+        return Number.isFinite(numeric) && numeric > 0 ? numeric : 30;
+    }
+
+    function _getDisplayedSpanDays(data) {
+        const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
+        if (labels.length < 2) return labels.length;
+        const spanDays = _daysBetweenInclusive(labels[0], labels[labels.length - 1]);
+        return spanDays || labels.length;
     }
 
     function _syncActivePills() {
         document.querySelectorAll('.range-pill').forEach(b => {
-            const val = parseInt(b.dataset.range);
-            b.classList.toggle('active', Number.isFinite(val) && val === currentDaysRange);
+            const val = _normalizeRangeValue(b.dataset.range);
+            b.classList.toggle('active', val === _normalizeRangeValue(currentDaysRange));
         });
         document.querySelectorAll('.ma-pill').forEach(b => {
             const val = parseInt(b.dataset.ma);
@@ -1100,12 +1143,15 @@
         setChartPointDetailsVisible(false);
 
         if (!_defaultsInitialized && data && Array.isArray(data.labels) && data.labels.length) {
-            currentDaysRange = _pickDefaultRangeFromLabels(data.labels);
+            const initialDays = _getRangeDaysForData(data);
+            const initialView = filterDataByRange(data, initialDays);
+            currentMAWindow = _pickDefaultMAWindowForDays(_getDisplayedSpanDays(initialView));
             _defaultsInitialized = true;
             _syncActivePills();
         }
 
-        const filteredData = filterDataByRange(data, currentDaysRange);
+        const rangeDays = _getRangeDaysForData(data);
+        const filteredData = filterDataByRange(data, rangeDays);
         const ctx = document.getElementById('progressChart').getContext('2d');
 
         const metricControls = document.getElementById('metricControls');
@@ -1126,7 +1172,7 @@
         const rawLabels = data.labels || [];
         const loggedIndexSet = getLoggedIndexSet(rawLabels, data);
         const loggedIndices = getLoggedIndicesFromSet(loggedIndexSet);
-        const rangeBounds = getRangeBounds(rawLabels, currentDaysRange);
+        const rangeBounds = getRangeBounds(rawLabels, rangeDays);
         const shortLabels = rawLabels.map(formatShortLabel);
 
         const metricConfig = getMetricConfig(currentMetric, data);
@@ -1657,10 +1703,12 @@
     // Handle time range filter buttons
     document.querySelectorAll('.range-pill').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.range-pill').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentDaysRange = parseInt(btn.dataset.range);
+            currentDaysRange = _normalizeRangeValue(btn.dataset.range);
             if (fullChartData) {
+                const selectedDays = _getRangeDaysForData(fullChartData);
+                const selectedView = filterDataByRange(fullChartData, selectedDays);
+                currentMAWindow = _pickDefaultMAWindowForDays(_getDisplayedSpanDays(selectedView));
+                _syncActivePills();
                 renderChart(fullChartData, fullChartData.exercise || 'Progress');
             }
         });

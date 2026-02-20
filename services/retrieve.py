@@ -39,6 +39,9 @@ def get_effective_plan_text(db_session, user) -> str:
         admin_plan = db_session.query(Plan).filter_by(user_id=admin_user.id).first()
         admin_text = admin_plan.text_content if admin_plan else ""
 
+    if getattr(user, 'follow_admin_plan', False):
+        return admin_text or default_text
+
     if not user_text:
         return admin_text or default_text
 
@@ -61,6 +64,9 @@ def get_effective_rep_ranges_text(db_session, user) -> str:
     if admin_user:
         admin_rep = db_session.query(RepRange).filter_by(user_id=admin_user.id).first()
         admin_text = admin_rep.text_content if admin_rep else ""
+
+    if getattr(user, 'follow_admin_exercises', False):
+        return admin_text or default_text
 
     if not user_text:
         return admin_text or default_text
@@ -146,7 +152,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
                 logged_exercise_index=logged_exercise_index,
             )
 
-            if ex in BW_EXERCISES:
+            if _is_bw_exercise(ex):
                 if not sets_line:
                     sets_line = "bw/4, 1"
                 sets_line = _normalize_bw(sets_line)
@@ -210,30 +216,75 @@ def _compress_shorthand_values(values):
     return list(values)
 
 
-def _format_weight_token(exercise: str, weight, bodyweight, *, force_bw: bool = False):
+def _is_bw_exercise(exercise: str) -> bool:
+    if exercise in BW_EXERCISES:
+        return True
+    normalized = exercise.strip().lower().replace("-", " ").replace("_", " ")
+    for bw in BW_EXERCISES:
+        if bw.lower().replace("-", " ").replace("_", " ") == normalized:
+            return True
+    return False
+
+
+def _format_weight_token(exercise: str, weight, bodyweight, *, force_bw: bool = False, current_bodyweight=None):
     token = _format_value(weight)
-    if exercise not in BW_EXERCISES:
+    if not _is_bw_exercise(exercise):
         return token
     if force_bw:
         return 'bw'
-    if bodyweight is None:
+    if bodyweight is None and current_bodyweight is None:
         return token
+
     try:
-        bw = float(bodyweight)
+        bw_logged = float(bodyweight) if bodyweight is not None else None
     except Exception:
+        bw_logged = None
+
+    try:
+        bw_current = float(current_bodyweight) if current_bodyweight is not None else bw_logged
+    except Exception:
+        bw_current = bw_logged
+
+    if bw_logged is None:
+        bw_logged = bw_current
+
+    if bw_logged is None:
         return token
 
     candidates = [
-        ("bw", bw),
-        ("bw/2", bw / 2.0 if bw else 0.0),
-        ("bw/4", bw / 4.0 if bw else 0.0),
+        ("bw", bw_logged),
+        ("bw/2", bw_logged / 2.0 if bw_logged else 0.0),
+        ("bw/4", bw_logged / 4.0 if bw_logged else 0.0),
     ]
+    matched_label = None
     for label, value in candidates:
         if not value:
             continue
         if abs(float(weight) - value) <= abs(value) * 0.02:
-            return label
-    return token
+            matched_label = label
+            break
+
+    if matched_label is None:
+        return token
+
+    if bw_current is None or bw_logged is None:
+        return matched_label
+
+    if matched_label == "bw":
+        offset = bw_current - bw_logged
+    elif matched_label == "bw/2":
+        offset = bw_current / 2.0 - bw_logged / 2.0
+    elif matched_label == "bw/4":
+        offset = bw_current / 4.0 - bw_logged / 4.0
+    else:
+        return matched_label
+
+    if abs(offset) < 0.05:
+        return matched_label
+
+    sign = "+" if offset > 0 else "-"
+    offset_str = _format_value(abs(round(offset, 2)))
+    return f"{matched_label}{sign}{offset_str}"
 
 
 def _build_best_sets_line_from_logs(
@@ -336,12 +387,14 @@ def _build_best_sets_line_from_logs(
     reps_top = [t[2] for t in top]
 
     log_bodyweight = getattr(best_log, "bodyweight", None)
+    current_bodyweight = getattr(user, "bodyweight", None)
     weight_tokens = [
         _format_weight_token(
             exercise,
             w,
-            log_bodyweight or getattr(user, "bodyweight", None),
-            force_bw=use_bw_format,
+            log_bodyweight or current_bodyweight,
+            force_bw=False,
+            current_bodyweight=current_bodyweight,
         )
         for w in weights_top
     ]

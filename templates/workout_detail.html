@@ -87,7 +87,14 @@
                                         {% if log.improvement_pct is not none %}
                                             {% set delta = log.improvement_pct %}
                                             <span class="{% if delta > 0 %}text-success{% elif delta < 0 %}text-danger{% else %}text-muted{% endif %}">
-                                                Δ e1RM: {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
+                                                {% if delta > 0 %}
+                                                <i class="bi bi-arrow-up-circle-fill me-1"></i>
+                                                {% elif delta < 0 %}
+                                                <i class="bi bi-arrow-down-circle-fill me-1"></i>
+                                                {% else %}
+                                                <i class="bi bi-dash-circle me-1"></i>
+                                                {% endif %}
+                                                e1RM: {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
                                             </span>
                                         {% endif %}
                                     </div>

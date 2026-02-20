@@ -142,11 +142,11 @@ def register_auth_routes(app, email_service):
 
             except AuthenticationError as e:
                 flash(str(e), "error")
-                return render_template('register.html')
+                return render_template('register.html', prefill_name=name, prefill_username=username, prefill_email=email)
             except Exception as e:
                 logger.error(f"Registration error: {e}", exc_info=True)
                 flash("An error occurred during registration. Please try again.", "error")
-                return render_template('register.html')
+                return render_template('register.html', prefill_name=name, prefill_username=username, prefill_email=email)
 
         return render_template('register.html')
 
@@ -1296,6 +1296,99 @@ def register_auth_routes(app, email_service):
 
         return redirect(url_for('verify_profile_update_otp'))
 
+    @login_required
+    def bulk_import():
+        user = current_user
+
+        if request.method == 'POST':
+            raw_text = request.form.get('bulk_workouts_text', '') or ''
+            raw_text = raw_text.strip()
+
+            if not raw_text:
+                flash('Paste your bulk workout text first.', 'error')
+                return render_template('bulk_import.html', prefill='')
+
+            lines = [ln.rstrip() for ln in raw_text.splitlines()]
+
+            header_re = re.compile(r'^\s*(\d{1,2})\s*/\s*(\d{1,2})\b')
+            blocks = []
+            current = []
+            for line in lines:
+                if header_re.match(line) and current:
+                    blocks.append("\n".join(current).strip())
+                    current = [line]
+                else:
+                    current.append(line)
+            if current:
+                blocks.append("\n".join(current).strip())
+
+            blocks = [b for b in blocks if b.strip()]
+            if not blocks:
+                flash('No workout days found. Make sure each day starts with a date like 03/02.', 'error')
+                return render_template('bulk_import.html', prefill=raw_text)
+
+            from datetime import timedelta
+            successes = []
+            skipped = []
+            failures = []
+
+            for block in blocks:
+                parsed = None
+                try:
+                    parsed = workout_parser(block, bodyweight=user.bodyweight)
+                except Exception:
+                    parsed = None
+
+                if not parsed or not parsed.get('date'):
+                    first_line = (block.splitlines()[0] if block.splitlines() else '').strip()
+                    failures.append(f"{first_line or 'Unknown day'}: could not parse")
+                    continue
+
+                workout_dt = parsed['date']
+                workout_date = workout_dt.date()
+                start_dt = datetime.combine(workout_date, datetime.min.time())
+                end_dt = start_dt + timedelta(days=1)
+
+                conflict = (
+                    Session.query(WorkoutLog)
+                    .filter_by(user_id=user.id)
+                    .filter(WorkoutLog.date >= start_dt)
+                    .filter(WorkoutLog.date < end_dt)
+                    .first()
+                )
+                if conflict:
+                    skipped.append(workout_date.strftime('%Y-%m-%d'))
+                    continue
+
+                parsed['date'] = start_dt
+
+                try:
+                    handle_workout_log(Session, user, parsed)
+                    Session.commit()
+                    successes.append(workout_date.strftime('%Y-%m-%d'))
+                except Exception as e:
+                    Session.rollback()
+                    failures.append(f"{workout_date.strftime('%Y-%m-%d')}: {str(e)}")
+
+            if successes:
+                flash(f"Imported {len(successes)} workout day(s).", 'success')
+            if skipped:
+                flash(
+                    f"Skipped {len(skipped)} day(s) (already exist): {', '.join(skipped[:6])}{'…' if len(skipped) > 6 else ''}",
+                    'info',
+                )
+            if failures:
+                flash(
+                    f"Failed to import {len(failures)} day(s): {failures[0]}",
+                    'error',
+                )
+
+            if successes and not failures:
+                return redirect(url_for('user_settings') + '#quick-actions')
+            return render_template('bulk_import.html', prefill=raw_text)
+
+        return render_template('bulk_import.html', prefill='')
+
     @dev_only
     @require_admin
     def internal_db_fix():
@@ -1351,4 +1444,5 @@ def register_auth_routes(app, email_service):
         view_func=resend_email_change_otp,
         methods=['POST'],
     )
+    app.add_url_rule('/bulk-import', endpoint='bulk_import', view_func=bulk_import, methods=['GET', 'POST'])
     app.add_url_rule('/internal_db_fix', endpoint='internal_db_fix', view_func=internal_db_fix, methods=['GET'])

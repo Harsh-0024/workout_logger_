@@ -161,20 +161,49 @@ def register_plan_routes(app):
             plan = Session.query(Plan).filter_by(user_id=user.id).first()
 
             if not plan:
-                flash("Plan not found. Creating new plan.", "info")
                 plan = Plan(user_id=user.id, text_content="")
                 Session.add(plan)
                 Session.flush()
 
             if request.method == 'POST':
+                form_type = request.form.get('form_type', 'save_plan')
+
+                if form_type == 'toggle_follow_admin':
+                    new_val = request.form.get('follow_admin_plan') == '1'
+                    user.follow_admin_plan = new_val
+                    user.updated_at = datetime.now()
+                    Session.commit()
+                    if new_val:
+                        flash("Now following admin's plan.", "success")
+                    else:
+                        flash("Switched to your own plan.", "success")
+                    return redirect(url_for('set_plan'))
+
                 plan_text = request.form.get('plan_text', '').strip()
                 plan.text_content = plan_text
+                user.follow_admin_plan = False
                 plan.updated_at = datetime.now()
                 Session.commit()
                 flash("Workout plan updated successfully!", "success")
                 return redirect(url_for('user_dashboard', username=user.username))
 
-            return render_template('set_plan.html', current_plan=plan.text_content or "")
+            from services.retrieve import get_effective_plan_text, _get_admin_user
+            admin_user = _get_admin_user(Session)
+            has_admin_plan = False
+            if admin_user and not user.is_admin():
+                from models import Plan as PlanModel
+                admin_plan = Session.query(PlanModel).filter_by(user_id=admin_user.id).first()
+                has_admin_plan = bool(admin_plan and admin_plan.text_content and admin_plan.text_content.strip())
+
+            display_plan = get_effective_plan_text(Session, user) if not getattr(user, 'follow_admin_plan', False) else (plan.text_content or "")
+
+            return render_template(
+                'set_plan.html',
+                current_plan=display_plan,
+                follow_admin_plan=getattr(user, 'follow_admin_plan', False),
+                has_admin_plan=has_admin_plan,
+                is_admin=user.is_admin(),
+            )
         except Exception as e:
             Session.rollback()
             logger.error(f"Error in set_plan: {e}", exc_info=True)
@@ -189,20 +218,47 @@ def register_plan_routes(app):
             reps = Session.query(RepRange).filter_by(user_id=user.id).first()
 
             if not reps:
-                flash("Rep ranges not found. Creating new entry.", "info")
                 reps = RepRange(user_id=user.id, text_content="")
                 Session.add(reps)
                 Session.flush()
 
             if request.method == 'POST':
+                form_type = request.form.get('form_type', 'save_exercises')
+
+                if form_type == 'toggle_follow_admin':
+                    new_val = request.form.get('follow_admin_exercises') == '1'
+                    user.follow_admin_exercises = new_val
+                    user.updated_at = datetime.now()
+                    Session.commit()
+                    if new_val:
+                        flash("Now following admin's rep ranges.", "success")
+                    else:
+                        flash("Switched to your own rep ranges.", "success")
+                    return redirect(url_for('set_exercises'))
+
                 rep_text = request.form.get('rep_text', '').strip()
                 reps.text_content = rep_text
+                user.follow_admin_exercises = False
                 reps.updated_at = datetime.now()
                 Session.commit()
                 flash("Rep ranges updated successfully!", "success")
                 return redirect(url_for('user_dashboard', username=user.username))
 
-            return render_template('set_exercises.html', current_reps=reps.text_content or "")
+            from services.retrieve import _get_admin_user
+            admin_user = _get_admin_user(Session)
+            has_admin_exercises = False
+            if admin_user and not user.is_admin():
+                from models import RepRange as RepRangeModel
+                admin_rep = Session.query(RepRangeModel).filter_by(user_id=admin_user.id).first()
+                has_admin_exercises = bool(admin_rep and admin_rep.text_content and admin_rep.text_content.strip())
+
+            return render_template(
+                'set_exercises.html',
+                current_reps=reps.text_content or "",
+                follow_admin_exercises=getattr(user, 'follow_admin_exercises', False),
+                has_admin_exercises=has_admin_exercises,
+                is_admin=user.is_admin(),
+            )
         except Exception as e:
             Session.rollback()
             logger.error(f"Error in set_exercises: {e}", exc_info=True)

@@ -14,7 +14,31 @@
                 </p>
             </div>
 
+            {% if not is_admin and has_admin_exercises %}
+            <div class="mb-4 p-3 rounded" style="background: var(--gold-subtle); border: 1px solid var(--border-gold);">
+                <div class="d-flex align-items-center justify-content-between gap-3">
+                    <div>
+                        <div class="fw-semibold" style="font-size: var(--fs-sm);"><i class="bi bi-person-check-fill text-gold me-2"></i>Follow Admin's Rep Ranges</div>
+                        <div class="text-muted mt-1" style="font-size: var(--fs-xs);">Automatically use the admin's exercise list and rep ranges.</div>
+                    </div>
+                    <form action="/set_exercises" method="POST" class="flex-shrink-0">
+                        <input type="hidden" name="form_type" value="toggle_follow_admin">
+                        <input type="hidden" name="follow_admin_exercises" value="{{ '0' if follow_admin_exercises else '1' }}">
+                        <button type="submit" class="btn btn-sm {{ 'btn-gold-solid' if follow_admin_exercises else 'btn-gold-outline' }}">
+                            {% if follow_admin_exercises %}
+                            <i class="bi bi-toggle-on me-1"></i>Following
+                            {% else %}
+                            <i class="bi bi-toggle-off me-1"></i>Follow
+                            {% endif %}
+                        </button>
+                    </form>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if not follow_admin_exercises %}
             <form action="/set_exercises" method="POST">
+                <input type="hidden" name="form_type" value="save_exercises">
                 <div class="mb-3 mb-md-4">
                     <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                         <i class="bi bi-code-square me-2"></i>Exercise Configuration
@@ -27,6 +51,12 @@
                     <i class="bi bi-check-circle-fill me-2"></i>Save Changes
                 </button>
             </form>
+            {% else %}
+            <div class="text-center py-4 text-muted" style="font-size: var(--fs-sm);">
+                <i class="bi bi-link-45deg text-gold me-2" style="font-size: 1.5rem;"></i>
+                <p class="mb-0">You are following the admin's rep ranges. Disable the toggle above to set your own.</p>
+            </div>
+            {% endif %}
 
             <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
                 <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
