@@ -5,7 +5,14 @@ from flask_login import login_required, current_user
 
 from list_of_exercise import get_workout_days
 from models import Plan, RepRange, Session
-from services.retrieve import generate_retrieve_output, get_effective_plan_text
+from services.retrieve import (
+    generate_retrieve_output,
+    get_admin_display_name,
+    get_effective_plan_text,
+    _get_admin_plan_text,
+    _get_admin_rep_ranges_text,
+)
+from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -187,21 +194,23 @@ def register_plan_routes(app):
                 flash("Workout plan updated successfully!", "success")
                 return redirect(url_for('user_dashboard', username=user.username))
 
-            from services.retrieve import get_effective_plan_text, _get_admin_user
-            admin_user = _get_admin_user(Session)
+            admin_display_name = get_admin_display_name(Session)
             has_admin_plan = False
-            if admin_user and not user.is_admin():
-                from models import Plan as PlanModel
-                admin_plan = Session.query(PlanModel).filter_by(user_id=admin_user.id).first()
-                has_admin_plan = bool(admin_plan and admin_plan.text_content and admin_plan.text_content.strip())
+            if not user.is_admin():
+                admin_plan_text = _get_admin_plan_text(Session)
+                has_admin_plan = bool(
+                    (admin_plan_text and admin_plan_text.strip())
+                    or (DEFAULT_PLAN and str(DEFAULT_PLAN).strip())
+                )
 
-            display_plan = get_effective_plan_text(Session, user) if not getattr(user, 'follow_admin_plan', False) else (plan.text_content or "")
+            display_plan = plan.text_content or ""
 
             return render_template(
                 'set_plan.html',
                 current_plan=display_plan,
                 follow_admin_plan=getattr(user, 'follow_admin_plan', False),
                 has_admin_plan=has_admin_plan,
+                admin_display_name=admin_display_name,
                 is_admin=user.is_admin(),
             )
         except Exception as e:
@@ -244,19 +253,21 @@ def register_plan_routes(app):
                 flash("Rep ranges updated successfully!", "success")
                 return redirect(url_for('user_dashboard', username=user.username))
 
-            from services.retrieve import _get_admin_user
-            admin_user = _get_admin_user(Session)
+            admin_display_name = get_admin_display_name(Session)
             has_admin_exercises = False
-            if admin_user and not user.is_admin():
-                from models import RepRange as RepRangeModel
-                admin_rep = Session.query(RepRangeModel).filter_by(user_id=admin_user.id).first()
-                has_admin_exercises = bool(admin_rep and admin_rep.text_content and admin_rep.text_content.strip())
+            if not user.is_admin():
+                admin_rep_text = _get_admin_rep_ranges_text(Session)
+                has_admin_exercises = bool(
+                    (admin_rep_text and admin_rep_text.strip())
+                    or (DEFAULT_REP_RANGES and len(DEFAULT_REP_RANGES) > 0)
+                )
 
             return render_template(
                 'set_exercises.html',
                 current_reps=reps.text_content or "",
                 follow_admin_exercises=getattr(user, 'follow_admin_exercises', False),
                 has_admin_exercises=has_admin_exercises,
+                admin_display_name=admin_display_name,
                 is_admin=user.is_admin(),
             )
         except Exception as e:

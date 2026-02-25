@@ -53,10 +53,23 @@
     <!-- Recent Workouts Panel -->
     <div class="col-12 col-lg-4">
         {% if recent_workouts %}
-        <div class="card w-100 d-flex flex-column recent-workouts-card" style="max-height: none;">
-            <div class="d-flex align-items-center mb-3 mb-md-4">
-                <i class="bi bi-clock-history me-2 text-gold" style="font-size: clamp(1.25rem, 4vw, 1.5rem);"></i>
-                <h5 class="mb-0 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">Recent Workouts</h5>
+        <div class="card w-100 d-flex flex-column recent-workouts-card" id="recent-workouts" style="max-height: none;">
+            <div class="d-flex align-items-center justify-content-between mb-3 mb-md-4 gap-2">
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-clock-history me-2 text-gold" style="font-size: clamp(1.25rem, 4vw, 1.5rem);"></i>
+                    <h5 class="mb-0 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">Recent Workouts</h5>
+                </div>
+                <button type="button" id="toggleSelectModeBtn" class="btn btn-outline-secondary btn-sm d-none" aria-label="Cancel selection mode">
+                    <i class="bi bi-x-circle me-1"></i>Cancel
+                </button>
+            </div>
+
+            <div class="d-flex gap-2 mb-3">
+                <form id="bulkDeleteForm" method="POST" action="{{ url_for('bulk_delete_workouts') }}" class="d-inline-block d-none">
+                    <button type="submit" id="bulkDeleteBtn" class="btn btn-outline-danger btn-sm" disabled>
+                        <i class="bi bi-trash me-1"></i>Delete Selected
+                    </button>
+                </form>
             </div>
 
             {% if recent_workouts|length > 3 %}
@@ -69,15 +82,25 @@
 
             <div id="recentList" class="flex-grow-1 recent-workouts-list" style="min-height: 0; overflow-y: auto;">
                 {% for workout in recent_workouts %}
-                <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="recent-workout-item text-decoration-none recent-item" style="transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d/%m/%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
+                <div class="recent-workout-item recent-item" style="transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d/%m/%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
                     <div class="d-flex justify-content-between align-items-center gap-2">
+                        <input
+                            type="checkbox"
+                            class="form-check-input recent-select-checkbox d-none"
+                            style="margin-top: 0;"
+                            form="bulkDeleteForm"
+                            name="selected_dates"
+                            value="{{ workout.date.strftime('%Y-%m-%d') }}"
+                        >
+                        <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="text-decoration-none d-flex justify-content-between align-items-center gap-2 flex-grow-1 recent-workout-link">
                         <div class="recent-workout-body" style="flex: 1; min-width: 0;">
                             <span class="text-white fw-semibold d-block recent-workout-title" style="font-size: clamp(0.875rem, 3vw, 1rem); overflow-wrap: break-word; word-break: break-word;">{{ workout.title }}</span>
                             <small class="text-muted recent-workout-date" style="font-size: var(--fs-xs); white-space: nowrap;">{{ workout.date | format_date }} • {{ workout.date.strftime('%A') }}</small>
                         </div>
                         <i class="bi bi-chevron-right text-muted" style="flex-shrink: 0;"></i>
+                        </a>
                     </div>
-                </a>
+                </div>
                 {% endfor %}
             </div>
 
@@ -103,9 +126,51 @@
         const input = document.getElementById('recentSearch');
         const list = document.getElementById('recentList');
         const empty = document.getElementById('recentEmpty');
-        if (!input || !list) return;
+        const toggleSelectModeBtn = document.getElementById('toggleSelectModeBtn');
+        const bulkDeleteForm = document.getElementById('bulkDeleteForm');
+        const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+        const params = new URLSearchParams(window.location.search);
+        const startBulkDelete = params.get('bulk_delete') === '1';
+        if (!list) return;
 
         const items = Array.from(list.querySelectorAll('.recent-item'));
+        const checkboxes = Array.from(list.querySelectorAll('.recent-select-checkbox'));
+        const links = Array.from(list.querySelectorAll('.recent-workout-link'));
+        let selectionMode = false;
+
+        const selectedCount = () => checkboxes.filter(cb => cb.checked).length;
+
+        const refreshBulkDeleteState = () => {
+            const count = selectedCount();
+            if (bulkDeleteBtn) {
+                bulkDeleteBtn.disabled = count === 0;
+                bulkDeleteBtn.innerHTML = count > 0
+                    ? `<i class="bi bi-trash me-1"></i>Delete Selected (${count})`
+                    : '<i class="bi bi-trash me-1"></i>Delete Selected';
+            }
+        };
+
+        const setSelectionMode = (enabled) => {
+            selectionMode = !!enabled;
+            checkboxes.forEach(cb => {
+                cb.classList.toggle('d-none', !selectionMode);
+                if (!selectionMode) cb.checked = false;
+            });
+            links.forEach(link => {
+                link.style.pointerEvents = selectionMode ? 'none' : '';
+                link.style.opacity = selectionMode ? '0.9' : '';
+            });
+            if (bulkDeleteForm) {
+                bulkDeleteForm.classList.toggle('d-none', !selectionMode);
+            }
+            if (toggleSelectModeBtn) {
+                toggleSelectModeBtn.classList.toggle('d-none', !selectionMode);
+                toggleSelectModeBtn.innerHTML = selectionMode
+                    ? '<i class="bi bi-x-circle me-1"></i>Cancel'
+                    : '<i class="bi bi-check2-square me-1"></i>Select';
+            }
+            refreshBulkDeleteState();
+        };
 
         const normalizeSearchValue = (value) => String(value || '')
             .toLowerCase()
@@ -115,7 +180,7 @@
             .trim();
 
         const applyFilter = () => {
-            const raw = input.value || '';
+            const raw = input ? (input.value || '') : '';
             const rawTerms = raw ? raw.split(',').map(t => t.trim()).filter(Boolean) : [];
 
             if (rawTerms.length === 0) {
@@ -157,10 +222,56 @@
             if (empty) empty.style.display = shown === 0 ? 'block' : 'none';
         };
 
-        input.addEventListener('input', applyFilter);
+        if (toggleSelectModeBtn) {
+            toggleSelectModeBtn.addEventListener('click', () => setSelectionMode(!selectionMode));
+        }
+
+        checkboxes.forEach(cb => cb.addEventListener('change', refreshBulkDeleteState));
+
+        if (bulkDeleteForm) {
+            bulkDeleteForm.addEventListener('submit', (e) => {
+                const count = selectedCount();
+                if (count <= 0) {
+                    e.preventDefault();
+                    return;
+                }
+                if (!window.confirm(`Delete ${count} selected workout day(s)? This cannot be undone.`)) {
+                    e.preventDefault();
+                }
+            });
+        }
+
+        if (input) {
+            input.addEventListener('input', applyFilter);
+        }
         applyFilter();
+        setSelectionMode(startBulkDelete);
+
+        if (startBulkDelete) {
+            window.history.replaceState({}, '', window.location.pathname + window.location.hash);
+        }
     })();
 </script>
+
+<style>
+    .recent-select-checkbox.form-check-input {
+        width: 1.15rem;
+        height: 1.15rem;
+        border-color: var(--border-gold);
+        background-color: rgba(212, 175, 55, 0.08);
+        accent-color: var(--gold-primary);
+    }
+
+    .recent-select-checkbox.form-check-input:checked {
+        background-color: var(--gold-primary);
+        border-color: var(--gold-primary);
+    }
+
+    .recent-select-checkbox.form-check-input:focus {
+        border-color: var(--gold-primary);
+        box-shadow: 0 0 0 0.2rem var(--gold-subtle);
+    }
+</style>
 
 <script>
     (function() {

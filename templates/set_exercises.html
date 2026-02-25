@@ -14,12 +14,12 @@
                 </p>
             </div>
 
-            {% if not is_admin and has_admin_exercises %}
+            {% if not is_admin %}
             <div class="mb-4 p-3 rounded" style="background: var(--gold-subtle); border: 1px solid var(--border-gold);">
                 <div class="d-flex align-items-center justify-content-between gap-3">
                     <div>
-                        <div class="fw-semibold" style="font-size: var(--fs-sm);"><i class="bi bi-person-check-fill text-gold me-2"></i>Follow Admin's Rep Ranges</div>
-                        <div class="text-muted mt-1" style="font-size: var(--fs-xs);">Automatically use the admin's exercise list and rep ranges.</div>
+                        <div class="fw-semibold" style="font-size: var(--fs-sm);"><i class="bi bi-person-check-fill text-gold me-2"></i>Follow Default Rep Ranges{% if admin_display_name %} ({{ admin_display_name }}){% endif %}</div>
+                        <div class="text-muted mt-1" style="font-size: var(--fs-xs);">Automatically use the admin{% if admin_display_name %}'s ({{ admin_display_name }}){% endif %} exercise list and rep ranges.</div>
                     </div>
                     <form action="/set_exercises" method="POST" class="flex-shrink-0">
                         <input type="hidden" name="form_type" value="toggle_follow_admin">

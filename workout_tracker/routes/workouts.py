@@ -2198,6 +2198,63 @@ def register_workout_routes(app):
             return redirect(url_for('edit_workout', date_str=date_str))
 
     @login_required
+    def bulk_delete_workouts():
+        user = current_user
+
+        selected_dates = request.form.getlist('selected_dates')
+        if not selected_dates:
+            flash("Select at least one workout day to delete.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+
+        unique_dates = []
+        seen = set()
+        for raw in selected_dates:
+            key = str(raw or '').strip()
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            unique_dates.append(key)
+
+        if not unique_dates:
+            flash("Select at least one workout day to delete.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+
+        total_deleted_days = 0
+        try:
+            for date_str in unique_dates:
+                try:
+                    workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+                except ValueError:
+                    continue
+
+                start_dt = datetime.combine(workout_date, datetime.min.time())
+                end_dt = start_dt + timedelta(days=1)
+
+                deleted = (
+                    Session.query(WorkoutLog)
+                    .filter_by(user_id=user.id)
+                    .filter(WorkoutLog.date >= start_dt)
+                    .filter(WorkoutLog.date < end_dt)
+                    .delete(synchronize_session=False)
+                )
+                if deleted:
+                    total_deleted_days += 1
+
+            Session.commit()
+
+            if total_deleted_days:
+                flash(f"Deleted {total_deleted_days} workout day(s).", "success")
+            else:
+                flash("No matching workouts were found to delete.", "info")
+
+            return redirect(url_for('user_dashboard', username=user.username))
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Error bulk deleting workouts: {e}", exc_info=True)
+            flash("Error deleting selected workouts.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+
+    @login_required
     def log_workout():
         user = current_user
 
@@ -2269,6 +2326,7 @@ def register_workout_routes(app):
     app.add_url_rule('/workout/<date_str>', endpoint='view_workout', view_func=view_workout, methods=['GET'])
     app.add_url_rule('/workout/<date_str>/edit', endpoint='edit_workout', view_func=edit_workout, methods=['GET', 'POST'])
     app.add_url_rule('/workout/<date_str>/delete', endpoint='delete_workout', view_func=delete_workout, methods=['POST'])
+    app.add_url_rule('/workouts/delete-selected', endpoint='bulk_delete_workouts', view_func=bulk_delete_workouts, methods=['POST'])
     app.add_url_rule('/log', endpoint='log_workout', view_func=log_workout, methods=['GET', 'POST'])
     app.add_url_rule('/api/recommend-workout', endpoint='recommend_workout_api', view_func=recommend_workout_api, methods=['GET'])
     app.add_url_rule('/api/history-qa', endpoint='history_qa_api', view_func=history_qa_api, methods=['POST'])

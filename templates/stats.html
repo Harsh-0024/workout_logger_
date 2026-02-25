@@ -1059,6 +1059,7 @@
             labels: data.labels.slice(cutoffIndex),
             data: data.data.slice(cutoffIndex),
             workout_days: Array.isArray(data.workout_days) ? data.workout_days.slice(cutoffIndex) : data.workout_days,
+            workout_titles: Array.isArray(data.workout_titles) ? data.workout_titles.slice(cutoffIndex) : data.workout_titles,
             log_data: Array.isArray(data.log_data) ? data.log_data.slice(cutoffIndex) : data.log_data,
             quality_adjusted_1rm: Array.isArray(data.quality_adjusted_1rm) ? data.quality_adjusted_1rm.slice(cutoffIndex) : data.quality_adjusted_1rm,
             series: filteredSeries,
@@ -1303,6 +1304,7 @@
         const avgColor = isLightMode ? 'rgba(212, 175, 55, 0.6)' : 'rgba(212, 175, 55, 0.5)';
 
         const primarySeries = getSeriesValues(data, currentMetric);
+        const workoutTitles = (data && Array.isArray(data.workout_titles)) ? data.workout_titles : [];
         const qualitySeries = (data && data.quality) ? data.quality : [];
         const showQuality = !!(qualitySeries && qualitySeries.length) && filteredData.unit !== 'percent';
 
@@ -1358,6 +1360,13 @@
                 if (!items || !items.length) return '';
                 const idx = items[0].dataIndex;
                 return formatDateLabel(rawLabels[idx], { month: 'short', day: 'numeric', year: 'numeric' });
+            },
+            afterTitle: (items) => {
+                if (!items || !items.length) return '';
+                const idx = items[0].dataIndex;
+                const title = String(workoutTitles[idx] || '').trim();
+                if (!title || title.toLowerCase() === 'workout') return '';
+                return title;
             },
             label: (context) => {
                 const value = context.parsed.y;

@@ -15,6 +15,7 @@ from services.stats import (
     get_average_growth_data,
     get_chart_data,
     get_csv_export,
+    get_export_log_count,
     get_overall_progress_data,
     get_json_export,
 )
@@ -23,6 +24,27 @@ from utils.validators import sanitize_text_input
 
 
 def register_stats_routes(app):
+    def _parse_export_date_range():
+        start_raw = (request.args.get('start_date') or '').strip()
+        end_raw = (request.args.get('end_date') or '').strip()
+
+        if not start_raw and not end_raw:
+            return None, None
+
+        if not start_raw or not end_raw:
+            raise ValueError("Please provide both start and end dates.")
+
+        try:
+            start_date = datetime.strptime(start_raw, '%Y-%m-%d').date()
+            end_date = datetime.strptime(end_raw, '%Y-%m-%d').date()
+        except ValueError as exc:
+            raise ValueError("Invalid date format. Use YYYY-MM-DD.") from exc
+
+        if end_date < start_date:
+            raise ValueError("End date cannot be earlier than start date.")
+
+        return start_date, end_date
+
     @login_required
     def stats_index():
         user = current_user
@@ -145,41 +167,58 @@ def register_stats_routes(app):
         user = current_user
 
         try:
-            csv_data = get_csv_export(Session, user)
-            filename = (
-                f"workout_history_{user.username}_{datetime.now().strftime('%Y%m%d')}.csv"
-            )
+            start_date, end_date = _parse_export_date_range()
+            log_count = get_export_log_count(Session, user, start_date=start_date, end_date=end_date)
+            if log_count == 0:
+                flash("No workouts found in that date range.", "warning")
+                return redirect(url_for('user_settings') + '#quick-actions')
+            csv_data = get_csv_export(Session, user, start_date=start_date, end_date=end_date)
+            date_suffix = datetime.now().strftime('%Y%m%d')
+            if start_date and end_date:
+                date_suffix = f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
+            filename = f"workout_history_{user.username}_{date_suffix}.csv"
 
             return Response(
                 csv_data,
                 mimetype='text/csv',
                 headers={'Content-disposition': f"attachment; filename={filename}"},
             )
+        except ValueError as e:
+            flash(str(e), "error")
+            return redirect(url_for('user_settings') + '#quick-actions')
         except Exception as e:
             logger.error(f"Error exporting CSV: {e}", exc_info=True)
             flash("Error exporting data.", "error")
-            return redirect(url_for('stats_index'))
+            return redirect(url_for('user_settings') + '#quick-actions')
 
     @login_required
     def export_json():
         user = current_user
 
         try:
-            data = get_json_export(Session, user)
-
-            filename = (
-                f"workout_history_{user.username}_{datetime.now().strftime('%Y%m%d')}.json"
-            )
+            start_date, end_date = _parse_export_date_range()
+            log_count = get_export_log_count(Session, user, start_date=start_date, end_date=end_date)
+            if log_count == 0:
+                flash("No workouts found in that date range.", "warning")
+                return redirect(url_for('user_settings') + '#quick-actions')
+            data = get_json_export(Session, user, start_date=start_date, end_date=end_date)
+            date_suffix = datetime.now().strftime('%Y%m%d')
+            if start_date and end_date:
+                date_suffix = f"{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}"
+            filename = f"workout_history_{user.username}_{date_suffix}.json"
 
             return Response(
                 json.dumps(data, ensure_ascii=False, indent=2),
                 mimetype='application/json',
                 headers={'Content-disposition': f"attachment; filename={filename}"},
             )
+        except ValueError as e:
+            flash(str(e), "error")
+            return redirect(url_for('user_settings') + '#quick-actions')
         except Exception as e:
             logger.error(f"Error exporting JSON: {e}", exc_info=True)
             flash("Error exporting data.", "error")
-            return redirect(url_for('stats_index'))
+            return redirect(url_for('user_settings') + '#quick-actions')
 
     app.add_url_rule('/stats', endpoint='stats_index', view_func=stats_index, methods=['GET'])
     app.add_url_rule(

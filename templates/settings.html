@@ -58,20 +58,47 @@
                     <i class="bi bi-download text-gold"></i>
                     <h6 class="mb-0 fw-semibold">Data Exports</h6>
                 </div>
+                <div class="mb-3">
+                    <div class="export-mode-toggle mb-2 flex-wrap">
+                        <label class="export-mode-option">
+                            <input type="radio" name="export_mode" value="all" checked class="export-mode-input">
+                            <span class="export-mode-label">Export all workouts</span>
+                        </label>
+                        <label class="export-mode-option">
+                            <input type="radio" name="export_mode" value="range" class="export-mode-input">
+                            <span class="export-mode-label">Choose date range</span>
+                        </label>
+                    </div>
+
+                    <div id="exportDateRange" class="row g-2" style="display: none;">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label text-muted mb-1" style="font-size: var(--fs-xs);">Start date</label>
+                            <input type="date" id="exportStartDate" class="form-control form-control-sm export-date-input">
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <label class="form-label text-muted mb-1" style="font-size: var(--fs-xs);">End date</label>
+                            <input type="date" id="exportEndDate" class="form-control form-control-sm export-date-input">
+                        </div>
+                    </div>
+                </div>
+
                 <div class="d-flex flex-column flex-md-row gap-2">
                     <div class="text-center flex-fill">
-                        <a href="/export_csv" class="btn btn-gold-outline w-100">
+                        <a href="/export_csv" class="btn btn-gold-outline w-100 export-link" data-export-format="csv">
                             <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export CSV
                         </a>
                         <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">~{{ csv_size_kb }}KB</small>
                     </div>
                     <div class="text-center flex-fill">
-                        <a href="/export_json" class="btn btn-gold-outline w-100">
+                        <a href="/export_json" class="btn btn-gold-outline w-100 export-link" data-export-format="json">
                             <i class="bi bi-file-earmark-code me-2"></i>Export JSON
                         </a>
                         <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">~{{ json_size_kb }}KB</small>
                     </div>
                 </div>
+                <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                    <i class="bi bi-info-circle me-1"></i>Date range applies only when "Choose date range" is selected.
+                </small>
             </div>
 
             <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
@@ -106,11 +133,24 @@
 
             <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
                 <div class="d-flex align-items-center gap-2 mb-3">
+                    <i class="bi bi-trash3 text-gold"></i>
+                    <h6 class="mb-0 fw-semibold">Bulk Delete Workouts</h6>
+                </div>
+                <a href="{{ url_for('user_dashboard', username=user.username, bulk_delete=1, _anchor='recent-workouts') }}" class="btn btn-gold-outline w-100">
+                    <i class="bi bi-check2-square me-2"></i>Select Multiple to Delete
+                </a>
+                <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                    <i class="bi bi-info-circle me-1"></i>Opens your recent workouts in selection mode.
+                </small>
+            </div>
+
+            <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
+                <div class="d-flex align-items-center gap-2 mb-3">
                     <i class="bi bi-journal-plus text-gold"></i>
                     <h6 class="mb-0 fw-semibold">Bulk Add Workouts</h6>
                 </div>
                 <a href="{{ url_for('bulk_import') }}" class="btn btn-gold-outline w-100">
-                    <i class="bi bi-upload me-2"></i>Import Workouts in Bulk
+                    <i class="bi bi-box-arrow-in-down me-2"></i>Import Workouts in Bulk
                 </a>
                 <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
                     <i class="bi bi-info-circle me-1"></i>Paste multiple workout days at once on the next page.
@@ -588,6 +628,92 @@
         display: block;
     }
 
+    .export-mode-toggle {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border-radius: 14px;
+        border: 1px solid var(--border-subtle);
+        background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(15, 15, 15, 0.5));
+        box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.08);
+    }
+
+    .export-mode-option {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 12px;
+        border-radius: 999px;
+        background: rgba(17, 17, 17, 0.75);
+        border: 1px solid transparent;
+        color: var(--text-muted);
+        font-size: 0.75rem;
+        font-weight: 600;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        transition: all var(--transition-base);
+    }
+
+    .export-mode-option:hover {
+        border-color: rgba(212, 175, 55, 0.45);
+        color: var(--text-primary);
+        box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.2);
+    }
+
+    .export-mode-input {
+        appearance: none;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        border: 2px solid rgba(212, 175, 55, 0.4);
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        transition: all var(--transition-base);
+    }
+
+    .export-mode-input::after {
+        content: '';
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--gold-primary);
+        transform: scale(0);
+        transition: transform var(--transition-base);
+    }
+
+    .export-mode-input:checked {
+        border-color: var(--gold-primary);
+        box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.16);
+    }
+
+    .export-mode-input:checked::after {
+        transform: scale(1);
+    }
+
+    .export-mode-input:checked + .export-mode-label {
+        color: var(--text-primary);
+    }
+
+    .export-mode-label {
+        font-size: 0.75rem;
+    }
+
+    .export-date-input {
+        background-color: var(--bg-secondary);
+        border-color: var(--border-subtle);
+        color: var(--text-primary);
+        box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.05);
+    }
+
+    .export-date-input:focus {
+        border-color: var(--gold-primary);
+        box-shadow: 0 0 0 0.2rem rgba(212, 175, 55, 0.18);
+    }
+
     .settings-nav-buttons {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -711,6 +837,54 @@
                 if (formTypeInput) {
                     formTypeInput.value = button.dataset.profileFormType || 'profile';
                 }
+            });
+        });
+
+        const exportModeInputs = document.querySelectorAll('input[name="export_mode"]');
+        const exportDateRange = document.getElementById('exportDateRange');
+        const exportStartDate = document.getElementById('exportStartDate');
+        const exportEndDate = document.getElementById('exportEndDate');
+        const exportLinks = document.querySelectorAll('.export-link');
+
+        const isRangeMode = () => {
+            const selected = document.querySelector('input[name="export_mode"]:checked');
+            return selected && selected.value === 'range';
+        };
+
+        const syncExportMode = () => {
+            if (!exportDateRange) return;
+            exportDateRange.style.display = isRangeMode() ? '' : 'none';
+        };
+
+        exportModeInputs.forEach((input) => {
+            input.addEventListener('change', syncExportMode);
+        });
+        syncExportMode();
+
+        exportLinks.forEach((link) => {
+            link.dataset.baseHref = link.getAttribute('href') || '';
+            link.addEventListener('click', (event) => {
+                event.preventDefault();
+                const baseHref = link.dataset.baseHref || link.getAttribute('href') || '';
+                if (!baseHref) return;
+
+                const target = new URL(baseHref, window.location.origin);
+                if (isRangeMode()) {
+                    const start = (exportStartDate?.value || '').trim();
+                    const end = (exportEndDate?.value || '').trim();
+                    if (!start || !end) {
+                        window.alert('Please select both start and end dates.');
+                        return;
+                    }
+                    if (end < start) {
+                        window.alert('End date cannot be earlier than start date.');
+                        return;
+                    }
+                    target.searchParams.set('start_date', start);
+                    target.searchParams.set('end_date', end);
+                }
+
+                window.location.href = `${target.pathname}${target.search}`;
             });
         });
 

@@ -5,11 +5,12 @@ from types import SimpleNamespace
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from config import Config
 from models import Base, Plan, RepRange, User, UserRole, WorkoutLog
 from services.best_scoring import best_workout_strength_score, coerce_equal_len_sets
 from services.exercise_matching import build_name_index, resolve_equivalent_names
 from services.logging import _parse_rep_target_sets
-from services.retrieve import generate_retrieve_output
+from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from services.retrieve import _build_best_sets_line_from_logs
 
 
@@ -261,6 +262,87 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertIn("Dumbbell Curl - [3, 8-12]", output)
         # fallback to <N keeps the best available history line
         self.assertIn("12.5 10, 8 10", output)
+
+    def test_follow_admin_plan_prefers_non_empty_admin_plan(self):
+        admin_one = User(
+            username="admin_one",
+            role=UserRole.ADMIN,
+            is_verified=True,
+        )
+        admin_two = User(
+            username="admin_two",
+            role=UserRole.ADMIN,
+            is_verified=True,
+        )
+        self.db.add_all([admin_one, admin_two])
+        self.db.flush()
+
+        self.db.add(Plan(user_id=admin_one.id, text_content=""))
+        self.db.add(
+            Plan(
+                user_id=admin_two.id,
+                text_content="\n".join([
+                    "Session 3 - Legs",
+                    "Hack Squat",
+                ]),
+            )
+        )
+
+        self.user.follow_admin_plan = True
+        self.db.commit()
+
+        effective = get_effective_plan_text(self.db, self.user)
+        self.assertIn("Session 3 - Legs", effective)
+        self.assertIn("Hack Squat", effective)
+
+    def test_follow_admin_plan_prefers_configured_admin_email(self):
+        original_admin_email = Config.ADMIN_EMAIL
+        try:
+            Config.ADMIN_EMAIL = "preferred_admin@example.com"
+
+            preferred_admin = User(
+                username="preferred_admin",
+                email="preferred_admin@example.com",
+                role=UserRole.ADMIN,
+                is_verified=True,
+            )
+            other_admin = User(
+                username="other_admin",
+                email="other_admin@example.com",
+                role=UserRole.ADMIN,
+                is_verified=True,
+            )
+            self.db.add_all([other_admin, preferred_admin])
+            self.db.flush()
+
+            self.db.add(
+                Plan(
+                    user_id=other_admin.id,
+                    text_content="\n".join([
+                        "Session 1 - Other",
+                        "Other Exercise",
+                    ]),
+                )
+            )
+            self.db.add(
+                Plan(
+                    user_id=preferred_admin.id,
+                    text_content="\n".join([
+                        "Session 1 - Preferred",
+                        "Preferred Exercise",
+                    ]),
+                )
+            )
+
+            self.user.follow_admin_plan = True
+            self.db.commit()
+
+            effective = get_effective_plan_text(self.db, self.user)
+            self.assertIn("Session 1 - Preferred", effective)
+            self.assertIn("Preferred Exercise", effective)
+            self.assertNotIn("Other Exercise", effective)
+        finally:
+            Config.ADMIN_EMAIL = original_admin_email
 
 
 if __name__ == "__main__":

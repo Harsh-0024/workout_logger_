@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import re
 
+from config import Config
 from models import Plan, RepRange, User, UserRole, WorkoutLog
 from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
 from services.best_scoring import best_workout_strength_score, coerce_equal_len_sets
@@ -16,13 +17,93 @@ def _build_default_rep_text() -> str:
     return "\n".join(f"{ex}: {rng}" for ex, rng in DEFAULT_REP_RANGES.items())
 
 
-def _get_admin_user(db_session):
-    return (
+def _normalized_email(value: str) -> str:
+    return (value or "").strip().lower()
+
+
+def _get_ordered_admins(db_session):
+    admins = (
         db_session.query(User)
         .filter(User.role == UserRole.ADMIN)
         .order_by(User.id.asc())
-        .first()
+        .all()
     )
+    if not admins:
+        return []
+
+    preferred_email = _normalized_email(getattr(Config, "ADMIN_EMAIL", ""))
+    if not preferred_email:
+        return admins
+
+    preferred = [admin for admin in admins if _normalized_email(getattr(admin, "email", "")) == preferred_email]
+    if not preferred:
+        return admins
+
+    remaining = [admin for admin in admins if admin not in preferred]
+    return preferred + remaining
+
+
+def _get_admin_user(db_session):
+    admins = _get_ordered_admins(db_session)
+    return admins[0] if admins else None
+
+
+def get_admin_display_name(db_session) -> str:
+    admin_user = _get_admin_user(db_session)
+    if not admin_user:
+        return "Admin"
+
+    full_name = (getattr(admin_user, "full_name", "") or "").strip()
+    if full_name:
+        return full_name
+
+    username = (getattr(admin_user, "username", "") or "").strip()
+    if username:
+        return username
+
+    email = (getattr(admin_user, "email", "") or "").strip()
+    if email:
+        return email.split("@", 1)[0]
+
+    return "Admin"
+
+
+def _get_admin_plan_text(db_session) -> str:
+    admins = _get_ordered_admins(db_session)
+    if not admins:
+        return ""
+
+    admin_ids = [admin.id for admin in admins]
+    plan_rows = db_session.query(Plan).filter(Plan.user_id.in_(admin_ids)).all()
+    plan_by_admin_id = {row.user_id: row for row in plan_rows}
+
+    for admin in admins:
+        plan_row = plan_by_admin_id.get(admin.id)
+        text = (plan_row.text_content if plan_row else "") or ""
+        if text.strip():
+            return text
+
+    first_plan = plan_by_admin_id.get(admins[0].id)
+    return (first_plan.text_content if first_plan else "") or ""
+
+
+def _get_admin_rep_ranges_text(db_session) -> str:
+    admins = _get_ordered_admins(db_session)
+    if not admins:
+        return ""
+
+    admin_ids = [admin.id for admin in admins]
+    rep_rows = db_session.query(RepRange).filter(RepRange.user_id.in_(admin_ids)).all()
+    rep_by_admin_id = {row.user_id: row for row in rep_rows}
+
+    for admin in admins:
+        rep_row = rep_by_admin_id.get(admin.id)
+        text = (rep_row.text_content if rep_row else "") or ""
+        if text.strip():
+            return text
+
+    first_rep = rep_by_admin_id.get(admins[0].id)
+    return (first_rep.text_content if first_rep else "") or ""
 
 
 def get_effective_plan_text(db_session, user) -> str:
@@ -33,22 +114,15 @@ def get_effective_plan_text(db_session, user) -> str:
     if user.is_admin():
         return user_text or default_text
 
-    admin_user = _get_admin_user(db_session)
-    admin_text = ""
-    if admin_user:
-        admin_plan = db_session.query(Plan).filter_by(user_id=admin_user.id).first()
-        admin_text = admin_plan.text_content if admin_plan else ""
+    admin_text = _get_admin_plan_text(db_session)
 
     if getattr(user, 'follow_admin_plan', False):
         return admin_text or default_text
 
-    if not user_text:
-        return admin_text or default_text
+    if user_text and user_text.strip():
+        return user_text
 
-    if _normalize_text(user_text) == _normalize_text(default_text):
-        return admin_text or user_text
-
-    return user_text
+    return default_text
 
 
 def get_effective_rep_ranges_text(db_session, user) -> str:
@@ -59,22 +133,15 @@ def get_effective_rep_ranges_text(db_session, user) -> str:
     if user.is_admin():
         return user_text or default_text
 
-    admin_user = _get_admin_user(db_session)
-    admin_text = ""
-    if admin_user:
-        admin_rep = db_session.query(RepRange).filter_by(user_id=admin_user.id).first()
-        admin_text = admin_rep.text_content if admin_rep else ""
+    admin_text = _get_admin_rep_ranges_text(db_session)
 
     if getattr(user, 'follow_admin_exercises', False):
         return admin_text or default_text
 
-    if not user_text:
-        return admin_text or default_text
+    if user_text and user_text.strip():
+        return user_text
 
-    if _normalize_text(user_text) == _normalize_text(default_text):
-        return admin_text or user_text
-
-    return user_text
+    return default_text
 
 
 def generate_retrieve_output(db_session, user, category, day_id):

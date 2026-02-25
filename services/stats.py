@@ -8,7 +8,7 @@ import math
 import re
 from statistics import median
 from typing import Dict, List, Optional, Tuple
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, time
 from sqlalchemy import func, desc
 from list_of_exercise import BW_EXERCISES
 from models import WorkoutLog, RepRange
@@ -175,6 +175,11 @@ def _normalize_exercise_name(exercise: str) -> str:
     return value
 
 
+def _clean_workout_title(title: str) -> str:
+    cleaned = str(title or "").strip()
+    return cleaned or "Workout"
+
+
 def _resolve_exercise_aliases(db_session, user, exercise_name: str) -> List[str]:
     key = _normalize_exercise_name(exercise_name)
     if not key:
@@ -206,11 +211,28 @@ def _get_peak_1rm_for_log(log) -> float:
     return float(quality.get('peak_1rm') or 0.0)
 
 
-def get_csv_export(db_session, user):
+def _query_logs_for_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
+    query = db_session.query(WorkoutLog).filter_by(user_id=user.id)
+
+    if start_date is not None:
+        start_dt = datetime.combine(start_date, time.min)
+        query = query.filter(WorkoutLog.date >= start_dt)
+
+    if end_date is not None:
+        end_dt_exclusive = datetime.combine(end_date + timedelta(days=1), time.min)
+        query = query.filter(WorkoutLog.date < end_dt_exclusive)
+
+    return query.order_by(desc(WorkoutLog.date)).all()
+
+
+def get_export_log_count(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None) -> int:
+    logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
+    return len(logs)
+
+
+def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
     """Generates a CSV string of all workout history."""
-    logs = db_session.query(WorkoutLog).filter_by(
-        user_id=user.id
-    ).order_by(desc(WorkoutLog.date)).all()
+    logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -248,11 +270,9 @@ def get_csv_export(db_session, user):
     return output.getvalue()
 
 
-def get_json_export(db_session, user) -> Dict:
+def get_json_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None) -> Dict:
     """Generate full JSON export payload for workout history."""
-    logs = db_session.query(WorkoutLog).filter_by(
-        user_id=user.id
-    ).order_by(desc(WorkoutLog.date)).all()
+    logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
 
     workouts_by_date: Dict[str, Dict] = {}
     for log in logs:
@@ -296,11 +316,13 @@ def get_chart_data(db_session, user, exercise_name):
     data_effective_volume = []
     data_quality = []
     data_quality_adjusted_1rm = []
+    workout_titles = []
 
     target_rep_range = _get_target_rep_range(db_session, user, exercise_name)
 
     for log in logs:
         labels.append(local_date(log.date).isoformat() if log.date else "")
+        workout_titles.append(_clean_workout_title(getattr(log, 'workout_name', None)))
 
         one_rm, top_weight, top_reps = _get_log_metrics(log)
         sets_for_quality = _normalize_sets_for_log(log)
@@ -346,6 +368,7 @@ def get_chart_data(db_session, user, exercise_name):
         "effective_volume": data_effective_volume,
         "quality": data_quality,
         "quality_adjusted_1rm": data_quality_adjusted_1rm,
+        "workout_titles": workout_titles,
         "series": {
             "e1rm": data_1rm,
             "top_weight": data_weight,
@@ -415,10 +438,14 @@ def get_average_growth_data(db_session, user) -> Dict:
         }
 
     logs_by_exercise = {}
+    title_by_date = {}
     for log in logs:
         key = _normalize_exercise_name(log.exercise)
         if not key:
             continue
+        if log.date:
+            date_key = local_date(log.date)
+            title_by_date.setdefault(date_key, _clean_workout_title(getattr(log, 'workout_name', None)))
         logs_by_exercise.setdefault(key, []).append(log)
 
     by_date = {}
@@ -466,10 +493,12 @@ def get_average_growth_data(db_session, user) -> Dict:
 
     labels = []
     data_pct = []
+    workout_titles = []
 
     for date_key in sorted(by_date.keys()):
         values = by_date[date_key]
         labels.append(date_key.isoformat())
+        workout_titles.append(title_by_date.get(date_key, "Workout"))
         weight_sum = values.get('weight_sum', 0.0)
         if weight_sum:
             data_pct.append(values.get('weighted_sum', 0.0) / weight_sum)
@@ -496,6 +525,7 @@ def get_average_growth_data(db_session, user) -> Dict:
         "exercise": "Overall Progress",
         "stats": stats,
         "unit": "percent",
+        "workout_titles": workout_titles,
     }
 
 
@@ -547,6 +577,7 @@ def get_overall_progress_data(
 
     exercise_day_values: Dict[str, Dict] = {}
     workout_days = set()
+    title_by_day: Dict = {}
 
     for log in logs:
         if not log.date:
@@ -556,6 +587,7 @@ def get_overall_progress_data(
             continue
         day = local_date(log.date)
         workout_days.add(day)
+        title_by_day.setdefault(day, _clean_workout_title(getattr(log, 'workout_name', None)))
         value = _get_peak_1rm_for_log(log)
         if not value or value <= 0:
             continue
@@ -629,6 +661,7 @@ def get_overall_progress_data(
     labels = []
     series = []
     log_series = []
+    workout_titles = []
     pointers = {key: -1 for key in universe}
     last_values = {key: None for key in universe}
     last_session_days = {key: None for key in universe}
@@ -636,6 +669,7 @@ def get_overall_progress_data(
 
     for day in _date_range(start_day, end_day):
         labels.append(day.isoformat())
+        workout_titles.append(title_by_day.get(day, "Workout"))
         weighted_sum = 0.0
         weight_sum = 0.0
         daily_log_sum = 0.0
@@ -723,6 +757,7 @@ def get_overall_progress_data(
         'workout_days': [d.isoformat() for d in workout_days_sorted],
         'weight': [],
         'reps': [],
+        'workout_titles': workout_titles,
         'exercise': title,
         'stats': stats,
         'unit': 'percent',
