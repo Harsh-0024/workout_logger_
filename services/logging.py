@@ -291,19 +291,21 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 r_score = float(best_workout_strength_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
                 p_score = float(best_workout_strength_score(new_sets, top_n=target_sets).get("score") or 0.0)
 
-                # Strength-first best update:
-                # - Prevents 1-set days from replacing a better multi-set best unless the improvement is real.
-                if p_score > r_score:
+                # Peak-first status:
+                # - If best set got stronger, show PEAK regardless of score mix across other sets.
+                # - Otherwise use strength-first score for consistency improvements.
+                if p_peak > r_peak:
                     is_new_best = True
-                    if p_peak > r_peak:
-                        diff = p_peak - r_peak
-                        improvement = f"PEAK (+{diff:.1f})"
-                    elif p_sum > r_sum:
-                        improvement = "VOLUME"
+                    diff = p_peak - r_peak
+                    improvement = f"PEAK (+{diff:.1f})"
+                elif p_score > r_score:
+                    is_new_best = True
+                    if p_sum > r_sum:
+                        improvement = "CONSISTENCY"
                     elif p_vol > r_vol:
                         improvement = "CONSISTENCY"
                     else:
-                        improvement = "PEAK (CONSISTENCY)"
+                        improvement = "CONSISTENCY"
             else:
                 row['old'] = 'First Log'
                 row['status'] = "NEW"
