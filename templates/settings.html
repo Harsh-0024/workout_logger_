@@ -58,19 +58,34 @@
                     <i class="bi bi-download text-gold"></i>
                     <h6 class="mb-0 fw-semibold">Data Exports</h6>
                 </div>
-                <div class="mb-3">
-                    <div class="export-mode-toggle mb-2 flex-wrap">
-                        <label class="export-mode-option">
-                            <input type="radio" name="export_mode" value="all" checked class="export-mode-input">
-                            <span class="export-mode-label">Export all workouts</span>
+                <button type="button" id="toggleExportPanelBtn" class="btn btn-gold-outline w-100">
+                    <i class="bi bi-download me-2"></i>Export Data
+                </button>
+
+                <div id="exportPanel" class="export-panel mt-3 d-none">
+                    <div class="export-choice-grid mb-3">
+                        <label class="export-choice-card">
+                            <input type="radio" name="export_scope" value="all" checked class="export-choice-input">
+                            <span class="export-choice-text">All workouts</span>
                         </label>
-                        <label class="export-mode-option">
-                            <input type="radio" name="export_mode" value="range" class="export-mode-input">
-                            <span class="export-mode-label">Choose date range</span>
+                        <label class="export-choice-card">
+                            <input type="radio" name="export_scope" value="range" class="export-choice-input">
+                            <span class="export-choice-text">Date range</span>
                         </label>
                     </div>
 
-                    <div id="exportDateRange" class="row g-2" style="display: none;">
+                    <div class="export-choice-grid mb-3">
+                        <label class="export-choice-card">
+                            <input type="radio" name="export_format" value="csv" checked class="export-choice-input">
+                            <span class="export-choice-text">CSV (~{{ csv_size_kb }}KB)</span>
+                        </label>
+                        <label class="export-choice-card">
+                            <input type="radio" name="export_format" value="json" class="export-choice-input">
+                            <span class="export-choice-text">JSON (~{{ json_size_kb }}KB)</span>
+                        </label>
+                    </div>
+
+                    <div id="exportDateRange" class="row g-2 mb-3" style="display: none;">
                         <div class="col-12 col-md-6">
                             <label class="form-label text-muted mb-1" style="font-size: var(--fs-xs);">Start date</label>
                             <input type="date" id="exportStartDate" class="form-control form-control-sm export-date-input">
@@ -80,25 +95,11 @@
                             <input type="date" id="exportEndDate" class="form-control form-control-sm export-date-input">
                         </div>
                     </div>
-                </div>
 
-                <div class="d-flex flex-column flex-md-row gap-2">
-                    <div class="text-center flex-fill">
-                        <a href="/export_csv" class="btn btn-gold-outline w-100 export-link" data-export-format="csv">
-                            <i class="bi bi-file-earmark-spreadsheet me-2"></i>Export CSV
-                        </a>
-                        <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">~{{ csv_size_kb }}KB</small>
-                    </div>
-                    <div class="text-center flex-fill">
-                        <a href="/export_json" class="btn btn-gold-outline w-100 export-link" data-export-format="json">
-                            <i class="bi bi-file-earmark-code me-2"></i>Export JSON
-                        </a>
-                        <small class="text-muted d-block mt-1" style="font-size: 0.7rem;">~{{ json_size_kb }}KB</small>
-                    </div>
+                    <button type="button" id="downloadExportBtn" class="btn btn-gold-solid w-100">
+                        <i class="bi bi-box-arrow-down me-2"></i>Download Export
+                    </button>
                 </div>
-                <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                    <i class="bi bi-info-circle me-1"></i>Date range applies only when "Choose date range" is selected.
-                </small>
             </div>
 
             <div class="border-top pt-4 mt-4" style="border-color: var(--border-subtle) !important;">
@@ -628,85 +629,51 @@
         display: block;
     }
 
-    .export-mode-toggle {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px 12px;
-        border-radius: 14px;
+    .export-panel {
         border: 1px solid var(--border-subtle);
-        background: linear-gradient(135deg, rgba(212, 175, 55, 0.08), rgba(15, 15, 15, 0.5));
-        box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.08);
+        border-radius: 12px;
+        padding: 12px;
+        background: var(--bg-secondary);
     }
 
-    .export-mode-option {
+    .export-choice-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+    }
+
+    .export-choice-card {
         display: inline-flex;
         align-items: center;
-        gap: 10px;
-        padding: 6px 12px;
-        border-radius: 999px;
-        background: rgba(17, 17, 17, 0.75);
-        border: 1px solid transparent;
-        color: var(--text-muted);
-        font-size: 0.75rem;
-        font-weight: 600;
-        letter-spacing: 0.3px;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
+        background: var(--card-bg-solid);
+        color: var(--text-primary);
         cursor: pointer;
-        transition: all var(--transition-base);
+        transition: border-color var(--transition-base), box-shadow var(--transition-base);
     }
 
-    .export-mode-option:hover {
-        border-color: rgba(212, 175, 55, 0.45);
-        color: var(--text-primary);
-        box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.2);
-    }
-
-    .export-mode-input {
-        appearance: none;
-        width: 16px;
-        height: 16px;
-        border-radius: 50%;
-        border: 2px solid rgba(212, 175, 55, 0.4);
-        background: transparent;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        position: relative;
-        transition: all var(--transition-base);
-    }
-
-    .export-mode-input::after {
-        content: '';
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--gold-primary);
-        transform: scale(0);
-        transition: transform var(--transition-base);
-    }
-
-    .export-mode-input:checked {
+    .export-choice-card:hover {
         border-color: var(--gold-primary);
-        box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.16);
     }
 
-    .export-mode-input:checked::after {
-        transform: scale(1);
+    .export-choice-input {
+        accent-color: var(--gold-primary);
+        margin-top: 0;
     }
 
-    .export-mode-input:checked + .export-mode-label {
-        color: var(--text-primary);
-    }
-
-    .export-mode-label {
-        font-size: 0.75rem;
+    .export-choice-text {
+        font-size: 0.78rem;
+        font-weight: 600;
     }
 
     .export-date-input {
         background-color: var(--bg-secondary);
         border-color: var(--border-subtle);
         color: var(--text-primary);
-        box-shadow: inset 0 0 0 1px rgba(212, 175, 55, 0.05);
+        box-shadow: none;
     }
 
     .export-date-input:focus {
@@ -800,6 +767,10 @@
             margin-right: 6px !important;
             font-size: 0.9rem;
         }
+
+        .export-choice-grid {
+            grid-template-columns: 1fr;
+        }
     }
 </style>
 <script>
@@ -840,15 +811,22 @@
             });
         });
 
-        const exportModeInputs = document.querySelectorAll('input[name="export_mode"]');
+        const toggleExportPanelBtn = document.getElementById('toggleExportPanelBtn');
+        const exportPanel = document.getElementById('exportPanel');
+        const exportScopeInputs = document.querySelectorAll('input[name="export_scope"]');
         const exportDateRange = document.getElementById('exportDateRange');
         const exportStartDate = document.getElementById('exportStartDate');
         const exportEndDate = document.getElementById('exportEndDate');
-        const exportLinks = document.querySelectorAll('.export-link');
+        const downloadExportBtn = document.getElementById('downloadExportBtn');
 
         const isRangeMode = () => {
-            const selected = document.querySelector('input[name="export_mode"]:checked');
+            const selected = document.querySelector('input[name="export_scope"]:checked');
             return selected && selected.value === 'range';
+        };
+
+        const selectedExportFormat = () => {
+            const selected = document.querySelector('input[name="export_format"]:checked');
+            return selected ? selected.value : 'csv';
         };
 
         const syncExportMode = () => {
@@ -856,19 +834,23 @@
             exportDateRange.style.display = isRangeMode() ? '' : 'none';
         };
 
-        exportModeInputs.forEach((input) => {
+        exportScopeInputs.forEach((input) => {
             input.addEventListener('change', syncExportMode);
         });
         syncExportMode();
 
-        exportLinks.forEach((link) => {
-            link.dataset.baseHref = link.getAttribute('href') || '';
-            link.addEventListener('click', (event) => {
-                event.preventDefault();
-                const baseHref = link.dataset.baseHref || link.getAttribute('href') || '';
-                if (!baseHref) return;
+        if (toggleExportPanelBtn && exportPanel) {
+            toggleExportPanelBtn.addEventListener('click', () => {
+                exportPanel.classList.toggle('d-none');
+            });
+        }
 
+        if (downloadExportBtn) {
+            downloadExportBtn.addEventListener('click', () => {
+                const format = selectedExportFormat();
+                const baseHref = format === 'json' ? '/export_json' : '/export_csv';
                 const target = new URL(baseHref, window.location.origin);
+
                 if (isRangeMode()) {
                     const start = (exportStartDate?.value || '').trim();
                     const end = (exportEndDate?.value || '').trim();
@@ -886,7 +868,7 @@
 
                 window.location.href = `${target.pathname}${target.search}`;
             });
-        });
+        }
 
         passwordToggles.forEach((toggle) => {
             toggle.addEventListener('click', () => {

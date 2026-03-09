@@ -70,6 +70,9 @@
                         <i class="bi bi-trash me-1"></i>Delete Selected
                     </button>
                 </form>
+                <button type="button" id="selectAllRecentBtn" class="btn btn-outline-secondary btn-sm d-none">
+                    <i class="bi bi-check2-all me-1"></i>Select All
+                </button>
             </div>
 
             {% if recent_workouts|length > 3 %}
@@ -129,6 +132,7 @@
         const toggleSelectModeBtn = document.getElementById('toggleSelectModeBtn');
         const bulkDeleteForm = document.getElementById('bulkDeleteForm');
         const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
+        const selectAllRecentBtn = document.getElementById('selectAllRecentBtn');
         const params = new URLSearchParams(window.location.search);
         const startBulkDelete = params.get('bulk_delete') === '1';
         if (!list) return;
@@ -139,14 +143,26 @@
         let selectionMode = false;
 
         const selectedCount = () => checkboxes.filter(cb => cb.checked).length;
+        const visibleCheckboxes = () => checkboxes.filter(cb => {
+            const item = cb.closest('.recent-item');
+            return item && item.style.display !== 'none';
+        });
 
         const refreshBulkDeleteState = () => {
             const count = selectedCount();
+            const visible = visibleCheckboxes();
+            const allVisibleSelected = visible.length > 0 && visible.every(cb => cb.checked);
             if (bulkDeleteBtn) {
                 bulkDeleteBtn.disabled = count === 0;
                 bulkDeleteBtn.innerHTML = count > 0
                     ? `<i class="bi bi-trash me-1"></i>Delete Selected (${count})`
                     : '<i class="bi bi-trash me-1"></i>Delete Selected';
+            }
+            if (selectAllRecentBtn) {
+                selectAllRecentBtn.disabled = !selectionMode || visible.length === 0;
+                selectAllRecentBtn.innerHTML = allVisibleSelected
+                    ? '<i class="bi bi-x-circle me-1"></i>Clear All'
+                    : '<i class="bi bi-check2-all me-1"></i>Select All';
             }
         };
 
@@ -162,6 +178,9 @@
             });
             if (bulkDeleteForm) {
                 bulkDeleteForm.classList.toggle('d-none', !selectionMode);
+            }
+            if (selectAllRecentBtn) {
+                selectAllRecentBtn.classList.toggle('d-none', !selectionMode);
             }
             if (toggleSelectModeBtn) {
                 toggleSelectModeBtn.classList.toggle('d-none', !selectionMode);
@@ -224,6 +243,21 @@
 
         if (toggleSelectModeBtn) {
             toggleSelectModeBtn.addEventListener('click', () => setSelectionMode(!selectionMode));
+        }
+
+        if (selectAllRecentBtn) {
+            selectAllRecentBtn.addEventListener('click', () => {
+                const visible = visibleCheckboxes();
+                if (visible.length === 0) {
+                    refreshBulkDeleteState();
+                    return;
+                }
+                const shouldSelectAll = visible.some(cb => !cb.checked);
+                visible.forEach(cb => {
+                    cb.checked = shouldSelectAll;
+                });
+                refreshBulkDeleteState();
+            });
         }
 
         checkboxes.forEach(cb => cb.addEventListener('change', refreshBulkDeleteState));
