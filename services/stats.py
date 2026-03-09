@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, date, time
 from sqlalchemy import func, desc
 from list_of_exercise import BW_EXERCISES
 from models import WorkoutLog, RepRange
-from services.helpers import get_set_stats
+from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
 from utils.dates import local_date
 
@@ -166,6 +166,17 @@ def _get_log_metrics(log):
     )
 
 
+def _is_timed_log(log) -> bool:
+    """Check if a log is for a time-based exercise via explicit [N-Ns] hint only."""
+    exercise_string = str(getattr(log, 'exercise_string', '') or '')
+    return bool(re.search(r"\[[^\]]*\d+\s*[-\u2013\u2014]\s*\d+\s*s[^\]]*\]", exercise_string, flags=re.IGNORECASE))
+
+
+def _get_timed_target_range(db_session, user, exercise_name: str) -> Optional[Tuple[int, int]]:
+    """Like _get_target_rep_range but treats the values as seconds."""
+    return _get_target_rep_range(db_session, user, exercise_name)
+
+
 def _normalize_exercise_name(exercise: str) -> str:
     value = str(exercise or '').strip().lower()
     value = re.sub(r'^\s*\d+\s*[\.)\-:]\s*', '', value)
@@ -205,7 +216,13 @@ def _get_peak_1rm_for_log(log) -> float:
         weights, reps = _apply_bodyweight(weights, reps, log.bodyweight)
 
     if not weights or not reps:
-        return 0.0
+        return float(log.estimated_1rm) if getattr(log, 'estimated_1rm', None) else 0.0
+
+    if _is_timed_log(log):
+        return max(
+            (timed_set_score(w, r) for w, r in zip(weights, reps) if w > 0 and r > 0),
+            default=0.0,
+        )
 
     quality = WorkoutQualityScorer.calculate_workout_score({'weights': weights, 'reps': reps}, None)
     return float(quality.get('peak_1rm') or 0.0)
@@ -320,24 +337,42 @@ def get_chart_data(db_session, user, exercise_name):
 
     target_rep_range = _get_target_rep_range(db_session, user, exercise_name)
 
+    exercise_is_timed = False
+    for log in logs:
+        if _is_timed_log(log):
+            exercise_is_timed = True
+            break
+
+    if exercise_is_timed:
+        timed_target = _get_timed_target_range(db_session, user, exercise_name)
+    else:
+        timed_target = None
+
     for log in logs:
         labels.append(local_date(log.date).isoformat() if log.date else "")
         workout_titles.append(_clean_workout_title(getattr(log, 'workout_name', None)))
 
-        one_rm, top_weight, top_reps = _get_log_metrics(log)
         sets_for_quality = _normalize_sets_for_log(log)
-        quality = WorkoutQualityScorer.calculate_workout_score(sets_for_quality, target_rep_range)
 
-        e1rm = quality.get('peak_1rm') or one_rm
-        total_vol = quality.get('total_volume')
-        if total_vol is None:
-            total_vol = 0
-        eff_vol = quality.get('effective_volume')
-        if eff_vol is None:
-            eff_vol = 0
-        q_index = quality.get('quality_index')
-        if q_index is None:
-            q_index = 0
+        if exercise_is_timed:
+            quality = WorkoutQualityScorer.calculate_timed_workout_score(sets_for_quality, timed_target)
+            e1rm = quality.get('peak_1rm') or 0
+        else:
+            one_rm, top_weight_m, top_reps_m = _get_log_metrics(log)
+            quality = WorkoutQualityScorer.calculate_workout_score(sets_for_quality, target_rep_range)
+            e1rm = quality.get('peak_1rm') or one_rm
+
+        top_weight, top_reps = 0, 0
+        weights_raw, reps_raw = _normalize_sets(log.sets_json)
+        if weights_raw and reps_raw:
+            top_weight, top_reps = _get_top_weight(weights_raw, reps_raw)
+        elif log.top_weight is not None:
+            top_weight = float(log.top_weight)
+            top_reps = int(log.top_reps or 0)
+
+        total_vol = quality.get('total_volume') or 0
+        eff_vol = quality.get('effective_volume') or 0
+        q_index = quality.get('quality_index') or 0
 
         data_1rm.append(float(e1rm or 0))
         data_weight.append(float(top_weight or 0))
@@ -369,6 +404,7 @@ def get_chart_data(db_session, user, exercise_name):
         "quality": data_quality,
         "quality_adjusted_1rm": data_quality_adjusted_1rm,
         "workout_titles": workout_titles,
+        "is_timed": exercise_is_timed,
         "series": {
             "e1rm": data_1rm,
             "top_weight": data_weight,

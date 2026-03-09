@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 from services.workout_quality import WorkoutQualityScorer
+from services.helpers import timed_set_score
 
 
 def coerce_equal_len_sets(weights: List, reps: List) -> Tuple[List[float], List[int]]:
@@ -87,5 +88,46 @@ def best_workout_strength_score(
         "score": float(score),
         "peak_1rm": peak,
         "top_sum_1rm": top_sum,
+        "set_count": float(len(r)),
+    }
+
+
+def best_workout_timed_score(
+    sets_json: Dict,
+    *,
+    top_n: int = 3,
+) -> Dict[str, float]:
+    """
+    Timed-exercise equivalent of best_workout_strength_score.
+    Uses timed_set_score = weight * sqrt(seconds) instead of 1RM.
+    Same bonus structure: peak + 25% of additional top-N set surplus.
+    """
+    if not sets_json or not isinstance(sets_json, dict):
+        return {"score": 0.0, "peak_timed": 0.0, "top_sum": 0.0, "set_count": 0.0}
+
+    weights = sets_json.get("weights") or []
+    reps = sets_json.get("reps") or []
+    w, r = coerce_equal_len_sets(weights, reps)
+    if not w or not r:
+        return {"score": 0.0, "peak_timed": 0.0, "top_sum": 0.0, "set_count": 0.0}
+
+    scores = [timed_set_score(wi, ri) for wi, ri in zip(w, r)]
+    scores = [float(x) for x in scores if x > 0]
+    if not scores:
+        return {"score": 0.0, "peak_timed": 0.0, "top_sum": 0.0, "set_count": float(len(r) or 0)}
+
+    scores.sort(reverse=True)
+    n = max(1, int(top_n) if isinstance(top_n, int) and top_n > 0 else 3)
+    top = scores[: min(n, len(scores))]
+
+    peak = float(top[0])
+    top_sum = float(sum(top))
+    bonus = 0.25 * float(max(0.0, top_sum - peak))
+    score = peak + bonus
+
+    return {
+        "score": float(score),
+        "peak_timed": peak,
+        "top_sum": top_sum,
         "set_count": float(len(r)),
     }

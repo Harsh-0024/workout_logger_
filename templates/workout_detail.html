@@ -75,7 +75,7 @@
                                     {% if log.sets_display %}
                                         <div class="mb-1">Sets: {{ log.sets_display }}</div>
                                     {% elif log.top_weight and log.top_reps %}
-                                        <div class="mb-1">Top Set: {{ log.top_weight }}kg × {{ log.top_reps }} reps</div>
+                                        <div class="mb-1">{% if log.is_timed %}Top Set: {{ log.top_weight }}kg × {{ log.top_reps }}s{% else %}Top Set: {{ log.top_weight }}kg × {{ log.top_reps }} reps{% endif %}</div>
                                     {% endif %}
                                     <div class="d-flex gap-3 flex-wrap">
                                         {% if log.estimated_1rm %}

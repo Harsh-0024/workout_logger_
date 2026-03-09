@@ -1,4 +1,5 @@
 from datetime import datetime
+import html
 import re
 import csv
 import io
@@ -121,7 +122,8 @@ def register_stats_routes(app):
         user = current_user
 
         try:
-            exercise = sanitize_text_input(exercise, max_length=100)
+            exercise = sanitize_text_input(exercise, max_length=100, allow_html=True)
+            exercise = html.unescape(exercise)
             updated = backfill_log_bodyweight(Session, user)
             if updated:
                 Session.commit()

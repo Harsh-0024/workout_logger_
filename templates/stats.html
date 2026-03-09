@@ -667,11 +667,12 @@
             return { key: 'data', label: 'Average Change (%)', unit: 'percent', suffix: '%' };
         }
 
+        const isTimed = !!(data && data.is_timed);
         const configs = {
-            e1rm: { key: 'e1rm', label: 'Estimated 1RM (kg)', suffix: '' },
+            e1rm: { key: 'e1rm', label: isTimed ? 'Timed Score (kg·√s)' : 'Estimated 1RM (kg)', suffix: '' },
             top_weight: { key: 'top_weight', label: 'Top Weight (kg)', suffix: '' },
-            tonnage: { key: 'tonnage', label: 'Tonnage (kg)', suffix: '' },
-            effective_tonnage: { key: 'effective_tonnage', label: 'Effective Tonnage (kg)', suffix: '' },
+            tonnage: { key: 'tonnage', label: isTimed ? 'Total Work (kg·s)' : 'Tonnage (kg)', suffix: '' },
+            effective_tonnage: { key: 'effective_tonnage', label: isTimed ? 'Effective Work (kg·s)' : 'Effective Tonnage (kg)', suffix: '' },
         };
         return configs[metricKey] || configs.e1rm;
     }
@@ -1249,6 +1250,19 @@
             const set = ctx.chart && ctx.chart.$loggedIndexSet;
             return set && set.has(ctx.dataIndex) ? primaryPointHoverRadius : 0;
         };
+        const segmentFn = {
+            borderDash: (ctx) => {
+                const loggedSet = ctx.chart && ctx.chart.$loggedIndexSet;
+                if (!loggedSet) return undefined;
+                return loggedSet.has(ctx.p0DataIndex) ? [] : [4, 4];
+            },
+            borderColor: (ctx) => {
+                const loggedSet = ctx.chart && ctx.chart.$loggedIndexSet;
+                if (!loggedSet || loggedSet.has(ctx.p0DataIndex)) return undefined;
+                return document.documentElement.getAttribute('data-theme') === 'light'
+                    ? 'rgba(120,110,80,0.4)' : 'rgba(180,160,100,0.4)';
+            },
+        };
         const isPercent = filteredData.unit === 'percent';
         const isRateMode = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
         const percentSuffix = '%';
@@ -1330,8 +1344,11 @@
             let topSet = '';
             const weightVal = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : null;
             const repsVal = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : null;
+            const _isTimedExercise = !!(data && data.is_timed);
             if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
-                topSet = `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`;
+                topSet = _isTimedExercise
+                    ? `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
+                    : `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`;
             }
 
             let tonnage = '';
@@ -1388,8 +1405,11 @@
 
                 const weightVal = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : null;
                 const repsVal = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : null;
+                const _isTEx = !!(data && data.is_timed);
                 if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
-                    lines.push(`Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`);
+                    lines.push(_isTEx
+                        ? `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
+                        : `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`);
                 }
 
                 const tonnageVal = (data && Array.isArray(data.volume)) ? Number(data.volume[idx]) : null;
@@ -1433,7 +1453,8 @@
             myChart.data.datasets[0].borderColor = avgColor;
             myChart.data.datasets[0].backgroundColor = 'transparent';
             myChart.data.datasets[0].borderWidth = 2;
-            myChart.data.datasets[0].borderDash = [6, 6];
+            myChart.data.datasets[0].borderDash = undefined;
+            myChart.data.datasets[0].segment = segmentFn;
             myChart.data.datasets[0].fill = false;
             myChart.data.datasets[0].pointRadius = pointRadiusFn;
             myChart.data.datasets[0].pointHoverRadius = pointHoverRadiusFn;
@@ -1514,7 +1535,7 @@
                             borderColor: avgColor,
                             backgroundColor: 'transparent',
                             borderWidth: 2,
-                            borderDash: [6, 6],
+                            segment: segmentFn,
                             tension: 0.35,
                             fill: false,
                             pointRadius: pointRadiusFn,

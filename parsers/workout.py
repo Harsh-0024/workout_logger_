@@ -92,6 +92,16 @@ def _extract_sets_from_bracket(line: str) -> Optional[int]:
     return count if count > 0 else None
 
 
+def _has_time_range_hint(line: str) -> bool:
+    if not line or '[' not in line or ']' not in line:
+        return False
+    try:
+        inside = line.split('[', 1)[1].split(']', 1)[0].strip().lower()
+    except Exception:
+        return False
+    return 's' in inside
+
+
 def parse_weight_x_reps(segment, base_weight=None):
     segment = (segment or '').replace('×', 'x').replace('*', 'x').lower()
     segment = re.sub(r'(kg|lbs|lb)', '', segment)
@@ -217,7 +227,7 @@ def is_probable_data_segment(segment: str) -> bool:
     return True
 
 
-def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None):
+def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None, max_rep_value: int = 30):
     segment = (segment or '').strip()
     if not segment:
         return None, None
@@ -256,7 +266,7 @@ def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None):
         r_val = parse_reps_token(r_token)
         if w_val is None or r_val is None:
             return None, None
-        if r_val <= 0 or r_val > 30:
+        if r_val <= 0 or r_val > max_rep_value:
             return None, None
         weight_hint = (
             '.' in w_token
@@ -274,14 +284,14 @@ def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None):
         r = parse_reps_token(tokens[idx + 1])
         if w is None or r is None:
             return None, None
-        if r <= 0 or r > 30:
+        if r <= 0 or r > max_rep_value:
             return None, None
         weights.append(w)
         reps.append(r)
     return weights, reps
 
 
-def parse_weight_reps_halves(segment, base_weight: Optional[float] = None):
+def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_rep_value: int = 30):
     segment = (segment or '').strip()
     if not segment:
         return None, None
@@ -306,7 +316,7 @@ def parse_weight_reps_halves(segment, base_weight: Optional[float] = None):
             val = int(tok)
         except ValueError:
             return None, None
-        if val <= 0 or val > 30:
+        if val <= 0 or val > max_rep_value:
             return None, None
         reps.append(val)
 
@@ -379,6 +389,7 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
         clean_line = list_of_lines[i]
         name, weights, reps = "", [], []
         data_part = ""
+        time_range_hint = _has_time_range_hint(clean_line)
         declared_sets, cleaned_line = _extract_declared_sets(clean_line)
         bracket_sets = _extract_sets_from_bracket(cleaned_line)
         if bracket_sets is not None:
@@ -447,8 +458,25 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
                 elif weights and not reps:
                     reps = [1] * len(weights)
             else:
-                weights = extract_weights(data_part, bodyweight)
-                reps = [1] * len(weights)
+                max_rep_value = 600 if time_range_hint else 30
+                w_pairs, r_pairs = parse_weight_reps_pairs(
+                    data_part,
+                    bodyweight,
+                    max_rep_value=max_rep_value,
+                )
+                if w_pairs and r_pairs:
+                    weights, reps = w_pairs, r_pairs
+                else:
+                    w_halves, r_halves = parse_weight_reps_halves(
+                        data_part,
+                        bodyweight,
+                        max_rep_value=max_rep_value,
+                    )
+                    if w_halves and r_halves:
+                        weights, reps = w_halves, r_halves
+                    else:
+                        weights = extract_weights(data_part, bodyweight)
+                        reps = [1] * len(weights)
 
         if not name:
             name = "Unknown Exercise"

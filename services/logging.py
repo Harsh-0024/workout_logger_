@@ -6,8 +6,9 @@ from datetime import datetime
 import re
 
 from models import Lift, RepRange, WorkoutLog
-from services.best_scoring import best_workout_strength_score
-from services.helpers import get_set_stats
+from parsers.workout import align_sets, extract_numbers
+from services.best_scoring import best_workout_strength_score, best_workout_timed_score
+from services.helpers import get_set_stats, get_timed_set_stats
 from services.exercise_matching import (
     build_name_index,
     normalize_exercise_name,
@@ -88,6 +89,62 @@ def _normalize_sets(sets_json: Optional[Dict]) -> Optional[Dict]:
     return {'weights': weights, 'reps': reps}
 
 
+def _has_time_hint_in_exercise_string(exercise_string: str) -> bool:
+    text = str(exercise_string or "")
+    if not text:
+        return False
+    return bool(re.search(r"\[[^\]]*\d+\s*[-–—]\s*\d+\s*s[^\]]*\]", text, flags=re.IGNORECASE))
+
+
+def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_index=None) -> bool:
+    candidates = resolve_equivalent_names(exercise_name, log_ex_index) if log_ex_index else []
+    if not candidates:
+        candidates = _exercise_candidates(exercise_name)
+    if not candidates:
+        return False
+
+    logs = (
+        db_session.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user_id)
+        .filter(WorkoutLog.exercise.in_(candidates))
+        .all()
+    )
+    for log in logs:
+        if _has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '')):
+            return True
+    return False
+
+
+def _extract_time_seconds(exercise_string: str, expected_sets: int) -> List[int]:
+    text = str(exercise_string or "")
+    if not text:
+        return []
+
+    lines = [ln.strip() for ln in text.splitlines() if ln and ln.strip()]
+    if not lines:
+        return []
+
+    for line in lines:
+        if ',' in line:
+            rhs = line.split(',', 1)[1].strip()
+            values = extract_numbers(rhs)
+            if values:
+                return [max(1, int(round(v))) for v in values]
+
+    numeric_lines = [ln for ln in lines if re.search(r'\d', ln)]
+    if len(numeric_lines) >= 2:
+        values = extract_numbers(numeric_lines[-1])
+        if values:
+            return [max(1, int(round(v))) for v in values]
+
+    values = extract_numbers(text)
+    if expected_sets > 0 and len(values) == expected_sets * 2:
+        latter = values[expected_sets:]
+        return [max(1, int(round(v))) for v in latter]
+
+    return []
+
+
 def _parse_rep_target_sets(rep_text: str) -> Dict[str, int]:
     """Parse 'Exercise: 2, 8-15' style lines into lowercased exercise->set_count."""
     out: Dict[str, int] = {}
@@ -121,6 +178,7 @@ def _get_best_log(
     *,
     target_sets: int = 3,
     log_ex_index=None,
+    is_timed: bool = False,
 ) -> Optional[WorkoutLog]:
     candidates = resolve_equivalent_names(exercise_name, log_ex_index) if log_ex_index else []
     if not candidates:
@@ -143,7 +201,10 @@ def _get_best_log(
         normalized_sets = _normalize_sets(log.sets_json)
         if not normalized_sets:
             continue
-        metrics = best_workout_strength_score(normalized_sets, top_n=required_sets)
+        if is_timed:
+            metrics = best_workout_timed_score(normalized_sets, top_n=required_sets)
+        else:
+            metrics = best_workout_strength_score(normalized_sets, top_n=required_sets)
         score = float(metrics.get("score") or 0.0)
         set_count = int(metrics.get("set_count") or 0)
         if score <= 0:
@@ -232,6 +293,24 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
         new_sets = {"weights": item["weights"], "reps": item["reps"]}
         new_str = item['exercise_string']
         is_valid = item.get('valid', True)
+        time_based = False
+
+        if is_valid:
+            has_explicit_hint = _has_time_hint_in_exercise_string(new_str)
+            time_based = has_explicit_hint or (
+                not has_explicit_hint
+                and _has_time_history(db_session, user.id, ex_name, log_ex_index=log_ex_index)
+            )
+            current_reps = [int(r) for r in (new_sets.get('reps') or []) if r is not None]
+            if time_based and current_reps and all(r <= 1 for r in current_reps):
+                seconds = _extract_time_seconds(new_str, expected_sets=len(new_sets.get('weights') or []))
+                if seconds:
+                    weights, reps = align_sets(
+                        list(new_sets.get('weights') or []),
+                        [int(v) for v in seconds],
+                        len(new_sets.get('weights') or []) or None,
+                    )
+                    new_sets = {'weights': weights, 'reps': reps}
         
         # Format display string from sets data
         formatted_display = _format_sets_display(new_sets) if is_valid else new_str
@@ -254,15 +333,19 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             ex_name,
             target_sets=target_sets,
             log_ex_index=log_ex_index,
+            is_timed=time_based,
         )
         best_log_sets = _normalize_sets(best_log.sets_json) if best_log else None
 
         row = {
             'name': ex_name, 'old': '-', 'new': formatted_display,
-            'status': '-', 'class': 'neutral', 'valid': is_valid
+            'status': '-', 'class': 'neutral', 'valid': is_valid,
+            'is_timed': time_based if is_valid else False,
         }
 
         if is_valid:
+            if time_based:
+                p_peak, p_sum, p_vol = get_timed_set_stats(new_sets)
             # --- SAVE TO HISTORY ---
             try:
                 history_log = WorkoutLog(
@@ -287,9 +370,14 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
 
             if best_log_sets:
                 row['old'] = _format_best_string(best_log)
-                r_peak, r_sum, r_vol = get_set_stats(best_log_sets)
-                r_score = float(best_workout_strength_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
-                p_score = float(best_workout_strength_score(new_sets, top_n=target_sets).get("score") or 0.0)
+                if time_based:
+                    r_peak, r_sum, r_vol = get_timed_set_stats(best_log_sets)
+                    r_score = float(best_workout_timed_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
+                    p_score = float(best_workout_timed_score(new_sets, top_n=target_sets).get("score") or 0.0)
+                else:
+                    r_peak, r_sum, r_vol = get_set_stats(best_log_sets)
+                    r_score = float(best_workout_strength_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
+                    p_score = float(best_workout_strength_score(new_sets, top_n=target_sets).get("score") or 0.0)
 
                 # Peak-first status:
                 # - If best set got stronger, show PEAK regardless of score mix across other sets.

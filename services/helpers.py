@@ -1,3 +1,4 @@
+import math
 from models import Lift
 
 def get_set_stats(sets):
@@ -24,6 +25,56 @@ def get_set_stats(sets):
         strength_sum += est_1rm
         volume += weight * reps_value
     return peak, strength_sum, volume
+
+def timed_set_score(weight: float, seconds: int) -> float:
+    """Load-duration score for timed exercises: weight * sqrt(seconds).
+    Blends semantically with 1RM-based scores across charts."""
+    try:
+        w = float(weight)
+        s = float(seconds)
+    except (TypeError, ValueError):
+        return 0.0
+    if w <= 0 or s <= 0:
+        return 0.0
+    return w * math.sqrt(s)
+
+
+def get_timed_set_stats(sets):
+    """Stats for time-based exercises.
+    Returns: (peak_score, score_sum, total_work)
+    - peak_score = best timed_set_score across sets
+    - score_sum  = sum of timed_set_scores
+    - total_work = sum of weight * seconds
+    """
+    if not sets or "weights" not in sets:
+        return 0.0, 0.0, 0.0
+    weights = list(sets.get("weights") or [])
+    reps = list(sets.get("reps") or [])  # reps = seconds for timed
+    if not weights or not reps:
+        return 0.0, 0.0, 0.0
+    if len(weights) != len(reps):
+        if len(weights) < len(reps) and weights:
+            weights = weights + [weights[-1]] * (len(reps) - len(weights))
+        elif len(reps) < len(weights) and reps:
+            reps = reps + [reps[-1]] * (len(weights) - len(reps))
+    peak = 0.0
+    score_sum = 0.0
+    total_work = 0.0
+    for w, s in zip(weights, reps):
+        try:
+            wf = float(w)
+            si = int(s)
+        except (TypeError, ValueError):
+            continue
+        if wf <= 0 or si <= 0:
+            continue
+        score = timed_set_score(wf, si)
+        if score > peak:
+            peak = score
+        score_sum += score
+        total_work += wf * si
+    return peak, score_sum, total_work
+
 
 def find_best_match(db_session, user_id, exercise_name):
     if not exercise_name: return None

@@ -172,6 +172,33 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[1]['weights'], [2.5, 1.0, 1.0])
         self.assertEqual(exs[1]['reps'], [9, 11, 11])
 
+    def test_time_based_exercise_parses_seconds_with_comma(self):
+        raw_text = """
+        06/03 Carry Day
+        Dumbbell Farmer's Walk - [20-60s]
+        25 22.5 22.5, 50 54 40
+        """
+        result = workout_parser(raw_text)
+        exs = result['exercises']
+
+        self.assertEqual(exs[0]['name'].lower(), "dumbbell farmer's walk")
+        self.assertEqual(exs[0]['weights'], [25.0, 22.5, 22.5])
+        self.assertEqual(exs[0]['reps'], [50, 54, 40])
+        self.assertTrue(exs[0]['valid'])
+
+    def test_time_based_exercise_parses_seconds_from_split_halves(self):
+        raw_text = """
+        06/03 Carry Day
+        Dumbbell Farmer's Walk - [20-60s]
+        25 22.5 22.5 50 54 40
+        """
+        result = workout_parser(raw_text)
+        exs = result['exercises']
+
+        self.assertEqual(exs[0]['weights'], [25.0, 22.5, 22.5])
+        self.assertEqual(exs[0]['reps'], [50, 54, 40])
+        self.assertTrue(exs[0]['valid'])
+
 
 class TestPlanParser(unittest.TestCase):
 

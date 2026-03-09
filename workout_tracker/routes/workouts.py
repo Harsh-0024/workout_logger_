@@ -363,6 +363,11 @@ def register_workout_routes(app):
 
             # Calculate volume for each exercise
             for log in logs:
+                log.is_timed = bool(re.search(
+                    r"\[[^\]]*\d\s*[-\u2013\u2014]\s*\d\s*s[^\]]*\]",
+                    str(getattr(log, 'exercise_string', '') or ''),
+                    re.IGNORECASE,
+                ))
                 set_count += _count_sets(log.sets_json, log.sets_display)
                 if user.bodyweight is None and _log_uses_bw(log):
                     missing_bw_exercises.add(log.exercise)

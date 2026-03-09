@@ -271,6 +271,117 @@ class WorkoutQualityScorer:
         return max(0.0, min(1.0, quality_index))
     
     @staticmethod
+    def calculate_timed_workout_score(sets_json: Dict, target_seconds_range=None) -> Dict:
+        """
+        Quality score for time-based exercises.
+        Uses load-duration score (weight * sqrt(seconds)) and duration adherence.
+        target_seconds_range: (min_seconds, max_seconds) or None
+        """
+        if not sets_json or not isinstance(sets_json, dict):
+            return WorkoutQualityScorer._empty_timed_score()
+
+        weights = list(sets_json.get('weights') or [])
+        seconds_list = list(sets_json.get('reps') or [])  # reps stores seconds for timed
+
+        if not weights or not seconds_list:
+            return WorkoutQualityScorer._empty_timed_score()
+
+        if len(weights) != len(seconds_list):
+            if len(weights) < len(seconds_list) and weights:
+                weights = weights + [weights[-1]] * (len(seconds_list) - len(weights))
+            elif len(seconds_list) < len(weights) and seconds_list:
+                seconds_list = seconds_list + [seconds_list[-1]] * (len(weights) - len(seconds_list))
+
+        set_scores = []
+        total_work = 0.0
+        peak_score = 0.0
+
+        for w, s in zip(weights, seconds_list):
+            try:
+                weight = float(w)
+                secs = int(s)
+            except (TypeError, ValueError):
+                continue
+            if weight <= 0 or secs <= 0:
+                continue
+            load_dur_score = weight * math.sqrt(float(secs))
+            work = weight * secs
+            set_scores.append({'weight': weight, 'seconds': secs, 'score': load_dur_score, 'work': work})
+            total_work += work
+            peak_score = max(peak_score, load_dur_score)
+
+        if not set_scores:
+            return WorkoutQualityScorer._empty_timed_score()
+
+        duration_adherence = WorkoutQualityScorer._duration_adherence_score(
+            [s['seconds'] for s in set_scores], target_seconds_range
+        )
+        work_consistency = WorkoutQualityScorer._work_consistency([s['work'] for s in set_scores])
+        avg_score_ratio = (
+            statistics.mean([s['score'] for s in set_scores]) / peak_score
+            if peak_score > 0 else 0.0
+        )
+
+        quality_index = max(0.0, min(1.0,
+            0.45 * work_consistency +
+            0.35 * duration_adherence +
+            0.20 * avg_score_ratio
+        ))
+
+        effective_vol = sum(s['work'] * (s['score'] / peak_score) for s in set_scores) if peak_score > 0 else 0.0
+
+        return {
+            'peak_timed_score': peak_score,
+            'total_work': total_work,
+            'effective_work': effective_vol,
+            'set_count': len(set_scores),
+            'duration_adherence': duration_adherence,
+            'work_consistency': work_consistency,
+            'quality_index': quality_index,
+            'quality_score': quality_index * 100.0,
+            'set_details': set_scores,
+            'peak_1rm': peak_score,
+            'total_volume': total_work,
+            'effective_volume': effective_vol,
+        }
+
+    @staticmethod
+    def _duration_adherence_score(seconds_list, target_range=None) -> float:
+        if not target_range or not seconds_list:
+            return 1.0
+        min_s, max_s = target_range
+        scores = []
+        for s in seconds_list:
+            if min_s <= s <= max_s:
+                scores.append(1.0)
+            elif s > max_s and max_s > 0:
+                scores.append(max(0.0, 1.0 - (s - max_s) / max_s))
+            elif s < min_s and min_s > 0:
+                scores.append(max(0.0, 1.0 - (min_s - s) / min_s))
+            else:
+                scores.append(0.0)
+        return sum(scores) / len(scores)
+
+    @staticmethod
+    def _work_consistency(works) -> float:
+        if len(works) < 2:
+            return 1.0
+        log_works = [math.log(w + 1.0) for w in works]
+        if len(log_works) < 2:
+            return 1.0
+        std = statistics.stdev(log_works)
+        return math.exp(-(std / 0.35))
+
+    @staticmethod
+    def _empty_timed_score() -> Dict:
+        return {
+            'peak_timed_score': 0, 'total_work': 0, 'effective_work': 0,
+            'set_count': 0, 'duration_adherence': 0, 'work_consistency': 0,
+            'quality_index': 0, 'quality_score': 0, 'set_details': [],
+            'peak_1rm': 0, 'total_volume': 0, 'effective_volume': 0,
+        }
+
+    @staticmethod
     def _empty_score() -> Dict:
         """Return empty score for invalid inputs."""
         return {
