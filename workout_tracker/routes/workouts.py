@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import html
+import json
 import re
 import threading
 import time
@@ -10,7 +11,7 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from sqlalchemy import desc, func
 
 from list_of_exercise import get_workout_days, list_of_exercises
-from models import Session, User, WorkoutLog, UserApiKey
+from models import Session, User, WorkoutLog, UserApiKey, ShortcutKeyMap
 from parsers.workout import workout_parser, parse_bw_weight
 from services.logging import handle_workout_log
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
@@ -48,6 +49,32 @@ def register_workout_routes(app):
             raise BadSignature("Invalid shortcut token")
         return payload
 
+    def _make_shortcut_pick_token(user_id: int):
+        payload = {
+            "user_id": user_id,
+            "scope": "shortcut_pick",
+        }
+        return serializer.dumps(payload)
+
+    def _load_shortcut_pick_token(token: str) -> dict:
+        payload = serializer.loads(token)
+        if not isinstance(payload, dict) or payload.get("scope") != "shortcut_pick":
+            raise BadSignature("Invalid shortcut pick token")
+        return payload
+
+    def _make_shortcut_log_token(user_id: int):
+        payload = {
+            "user_id": user_id,
+            "scope": "shortcut_log",
+        }
+        return serializer.dumps(payload)
+
+    def _load_shortcut_log_token(token: str) -> dict:
+        payload = serializer.loads(token)
+        if not isinstance(payload, dict) or payload.get("scope") != "shortcut_log":
+            raise BadSignature("Invalid shortcut log token")
+        return payload
+
     def _count_sets(sets_json=None, sets_display=None):
         if sets_json and isinstance(sets_json, dict):
             weights = sets_json.get('weights') or []
@@ -63,6 +90,26 @@ def register_workout_routes(app):
         else:
             count = 0
         return count
+
+    def _workout_day_bounds(value):
+        if isinstance(value, datetime):
+            workout_day = value.date()
+        else:
+            workout_day = value
+        start_dt = datetime.combine(workout_day, datetime.min.time())
+        end_dt = start_dt + timedelta(days=1)
+        return workout_day, start_dt, end_dt
+
+    def _find_existing_workout_for_day(user_id, workout_date):
+        _, start_dt, end_dt = _workout_day_bounds(workout_date)
+        return (
+            Session.query(WorkoutLog)
+            .filter_by(user_id=user_id)
+            .filter(WorkoutLog.date >= start_dt)
+            .filter(WorkoutLog.date < end_dt)
+            .order_by(WorkoutLog.id.asc())
+            .first()
+        )
 
     def _log_uses_bw(log):
         haystack = f"{getattr(log, 'exercise_string', '')} {getattr(log, 'sets_display', '')}".lower()
@@ -1991,11 +2038,250 @@ def register_workout_routes(app):
                 return f"Session {did}"
         return ''
 
+    def _normalize_shortcut_key(value: str) -> str:
+        text = html.unescape(str(value or "")).strip().lower()
+        if not text:
+            return ""
+        text = text.replace("–", "-").replace("—", "-").replace("•", " ")
+        text = re.sub(r"[^a-z0-9\s\-]", " ", text)
+        text = text.replace("-", " ")
+        text = re.sub(r"\s+", " ", text).strip()
+        return text
+
+    def _shortcut_day_token(category: str, day_id: int) -> str:
+        cat = str(category or "").strip().lower()
+        cat = re.sub(r"[^a-z0-9]+", "_", cat).strip("_")
+        return f"{cat}:{int(day_id)}"
+
+    def _load_shortcut_key_map(user) -> dict[str, str]:
+        row = Session.query(ShortcutKeyMap).filter_by(user_id=user.id).first()
+        raw = (row.text_content if row else "") or ""
+        if not str(raw).strip():
+            return {}
+        try:
+            data = json.loads(raw)
+        except Exception:
+            return {}
+        if not isinstance(data, dict):
+            return {}
+        out: dict[str, str] = {}
+        for k, v in data.items():
+            token = str(k or "").strip()
+            val = str(v or "").strip()
+            if not token or not val:
+                continue
+            out[token] = val[:120]
+        return out
+
+    def _build_shortcut_plan_day_rows(user) -> list[dict]:
+        plan_text = get_effective_plan_text(Session, user)
+        if not plan_text:
+            return []
+        plan_data = get_workout_days(plan_text or "")
+        workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
+        if not isinstance(workout_map, dict):
+            return []
+        session_titles = plan_data.get("session_titles") if isinstance(plan_data, dict) else {}
+        if not isinstance(session_titles, dict):
+            session_titles = {}
+
+        rows: list[dict] = []
+        for category, days in workout_map.items():
+            if not isinstance(days, dict):
+                continue
+            cat_name = str(category or "").strip()
+            if not cat_name:
+                continue
+            for day_name in days.keys():
+                if not isinstance(day_name, str):
+                    continue
+                m = re.search(r"\s+(\d+)\s*$", day_name)
+                if not m:
+                    continue
+                day_id = int(m.group(1))
+                session_title = ""
+                if cat_name.lower() == "session":
+                    session_title = str(session_titles.get(str(day_id)) or "").strip()
+                    if not session_title:
+                        extracted = _extract_session_title(plan_text, day_id)
+                        if extracted.lower().startswith("session "):
+                            session_title = re.sub(
+                                rf"^\s*session\s*{day_id}\s*[-:–—]?\s*",
+                                "",
+                                extracted,
+                                flags=re.IGNORECASE,
+                            ).strip()
+                label = f"{cat_name} {day_id}"
+                if cat_name.lower() == "session" and session_title:
+                    label = f"Session {day_id} - {session_title}"
+                default_key = label
+                rows.append(
+                    {
+                        "category": cat_name,
+                        "day_id": day_id,
+                        "label": label,
+                        "token": _shortcut_day_token(cat_name, day_id),
+                        "default_key": default_key,
+                    }
+                )
+        rows.sort(key=lambda x: (str(x.get("category") or "").lower(), int(x.get("day_id") or 0)))
+        return rows
+
+    def _resolve_shortcut_pick_day(user, raw_key: str):
+        plan_text = get_effective_plan_text(Session, user)
+        if not plan_text:
+            return None, "No workout plan found."
+
+        plan_data = get_workout_days(plan_text or "")
+        workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
+        if not isinstance(workout_map, dict) or not workout_map:
+            return None, "No workout plan found."
+
+        key = _normalize_shortcut_key(raw_key)
+        if not key:
+            return None, "Missing key."
+
+        session_titles = plan_data.get("session_titles") if isinstance(plan_data, dict) else {}
+        if not isinstance(session_titles, dict):
+            session_titles = {}
+
+        alias_map: dict[str, list[dict]] = {}
+        all_labels: set[str] = set()
+
+        token_to_entry: dict[str, dict] = {}
+        for category, days in workout_map.items():
+            if not isinstance(days, dict):
+                continue
+            cat_name = str(category or "").strip()
+            if not cat_name:
+                continue
+
+            for day_name in days.keys():
+                if not isinstance(day_name, str):
+                    continue
+                m = re.search(r"\s+(\d+)\s*$", day_name)
+                if not m:
+                    continue
+
+                day_id = int(m.group(1))
+                session_title = ""
+                if cat_name.lower() == "session":
+                    session_title = str(session_titles.get(str(day_id)) or "").strip()
+                    if not session_title:
+                        extracted = _extract_session_title(plan_text, day_id)
+                        if extracted.lower().startswith("session "):
+                            session_title = re.sub(
+                                rf"^\s*session\s*{day_id}\s*[-:–—]?\s*",
+                                "",
+                                extracted,
+                                flags=re.IGNORECASE,
+                            ).strip()
+
+                label = f"{cat_name} {day_id}"
+                if cat_name.lower() == "session" and session_title:
+                    label = f"Session {day_id} - {session_title}"
+                all_labels.add(label)
+
+                entry = {
+                    "category": cat_name,
+                    "day_id": day_id,
+                    "label": label,
+                }
+                token_to_entry[_shortcut_day_token(cat_name, day_id)] = entry
+
+                aliases = {
+                    day_name,
+                    f"{cat_name} {day_id}",
+                    f"{cat_name}:{day_id}",
+                    f"{cat_name}-{day_id}",
+                }
+                if cat_name.lower() == "session":
+                    aliases.add(f"session {day_id}")
+                    aliases.add(f"s{day_id}")
+                    if session_title:
+                        aliases.add(session_title)
+                        aliases.add(f"session {day_id} {session_title}")
+                        aliases.add(f"session {day_id} - {session_title}")
+
+                for alias in aliases:
+                    norm = _normalize_shortcut_key(alias)
+                    if not norm:
+                        continue
+                    alias_map.setdefault(norm, []).append(entry)
+
+        custom_map = _load_shortcut_key_map(user)
+        custom_alias_map: dict[str, list[dict]] = {}
+        for token, custom_key in custom_map.items():
+            entry = token_to_entry.get(str(token))
+            if not entry:
+                continue
+            norm = _normalize_shortcut_key(custom_key)
+            if not norm:
+                continue
+            custom_alias_map.setdefault(norm, []).append(entry)
+
+        def _unique_entries(entries: list[dict]) -> list[dict]:
+            out: dict[tuple[str, int], dict] = {}
+            for item in entries:
+                k = (str(item.get("category") or ""), int(item.get("day_id") or 0))
+                if k[0] and k[1] > 0:
+                    out[k] = item
+            return list(out.values())
+
+        custom_exact = _unique_entries(custom_alias_map.get(key) or [])
+        if len(custom_exact) == 1:
+            return custom_exact[0], None
+        if len(custom_exact) > 1:
+            labels = sorted({x.get("label") for x in custom_exact if x.get("label")})
+            return None, f"Ambiguous key '{raw_key}'. Matches: {', '.join(labels[:8])}"
+
+        exact = _unique_entries(alias_map.get(key) or [])
+        if len(exact) == 1:
+            return exact[0], None
+        if len(exact) > 1:
+            labels = sorted({x.get("label") for x in exact if x.get("label")})
+            return None, f"Ambiguous key '{raw_key}'. Matches: {', '.join(labels[:8])}"
+
+        partial_candidates: list[dict] = []
+        for alias, items in alias_map.items():
+            if key in alias or alias in key:
+                partial_candidates.extend(items)
+        partial = _unique_entries(partial_candidates)
+        if len(partial) == 1:
+            return partial[0], None
+        if len(partial) > 1:
+            labels = sorted({x.get("label") for x in partial if x.get("label")})
+            return None, f"Ambiguous key '{raw_key}'. Matches: {', '.join(labels[:8])}"
+
+        sample = ", ".join(sorted(all_labels)[:8])
+        return None, f"No workout day matched '{raw_key}'. Try one of: {sample}"
+
     @login_required
     def shortcut_recommend_url():
         token = _make_shortcut_token(current_user.id)
         shortcut_url = url_for('shortcut_recommend', token=token, _external=True)
         return jsonify({"ok": True, "url": shortcut_url})
+
+    @login_required
+    def shortcut_pick_url():
+        if not current_user.is_admin():
+            return jsonify({"ok": False, "error": "Shortcut picker is currently admin-only."}), 403
+        token = _make_shortcut_pick_token(current_user.id)
+        shortcut_url = url_for('shortcut_pick', token=token, _external=True)
+        return jsonify({"ok": True, "url": shortcut_url, "query_param": "key"})
+
+    @login_required
+    def shortcut_log_url():
+        token = _make_shortcut_log_token(current_user.id)
+        shortcut_url = url_for('shortcut_log', token=token, _external=True)
+        return jsonify(
+            {
+                "ok": True,
+                "url": shortcut_url,
+                "method": "POST",
+                "body_param": "workout_text",
+            }
+        )
 
     def shortcut_recommend(token):
         try:
@@ -2021,6 +2307,201 @@ def register_workout_routes(app):
         day_id = reco_payload.get("day_id")
         output, _, _ = generate_retrieve_output(Session, user, category, day_id)
         return Response(str(output), mimetype="text/plain")
+
+    def shortcut_pick(token):
+        try:
+            payload = _load_shortcut_pick_token(token)
+            user_id = payload.get("user_id")
+            if not user_id:
+                raise BadSignature("Missing user")
+            user = Session.query(User).get(user_id)
+            if not user:
+                raise BadSignature("Unknown user")
+        except BadSignature:
+            return Response("Invalid shortcut token.", status=401, mimetype="text/plain")
+        except Exception as e:
+            logger.error(f"Shortcut token error: {e}", exc_info=True)
+            return Response("Invalid shortcut token.", status=401, mimetype="text/plain")
+
+        if not user.is_admin():
+            return Response("Shortcut picker is currently admin-only.", status=403, mimetype="text/plain")
+
+        raw_key = str(request.args.get("key") or request.args.get("session") or request.args.get("word") or "").strip()
+        if len(raw_key) > 140:
+            raw_key = raw_key[:140]
+        if not raw_key:
+            return Response("Missing key. Pass ?key=<session-name-or-day>.", status=400, mimetype="text/plain")
+
+        picked_day, error = _resolve_shortcut_pick_day(user, raw_key)
+        if error:
+            return Response(str(error), status=400, mimetype="text/plain")
+
+        category = picked_day.get("category")
+        day_id = picked_day.get("day_id")
+        output, _, _ = generate_retrieve_output(Session, user, category, day_id)
+        return Response(str(output), mimetype="text/plain")
+
+    def shortcut_log(token):
+        try:
+            payload = _load_shortcut_log_token(token)
+            user_id = payload.get("user_id")
+            if not user_id:
+                raise BadSignature("Missing user")
+            user = Session.query(User).get(user_id)
+            if not user:
+                raise BadSignature("Unknown user")
+        except BadSignature:
+            return jsonify({"ok": False, "error": "Invalid shortcut token."})
+        except Exception as e:
+            logger.error(f"Shortcut token error: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": "Invalid shortcut token."})
+
+        raw_text = ""
+        source = "none"
+        try:
+            if request.method == 'POST':
+                raw_text = str(request.form.get("workout_text") or "").strip()
+                if raw_text:
+                    source = "form.workout_text"
+                if not raw_text:
+                    raw_text = str(request.form.get("text") or request.form.get("note") or "").strip()
+                    if raw_text:
+                        source = "form.text_or_note"
+                if not raw_text and request.form:
+                    values = [str(v or "").strip() for v in request.form.values()]
+                    values = [v for v in values if v]
+                    if values:
+                        raw_text = max(values, key=len)
+                        source = "form.any"
+                if not raw_text and request.is_json:
+                    payload_json = request.get_json(silent=True)
+                    if isinstance(payload_json, dict):
+                        raw_text = str(
+                            payload_json.get("workout_text")
+                            or payload_json.get("text")
+                            or payload_json.get("note")
+                            or ""
+                        ).strip()
+                        if raw_text:
+                            source = "json.named"
+                    if not raw_text:
+                        str_values = [
+                            str(v or "").strip()
+                            for v in payload_json.values()
+                            if isinstance(v, (str, int, float))
+                        ] if isinstance(payload_json, dict) else []
+                        str_values = [v for v in str_values if v]
+                        if str_values:
+                            raw_text = max(str_values, key=len)
+                            source = "json.any"
+                content_type = (request.content_type or "").lower()
+                if not raw_text and content_type.startswith("text/plain"):
+                    raw_text = str(request.get_data(as_text=True) or "").strip()
+                    if raw_text:
+                        source = "raw.text_plain"
+            else:
+                raw_text = str(
+                    request.args.get("workout_text")
+                    or request.args.get("text")
+                    or request.args.get("note")
+                    or ""
+                ).strip()
+                if raw_text:
+                    source = "query"
+        except Exception:
+            raw_text = ""
+            source = "error"
+
+        if len(raw_text) > 60000:
+            raw_text = raw_text[:60000]
+
+        result, error = _parse_and_save_workout_text(user, raw_text)
+        if error:
+            return jsonify(
+                {
+                    "ok": False,
+                    "error": error,
+                    "received_chars": len(raw_text),
+                    "input_source": source,
+                }
+            )
+
+        date_str = result.get("date_str")
+        detail_url = url_for('view_workout', date_str=date_str, _external=True)
+        return jsonify(
+            {
+                "ok": True,
+                "date": date_str,
+                "exercise_count": int(result.get("exercise_count") or 0),
+                "set_count": int(result.get("set_count") or 0),
+                "result_url": detail_url,
+                "bodyweight_hint": bool(result.get("needs_bodyweight_info")),
+                "input_source": source,
+                "already_exists": bool(result.get("already_exists")),
+                "message": result.get("message") or (
+                    "Workout already there." if result.get("already_exists") else "Workout logged successfully."
+                ),
+            }
+        )
+
+    @login_required
+    def shortcut_key_map_settings():
+        user = current_user
+        if not user.is_admin():
+            flash("Access denied. Admin privileges required.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+
+        rows = _build_shortcut_plan_day_rows(user)
+        if request.method == 'POST':
+            try:
+                tokens = request.form.getlist("day_token")
+                keys = request.form.getlist("day_key")
+                mapping: dict[str, str] = {}
+                seen_keys: dict[str, str] = {}
+                allowed_tokens = {str(r.get("token")) for r in rows}
+
+                for idx, token in enumerate(tokens):
+                    tok = str(token or "").strip()
+                    if not tok or tok not in allowed_tokens:
+                        continue
+                    val = str(keys[idx] if idx < len(keys) else "").strip()
+                    if not val:
+                        continue
+                    val = val[:120]
+                    norm = _normalize_shortcut_key(val)
+                    if not norm:
+                        continue
+                    prev = seen_keys.get(norm)
+                    if prev and prev != tok:
+                        flash("Each shortcut key must be unique across sessions/days.", "error")
+                        return redirect(url_for('shortcut_key_map_settings'))
+                    seen_keys[norm] = tok
+                    mapping[tok] = val
+
+                row = Session.query(ShortcutKeyMap).filter_by(user_id=user.id).first()
+                if not row:
+                    row = ShortcutKeyMap(user_id=user.id, text_content="")
+                    Session.add(row)
+                row.text_content = json.dumps(mapping, ensure_ascii=False, separators=(",", ":"))
+                row.updated_at = datetime.now()
+                Session.commit()
+                flash("Shortcut key mapping updated.", "success")
+                return redirect(url_for('shortcut_key_map_settings'))
+            except Exception as e:
+                Session.rollback()
+                logger.error(f"Shortcut key mapping update failed: {e}", exc_info=True)
+                flash("Failed to update shortcut key mapping.", "error")
+                return redirect(url_for('shortcut_key_map_settings'))
+
+        custom_map = _load_shortcut_key_map(user)
+        for row in rows:
+            token = str(row.get("token"))
+            row["custom_key"] = custom_map.get(token) or str(row.get("default_key") or "")
+
+        return render_template(
+            'shortcut_key_map.html',
+            rows=rows,
+        )
 
     def shared_workout(token):
         try:
@@ -2259,37 +2740,39 @@ def register_workout_routes(app):
             flash("Error deleting selected workouts.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
 
-    @login_required
-    def log_workout():
-        user = current_user
-
-        if request.method == 'GET':
-            return render_template('log.html', exercise_list=list_of_exercises)
-
-        raw_text = request.form.get('workout_text', '').strip()
-
-        if not raw_text:
-            flash("Please enter workout data.", "error")
-            return redirect(url_for('log_workout'))
+    def _parse_and_save_workout_text(user, raw_text: str):
+        text = str(raw_text or "").strip()
+        if not text:
+            return None, "Please enter workout data."
 
         try:
-            parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
+            parsed = workout_parser(text, bodyweight=user.bodyweight)
             if not parsed:
-                raise ParsingError(
-                    "Could not parse workout data. Please check the format."
-                )
-            if user.bodyweight is None and re.search(r'\bbw[+-]?\d*\b', raw_text, re.IGNORECASE):
-                flash(
-                    "Set your bodyweight in Settings to calculate BW loads accurately.",
-                    "info",
-                )
+                raise ParsingError("Could not parse workout data. Please check the format.")
         except ParsingError as e:
-            flash(str(e), "error")
-            return redirect(url_for('log_workout'))
+            return None, str(e)
         except Exception as e:
             logger.error(f"Parsing error: {e}", exc_info=True)
-            flash("Error parsing workout data. Please check the format.", "error")
-            return redirect(url_for('log_workout'))
+            return None, "Error parsing workout data. Please check the format."
+
+        needs_bodyweight_info = bool(
+            user.bodyweight is None and re.search(r'\bbw[+-]?\d*\b', text, re.IGNORECASE)
+        )
+
+        parsed_date = parsed.get('date')
+        if parsed_date:
+            existing_log = _find_existing_workout_for_day(user.id, parsed_date)
+            if existing_log:
+                existing_day, _, _ = _workout_day_bounds(existing_log.date)
+                return {
+                    "summary": [],
+                    "date_str": existing_day.strftime('%Y-%m-%d'),
+                    "exercise_count": 0,
+                    "set_count": 0,
+                    "needs_bodyweight_info": needs_bodyweight_info,
+                    "already_exists": True,
+                    "message": "Workout already there.",
+                }, None
 
         try:
             summary = handle_workout_log(Session, user, parsed)
@@ -2303,25 +2786,58 @@ def register_workout_routes(app):
             logger.info(
                 f"Workout logged successfully for user {user.username} on {parsed['date']}"
             )
-
-            return render_template(
-                'result.html',
-                summary=summary,
-                date=parsed['date'].strftime('%Y-%m-%d'),
-                exercise_count=exercise_count,
-                set_count=set_count,
-            )
+            return {
+                "summary": summary,
+                "date_str": parsed['date'].strftime('%Y-%m-%d'),
+                "exercise_count": exercise_count,
+                "set_count": set_count,
+                "needs_bodyweight_info": needs_bodyweight_info,
+                "already_exists": False,
+            }, None
         except Exception as e:
             Session.rollback()
             logger.error(f"Error saving workout: {e}", exc_info=True)
-            flash("Error saving workout. Please try again.", "error")
+            return None, "Error saving workout. Please try again."
+
+    @login_required
+    def log_workout():
+        user = current_user
+
+        if request.method == 'GET':
+            return render_template('log.html', exercise_list=list_of_exercises)
+
+        raw_text = request.form.get('workout_text', '').strip()
+        result, error = _parse_and_save_workout_text(user, raw_text)
+        if error:
+            flash(str(error), "error")
             return redirect(url_for('log_workout'))
+        if result.get("already_exists"):
+            flash(result.get("message") or "Workout already there.", "info")
+            return redirect(url_for('view_workout', date_str=result.get("date_str")))
+        if result.get("needs_bodyweight_info"):
+            flash(
+                "Set your bodyweight in Settings to calculate BW loads accurately.",
+                "info",
+            )
+
+        return render_template(
+            'result.html',
+            summary=result.get("summary") or [],
+            date=result.get("date_str"),
+            exercise_count=int(result.get("exercise_count") or 0),
+            set_count=int(result.get("set_count") or 0),
+        )
 
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
     app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])
     app.add_url_rule('/share/<token>', endpoint='shared_workout', view_func=shared_workout, methods=['GET'])
     app.add_url_rule('/shortcut/recommend', endpoint='shortcut_recommend_url', view_func=shortcut_recommend_url, methods=['GET'])
     app.add_url_rule('/shortcut/recommend/<token>', endpoint='shortcut_recommend', view_func=shortcut_recommend, methods=['GET'])
+    app.add_url_rule('/shortcut/pick', endpoint='shortcut_pick_url', view_func=shortcut_pick_url, methods=['GET'])
+    app.add_url_rule('/shortcut/pick/<token>', endpoint='shortcut_pick', view_func=shortcut_pick, methods=['GET'])
+    app.add_url_rule('/shortcut/log', endpoint='shortcut_log_url', view_func=shortcut_log_url, methods=['GET'])
+    app.add_url_rule('/shortcut/log/<token>', endpoint='shortcut_log', view_func=shortcut_log, methods=['GET', 'POST'])
+    app.add_url_rule('/shortcut/mapping', endpoint='shortcut_key_map_settings', view_func=shortcut_key_map_settings, methods=['GET', 'POST'])
     app.add_url_rule(
         '/<username>',
         endpoint='user_dashboard',

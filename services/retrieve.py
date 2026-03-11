@@ -303,55 +303,30 @@ def _format_weight_token(exercise: str, weight, bodyweight, *, force_bw: bool = 
         return token
 
     try:
+        weight_value = float(weight)
+    except Exception:
+        return token
+
+    try:
         bw_logged = float(bodyweight) if bodyweight is not None else None
     except Exception:
         bw_logged = None
 
     try:
-        bw_current = float(current_bodyweight) if current_bodyweight is not None else bw_logged
+        bw_current = float(current_bodyweight) if current_bodyweight is not None else None
     except Exception:
-        bw_current = bw_logged
+        bw_current = None
 
-    if bw_logged is None:
-        bw_logged = bw_current
-
-    if bw_logged is None:
+    base_bw = bw_current if bw_current is not None else bw_logged
+    if base_bw is None:
         return token
 
-    candidates = [
-        ("bw", bw_logged),
-        ("bw/2", bw_logged / 2.0 if bw_logged else 0.0),
-        ("bw/4", bw_logged / 4.0 if bw_logged else 0.0),
-    ]
-    matched_label = None
-    for label, value in candidates:
-        if not value:
-            continue
-        if abs(float(weight) - value) <= abs(value) * 0.02:
-            matched_label = label
-            break
-
-    if matched_label is None:
-        return token
-
-    if bw_current is None or bw_logged is None:
-        return matched_label
-
-    if matched_label == "bw":
-        offset = bw_current - bw_logged
-    elif matched_label == "bw/2":
-        offset = bw_current / 2.0 - bw_logged / 2.0
-    elif matched_label == "bw/4":
-        offset = bw_current / 4.0 - bw_logged / 4.0
-    else:
-        return matched_label
-
+    offset = weight_value - base_bw
     if abs(offset) < 0.05:
-        return matched_label
-
+        return "bw"
     sign = "+" if offset > 0 else "-"
     offset_str = _format_value(abs(round(offset, 2)))
-    return f"{matched_label}{sign}{offset_str}"
+    return f"bw{sign}{offset_str}"
 
 
 def _build_best_sets_line_from_logs(

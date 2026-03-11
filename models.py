@@ -76,6 +76,7 @@ class User(Base):
     lifts = relationship("Lift", back_populates="user", cascade="all, delete-orphan")
     plan = relationship("Plan", uselist=False, back_populates="user", cascade="all, delete-orphan")
     rep_ranges = relationship("RepRange", uselist=False, back_populates="user", cascade="all, delete-orphan")
+    shortcut_key_map = relationship("ShortcutKeyMap", uselist=False, back_populates="user", cascade="all, delete-orphan")
     logs = relationship("WorkoutLog", back_populates="user", cascade="all, delete-orphan")
     api_keys = relationship("UserApiKey", back_populates="user", cascade="all, delete-orphan")
     
@@ -184,6 +185,20 @@ class RepRange(Base):
     
     def __repr__(self):
         return f"<RepRange(id={self.id}, user_id={self.user_id})>"
+
+
+# --- 4B. SHORTCUT KEY MAPPINGS TABLE ---
+class ShortcutKeyMap(Base):
+    __tablename__ = 'shortcut_key_maps'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), unique=True, nullable=False, index=True)
+    text_content = Column(Text)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    user = relationship("User", back_populates="shortcut_key_map")
+
+    def __repr__(self):
+        return f"<ShortcutKeyMap(id={self.id}, user_id={self.user_id})>"
 
 
 # --- 5. HISTORY TABLE (New) ---
@@ -407,6 +422,9 @@ def migrate_schema():
                 if 'account_label' not in key_columns:
                     conn.execute(text("ALTER TABLE user_api_keys ADD COLUMN account_label VARCHAR(100)"))
 
+            if 'shortcut_key_maps' not in inspector.get_table_names():
+                ShortcutKeyMap.__table__.create(bind=conn, checkfirst=True)
+
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
 
@@ -599,3 +617,7 @@ def _seed_user_data(session, user):
         for ex, rng in DEFAULT_REP_RANGES.items():
             default_rep_text += f"{ex}: {rng}\n"
         session.add(RepRange(user_id=user.id, text_content=default_rep_text))
+
+    existing_shortcut_map = session.query(ShortcutKeyMap).filter(ShortcutKeyMap.user_id == user.id).first()
+    if not existing_shortcut_map:
+        session.add(ShortcutKeyMap(user_id=user.id, text_content=""))

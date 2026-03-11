@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-10">
+        <div class="card">
+            <div class="text-center mb-4">
+                <div class="mb-3">
+                    <i class="bi bi-grid-3x3-gap" style="font-size: clamp(2.75rem, 8vw, 3.5rem); color: var(--gold-primary); opacity: 0.65;"></i>
+                </div>
+                <h2 class="fw-bold mb-2" style="font-size: clamp(1.4rem, 5vw, 2rem);">Shortcut Session Mapping</h2>
+                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Set custom shortcut words for each workout day/session.</p>
+            </div>
+
+            <div class="shortcut-note mb-4">
+                <div class="d-flex align-items-start gap-2">
+                    <i class="bi bi-info-circle text-gold mt-1"></i>
+                    <div class="text-muted" style="font-size: var(--fs-xs); line-height: 1.55;">
+                        Custom keys take priority over automatic matching in <code>/shortcut/pick/&lt;token&gt;?key=...</code>.
+                        Matching is case-insensitive and ignores punctuation.
+                    </div>
+                </div>
+            </div>
+
+            {% if rows %}
+            <form method="POST" action="{{ url_for('shortcut_key_map_settings') }}">
+                <div class="table-responsive">
+                    <table class="table table-borderless align-middle mb-3 mapping-table">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="text-muted" style="font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase;">Workout Day</th>
+                                <th scope="col" class="text-muted" style="font-size: var(--fs-xs); letter-spacing: 0.06em; text-transform: uppercase;">Custom Shortcut Key</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in rows %}
+                            <tr>
+                                <td>
+                                    <div class="fw-semibold">{{ row.label }}</div>
+                                    <div class="text-muted" style="font-size: var(--fs-xs);">{{ row.category }} {{ row.day_id }}</div>
+                                </td>
+                                <td>
+                                    <input type="hidden" name="day_token" value="{{ row.token }}">
+                                    <input
+                                        type="text"
+                                        name="day_key"
+                                        class="form-control"
+                                        value="{{ row.custom_key }}"
+                                        maxlength="120"
+                                        placeholder="e.g. chest, push, session 1"
+                                        autocomplete="off"
+                                    >
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="d-flex flex-column flex-md-row gap-2 mt-4">
+                    <button type="submit" class="btn btn-gold-solid flex-fill">
+                        <i class="bi bi-check-circle-fill me-2"></i>Save Mapping
+                    </button>
+                    <a href="{{ url_for('user_settings') }}#quick-actions" class="btn btn-gold-outline flex-fill">
+                        <i class="bi bi-arrow-left me-2"></i>Back to Settings
+                    </a>
+                </div>
+            </form>
+            {% else %}
+            <div class="text-center py-3">
+                <p class="text-muted mb-3">No workout days found in the current plan.</p>
+                <a href="{{ url_for('set_plan') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-journal-text me-2"></i>Edit Plan
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<style>
+    .shortcut-note {
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 0.9rem 1rem;
+        background: rgba(212, 175, 55, 0.08);
+    }
+
+    .mapping-table th,
+    .mapping-table td {
+        padding-top: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .mapping-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    [data-theme="light"] .shortcut-note {
+        background: rgba(201, 169, 97, 0.1);
+    }
+</style>
+{% endblock %}

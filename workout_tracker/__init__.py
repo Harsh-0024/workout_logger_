@@ -40,8 +40,9 @@ def create_app(config_object=Config, init_db: bool = True):
     app.secret_key = app.config['SECRET_KEY']
 
     app.config.setdefault('WTF_CSRF_ENABLED', bool(getattr(config_object, 'ENABLE_CSRF', False)))
+    csrf = None
     if app.config.get('WTF_CSRF_ENABLED'):
-        CSRFProtect(app)
+        csrf = CSRFProtect(app)
 
     @app.context_processor
     def inject_feature_flags():
@@ -90,6 +91,14 @@ def create_app(config_object=Config, init_db: bool = True):
     register_workout_routes(app)
     register_stats_routes(app)
     register_plan_routes(app)
+
+    if csrf is not None:
+        try:
+            shortcut_log_view = app.view_functions.get('shortcut_log')
+            if shortcut_log_view is not None:
+                csrf.exempt(shortcut_log_view)
+        except Exception:
+            logger.error("Failed to exempt shortcut_log from CSRF", exc_info=True)
 
     @app.template_filter('url_encode')
     def url_encode_filter(s):
