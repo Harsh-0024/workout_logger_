@@ -22,7 +22,9 @@ class Config:
     
     # App Settings
     DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'
-    PORT = int(os.environ.get('PORT', 5001))
+    # Elastic Beanstalk's nginx proxy expects the web process on 8000 unless
+    # a different PORT is explicitly injected into the environment.
+    PORT = int(os.environ.get('PORT', 8000))
     HOST = os.environ.get('HOST', '0.0.0.0')
     
     # Feature Flags
