@@ -31,6 +31,7 @@ def health_check():
             git_sha = v
             break
 
+
     def _sha256_file(path: str) -> str | None:
         try:
             h = hashlib.sha256()
