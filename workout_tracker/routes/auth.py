@@ -70,8 +70,9 @@ def register_auth_routes(app, email_service):
         return ext in {'png', 'jpg', 'jpeg', 'webp'}
 
     def _save_profile_image(user_id: int, file_storage) -> str:
-        uploads_dir = Path(app.static_folder) / 'uploads' / 'avatars'
-        uploads_dir.mkdir(parents=True, exist_ok=True)
+        import boto3
+        import os
+        from io import BytesIO
 
         filename = secure_filename(file_storage.filename or '')
         if not _is_allowed_profile_image(filename):
@@ -80,15 +81,29 @@ def register_auth_routes(app, email_service):
         image = Image.open(file_storage.stream)
         image = ImageOps.exif_transpose(image)
         image = image.convert('RGB')
-
         size = 320
         image = ImageOps.fit(image, (size, size), Image.LANCZOS)
 
-        output_name = f"user_{user_id}.png"
-        output_path = uploads_dir / output_name
-        image.save(output_path, format='PNG', optimize=True)
+        output_name = f"avatars/user_{user_id}.png"
+        buffer = BytesIO()
+        image.save(buffer, format='PNG', optimize=True)
+        buffer.seek(0)
 
-        return f"uploads/avatars/{output_name}"
+        s3 = boto3.client(
+            's3',
+            aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+            aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+            region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
+        )
+        bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+        s3.put_object(
+            Bucket=bucket,
+            Key=output_name,
+            Body=buffer,
+            ContentType='image/png',
+        )
+
+        return output_name
 
     def _enforce_rate_limit(action: str, identifier: str | None, limit: int, window_seconds: int) -> None:
         if not app.config.get('ENABLE_RATE_LIMITING', False):
@@ -553,9 +568,15 @@ def register_auth_routes(app, email_service):
                 if form_type == 'remove_photo':
                     try:
                         if user.profile_image:
-                            photo_path = Path(app.static_folder) / user.profile_image
-                            if photo_path.exists():
-                                photo_path.unlink()
+                            import boto3, os
+                            s3 = boto3.client(
+                                's3',
+                                aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                                aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                                region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
+                            )
+                            bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+                            s3.delete_object(Bucket=bucket, Key=user.profile_image)
                         user.profile_image = None
                         user.updated_at = datetime.now()
                         Session.commit()
@@ -903,12 +924,10 @@ def register_auth_routes(app, email_service):
 
         profile_image_url = None
         if getattr(user, 'profile_image', None):
-            try:
-                image_path = Path(app.static_folder) / user.profile_image
-                if image_path.exists():
-                    profile_image_url = url_for('static', filename=user.profile_image)
-            except Exception:
-                profile_image_url = None
+            import os
+            bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+            region = os.environ.get('AWS_S3_REGION', 'ap-southeast-2')
+            profile_image_url = f"https://{bucket}.s3.{region}.amazonaws.com/{user.profile_image}"
 
         user_api_keys = (
             Session.query(UserApiKey)
