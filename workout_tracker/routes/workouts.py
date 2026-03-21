@@ -348,7 +348,10 @@ def register_workout_routes(app):
 
             profile_image_url = None
             if getattr(user, 'profile_image', None):
-                profile_image_url = url_for('static', filename=user.profile_image)
+                import os
+                bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+                region = os.environ.get('AWS_S3_REGION', 'ap-southeast-2')
+                profile_image_url = f"https://{bucket}.s3.{region}.amazonaws.com/{user.profile_image}"
 
             display_name = (user.full_name or user.username or '').strip()
             return render_template(
