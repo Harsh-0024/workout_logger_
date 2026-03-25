@@ -6,7 +6,11 @@ from models import Plan, RepRange, User, UserRole, WorkoutLog
 from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
 from services.best_scoring import best_workout_strength_score, coerce_equal_len_sets
 from services.workout_quality import WorkoutQualityScorer
-from services.exercise_matching import build_name_index, resolve_equivalent_names
+from services.exercise_matching import (
+    build_name_index,
+    normalize_exercise_name,
+    resolve_equivalent_names,
+)
 
 
 def _normalize_text(text: str) -> str:
@@ -168,17 +172,26 @@ def generate_retrieve_output(db_session, user, category, day_id):
         for line in rep_text.split('\n'):
             if ':' in line:
                 k, v = line.split(':', 1)
-                exercise_key = k.strip().lower()
+                exercise_key_raw = k.strip()
+                exercise_key = exercise_key_raw.lower()
+                exercise_key_norm = normalize_exercise_name(exercise_key_raw)
                 value = v.strip()
                 m = re.match(r'^(\d+)\s*,\s*(.+)$', value)
                 if m:
                     try:
-                        custom_sets[exercise_key] = int(m.group(1))
+                        set_count = int(m.group(1))
                     except Exception:
-                        custom_sets[exercise_key] = None
-                    custom_ranges[exercise_key] = m.group(2).strip()
+                        set_count = None
+                    range_value = m.group(2).strip()
+                    custom_sets[exercise_key] = set_count
+                    custom_ranges[exercise_key] = range_value
+                    if exercise_key_norm:
+                        custom_sets[exercise_key_norm] = set_count
+                        custom_ranges[exercise_key_norm] = range_value
                 else:
                     custom_ranges[exercise_key] = value
+                    if exercise_key_norm:
+                        custom_ranges[exercise_key_norm] = value
 
     ist_offset = timedelta(hours=5, minutes=30)
     today_str = (datetime.utcnow() + ist_offset).strftime("%d/%m")
@@ -198,8 +211,13 @@ def generate_retrieve_output(db_session, user, category, day_id):
         
         for ex in exercises:
             ex_key = ex.lower()
+            ex_key_norm = normalize_exercise_name(ex)
             rng = custom_ranges.get(ex_key, "")
+            if not rng and ex_key_norm:
+                rng = custom_ranges.get(ex_key_norm, "")
             declared_sets = custom_sets.get(ex_key)
+            if declared_sets is None and ex_key_norm:
+                declared_sets = custom_sets.get(ex_key_norm)
             fmt_rng = ""
             if rng and declared_sets:
                 fmt_rng = f" - [{declared_sets}, {rng}]"
@@ -293,12 +311,22 @@ def _is_bw_exercise(exercise: str) -> bool:
     return False
 
 
-def _format_weight_token(exercise: str, weight, bodyweight, *, force_bw: bool = False, current_bodyweight=None):
+def _format_weight_token(
+    exercise: str,
+    weight,
+    bodyweight,
+    *,
+    force_bw: bool = False,
+    current_bodyweight=None,
+    render_as_bw: bool = False,
+):
     token = _format_value(weight)
     if not _is_bw_exercise(exercise):
         return token
     if force_bw:
         return 'bw'
+    if not render_as_bw:
+        return token
     if bodyweight is None and current_bodyweight is None:
         return token
 
@@ -390,9 +418,7 @@ def _build_best_sets_line_from_logs(
         ),
     )
 
-    use_bw_format = False
-    if best_log.exercise_string and "bw" in best_log.exercise_string.lower():
-        use_bw_format = True
+    use_bw_format = _log_uses_bw_notation(best_log, exercise)
 
     sets_json = best_log.sets_json if isinstance(best_log.sets_json, dict) else None
     if not sets_json:
@@ -437,6 +463,7 @@ def _build_best_sets_line_from_logs(
             log_bodyweight or current_bodyweight,
             force_bw=False,
             current_bodyweight=current_bodyweight,
+            render_as_bw=use_bw_format,
         )
         for w in weights_top
     ]
@@ -499,6 +526,19 @@ def _extract_sets_line(best_string: str, exercise: str) -> str:
         if tail:
             return tail
     return trimmed
+
+
+def _log_uses_bw_notation(log, exercise: str) -> bool:
+    sets_line = _extract_sets_line(getattr(log, "exercise_string", ""), exercise)
+    if not sets_line:
+        return False
+    return bool(
+        re.search(
+            r"\bbw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?\b",
+            sets_line,
+            flags=re.IGNORECASE,
+        )
+    )
 
 
 def _normalize_bw(value: str) -> str:
