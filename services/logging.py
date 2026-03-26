@@ -2,7 +2,7 @@
 Workout logging service for processing and saving workout data.
 """
 from typing import List, Dict, Optional
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import re
 
 from models import Lift, RepRange, WorkoutLog
@@ -437,3 +437,201 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
         summary.append(row)
 
     return summary
+
+
+def _get_best_log_before_date(
+    db_session,
+    user_id: int,
+    exercise_name: str,
+    *,
+    target_sets: int = 3,
+    log_ex_index=None,
+    is_timed: bool = False,
+    workout_day_start_dt: Optional[datetime] = None,
+) -> Optional[WorkoutLog]:
+    """
+    Like `_get_best_log`, but only considers logs strictly before `workout_day_start_dt`.
+    Used to recreate "previous best" for the session summary page.
+    """
+    if workout_day_start_dt is None:
+        return None
+
+    candidates = resolve_equivalent_names(exercise_name, log_ex_index) if log_ex_index else []
+    if not candidates:
+        candidates = _exercise_candidates(exercise_name)
+    if not candidates:
+        return None
+
+    required_sets = int(target_sets) if isinstance(target_sets, int) and target_sets > 0 else 3
+
+    logs = (
+        db_session.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user_id)
+        .filter(WorkoutLog.exercise.in_(candidates))
+        .filter(WorkoutLog.date < workout_day_start_dt)
+        .all()
+    )
+    if not logs:
+        return None
+
+    preferred = []
+    fallback = []
+
+    for log in logs:
+        normalized_sets = _normalize_sets(log.sets_json)
+        if not normalized_sets:
+            continue
+
+        if is_timed:
+            metrics = best_workout_timed_score(normalized_sets, top_n=required_sets)
+        else:
+            metrics = best_workout_strength_score(normalized_sets, top_n=required_sets)
+
+        score = float(metrics.get("score") or 0.0)
+        set_count = int(metrics.get("set_count") or 0)
+        if score <= 0:
+            continue
+
+        row = (log, score, set_count)
+        if set_count >= required_sets:
+            preferred.append(row)
+        else:
+            fallback.append(row)
+
+    pool = preferred if preferred else fallback
+    if not pool:
+        return None
+
+    best_log, _, _ = max(
+        pool,
+        key=lambda row: (
+            row[1],
+            row[2],
+            getattr(row[0], "date", datetime.min),
+        ),
+    )
+    return best_log
+
+
+def compute_workout_summary_for_date(db_session, user, workout_date: date | datetime) -> tuple[list[Dict], int, int]:
+    """
+    Build the `summary` rows that `templates/result.html` expects, for an already-logged day.
+    This recreates the "previous best vs today's performance" session summary without mutating history.
+    """
+    workout_day = workout_date.date() if isinstance(workout_date, datetime) else workout_date
+    workout_day_start_dt = datetime.combine(workout_day, datetime.min.time())
+    workout_day_end_dt = workout_day_start_dt + timedelta(days=1)
+
+    logs = (
+        db_session.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user.id)
+        .filter(WorkoutLog.date >= workout_day_start_dt)
+        .filter(WorkoutLog.date < workout_day_end_dt)
+        .order_by(WorkoutLog.id)
+        .all()
+    )
+    if not logs:
+        return [], 0, 0
+
+    rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
+    rep_target_sets = _parse_rep_target_sets(rep_row.text_content if rep_row else "")
+
+    distinct_exercises: list[str] = []
+    seen: set[str] = set()
+    unique_logs: list[WorkoutLog] = []
+    for log in logs:
+        if log.exercise in seen:
+            continue
+        seen.add(log.exercise)
+        unique_logs.append(log)
+        distinct_exercises.append(log.exercise)
+
+    # Use the full user's distinct exercise list for conservative aliasing,
+    # matching the behavior of `handle_workout_log`.
+    distinct_logs = (
+        db_session.query(WorkoutLog.exercise)
+        .filter(WorkoutLog.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    log_ex_index = build_name_index([row[0] for row in distinct_logs or []])
+
+    summary: list[Dict] = []
+    exercise_count = len(unique_logs)
+    set_count = 0
+
+    for log in unique_logs:
+        ex_name = log.exercise
+        target_sets = int(rep_target_sets.get(normalize_exercise_name(ex_name or ""), 3) or 3)
+
+        new_sets = _normalize_sets(log.sets_json)
+        valid = bool(new_sets)
+        has_explicit_hint = _has_time_hint_in_exercise_string(getattr(log, "exercise_string", "") or "")
+        time_based = has_explicit_hint or (
+            (not has_explicit_hint) and _has_time_history(db_session, user.id, ex_name, log_ex_index=log_ex_index)
+        )
+
+        formatted_display = _format_sets_display(new_sets) if valid else (getattr(log, "exercise_string", "") or "")
+
+        row = {
+            "name": ex_name,
+            "old": "-",
+            "new": formatted_display,
+            "status": "-",
+            "class": "neutral",
+            "valid": valid,
+            "is_timed": time_based if valid else False,
+        }
+
+        if valid:
+            if time_based:
+                p_peak, p_sum, p_vol = get_timed_set_stats(new_sets)
+            else:
+                p_peak, p_sum, p_vol = get_set_stats(new_sets)
+
+            best_log = _get_best_log_before_date(
+                db_session,
+                user.id,
+                ex_name,
+                target_sets=target_sets,
+                log_ex_index=log_ex_index,
+                is_timed=time_based,
+                workout_day_start_dt=workout_day_start_dt,
+            )
+            best_log_sets = _normalize_sets(best_log.sets_json) if best_log else None
+
+            if best_log_sets:
+                row["old"] = _format_best_string(best_log)
+
+                if time_based:
+                    r_peak, r_sum, r_vol = get_timed_set_stats(best_log_sets)
+                    r_score = float(best_workout_timed_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
+                    p_score = float(best_workout_timed_score(new_sets, top_n=target_sets).get("score") or 0.0)
+                else:
+                    r_peak, r_sum, r_vol = get_set_stats(best_log_sets)
+                    r_score = float(best_workout_strength_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
+                    p_score = float(best_workout_strength_score(new_sets, top_n=target_sets).get("score") or 0.0)
+
+                if p_peak > r_peak:
+                    diff = p_peak - r_peak
+                    row["status"] = f"PEAK (+{diff:.1f})"
+                    row["class"] = "improved"
+                elif p_score > r_score:
+                    row["status"] = "CONSISTENCY"
+                    row["class"] = "improved"
+            else:
+                row["old"] = "First Log"
+                row["status"] = "NEW"
+                row["class"] = "new"
+
+            if isinstance(log.sets_json, dict):
+                weights = log.sets_json.get("weights") or []
+                reps = log.sets_json.get("reps") or []
+                try:
+                    set_count += max(len(weights), len(reps))
+                except Exception:
+                    pass
+
+        summary.append(row)
+
+    return summary, exercise_count, set_count

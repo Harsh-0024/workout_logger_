@@ -13,7 +13,7 @@ from sqlalchemy import desc, func
 from list_of_exercise import get_workout_days, list_of_exercises
 from models import Session, User, WorkoutLog, UserApiKey, ShortcutKeyMap
 from parsers.workout import workout_parser, parse_bw_weight
-from services.logging import handle_workout_log
+from services.logging import handle_workout_log, compute_workout_summary_for_date
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
@@ -480,6 +480,28 @@ def register_workout_routes(app):
             logger.error(f"Error viewing workout: {e}", exc_info=True)
             flash("Error loading workout.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
+
+    @login_required
+    def workout_summary(date_str):
+        user = current_user
+        try:
+            workout_day = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            flash("Invalid date format.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+
+        summary, exercise_count, set_count = compute_workout_summary_for_date(Session, user, workout_day)
+        if not summary:
+            flash("Workout not found.", "error")
+            return redirect(url_for('user_dashboard', username=user.username))
+
+        return render_template(
+            'result.html',
+            summary=summary,
+            date=date_str,
+            exercise_count=int(exercise_count or 0),
+            set_count=int(set_count or 0),
+        )
 
     @login_required
     def workout_history():
@@ -2430,7 +2452,7 @@ def register_workout_routes(app):
             )
 
         date_str = result.get("date_str")
-        detail_url = url_for('view_workout', date_str=date_str, _external=True)
+        detail_url = url_for('workout_summary', date_str=date_str, _external=True)
         return jsonify(
             {
                 "ok": True,
@@ -2848,6 +2870,7 @@ def register_workout_routes(app):
         methods=['GET'],
     )
     app.add_url_rule('/workout/<date_str>', endpoint='view_workout', view_func=view_workout, methods=['GET'])
+    app.add_url_rule('/summary/<date_str>', endpoint='workout_summary', view_func=workout_summary, methods=['GET'])
     app.add_url_rule('/workout/<date_str>/edit', endpoint='edit_workout', view_func=edit_workout, methods=['GET', 'POST'])
     app.add_url_rule('/workout/<date_str>/delete', endpoint='delete_workout', view_func=delete_workout, methods=['POST'])
     app.add_url_rule('/workouts/delete-selected', endpoint='bulk_delete_workouts', view_func=bulk_delete_workouts, methods=['POST'])
