@@ -201,6 +201,16 @@ def classify_exercise_performance(
     ]
 
     if len(tie_group) > 1:
+        # If another workout is identical on load vector too, treat as consistent
+        # instead of awarding a load medal for a non-unique rank.
+        has_exact_load_tie = any(
+            row is not current_row
+            and _lex_compare_desc(row.get("weights") or [], current_row.get("weights") or []) == 0
+            for row in tie_group
+        )
+        if has_exact_load_tie:
+            return _performance_payload("consistent", summary_mode=summary_mode)
+
         weight_rank = 1 + sum(
             1
             for row in tie_group
