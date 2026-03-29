@@ -92,6 +92,142 @@ def best_workout_strength_score(
     }
 
 
+def _lexicographic_compare_desc(left: List[float], right: List[float], *, eps: float = 1e-9) -> Tuple[int, int | None]:
+    """
+    Compare two descending vectors lexicographically.
+
+    Returns:
+    - 1 if left wins
+    - -1 if right wins
+    - 0 if tied
+
+    Second return value is the first differing index, or None when tied.
+    """
+    limit = max(len(left), len(right))
+    for idx in range(limit):
+        lv = left[idx] if idx < len(left) else None
+        rv = right[idx] if idx < len(right) else None
+        if lv is None and rv is None:
+            return 0, None
+        if lv is None:
+            return -1, idx
+        if rv is None:
+            return 1, idx
+        if abs(float(lv) - float(rv)) <= eps:
+            continue
+        return (1, idx) if float(lv) > float(rv) else (-1, idx)
+    return 0, None
+
+
+def _strength_rank_vectors(
+    sets_json: Dict,
+    *,
+    top_n: int = 3,
+) -> Dict[str, List[float]]:
+    weights = sets_json.get("weights") or []
+    reps = sets_json.get("reps") or []
+    w, r = coerce_equal_len_sets(weights, reps)
+    if not w or not r:
+        return {"scores": [], "weights": []}
+
+    one_rms = [float(WorkoutQualityScorer.estimate_1rm(wi, ri) or 0.0) for wi, ri in zip(w, r)]
+    pairs = [(score, float(weight)) for score, weight in zip(one_rms, w) if score > 0 and weight > 0]
+    if not pairs:
+        return {"scores": [], "weights": []}
+
+    pairs.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    n = max(1, int(top_n) if isinstance(top_n, int) and top_n > 0 else 3)
+    top = pairs[: min(n, len(pairs))]
+    return {
+        "scores": [score for score, _weight in top],
+        "weights": sorted((weight for _score, weight in top), reverse=True),
+    }
+
+
+def _timed_rank_vectors(
+    sets_json: Dict,
+    *,
+    top_n: int = 3,
+) -> Dict[str, List[float]]:
+    weights = sets_json.get("weights") or []
+    reps = sets_json.get("reps") or []
+    w, r = coerce_equal_len_sets(weights, reps)
+    if not w or not r:
+        return {"scores": [], "weights": []}
+
+    timed_scores = [float(timed_set_score(wi, ri) or 0.0) for wi, ri in zip(w, r)]
+    pairs = [(score, float(weight)) for score, weight in zip(timed_scores, w) if score > 0 and weight > 0]
+    if not pairs:
+        return {"scores": [], "weights": []}
+
+    pairs.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    n = max(1, int(top_n) if isinstance(top_n, int) and top_n > 0 else 3)
+    top = pairs[: min(n, len(pairs))]
+    return {
+        "scores": [score for score, _weight in top],
+        "weights": sorted((weight for _score, weight in top), reverse=True),
+    }
+
+
+def _compare_rank_vectors(
+    previous: Dict[str, List[float]],
+    current: Dict[str, List[float]],
+) -> Dict[str, float | int | str | None]:
+    perf_cmp, perf_idx = _lexicographic_compare_desc(current.get("scores") or [], previous.get("scores") or [])
+    if perf_cmp != 0:
+        return {
+            "cmp": perf_cmp,
+            "reason": "peak" if perf_idx == 0 else "consistency",
+            "diff_index": perf_idx,
+            "diff": (
+                (current["scores"][perf_idx] - previous["scores"][perf_idx])
+                if perf_idx is not None
+                and perf_idx < len(current.get("scores") or [])
+                and perf_idx < len(previous.get("scores") or [])
+                else None
+            ),
+        }
+
+    weight_cmp, weight_idx = _lexicographic_compare_desc(current.get("weights") or [], previous.get("weights") or [])
+    if weight_cmp != 0:
+        return {
+            "cmp": weight_cmp,
+            "reason": "consistency",
+            "diff_index": weight_idx,
+            "diff": (
+                (current["weights"][weight_idx] - previous["weights"][weight_idx])
+                if weight_idx is not None
+                and weight_idx < len(current.get("weights") or [])
+                and weight_idx < len(previous.get("weights") or [])
+                else None
+            ),
+        }
+
+    return {"cmp": 0, "reason": "same", "diff_index": None, "diff": 0.0}
+
+
+def compare_strength_workouts(
+    previous_sets_json: Dict,
+    current_sets_json: Dict,
+    *,
+    top_n: int = 3,
+) -> Dict[str, float | int | str | None]:
+    """
+    Compare two strength workouts lexicographically:
+    1. best set
+    2. second-best set
+    3. third-best set
+    4. continue until a difference is found
+    5. if all tied, compare weights lexicographically
+    """
+    previous = _strength_rank_vectors(previous_sets_json or {}, top_n=top_n)
+    current = _strength_rank_vectors(current_sets_json or {}, top_n=top_n)
+    result = _compare_rank_vectors(previous, current)
+    result["previous"] = previous
+    result["current"] = current
+    return result
+
+
 def best_workout_timed_score(
     sets_json: Dict,
     *,
@@ -131,3 +267,17 @@ def best_workout_timed_score(
         "top_sum": top_sum,
         "set_count": float(len(r)),
     }
+
+
+def compare_timed_workouts(
+    previous_sets_json: Dict,
+    current_sets_json: Dict,
+    *,
+    top_n: int = 3,
+) -> Dict[str, float | int | str | None]:
+    previous = _timed_rank_vectors(previous_sets_json or {}, top_n=top_n)
+    current = _timed_rank_vectors(current_sets_json or {}, top_n=top_n)
+    result = _compare_rank_vectors(previous, current)
+    result["previous"] = previous
+    result["current"] = current
+    return result

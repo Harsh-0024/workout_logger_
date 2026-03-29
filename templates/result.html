@@ -3,6 +3,161 @@
 <div class="row justify-content-center">
     <div class="col-12">
         <div class="card">
+            <style>
+                .summary-table {
+                    table-layout: fixed;
+                    border-collapse: collapse;
+                    width: 100%;
+                }
+
+                .summary-table col.col-exercise {
+                    width: 34%;
+                }
+
+                .summary-table col.col-prev {
+                    width: 24%;
+                }
+
+                .summary-table col.col-today {
+                    width: 24%;
+                }
+
+                .summary-table col.col-status {
+                    width: 18%;
+                }
+
+                .summary-table thead th {
+                    padding: 14px 14px;
+                    border-bottom: 1px solid var(--border-subtle);
+                    font-size: 0.72rem;
+                    letter-spacing: 2px;
+                    text-transform: uppercase;
+                    color: var(--text-subtle);
+                    font-weight: 700;
+                }
+
+                .summary-table thead th.status-head {
+                    text-align: center;
+                }
+
+                .summary-table tbody td {
+                    padding: 16px 14px;
+                    border-bottom: 1px solid var(--border-subtle);
+                    vertical-align: middle;
+                }
+
+                .summary-table tbody td.status-cell {
+                    text-align: center;
+                }
+
+                .summary-exercise {
+                    display: inline-flex;
+                    align-items: center;
+                    gap: 10px;
+                    font-size: var(--fs-base);
+                    font-weight: 600;
+                }
+
+                .summary-sets {
+                    font-size: var(--fs-base);
+                    line-height: 1.45;
+                    letter-spacing: 0.2px;
+                    word-break: break-word;
+                }
+
+                .summary-sets-prev {
+                    color: var(--text-muted);
+                    font-weight: 500;
+                    font-size: var(--fs-sm);
+                    line-height: 1.45;
+                    word-break: break-word;
+                }
+
+                .perf-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 6px;
+                    width: 140px;
+                    height: 30px;
+                    padding: 0 6px;
+                    border-radius: 999px;
+                    border: 1px solid transparent;
+                    font-size: 0.76rem;
+                    letter-spacing: 0.2px;
+                    font-weight: 700;
+                    white-space: nowrap;
+                    text-align: center;
+                    box-sizing: border-box;
+                }
+
+                .perf-gold_strength,
+                .perf-gold_load,
+                .perf-first_log {
+                    color: #2b1c00;
+                    background: linear-gradient(135deg, #f4d03f 0%, #d4af37 100%);
+                    border-color: rgba(212, 175, 55, 0.75);
+                }
+
+                .perf-silver_strength,
+                .perf-silver_load {
+                    color: #111827;
+                    background: linear-gradient(135deg, #f2f3f5 0%, #c0c0c0 100%);
+                    border-color: rgba(192, 192, 192, 0.75);
+                }
+
+                .perf-bronze_strength,
+                .perf-bronze_load {
+                    color: #2f1304;
+                    background: linear-gradient(135deg, #d9a16a 0%, #cd7f32 100%);
+                    border-color: rgba(205, 127, 50, 0.75);
+                }
+
+                .perf-consistent {
+                    color: #e5e7eb;
+                    background: rgba(113, 113, 122, 0.28);
+                    border-color: rgba(113, 113, 122, 0.45);
+                }
+
+                .perf-slightly_off {
+                    color: #ffefcf;
+                    background: rgba(245, 158, 11, 0.22);
+                    border-color: rgba(245, 158, 11, 0.45);
+                }
+
+                .perf-moderately_off {
+                    color: #ffe3c2;
+                    background: rgba(239, 106, 0, 0.25);
+                    border-color: rgba(239, 106, 0, 0.5);
+                }
+
+                .perf-significantly_off {
+                    color: #ffe0e0;
+                    background: rgba(239, 68, 68, 0.25);
+                    border-color: rgba(239, 68, 68, 0.5);
+                }
+
+                [data-theme="light"] .perf-consistent {
+                    color: #44403c;
+                    background: rgba(113, 113, 122, 0.14);
+                }
+
+                [data-theme="light"] .perf-slightly_off {
+                    color: #8a4b02;
+                    background: rgba(245, 158, 11, 0.15);
+                }
+
+                [data-theme="light"] .perf-moderately_off {
+                    color: #8c3600;
+                    background: rgba(239, 106, 0, 0.16);
+                }
+
+                [data-theme="light"] .perf-significantly_off {
+                    color: #991b1b;
+                    background: rgba(239, 68, 68, 0.14);
+                }
+            </style>
+
             <div class="mb-4 mb-md-5 pb-3 pb-md-4 border-bottom" style="border-color: var(--border-subtle) !important;">
                 <div class="text-center text-md-start mb-3 mb-md-0">
                     <h2 class="fw-bold mb-2" style="font-size: clamp(1.5rem, 5vw, 2rem);">Session Summary</h2>
@@ -36,18 +191,8 @@
                         <div>
                             {% if not row.valid %}
                                 <span class="text-danger fw-bold small tracking-wide">CHECK FORMAT</span>
-                            {% elif 'PEAK' in row.status %}
-                                <span class="badge bg-success">
-                                    <i class="bi bi-trophy-fill me-1"></i>PEAK
-                                </span>
-                            {% elif 'CONSISTENCY' in row.status %}
-                                <span class="badge bg-info">
-                                    <i class="bi bi-check-circle-fill me-1"></i>CONSISTENCY
-                                </span>
-                            {% elif 'NEW' in row.status %}
-                                <span class="badge bg-primary">
-                                    <i class="bi bi-star-fill me-1"></i>NEW
-                                </span>
+                            {% elif row.performance_label %}
+                                <span class="perf-badge perf-{{ row.performance_key }}">{{ row.performance_label }}</span>
                             {% else %}
                                 <span class="text-muted" style="opacity: 0.3;">—</span>
                             {% endif %}
@@ -73,50 +218,46 @@
             </div>
 
             <div class="table-responsive d-none d-md-block">
-                <table class="table">
+                <table class="table summary-table">
+                    <colgroup>
+                        <col class="col-exercise">
+                        <col class="col-prev">
+                        <col class="col-today">
+                        <col class="col-status">
+                    </colgroup>
                     <thead>
                         <tr>
-                            <th style="width: 35%;">Exercise</th>
-                            <th style="width: 25%;">Previous Best</th>
-                            <th style="width: 25%;">Today's Performance</th>
-                            <th style="width: 15%; text-align: right;">Status</th>
+                            <th>Exercise</th>
+                            <th>Previous Best</th>
+                            <th>Today's Performance</th>
+                            <th class="status-head">Status</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for row in summary %}
                         <tr class="{{ 'bg-danger bg-opacity-10' if not row.valid else '' }}">
                             <td>
-                                <div class="fw-semibold {{ 'text-danger' if not row.valid else 'text-white' }}" style="font-size: var(--fs-base);">
-                                    <i class="bi bi-activity me-2 text-gold"></i>{{ row.name }}
-                                    {% if not row.valid %}
-                                        <br><span class="badge bg-danger mt-2">PARSING FAILED</span>
-                                    {% endif %}
+                                <div class="summary-exercise {{ 'text-danger' if not row.valid else 'text-white' }}">
+                                    <i class="bi bi-activity text-gold"></i>{{ row.name }}
                                 </div>
+                                {% if not row.valid %}
+                                    <div class="mt-2"><span class="badge bg-danger">PARSING FAILED</span></div>
+                                {% endif %}
                             </td>
 
-                            <td class="text-muted mono" style="font-size: var(--fs-sm); font-weight: 500;">
+                            <td class="mono summary-sets-prev">
                                 {{ row.old if row.old != '-' else '—' }}
                             </td>
 
-                            <td class="{{ 'text-danger' if not row.valid else 'text-white' }} mono fw-semibold" style="font-size: var(--fs-base);">
+                            <td class="{{ 'text-danger' if not row.valid else 'text-white' }} mono fw-semibold summary-sets">
                                 {{ row.new }}
                             </td>
 
-                            <td style="text-align: right;">
+                            <td class="status-cell">
                                 {% if not row.valid %}
                                     <span class="text-danger fw-bold small tracking-wide">CHECK FORMAT</span>
-                                {% elif 'PEAK' in row.status %}
-                                    <span class="badge bg-success">
-                                        <i class="bi bi-trophy-fill me-1"></i>PEAK
-                                    </span>
-                                {% elif 'CONSISTENCY' in row.status %}
-                                    <span class="badge bg-info">
-                                        <i class="bi bi-check-circle-fill me-1"></i>CONSISTENCY
-                                    </span>
-                                {% elif 'NEW' in row.status %}
-                                    <span class="badge bg-primary">
-                                        <i class="bi bi-star-fill me-1"></i>NEW
-                                    </span>
+                                {% elif row.performance_label %}
+                                    <span class="perf-badge perf-{{ row.performance_key }}">{{ row.performance_label }}</span>
                                 {% else %}
                                     <span class="text-muted" style="opacity: 0.3;">—</span>
                                 {% endif %}

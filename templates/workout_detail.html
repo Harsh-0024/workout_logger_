@@ -50,12 +50,134 @@
                     justify-content: center;
                 }
 
+                .perf-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 6px;
+                    width: 140px;
+                    height: 30px;
+                    padding: 0 6px;
+                    border-radius: 999px;
+                    border: 1px solid transparent;
+                    font-size: 0.76rem;
+                    letter-spacing: 0.2px;
+                    font-weight: 700;
+                    white-space: nowrap;
+                    text-align: center;
+                    box-sizing: border-box;
+                }
+
+                .exercise-card-content {
+                    display: flex;
+                    justify-content: space-between;
+                    align-items: center;
+                    gap: 14px;
+                }
+
+                .exercise-main {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                }
+
+                .exercise-title {
+                    margin-bottom: 8px;
+                }
+
+                .exercise-right-rail {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    flex: 0 0 auto;
+                    align-self: center;
+                }
+
+                .exercise-right-rail .perf-badge {
+                    flex-shrink: 0;
+                }
+
+                .perf-gold_strength,
+                .perf-gold_load,
+                .perf-first_log {
+                    color: #2b1c00;
+                    background: linear-gradient(135deg, #f4d03f 0%, #d4af37 100%);
+                    border-color: rgba(212, 175, 55, 0.75);
+                }
+
+                .perf-silver_strength,
+                .perf-silver_load {
+                    color: #111827;
+                    background: linear-gradient(135deg, #f2f3f5 0%, #c0c0c0 100%);
+                    border-color: rgba(192, 192, 192, 0.75);
+                }
+
+                .perf-bronze_strength,
+                .perf-bronze_load {
+                    color: #2f1304;
+                    background: linear-gradient(135deg, #d9a16a 0%, #cd7f32 100%);
+                    border-color: rgba(205, 127, 50, 0.75);
+                }
+
+                .perf-consistent {
+                    color: #e5e7eb;
+                    background: rgba(113, 113, 122, 0.28);
+                    border-color: rgba(113, 113, 122, 0.45);
+                }
+
+                .perf-slightly_off {
+                    color: #ffefcf;
+                    background: rgba(245, 158, 11, 0.22);
+                    border-color: rgba(245, 158, 11, 0.45);
+                }
+
+                .perf-moderately_off {
+                    color: #ffe3c2;
+                    background: rgba(239, 106, 0, 0.25);
+                    border-color: rgba(239, 106, 0, 0.5);
+                }
+
+                .perf-significantly_off {
+                    color: #ffe0e0;
+                    background: rgba(239, 68, 68, 0.25);
+                    border-color: rgba(239, 68, 68, 0.5);
+                }
+
+                [data-theme="light"] .perf-consistent {
+                    color: #44403c;
+                    background: rgba(113, 113, 122, 0.14);
+                }
+
+                [data-theme="light"] .perf-slightly_off {
+                    color: #8a4b02;
+                    background: rgba(245, 158, 11, 0.15);
+                }
+
+                [data-theme="light"] .perf-moderately_off {
+                    color: #8c3600;
+                    background: rgba(239, 106, 0, 0.16);
+                }
+
+                [data-theme="light"] .perf-significantly_off {
+                    color: #991b1b;
+                    background: rgba(239, 68, 68, 0.14);
+                }
+
                 @media (max-width: 576px) {
                     .workout-action-buttons {
                         flex-direction: row;
                     }
                     .workout-action-buttons .btn {
                         min-width: 0;
+                    }
+                    .exercise-card-content {
+                        flex-direction: column;
+                        align-items: flex-start;
+                        gap: 8px;
+                    }
+                    .exercise-right-rail {
+                        width: 100%;
+                        justify-content: flex-start;
                     }
                 }
             </style>
@@ -68,9 +190,9 @@
                 <div class="list-group">
                     {% for log in logs %}
                     <a href="{{ url_for('stats_index') }}?exercise={{ log.exercise | urlencode }}" class="list-group-item bg-dark border-subtle mb-2 text-decoration-none exercise-card-link" style="border-radius: 12px; border-color: var(--border-subtle); cursor: pointer; transition: all var(--transition-base);">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="flex-grow-1">
-                                <h6 class="mb-2 text-white" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ log.exercise }}</h6>
+                        <div class="exercise-card-content">
+                            <div class="exercise-main">
+                                <h6 class="exercise-title text-white" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ log.exercise }}</h6>
                                 <div class="text-muted" style="font-size: var(--fs-xs);">
                                     {% if log.sets_display %}
                                         <div class="mb-1">Sets: {{ log.sets_display }}</div>
@@ -105,7 +227,12 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            <i class="bi bi-chevron-right text-muted align-self-center"></i>
+                            <div class="exercise-right-rail">
+                                {% if log.performance_label %}
+                                    <span class="perf-badge perf-{{ log.performance_key }}">{{ log.performance_label }}</span>
+                                {% endif %}
+                                <i class="bi bi-chevron-right text-muted"></i>
+                            </div>
                         </div>
                     </a>
                     {% endfor %}

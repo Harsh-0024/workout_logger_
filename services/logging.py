@@ -1,13 +1,18 @@
 """
 Workout logging service for processing and saving workout data.
 """
-from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from datetime import datetime, date, timedelta
 import re
 
 from models import Lift, RepRange, WorkoutLog
 from parsers.workout import align_sets, extract_numbers
-from services.best_scoring import best_workout_strength_score, best_workout_timed_score
+from services.best_scoring import (
+    best_workout_strength_score,
+    best_workout_timed_score,
+    compare_strength_workouts,
+    compare_timed_workouts,
+)
 from services.helpers import get_set_stats, get_timed_set_stats
 from services.exercise_matching import (
     build_name_index,
@@ -15,6 +20,242 @@ from services.exercise_matching import (
     resolve_equivalent_names,
 )
 from utils.logger import logger
+
+
+_PERFORMANCE_LABELS: Dict[str, Dict[str, str]] = {
+    "gold_strength": {"label": "🥇 Gold Strength", "short": "Gold Strength"},
+    "silver_strength": {"label": "🥈 Silver Strength", "short": "Silver Strength"},
+    "bronze_strength": {"label": "🥉 Bronze Strength", "short": "Bronze Strength"},
+    "gold_load": {"label": "🥇 Gold Load", "short": "Gold Load"},
+    "silver_load": {"label": "🥈 Silver Load", "short": "Silver Load"},
+    "bronze_load": {"label": "🥉 Bronze Load", "short": "Bronze Load"},
+    "consistent": {"label": "→ Consistent", "short": "Consistent"},
+    "slightly_off": {"label": "↓ Slightly Off", "short": "Slightly Off"},
+    "moderately_off": {"label": "↓ Moderately Off", "short": "Moderately Off"},
+    "significantly_off": {"label": "↓ Significantly Off", "short": "Significantly Off"},
+    "first_log": {"label": "🆕 First Log", "short": "First Log"},
+}
+
+
+def _performance_payload(key: str, *, summary_mode: bool = False) -> Dict[str, str]:
+    normalized = str(key or "consistent").strip().lower()
+    if normalized not in _PERFORMANCE_LABELS:
+        normalized = "consistent"
+
+    # Session summary intentionally collapses load tie-break tiers into "Consistent".
+    display_key = normalized
+    if summary_mode and normalized in {"gold_load", "silver_load", "bronze_load"}:
+        display_key = "consistent"
+
+    meta = _PERFORMANCE_LABELS.get(display_key, _PERFORMANCE_LABELS["consistent"])
+    return {
+        "key": display_key,
+        "label": meta["label"],
+        "short": meta["short"],
+    }
+
+
+def _rank_vectors_for_sets(sets_json: Dict, *, top_n: int = 3, is_timed: bool = False) -> Dict[str, List[float]]:
+    if is_timed:
+        result = compare_timed_workouts(sets_json or {}, sets_json or {}, top_n=top_n)
+    else:
+        result = compare_strength_workouts(sets_json or {}, sets_json or {}, top_n=top_n)
+    vectors = result.get("current") or {}
+    return {
+        "scores": [float(v) for v in (vectors.get("scores") or [])],
+        "weights": [float(v) for v in (vectors.get("weights") or [])],
+    }
+
+
+def _lex_compare_desc(left: List[float], right: List[float], *, eps: float = 1e-6) -> int:
+    limit = max(len(left), len(right))
+    for idx in range(limit):
+        lv = float(left[idx]) if idx < len(left) else None
+        rv = float(right[idx]) if idx < len(right) else None
+        if lv is None and rv is None:
+            return 0
+        if lv is None:
+            return -1
+        if rv is None:
+            return 1
+        if abs(lv - rv) <= eps:
+            continue
+        return 1 if lv > rv else -1
+    return 0
+
+
+def _first_drop_index(best_scores: List[float], current_scores: List[float], *, top_n: int = 3, eps: float = 1e-6) -> Optional[int]:
+    for idx in range(max(1, int(top_n))):
+        b = float(best_scores[idx]) if idx < len(best_scores) else 0.0
+        c = float(current_scores[idx]) if idx < len(current_scores) else 0.0
+        if c + eps < b:
+            return idx
+        if c > b + eps:
+            return None
+    return None
+
+
+def _first_score_diff_index(left_scores: List[float], right_scores: List[float], *, top_n: int = 3, eps: float = 1e-6) -> tuple[Optional[int], int]:
+    """
+    Compare top-N score vectors and return (first_diff_index, cmp).
+
+    cmp semantics:
+    - 1: left wins
+    - -1: right wins
+    - 0: tied
+    """
+    n = max(1, int(top_n) if isinstance(top_n, int) and top_n > 0 else 3)
+    for idx in range(n):
+        lv = float(left_scores[idx]) if idx < len(left_scores) else 0.0
+        rv = float(right_scores[idx]) if idx < len(right_scores) else 0.0
+        if abs(lv - rv) <= eps:
+            continue
+        return (idx, 1) if lv > rv else (idx, -1)
+    return None, 0
+
+
+def classify_exercise_performance(
+    db_session,
+    user_id: int,
+    exercise_name: str,
+    current_sets: Optional[Dict],
+    *,
+    target_sets: int = 3,
+    log_ex_index=None,
+    is_timed: bool = False,
+    current_log_id: Optional[int] = None,
+    summary_mode: bool = False,
+) -> Dict[str, Any]:
+    """
+    Classify today's exercise performance against all historical logs of the exercise.
+
+    Ranking uses top-N performance vectors (e1RM for strength, timed score for timed logs)
+    and tie-breaks by top-set loads.
+    """
+    normalized_current = _normalize_sets(current_sets)
+    if not normalized_current:
+        return _performance_payload("consistent", summary_mode=summary_mode)
+
+    candidates = resolve_equivalent_names(exercise_name, log_ex_index) if log_ex_index else []
+    if not candidates:
+        candidates = _exercise_candidates(exercise_name)
+    if not candidates:
+        return _performance_payload("first_log", summary_mode=summary_mode)
+
+    top_n = max(1, int(target_sets) if isinstance(target_sets, int) and target_sets > 0 else 3)
+    logs = (
+        db_session.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user_id)
+        .filter(WorkoutLog.exercise.in_(candidates))
+        .order_by(WorkoutLog.date.asc(), WorkoutLog.id.asc())
+        .all()
+    )
+
+    rows: List[Dict[str, Any]] = []
+    for log in logs:
+        log_sets = _normalize_sets(getattr(log, "sets_json", None))
+        if not log_sets:
+            continue
+        vectors = _rank_vectors_for_sets(log_sets, top_n=top_n, is_timed=is_timed)
+        if not vectors.get("scores"):
+            continue
+        rows.append(
+            {
+                "id": getattr(log, "id", None),
+                "scores": vectors["scores"],
+                "weights": vectors["weights"],
+                "date": getattr(log, "date", datetime.min),
+                "is_current": False,
+            }
+        )
+
+    current_row: Optional[Dict[str, Any]] = None
+    if current_log_id is not None:
+        for row in rows:
+            if row.get("id") == current_log_id:
+                row["is_current"] = True
+                current_row = row
+                break
+
+    if current_row is None:
+        vectors = _rank_vectors_for_sets(normalized_current, top_n=top_n, is_timed=is_timed)
+        if not vectors.get("scores"):
+            return _performance_payload("consistent", summary_mode=summary_mode)
+        current_row = {
+            "id": current_log_id,
+            "scores": vectors["scores"],
+            "weights": vectors["weights"],
+            "date": datetime.now(),
+            "is_current": True,
+        }
+        rows.append(current_row)
+
+    competitors = [row for row in rows if not row.get("is_current")]
+    if not competitors:
+        return _performance_payload("first_log", summary_mode=summary_mode)
+
+    tie_group = [
+        row
+        for row in rows
+        if _lex_compare_desc(row.get("scores") or [], current_row.get("scores") or []) == 0
+    ]
+
+    if len(tie_group) > 1:
+        weight_rank = 1 + sum(
+            1
+            for row in tie_group
+            if row is not current_row
+            and _lex_compare_desc(row.get("weights") or [], current_row.get("weights") or []) > 0
+        )
+        if weight_rank <= 3:
+            load_key = {1: "gold_load", 2: "silver_load", 3: "bronze_load"}.get(weight_rank, "consistent")
+            return _performance_payload(load_key, summary_mode=summary_mode)
+        return _performance_payload("consistent", summary_mode=summary_mode)
+
+    best_row = max(
+        rows,
+        key=lambda row: (
+            tuple(row.get("scores") or []),
+            tuple(row.get("weights") or []),
+            row.get("date") or datetime.min,
+        ),
+    )
+
+    # Compare against the strongest non-current reference workout.
+    # If current is already best overall, compare against the next-best competitor.
+    if best_row is current_row:
+        reference_row = max(
+            competitors,
+            key=lambda row: (
+                tuple(row.get("scores") or []),
+                tuple(row.get("weights") or []),
+                row.get("date") or datetime.min,
+            ),
+        )
+    else:
+        reference_row = best_row
+
+    diff_idx, cmp_to_reference = _first_score_diff_index(
+        current_row.get("scores") or [],
+        reference_row.get("scores") or [],
+        top_n=top_n,
+    )
+
+    if cmp_to_reference > 0:
+        if diff_idx == 0:
+            return _performance_payload("gold_strength", summary_mode=summary_mode)
+        if diff_idx == 1:
+            return _performance_payload("silver_strength", summary_mode=summary_mode)
+        return _performance_payload("bronze_strength", summary_mode=summary_mode)
+
+    if cmp_to_reference < 0:
+        if diff_idx == 0:
+            return _performance_payload("significantly_off", summary_mode=summary_mode)
+        if diff_idx == 1:
+            return _performance_payload("moderately_off", summary_mode=summary_mode)
+        return _performance_payload("slightly_off", summary_mode=summary_mode)
+
+    return _performance_payload("consistent", summary_mode=summary_mode)
 
 
 def _format_sets_display(sets_json):
@@ -341,12 +582,15 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             'name': ex_name, 'old': '-', 'new': formatted_display,
             'status': '-', 'class': 'neutral', 'valid': is_valid,
             'is_timed': time_based if is_valid else False,
+            'performance_key': None,
+            'performance_label': None,
         }
 
         if is_valid:
             if time_based:
                 p_peak, p_sum, p_vol = get_timed_set_stats(new_sets)
             # --- SAVE TO HISTORY ---
+            history_log = None
             try:
                 history_log = WorkoutLog(
                     user_id=user.id,
@@ -361,9 +605,24 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                     estimated_1rm=p_peak if p_peak > 0 else None
                 )
                 db_session.add(history_log)
+                db_session.flush()
             except Exception as e:
                 logger.error(f"Error creating workout log for {ex_name}: {e}", exc_info=True)
                 # Continue processing other exercises even if one fails
+
+            perf = classify_exercise_performance(
+                db_session,
+                user.id,
+                ex_name,
+                new_sets,
+                target_sets=3,
+                log_ex_index=log_ex_index,
+                is_timed=time_based,
+                current_log_id=(getattr(history_log, 'id', None) if history_log else None),
+                summary_mode=True,
+            )
+            row['performance_key'] = perf.get('key')
+            row['performance_label'] = perf.get('label')
 
             improvement = None
             is_new_best = False
@@ -371,27 +630,16 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             if best_log_sets:
                 row['old'] = _format_best_string(best_log)
                 if time_based:
-                    r_peak, r_sum, r_vol = get_timed_set_stats(best_log_sets)
-                    r_score = float(best_workout_timed_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
-                    p_score = float(best_workout_timed_score(new_sets, top_n=target_sets).get("score") or 0.0)
+                    comparison = compare_timed_workouts(best_log_sets, new_sets, top_n=target_sets)
                 else:
-                    r_peak, r_sum, r_vol = get_set_stats(best_log_sets)
-                    r_score = float(best_workout_strength_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
-                    p_score = float(best_workout_strength_score(new_sets, top_n=target_sets).get("score") or 0.0)
+                    comparison = compare_strength_workouts(best_log_sets, new_sets, top_n=target_sets)
 
-                # Peak-first status:
-                # - If best set got stronger, show PEAK regardless of score mix across other sets.
-                # - Otherwise use strength-first score for consistency improvements.
-                if p_peak > r_peak:
+                # Peak-first, then lexicographic set comparison, then lexicographic weight comparison.
+                if comparison.get("cmp", 0) > 0:
                     is_new_best = True
-                    diff = p_peak - r_peak
-                    improvement = f"PEAK (+{diff:.1f})"
-                elif p_score > r_score:
-                    is_new_best = True
-                    if p_sum > r_sum:
-                        improvement = "CONSISTENCY"
-                    elif p_vol > r_vol:
-                        improvement = "CONSISTENCY"
+                    if comparison.get("reason") == "peak":
+                        diff = float(comparison.get("diff") or 0.0)
+                        improvement = f"PEAK (+{diff:.1f})"
                     else:
                         improvement = "CONSISTENCY"
             else:
@@ -581,9 +829,25 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
             "class": "neutral",
             "valid": valid,
             "is_timed": time_based if valid else False,
+            "performance_key": None,
+            "performance_label": None,
         }
 
         if valid:
+            perf = classify_exercise_performance(
+                db_session,
+                user.id,
+                ex_name,
+                new_sets,
+                target_sets=3,
+                log_ex_index=log_ex_index,
+                is_timed=time_based,
+                current_log_id=getattr(log, "id", None),
+                summary_mode=True,
+            )
+            row["performance_key"] = perf.get("key")
+            row["performance_label"] = perf.get("label")
+
             if time_based:
                 p_peak, p_sum, p_vol = get_timed_set_stats(new_sets)
             else:
@@ -604,20 +868,16 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
                 row["old"] = _format_best_string(best_log)
 
                 if time_based:
-                    r_peak, r_sum, r_vol = get_timed_set_stats(best_log_sets)
-                    r_score = float(best_workout_timed_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
-                    p_score = float(best_workout_timed_score(new_sets, top_n=target_sets).get("score") or 0.0)
+                    comparison = compare_timed_workouts(best_log_sets, new_sets, top_n=target_sets)
                 else:
-                    r_peak, r_sum, r_vol = get_set_stats(best_log_sets)
-                    r_score = float(best_workout_strength_score(best_log_sets, top_n=target_sets).get("score") or 0.0)
-                    p_score = float(best_workout_strength_score(new_sets, top_n=target_sets).get("score") or 0.0)
+                    comparison = compare_strength_workouts(best_log_sets, new_sets, top_n=target_sets)
 
-                if p_peak > r_peak:
-                    diff = p_peak - r_peak
-                    row["status"] = f"PEAK (+{diff:.1f})"
-                    row["class"] = "improved"
-                elif p_score > r_score:
-                    row["status"] = "CONSISTENCY"
+                if comparison.get("cmp", 0) > 0:
+                    if comparison.get("reason") == "peak":
+                        diff = float(comparison.get("diff") or 0.0)
+                        row["status"] = f"PEAK (+{diff:.1f})"
+                    else:
+                        row["status"] = "CONSISTENCY"
                     row["class"] = "improved"
             else:
                 row["old"] = "First Log"

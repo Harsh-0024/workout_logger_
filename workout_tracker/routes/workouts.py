@@ -13,7 +13,7 @@ from sqlalchemy import desc, func
 from list_of_exercise import get_workout_days, list_of_exercises
 from models import Session, User, WorkoutLog, UserApiKey, ShortcutKeyMap
 from parsers.workout import workout_parser, parse_bw_weight
-from services.logging import handle_workout_log, compute_workout_summary_for_date
+from services.logging import handle_workout_log, compute_workout_summary_for_date, classify_exercise_performance
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
@@ -418,6 +418,18 @@ def register_workout_routes(app):
                     str(getattr(log, 'exercise_string', '') or ''),
                     re.IGNORECASE,
                 ))
+                perf = classify_exercise_performance(
+                    Session,
+                    user.id,
+                    log.exercise,
+                    getattr(log, 'sets_json', None),
+                    target_sets=3,
+                    is_timed=log.is_timed,
+                    current_log_id=getattr(log, 'id', None),
+                    summary_mode=False,
+                )
+                log.performance_key = perf.get('key')
+                log.performance_label = perf.get('label')
                 set_count += _count_sets(log.sets_json, log.sets_display)
                 if user.bodyweight is None and _log_uses_bw(log):
                     missing_bw_exercises.add(log.exercise)

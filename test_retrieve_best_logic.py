@@ -7,7 +7,11 @@ from sqlalchemy.orm import sessionmaker
 
 from config import Config
 from models import Base, Plan, RepRange, User, UserRole, WorkoutLog
-from services.best_scoring import best_workout_strength_score, coerce_equal_len_sets
+from services.best_scoring import (
+    best_workout_strength_score,
+    coerce_equal_len_sets,
+    compare_strength_workouts,
+)
 from services.exercise_matching import build_name_index, resolve_equivalent_names
 from services.logging import _parse_rep_target_sets
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
@@ -54,6 +58,21 @@ class TestBestScoring(unittest.TestCase):
         score_n1 = best_workout_strength_score(sets_json, top_n=1)["score"]
         score_n3 = best_workout_strength_score(sets_json, top_n=3)["score"]
         self.assertGreater(score_n3, score_n1)
+
+    def test_compare_strength_workouts_prefers_better_second_best_when_peak_tied(self):
+        previous = {"weights": [30, 25, 25], "reps": [6, 12, 11]}
+        current = {"weights": [30, 27.8, 25], "reps": [6, 8, 9]}
+        result = compare_strength_workouts(previous, current, top_n=3)
+        self.assertEqual(result["cmp"], 1)
+        self.assertEqual(result["reason"], "consistency")
+        self.assertEqual(result["diff_index"], 1)
+
+    def test_compare_strength_workouts_uses_weight_as_final_tiebreaker(self):
+        previous = {"weights": [27, 25, 24], "reps": [10, 12, 15]}
+        current = {"weights": [30, 27, 25], "reps": [6, 10, 12]}
+        result = compare_strength_workouts(previous, current, top_n=3)
+        self.assertEqual(result["cmp"], 1)
+        self.assertEqual(result["reason"], "consistency")
 
 
 class TestExerciseMatching(unittest.TestCase):
