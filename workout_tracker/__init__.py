@@ -3,7 +3,7 @@ import secrets
 import urllib.parse
 import threading
 import time
-from datetime import datetime
+from datetime import date, datetime
 
 from flask import Flask, render_template, send_from_directory, jsonify, request
 from flask_login import LoginManager
@@ -106,8 +106,21 @@ def create_app(config_object=Config, init_db: bool = True):
 
     @app.template_filter('format_date')
     def format_date_filter(date_obj):
+        """Display dates as dd-mm-yyyy (day first). Accepts datetime, date, or YYYY-MM-DD string."""
+        d = None
         if isinstance(date_obj, datetime):
-            return date_obj.strftime('%Y-%m-%d')
+            d = date_obj.date()
+        elif isinstance(date_obj, date):
+            d = date_obj
+        elif isinstance(date_obj, str):
+            s = date_obj.strip()
+            if len(s) >= 10:
+                try:
+                    d = datetime.strptime(s[:10], '%Y-%m-%d').date()
+                except ValueError:
+                    pass
+        if d is not None:
+            return d.strftime('%d-%m-%Y')
         return str(date_obj)
 
     @app.route('/favicon.ico')

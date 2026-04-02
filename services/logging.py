@@ -33,7 +33,7 @@ _PERFORMANCE_LABELS: Dict[str, Dict[str, str]] = {
     "slightly_off": {"label": "↓ Slightly Off", "short": "Slightly Off"},
     "moderately_off": {"label": "↓ Moderately Off", "short": "Moderately Off"},
     "significantly_off": {"label": "↓ Significantly Off", "short": "Significantly Off"},
-    "first_log": {"label": "🆕 First Log", "short": "First Log"},
+    "first_log": {"label": "First Log", "short": "First Log"},
 }
 
 

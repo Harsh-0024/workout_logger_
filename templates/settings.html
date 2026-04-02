@@ -1,7 +1,29 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="row justify-content-center mt-3 mt-md-4">
-    <div class="col-12 col-md-10 col-lg-8">
+    <div class="col-12 col-xl-11 col-xxl-10">
+        <div class="row g-4 g-xl-5">
+            <aside class="col-lg-3 col-xl-2 d-none d-lg-block settings-toc-column" aria-label="Settings page contents">
+                <nav class="settings-toc">
+                    <p class="settings-toc-label">Contents</p>
+                    <ul class="settings-toc-list list-unstyled mb-0">
+                        <li>
+                            <a href="#quick-actions" class="settings-toc-item" onclick="event.preventDefault(); scrollToSection('quick-actions');">Quick Actions</a>
+                        </li>
+                        <li>
+                            <a href="#profile-appearance" class="settings-toc-item" onclick="event.preventDefault(); scrollToSection('profile-appearance');">Profile &amp; Style</a>
+                        </li>
+                        <li>
+                            <a href="#ai-keys" class="settings-toc-item" onclick="event.preventDefault(); scrollToSection('ai-keys');">AI Keys</a>
+                        </li>
+                        <li>
+                            <a href="#account-security" class="settings-toc-item" onclick="event.preventDefault(); scrollToSection('account-security');">Account &amp; Security</a>
+                        </li>
+                    </ul>
+                </nav>
+            </aside>
+
+            <div class="col-12 col-lg-9 col-xl-10 settings-main-column">
         <div class="text-center mb-4">
             <div class="mb-3">
                 <i class="bi bi-gear" style="font-size: clamp(2.5rem, 8vw, 3.5rem); color: var(--gold-primary); opacity: 0.6;"></i>
@@ -10,7 +32,7 @@
             <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Manage your account details</p>
         </div>
 
-        <div class="settings-nav-buttons mb-4">
+        <div class="settings-nav-buttons mb-4 d-lg-none">
             <button type="button" onclick="scrollToSection('quick-actions')" class="btn btn-gold-outline" data-shortcut="1" aria-keyshortcuts="1">
                 <i class="bi bi-lightning-charge"></i>
                 <span class="d-none d-md-inline">Quick Actions</span>
@@ -482,6 +504,8 @@
                 <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
             </a>
         </div>
+            </div>
+        </div>
     </div>
 </div>
 <style>
@@ -494,21 +518,58 @@
         margin: 0 auto;
     }
 
-    .settings-nav-buttons {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
+    .settings-toc-column {
+        align-self: flex-start;
     }
 
-    .settings-nav-buttons .btn {
-        width: 100%;
+    .settings-toc {
+        position: sticky;
+        top: 92px;
+        z-index: 2;
+        padding: 1rem 1rem 1.15rem;
+        border-radius: 16px;
+        border: 1px solid var(--border-subtle);
+        background: var(--card-bg-solid);
+        box-shadow: var(--shadow-lg);
     }
 
-    @media (min-width: 768px) {
-        .settings-nav-buttons {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-        }
+    .settings-toc-label {
+        font-size: 0.65rem;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--text-muted);
+        font-weight: 700;
+        margin-bottom: 0.65rem;
+    }
+
+    .settings-toc-list li {
+        margin-bottom: 0.35rem;
+    }
+
+    .settings-toc-item {
+        display: block;
+        padding: 0.5rem 0.65rem;
+        border-radius: 10px;
+        color: var(--text-muted);
+        font-size: 0.84rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: color var(--transition-base), background var(--transition-base), border-color var(--transition-base);
+        border: 1px solid transparent;
+    }
+
+    .settings-toc-item:hover {
+        color: var(--gold-primary);
+        background: rgba(212, 175, 55, 0.08);
+        border-color: rgba(212, 175, 55, 0.22);
+    }
+
+    [data-theme="light"] .settings-toc-item:hover {
+        background: rgba(201, 169, 97, 0.1);
+    }
+
+    .settings-main-column .card[id] {
+        scroll-margin-top: 96px;
     }
 
     @media (min-width: 768px) {

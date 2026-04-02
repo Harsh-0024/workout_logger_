@@ -85,7 +85,7 @@
 
             <div id="recentList" class="flex-grow-1 recent-workouts-list" style="min-height: 0; overflow-y: auto;">
                 {% for workout in recent_workouts %}
-                <div class="recent-workout-item recent-item" style="transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d/%m/%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
+                <div class="recent-workout-item recent-item" style="transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d-%m-%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
                     <div class="d-flex justify-content-between align-items-center gap-2">
                         <input
                             type="checkbox"

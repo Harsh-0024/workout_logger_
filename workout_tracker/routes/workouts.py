@@ -398,6 +398,7 @@ def register_workout_routes(app):
             set_count = 0
             missing_bw_exercises = set()
             prev_1rm_by_exercise = {}
+            prev_log_by_exercise = {}
 
             for log in logs:
                 prev_log = (
@@ -410,6 +411,7 @@ def register_workout_routes(app):
                 prev_1rm_by_exercise[log.exercise] = (
                     prev_log.estimated_1rm if prev_log and prev_log.estimated_1rm else None
                 )
+                prev_log_by_exercise[log.exercise] = prev_log
 
             # Calculate volume for each exercise
             for log in logs:
@@ -463,6 +465,7 @@ def register_workout_routes(app):
                             continue
                 log.total_volume = total_volume if total_volume > 0 else None
                 prev_1rm = prev_1rm_by_exercise.get(log.exercise)
+                prev_log = prev_log_by_exercise.get(log.exercise)
                 current_1rm = log.estimated_1rm if log.estimated_1rm else None
                 if prev_1rm and current_1rm:
                     delta_pct = ((current_1rm - prev_1rm) / prev_1rm) * 100.0
@@ -470,6 +473,13 @@ def register_workout_routes(app):
                 else:
                     delta_pct = None
                 log.improvement_pct = delta_pct
+                log.prev_1rm = prev_1rm
+                log.prev_sets_display = prev_log.sets_display if prev_log else None
+                log.prev_date_label = (
+                    prev_log.date.strftime('%d-%m-%y')
+                    if prev_log and getattr(prev_log, 'date', None)
+                    else None
+                )
             
             share_token = _make_share_token(user.id, workout_date)
             share_url = url_for('shared_workout', token=share_token, _external=True)

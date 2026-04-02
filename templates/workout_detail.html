@@ -3,19 +3,19 @@
 <div class="row justify-content-center">
     <div class="col-12 col-md-10 col-lg-8">
         <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3 mb-md-4">
-                    <i class="bi bi-calendar-check" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
+            <div class="text-center mb-3 mb-md-4">
+                <div class="mb-2 mb-md-3">
+                    <i class="bi bi-calendar-check" style="font-size: clamp(2.75rem, 9vw, 3.5rem); color: var(--gold-primary); opacity: 0.6;"></i>
                 </div>
-                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">{{ workout_name }}</h2>
-                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">{{ date }}</p>
+                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.35rem, 5vw, 1.85rem);">{{ workout_name }}</h2>
+                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">{{ date | format_date }}</p>
             </div>
 
             <div class="workout-result-stats mb-3 mb-md-4">
-                <div class="badge bg-dark d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
+                <div class="badge bg-dark d-inline-flex align-items-center workout-stat-badge">
                     <i class="bi bi-activity me-2 text-gold"></i>{{ exercise_count or 0 }} Exercises
                 </div>
-                <div class="badge bg-dark d-inline-flex align-items-center" style="font-size: var(--fs-sm); padding: 10px 18px; border: 1px solid var(--border-subtle);">
+                <div class="badge bg-dark d-inline-flex align-items-center workout-stat-badge">
                     <i class="bi bi-stack me-2 text-gold"></i>{{ set_count or 0 }} Sets
                 </div>
             </div>
@@ -27,56 +27,150 @@
             </div>
             {% endif %}
 
-            <div class="d-flex justify-content-center gap-2 mb-4 mb-md-5 flex-wrap workout-action-buttons">
-                <a href="{{ url_for('edit_workout', date_str=date) }}" class="btn btn-gold-outline btn-sm flex-fill flex-sm-grow-0">
+            <div class="workout-action-buttons mb-3 mb-md-4">
+                <a href="{{ url_for('edit_workout', date_str=date) }}" class="btn btn-gold-outline btn-sm workout-detail-action-btn">
                     <i class="bi bi-pencil-square me-2"></i>Edit Workout
                 </a>
-                <button type="button" id="shareWorkoutBtn" class="btn btn-gold-solid btn-sm flex-fill flex-sm-grow-0" data-share-url="{{ share_url }}">
+                <button type="button" id="shareWorkoutBtn" class="btn btn-gold-solid btn-sm workout-detail-action-btn" data-share-url="{{ share_url }}">
                     <i class="bi bi-share-fill me-2"></i>Share Workout
                 </button>
             </div>
             <style>
+                /* Top row: two equal compact badges (narrower than action buttons). */
                 .workout-result-stats {
                     display: grid;
                     grid-template-columns: repeat(2, minmax(0, 1fr));
-                    gap: 12px;
-                    max-width: 520px;
+                    gap: 10px;
+                    width: min(100%, 320px);
                     margin-left: auto;
                     margin-right: auto;
                 }
 
-                .workout-result-stats .badge {
+                .workout-stat-badge {
+                    font-size: var(--fs-sm);
+                    padding: 8px 10px;
+                    border: 1px solid var(--border-subtle);
                     width: 100%;
                     justify-content: center;
+                    min-height: 38px;
+                    box-sizing: border-box;
                 }
 
-                .perf-badge {
+                /* Bottom row: wider so "Share Workout" stays one line; pair matches each other only. */
+                .workout-action-buttons {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 10px;
+                    width: min(100%, 520px);
+                    margin-left: auto;
+                    margin-right: auto;
+                }
+
+                .workout-detail-action-btn {
+                    width: 100%;
+                    min-height: 44px;
+                    white-space: nowrap;
+                    font-size: 0.78rem;
+                    letter-spacing: 0.45px;
+                    padding-left: 0.65rem;
+                    padding-right: 0.65rem;
+                }
+
+                @media (max-width: 360px) {
+                    .workout-detail-action-btn {
+                        font-size: 0.72rem;
+                        letter-spacing: 0.3px;
+                        padding-left: 0.45rem;
+                        padding-right: 0.45rem;
+                    }
+                }
+
+                .perf-badge,
+                .delta-badge {
                     display: inline-flex;
                     align-items: center;
                     justify-content: center;
-                    gap: 6px;
-                    width: 140px;
-                    height: 30px;
-                    padding: 0 6px;
+                    gap: 4px;
+                    width: 118px;
+                    min-height: 26px;
+                    padding: 3px 6px;
                     border-radius: 999px;
                     border: 1px solid transparent;
-                    font-size: 0.76rem;
+                    font-size: 0.6875rem;
                     letter-spacing: 0.2px;
                     font-weight: 700;
-                    white-space: nowrap;
                     text-align: center;
+                    line-height: 1.15;
                     box-sizing: border-box;
+                }
+
+                .perf-badge {
+                    white-space: nowrap;
+                }
+
+                .delta-badge {
+                    white-space: normal;
+                }
+
+                .delta-positive {
+                    color: #bbf7d0;
+                    background: rgba(34, 197, 94, 0.18);
+                    border-color: rgba(34, 197, 94, 0.45);
+                }
+
+                .delta-negative {
+                    color: #fecaca;
+                    background: rgba(239, 68, 68, 0.2);
+                    border-color: rgba(239, 68, 68, 0.45);
+                }
+
+                .delta-flat {
+                    color: #d4d4d8;
+                    background: rgba(113, 113, 122, 0.28);
+                    border-color: rgba(113, 113, 122, 0.45);
+                }
+
+                .delta-none {
+                    color: var(--text-muted);
+                    background: rgba(113, 113, 122, 0.18);
+                    border-color: rgba(113, 113, 122, 0.35);
+                    font-size: 0.6rem;
+                    font-weight: 600;
+                    line-height: 1.1;
+                }
+
+                [data-theme="light"] .delta-positive {
+                    color: #166534;
+                    background: rgba(34, 197, 94, 0.14);
+                    border-color: rgba(22, 101, 52, 0.35);
+                }
+
+                [data-theme="light"] .delta-negative {
+                    color: #991b1b;
+                    background: rgba(239, 68, 68, 0.12);
+                    border-color: rgba(185, 28, 28, 0.35);
+                }
+
+                [data-theme="light"] .delta-flat {
+                    color: #52525b;
+                    background: rgba(113, 113, 122, 0.12);
+                    border-color: rgba(82, 82, 91, 0.35);
+                }
+
+                [data-theme="light"] .delta-none {
+                    color: #52525b;
+                    background: rgba(113, 113, 122, 0.1);
                 }
 
                 .exercise-card-content {
                     display: flex;
-                    justify-content: space-between;
-                    align-items: center;
+                    flex-wrap: wrap;
+                    align-items: flex-start;
                     gap: 14px;
                 }
 
                 .exercise-main {
-                    flex: 1 1 auto;
+                    flex: 1 1 260px;
                     min-width: 0;
                 }
 
@@ -84,13 +178,53 @@
                     margin-bottom: 8px;
                 }
 
+                .exercise-previous-rail {
+                    flex: 1 1 200px;
+                    min-width: 160px;
+                    max-width: 100%;
+                    padding-left: 12px;
+                    border-left: 1px dashed var(--border-subtle);
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: flex-start;
+                    text-align: center;
+                    gap: 12px;
+                }
+
                 .exercise-right-rail {
+                    flex: 0 1 200px;
+                    min-width: 160px;
+                    max-width: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: flex-start;
+                    text-align: center;
+                    gap: 12px;
+                    padding-left: 12px;
+                    border-left: 1px dashed var(--border-subtle);
+                    align-self: stretch;
+                }
+
+                .exercise-vs-title {
+                    font-size: 0.65rem;
+                    letter-spacing: 0.75px;
+                    text-transform: uppercase;
+                    color: var(--text-muted);
+                    font-weight: 600;
+                    margin-bottom: 0;
+                    padding-bottom: 2px;
+                    line-height: 1.35;
+                    white-space: nowrap;
+                }
+
+                .exercise-vs-row {
                     display: flex;
                     align-items: center;
                     justify-content: center;
-                    gap: 10px;
-                    flex: 0 0 auto;
-                    align-self: center;
+                    width: 100%;
+                    min-height: 26px;
                 }
 
                 .exercise-right-rail .perf-badge {
@@ -164,25 +298,39 @@
                 }
 
                 @media (max-width: 576px) {
+                    .workout-result-stats,
                     .workout-action-buttons {
-                        flex-direction: row;
-                    }
-                    .workout-action-buttons .btn {
-                        min-width: 0;
+                        max-width: 100%;
                     }
                     .exercise-card-content {
                         flex-direction: column;
-                        align-items: flex-start;
-                        gap: 8px;
+                        align-items: stretch;
+                        gap: 10px;
+                    }
+                    .exercise-main {
+                        flex: 1 1 auto;
+                    }
+                    .exercise-previous-rail,
+                    .exercise-right-rail {
+                        flex: 1 1 auto;
+                        width: 100%;
+                        min-width: 0;
+                        border-left: 0;
+                        padding-left: 0;
+                        padding-top: 8px;
+                        border-top: 1px dashed var(--border-subtle);
                     }
                     .exercise-right-rail {
-                        width: 100%;
-                        justify-content: flex-start;
+                        align-items: center;
+                        gap: 12px;
+                    }
+                    .exercise-vs-row {
+                        justify-content: center;
                     }
                 }
             </style>
 
-            <div class="mb-4 mb-md-5">
+            <div class="mb-3 mb-md-4">
                 <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                     <i class="bi bi-list-check me-2"></i>Exercises
                 </label>
@@ -206,19 +354,6 @@
                                         {% if log.total_volume %}
                                             <span>Volume: {{ "%.0f"|format(log.total_volume) }}kg</span>
                                         {% endif %}
-                                        {% if log.improvement_pct is not none %}
-                                            {% set delta = log.improvement_pct %}
-                                            <span class="{% if delta > 0 %}text-success{% elif delta < 0 %}text-danger{% else %}text-muted{% endif %}">
-                                                {% if delta > 0 %}
-                                                <i class="bi bi-arrow-up-circle-fill me-1"></i>
-                                                {% elif delta < 0 %}
-                                                <i class="bi bi-arrow-down-circle-fill me-1"></i>
-                                                {% else %}
-                                                <i class="bi bi-dash-circle me-1"></i>
-                                                {% endif %}
-                                                e1RM: {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
-                                            </span>
-                                        {% endif %}
                                     </div>
                                     {% if log.exercise in missing_bw_exercises %}
                                         <div class="text-warning mt-2" style="font-size: var(--fs-xs);">
@@ -227,11 +362,42 @@
                                     {% endif %}
                                 </div>
                             </div>
+                            <div class="exercise-previous-rail">
+                                <div class="exercise-vs-title">
+                                    Vs Previous{% if log.prev_date_label %} ({{ log.prev_date_label }}){% endif %}
+                                </div>
+                                <div class="d-flex justify-content-center w-100">
+                                    {% if log.improvement_pct is not none %}
+                                        {% set delta = log.improvement_pct %}
+                                        <span class="delta-badge {% if delta > 0 %}delta-positive{% elif delta < 0 %}delta-negative{% else %}delta-flat{% endif %}">
+                                            {% if delta > 0 %}
+                                            <i class="bi bi-arrow-up-circle-fill flex-shrink-0"></i>
+                                            {% elif delta < 0 %}
+                                            <i class="bi bi-arrow-down-circle-fill flex-shrink-0"></i>
+                                            {% else %}
+                                            <i class="bi bi-dash-circle flex-shrink-0"></i>
+                                            {% endif %}
+                                            {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
+                                        </span>
+                                    {% elif log.prev_1rm %}
+                                        <span class="delta-badge delta-flat">
+                                            <i class="bi bi-dash-circle flex-shrink-0"></i>
+                                            0.0%
+                                        </span>
+                                    {% else %}
+                                        <span class="delta-badge delta-none">
+                                            No prior
+                                        </span>
+                                    {% endif %}
+                                </div>
+                            </div>
                             <div class="exercise-right-rail">
-                                {% if log.performance_label %}
-                                    <span class="perf-badge perf-{{ log.performance_key }}">{{ log.performance_label }}</span>
-                                {% endif %}
-                                <i class="bi bi-chevron-right text-muted"></i>
+                                <div class="exercise-vs-title">Vs All-Time Best</div>
+                                <div class="exercise-vs-row">
+                                    {% if log.performance_label %}
+                                        <span class="perf-badge perf-{{ log.performance_key }}">{{ log.performance_label }}</span>
+                                    {% endif %}
+                                </div>
                             </div>
                         </div>
                     </a>
@@ -243,8 +409,8 @@
                         <summary class="text-gold fw-semibold" style="cursor: pointer; font-size: var(--fs-sm);">
                             <i class="bi bi-code-square me-2"></i>View Raw Log Data
                         </summary>
-                        <textarea class="form-control mt-3" rows="10"
-                                  style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6; height: clamp(200px, 32vh, 360px);"
+                        <textarea class="form-control mt-3" rows="8"
+                                  style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6; height: clamp(140px, 22vh, 260px);"
                                   readonly>{{ workout_text }}</textarea>
                     </details>
                 </div>

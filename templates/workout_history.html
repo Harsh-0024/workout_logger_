@@ -27,7 +27,7 @@
 
             <div id="historyList" class="workout-history-list">
                 {% for workout in workouts %}
-                <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="recent-workout-item text-decoration-none history-item" style="display: block; transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d/%m/%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
+                <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="recent-workout-item text-decoration-none history-item" style="display: block; transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d-%m-%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
                     <div class="d-flex justify-content-between align-items-center">
                         <div class="flex-grow-1">
                             <span class="text-white fw-semibold d-block" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ workout.title }}</span>
