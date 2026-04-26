@@ -14,6 +14,7 @@ from list_of_exercise import BW_EXERCISES
 from models import WorkoutLog, RepRange
 from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
+from services.logging import resolve_timed_exercise_status
 from utils.dates import local_date
 
 
@@ -167,9 +168,36 @@ def _get_log_metrics(log):
 
 
 def _is_timed_log(log) -> bool:
-    """Check if a log is for a time-based exercise via explicit [N-Ns] hint only."""
+    """
+    Check if a log is for a seconds/time-based exercise.
+
+    Historically we relied on a narrow `[N-Ns]` pattern inside `exercise_string`.
+    Some logs may contain non-standard dash encodings, so we also:
+    - detect any bracket that contains a trailing `s` after digits
+    - fall back to keyword matching on `log.exercise` for known timed movements
+    """
     exercise_string = str(getattr(log, 'exercise_string', '') or '')
-    return bool(re.search(r"\[[^\]]*\d+\s*[-\u2013\u2014]\s*\d+\s*s[^\]]*\]", exercise_string, flags=re.IGNORECASE))
+    exercise_name = str(getattr(log, 'exercise', '') or '')
+
+    bracket_parts = re.findall(r"\[([^\]]*)\]", exercise_string)
+    for part in bracket_parts:
+        token = str(part or "").strip().lower()
+        if not token:
+            continue
+        if re.search(r"(?:\b(?:s|sec|secs|second|seconds)\b|\d+\s*s(?:ec(?:onds?)?)?\b)", token):
+            return True
+
+    name = exercise_name.lower()
+    # Keyword fallback for common seconds-based movements.
+    timed_name_patterns = [
+        r"\bdead\s*hang\b",
+        r"\bplank\b",
+        r"\bforearm\s*roller\b",
+        # farmer's walk variants (including trap bar)
+        r"\b(?:trap\s*bar\s*)?farmer(?:[’']\s*s)?\s*walk\b",
+        r"\b(?:trap\s*bar\s*)?farmers?\s*walk\b",
+    ]
+    return bool(re.search("|".join(timed_name_patterns), name, flags=re.IGNORECASE))
 
 
 def _get_timed_target_range(db_session, user, exercise_name: str) -> Optional[Tuple[int, int]]:
@@ -339,7 +367,13 @@ def get_chart_data(db_session, user, exercise_name):
 
     exercise_is_timed = False
     for log in logs:
-        if _is_timed_log(log):
+        timed_status = resolve_timed_exercise_status(
+            db_session,
+            user.id,
+            getattr(log, 'exercise', ''),
+            getattr(log, 'exercise_string', '') or '',
+        )
+        if timed_status.get("is_timed"):
             exercise_is_timed = True
             break
 
@@ -585,7 +619,7 @@ def get_overall_progress_data(
     db_session,
     user,
     mode: str = 'index',
-    baseline_days_target: int = 24,
+    baseline_sessions_target: int = 5,
     min_sessions: int = 3,
     fade_start_days: int = 60,
     fade_end_days: int = 90,
@@ -647,16 +681,18 @@ def get_overall_progress_data(
     workout_days_sorted = sorted(workout_days)
     start_day = workout_days_sorted[0]
     end_day = workout_days_sorted[-1]
-    baseline_days_actual = min(int(baseline_days_target), len(workout_days_sorted))
-    baseline_end_day = workout_days_sorted[baseline_days_actual - 1]
 
     baseline_by_exercise: Dict[str, float] = {}
     sessions_by_exercise: Dict[str, int] = {}
-
     for key, day_map in exercise_day_values.items():
         session_items = sorted(day_map.items())
         sessions_by_exercise[key] = len(session_items)
-        samples = [v for d, v in session_items if d <= baseline_end_day and v and v > 0]
+        positive_values = [v for _, v in session_items if v and v > 0]
+        baseline_session_count = min(
+            int(baseline_sessions_target),
+            len(positive_values),
+        )
+        samples = positive_values[:baseline_session_count]
         if not samples:
             continue
         if len(samples) >= 3:
@@ -798,7 +834,7 @@ def get_overall_progress_data(
         'stats': stats,
         'unit': 'percent',
         'overall_mode': mode,
-        'baseline_days': baseline_days_actual,
+        'baseline_sessions': int(baseline_sessions_target),
         'min_sessions': int(min_sessions),
     }
 

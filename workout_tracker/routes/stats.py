@@ -143,7 +143,9 @@ def register_stats_routes(app):
 
             mode = (request.args.get('mode') or '').strip().lower()
             if mode in {'index', 'rate'}:
-                baseline_days = request.args.get('baseline_days', type=int) or 24
+                baseline_sessions = request.args.get('baseline_sessions', type=int)
+                if baseline_sessions is None:
+                    baseline_sessions = request.args.get('baseline_days', type=int) or 5
                 min_sessions = request.args.get('min_sessions', type=int) or 3
                 fade_start_days = request.args.get('fade_start_days', type=int) or 60
                 fade_end_days = request.args.get('fade_end_days', type=int) or 90
@@ -152,7 +154,7 @@ def register_stats_routes(app):
                         Session,
                         user,
                         mode=mode,
-                        baseline_days_target=baseline_days,
+                        baseline_sessions_target=baseline_sessions,
                         min_sessions=min_sessions,
                         fade_start_days=fade_start_days,
                         fade_end_days=fade_end_days,

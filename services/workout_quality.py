@@ -154,7 +154,6 @@ class WorkoutQualityScorer:
     def _estimate_1rm(weight: float, reps: int) -> float:
         if weight <= 0 or reps <= 0:
             return 0.0
-        # Calculator A: monotonic by reps for the same load.
         return weight * (1.0 + reps / 30.0)
 
     @staticmethod

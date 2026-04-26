@@ -5,6 +5,47 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 _DASH_CHARS = "-‐‑‒–—−"
 _APOSTROPHES = "’`´"
 
+_TOKEN_PLURAL_EXCEPTIONS = {
+    # Keep compound/abbreviation-like tokens intact.
+    "oh",  # normalized to overhead below
+    "ui",  # hypothetical; harmless
+}
+
+
+def _normalize_token(tok: str) -> str:
+    t = (tok or "").strip().lower()
+    if not t:
+        return ""
+
+    # Common abbreviations / shorthand.
+    if t in {"oh", "overhead"}:
+        return "overhead"
+
+    # Common singular/plural swap.
+    if t in {"tricep", "triceps"}:
+        return "triceps"
+
+    # Optional/common filler tokens.
+    if t == "forearm":
+        return ""
+
+    # Generic plural normalization (keeps 'ss' words like 'press').
+    if (
+        t not in _TOKEN_PLURAL_EXCEPTIONS
+        and len(t) > 3
+        and t.endswith("s")
+        and not t.endswith("ss")
+    ):
+        t = t[:-1]
+
+    # Re-apply the singular/plural mapping after stripping.
+    if t in {"tricep", "triceps"}:
+        t = "triceps"
+    if t in {"oh", "overhead"}:
+        t = "overhead"
+
+    return t
+
 
 def _collapse_ws(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip())
@@ -27,12 +68,19 @@ def normalize_exercise_name(name: str) -> str:
     for ch in _APOSTROPHES:
         s = s.replace(ch, "'")
 
+    # Treat underscores like spaces (common in data exports).
+    s = s.replace("_", " ")
+
     # Normalize all dash-like characters to spaces (handles "Pull-Ups" vs "Pull Ups").
     for ch in _DASH_CHARS:
         s = s.replace(ch, " ")
 
     s = _collapse_ws(s).lower()
-    return s
+
+    tokens = [t for t in s.split(" ") if t]
+    norm_tokens = [_normalize_token(t) for t in tokens]
+    norm_tokens = [t for t in norm_tokens if t]
+    return " ".join(norm_tokens)
 
 
 def token_signature(name: str) -> Tuple[str, ...]:
@@ -40,8 +88,9 @@ def token_signature(name: str) -> Tuple[str, ...]:
     Order-insensitive signature used only as a conservative fallback when an exact
     normalized match is missing.
 
-    Important: this intentionally keeps all tokens (including 'machine', 'barbell',
-    etc.) to reduce accidental merging of distinct exercises.
+    Important: signature is intentionally conservative:
+    - It uses a normalized token stream (plural/oh/forearm normalized).
+    - It keeps all remaining tokens (including 'machine', 'barbell', etc.) to reduce accidental merging.
     """
     norm = normalize_exercise_name(name)
     if not norm:

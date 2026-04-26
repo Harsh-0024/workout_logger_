@@ -87,6 +87,38 @@ class TestExerciseMatching(unittest.TestCase):
         idx = build_name_index(["Calf Raises Standing", "Standing Calf Raises"])
         self.assertEqual(resolve_equivalent_names("Raises Standing Calf", idx), [])
 
+    def test_plural_dips_matches_dip(self):
+        idx = build_name_index(["Machine Dip"])
+        self.assertEqual(resolve_equivalent_names("Machine Dips", idx), ["Machine Dip"])
+
+    def test_tricep_singular_matches_triceps(self):
+        idx = build_name_index(["Triceps Rope Pushdown"])
+        self.assertEqual(
+            resolve_equivalent_names("Tricep Rope Pushdown", idx),
+            ["Triceps Rope Pushdown"],
+        )
+
+    def test_oh_matches_overhead(self):
+        idx = build_name_index(["Single-Arm Dumbbell Oh Extension"])
+        self.assertEqual(
+            resolve_equivalent_names("Single-Arm Dumbbell Overhead Extension", idx),
+            ["Single-Arm Dumbbell Oh Extension"],
+        )
+
+    def test_forearm_optional_token(self):
+        idx = build_name_index(["Barbell Forearm Ulnar/Radial Deviation"])
+        self.assertEqual(
+            resolve_equivalent_names("Barbell Ulnar/Radial Deviation", idx),
+            ["Barbell Forearm Ulnar/Radial Deviation"],
+        )
+
+    def test_ordering_does_not_matter_when_unambiguous(self):
+        idx = build_name_index(["Single-Arm Cable Triceps Pushdown"])
+        self.assertEqual(
+            resolve_equivalent_names("Tricep Single-Arm Cable Pushdown", idx),
+            ["Single-Arm Cable Triceps Pushdown"],
+        )
+
 
 class TestRepTargetParsing(unittest.TestCase):
     def test_parse_rep_target_sets_with_normalization(self):
@@ -96,7 +128,8 @@ class TestRepTargetParsing(unittest.TestCase):
         Flat Dumbbell Press: 8-12
         """
         parsed = _parse_rep_target_sets(rep_text)
-        self.assertEqual(parsed.get("stationary reverse lunges"), 2)
+        # Plural forms are normalized away for matching consistency (e.g., lunges -> lunge).
+        self.assertEqual(parsed.get("stationary reverse lunge"), 2)
         self.assertEqual(parsed.get("wrist extension dumbbell"), 4)
         # No explicit set-count prefix here, so it should not be present.
         self.assertNotIn("flat dumbbell press", parsed)

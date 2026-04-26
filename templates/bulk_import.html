@@ -44,10 +44,77 @@
                         placeholder="03/02 Back &amp; Biceps&#10;Pull-Ups - [6–10]&#10;bw, 10 8 6&#10;&#10;04/02 Chest &amp; Shoulders&#10;Bench Press - [6–10]&#10;80 75, 8 10"
                     >{{ prefill or '' }}</textarea>
                 </div>
-                <button type="submit" class="btn btn-gold-solid w-100 mb-3">
-                    <i class="bi bi-upload me-2"></i>Import Workouts
+                {% if import_feedback and import_feedback.preview_mode %}
+                <button type="submit" name="confirm_import" value="1" class="btn btn-gold-solid w-100 mb-3">
+                    <i class="bi bi-upload me-2"></i>Confirm Import
                 </button>
+                {% else %}
+                <button type="submit" name="confirm_import" value="0" class="btn btn-gold-solid w-100 mb-3">
+                    <i class="bi bi-upload me-2"></i>Assess & Review Import
+                </button>
+                {% endif %}
             </form>
+
+            {% if import_feedback %}
+            <div class="mt-3 p-3 rounded border" style="border-color: var(--border-subtle) !important; background: var(--gold-subtle); color: var(--text-primary);">
+                {% set ns = namespace(n=0) %}
+                <div class="d-flex align-items-center gap-2 mb-2">
+                    <i class="bi bi-exclamation-triangle text-gold"></i>
+                    <div class="fw-semibold">Import details</div>
+                </div>
+                <div class="text-muted" style="font-size: var(--fs-sm); color: var(--text-primary) !important;">
+                    {% if import_feedback.preview_mode %}
+                        {{"Assessment: would import " ~ import_feedback.success_day_count ~ " day(s) • Skipped " ~ import_feedback.skipped_day_count ~ " • Failed " ~ import_feedback.failed_day_count ~ " • Couldn't parse " ~ import_feedback.invalid_exercise_count ~ " exercise line(s) • Detected " ~ import_feedback.total_blocks ~ " day blocks from your paste."}}
+                    {% else %}
+                        {{"Imported " ~ import_feedback.success_day_count ~ " day(s) • Skipped " ~ import_feedback.skipped_day_count ~ " • Failed " ~ import_feedback.failed_day_count ~ " • Couldn't parse " ~ import_feedback.invalid_exercise_count ~ " exercise line(s) • Detected " ~ import_feedback.total_blocks ~ " day blocks from your paste."}}
+                    {% endif %}
+                </div>
+                {% if import_feedback.failed_day_count and import_feedback.failed_details %}
+                {% set ns.n = ns.n + 1 %}
+                <div class="mt-2 fw-semibold">Issue {{ ns.n }}: Failed days</div>
+                <pre class="mt-2 mb-0" style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: 0.78rem; white-space: pre-wrap; color: var(--text-primary);">
+{% for line in import_feedback.failed_details %}{{ line }}
+{% endfor %}</pre>
+                {% endif %}
+
+                {% if import_feedback.skipped_details and import_feedback.skipped_details|length %}
+                {% set ns.n = ns.n + 1 %}
+                <div class="mt-2 fw-semibold">Issue {{ ns.n }}: Skipped days</div>
+                <pre class="mt-2 mb-0" style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: 0.78rem; white-space: pre-wrap; color: var(--text-primary);">
+{% for line in import_feedback.skipped_details %}{{ line }}
+{% endfor %}</pre>
+                {% endif %}
+
+                {% if import_feedback.date_assumptions and import_feedback.date_assumptions|length %}
+                {% set ns.n = ns.n + 1 %}
+                <div class="mt-2 fw-semibold">Issue {{ ns.n }}: Date assumptions</div>
+                <pre class="mt-2 mb-0" style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: 0.78rem; white-space: pre-wrap; color: var(--text-primary);">
+{% for line in import_feedback.date_assumptions %}{{ line }}
+{% endfor %}</pre>
+                {% endif %}
+                {% if import_feedback.invalid_exercise_count and import_feedback.invalid_details %}
+                {% set ns.n = ns.n + 1 %}
+                <div class="mt-2 fw-semibold">Issue {{ ns.n }}: Invalid exercise lines</div>
+                <pre class="mt-2 mb-0" style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: 0.78rem; white-space: pre-wrap; color: var(--text-primary);">
+{% for line in import_feedback.invalid_details %}{{ line }}
+{% endfor %}</pre>
+                {% endif %}
+
+                {% if import_feedback.ignored_section_count and import_feedback.ignored_section_details %}
+                {% set ns.n = ns.n + 1 %}
+                <div class="mt-2 fw-semibold">Issue {{ ns.n }}: Ignored section lines</div>
+                <pre class="mt-2 mb-0" style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: 0.78rem; white-space: pre-wrap; color: var(--text-primary);">
+{% for line in import_feedback.ignored_section_details %}{{ line }}
+{% endfor %}</pre>
+                {% endif %}
+
+                {% if import_feedback.failed_day_count == 0 and import_feedback.skipped_day_count == 0 and import_feedback.invalid_exercise_count == 0 and (import_feedback.date_assumptions|length == 0) %}
+                <div class="mt-2 text-muted" style="font-size: var(--fs-sm); color: var(--text-primary) !important;">
+                    No issues detected. {{ 'Ready to confirm import.' if import_feedback.preview_mode else 'Import completed successfully.' }}
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
 
             <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
                 <a href="{{ url_for('user_settings') }}" class="text-muted text-decoration-none small hover-gold tracking-wide">

@@ -4,6 +4,7 @@ import json
 import re
 import threading
 import time
+from urllib.parse import urlsplit
 
 from flask import Response, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
@@ -11,9 +12,20 @@ from itsdangerous import URLSafeSerializer, BadSignature
 from sqlalchemy import desc, func
 
 from list_of_exercise import get_workout_days, list_of_exercises
-from models import Session, User, WorkoutLog, UserApiKey, ShortcutKeyMap
+from models import Session, User, WorkoutLog, UserApiKey, ShortcutKeyMap, RepRange
 from parsers.workout import workout_parser, parse_bw_weight
-from services.logging import handle_workout_log, compute_workout_summary_for_date, classify_exercise_performance
+from services.logging import (
+    handle_workout_log,
+    compute_workout_summary_for_date,
+    classify_exercise_performance,
+    resolve_timed_exercise_status,
+    set_timed_exercise_preference,
+    comparison_set_count,
+    get_best_log_for_exercise,
+    get_plan_target_sets_for_user,
+    parse_rep_target_sets_text,
+    resolve_target_sets_for_exercise,
+)
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
@@ -390,6 +402,18 @@ def register_workout_routes(app):
                 flash("Workout not found.", "error")
                 return redirect(url_for('user_dashboard', username=user.username))
 
+            default_back_url = url_for('user_dashboard', username=user.username)
+            back_url = default_back_url
+            return_to = (request.args.get('return_to') or '').strip()
+            if return_to:
+                parsed = urlsplit(return_to)
+                if (not parsed.scheme) and (not parsed.netloc):
+                    candidate = parsed.path or ''
+                    if candidate.startswith('/workout/') or candidate.startswith('/stats'):
+                        back_url = candidate + ((f"?{parsed.query}") if parsed.query else '')
+
+            current_workout_url = url_for('view_workout', date_str=date_str)
+
             workout_name = _clean_workout_title(logs[0].workout_name or "Workout")
             header_date = workout_date.strftime('%d/%m')
             workout_text = build_exercise_text(logs)
@@ -397,37 +421,42 @@ def register_workout_routes(app):
             exercise_count = len(logs)
             set_count = 0
             missing_bw_exercises = set()
-            prev_1rm_by_exercise = {}
-            prev_log_by_exercise = {}
 
-            for log in logs:
-                prev_log = (
-                    Session.query(WorkoutLog)
-                    .filter_by(user_id=user.id, exercise=log.exercise)
-                    .filter(WorkoutLog.date < start_dt)
-                    .order_by(WorkoutLog.date.desc())
-                    .first()
-                )
-                prev_1rm_by_exercise[log.exercise] = (
-                    prev_log.estimated_1rm if prev_log and prev_log.estimated_1rm else None
-                )
-                prev_log_by_exercise[log.exercise] = prev_log
+            rep_row = Session.query(RepRange).filter_by(user_id=user.id).first()
+            rep_target_sets = parse_rep_target_sets_text(rep_row.text_content if rep_row else "")
+            plan_target_sets = get_plan_target_sets_for_user(Session, user)
 
             # Calculate volume for each exercise
             for log in logs:
-                log.is_timed = bool(re.search(
-                    r"\[[^\]]*\d\s*[-\u2013\u2014]\s*\d\s*s[^\]]*\]",
-                    str(getattr(log, 'exercise_string', '') or ''),
-                    re.IGNORECASE,
-                ))
+                exercise_text = str(getattr(log, 'exercise_string', '') or '')
+                inferred_set_count = comparison_set_count(getattr(log, "sets_json", None), exercise_text)
+                target_sets, strict_target_sets = resolve_target_sets_for_exercise(
+                    exercise_name=log.exercise,
+                    exercise_string=exercise_text,
+                    rep_target_sets=rep_target_sets,
+                    plan_target_sets=plan_target_sets,
+                    inferred_set_count=inferred_set_count,
+                    default_sets=3,
+                )
+                log.target_sets = target_sets
+                log.strict_target_sets = strict_target_sets
+                timed_status = resolve_timed_exercise_status(
+                    Session,
+                    user.id,
+                    log.exercise,
+                    exercise_text,
+                )
+                log.is_timed = bool(timed_status.get("is_timed"))
                 perf = classify_exercise_performance(
                     Session,
                     user.id,
                     log.exercise,
                     getattr(log, 'sets_json', None),
-                    target_sets=3,
+                    target_sets=target_sets,
+                    strict_target_sets=strict_target_sets,
                     is_timed=log.is_timed,
                     current_log_id=getattr(log, 'id', None),
+                    current_exercise_string=exercise_text,
                     summary_mode=False,
                 )
                 log.performance_key = perf.get('key')
@@ -464,8 +493,23 @@ def register_workout_routes(app):
                         except (ValueError, IndexError):
                             continue
                 log.total_volume = total_volume if total_volume > 0 else None
-                prev_1rm = prev_1rm_by_exercise.get(log.exercise)
-                prev_log = prev_log_by_exercise.get(log.exercise)
+                prev_candidates = (
+                    Session.query(WorkoutLog)
+                    .filter_by(user_id=user.id, exercise=log.exercise)
+                    .filter(WorkoutLog.date < start_dt)
+                    .order_by(WorkoutLog.date.desc(), WorkoutLog.id.desc())
+                    .all()
+                )
+                prev_log = None
+                for candidate in prev_candidates:
+                    if strict_target_sets and comparison_set_count(
+                        getattr(candidate, "sets_json", None),
+                        getattr(candidate, "exercise_string", "") or "",
+                    ) < target_sets:
+                        continue
+                    prev_log = candidate
+                    break
+                prev_1rm = prev_log.estimated_1rm if prev_log and prev_log.estimated_1rm else None
                 current_1rm = log.estimated_1rm if log.estimated_1rm else None
                 if prev_1rm and current_1rm:
                     delta_pct = ((current_1rm - prev_1rm) / prev_1rm) * 100.0
@@ -480,6 +524,44 @@ def register_workout_routes(app):
                     if prev_log and getattr(prev_log, 'date', None)
                     else None
                 )
+                log.prev_date_iso = (
+                    prev_log.date.strftime('%Y-%m-%d')
+                    if prev_log and getattr(prev_log, 'date', None)
+                    else None
+                )
+                log.prev_workout_url = (
+                    url_for('view_workout', date_str=log.prev_date_iso, return_to=current_workout_url)
+                    if log.prev_date_iso else None
+                )
+                if not prev_log:
+                    log.performance_key = "first_log"
+                    if strict_target_sets and prev_candidates:
+                        log.performance_label = "No Comparable Baseline"
+                    else:
+                        log.performance_label = "No baseline"
+                best_log = get_best_log_for_exercise(
+                    Session,
+                    user.id,
+                    log.exercise,
+                    target_sets=target_sets,
+                    strict_target_sets=strict_target_sets,
+                    is_timed=log.is_timed,
+                )
+                log.best_date_label = (
+                    best_log.date.strftime('%d-%m-%y')
+                    if best_log and getattr(best_log, 'date', None)
+                    else None
+                )
+                log.best_date_iso = (
+                    best_log.date.strftime('%Y-%m-%d')
+                    if best_log and getattr(best_log, 'date', None)
+                    else None
+                )
+                log.best_workout_url = (
+                    url_for('view_workout', date_str=log.best_date_iso, return_to=current_workout_url)
+                    if log.best_date_iso else None
+                )
+                log.stats_url = url_for('stats_index', exercise=log.exercise)
             
             share_token = _make_share_token(user.id, workout_date)
             share_url = url_for('shared_workout', token=share_token, _external=True)
@@ -494,6 +576,7 @@ def register_workout_routes(app):
                 set_count=set_count,
                 missing_bw_exercises=sorted(missing_bw_exercises),
                 share_url=share_url,
+                back_url=back_url,
             )
         except ValueError:
             flash("Invalid date format.", "error")
@@ -516,6 +599,19 @@ def register_workout_routes(app):
         if not summary:
             flash("Workout not found.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
+        timed_prompts = []
+        seen_timed_prompt_keys = set()
+        for row in summary:
+            if not row.get("timed_prompt_needed"):
+                continue
+            exercise_name = str(row.get("timed_prompt_exercise") or row.get("name") or "").strip()
+            if not exercise_name:
+                continue
+            dedup_key = exercise_name.lower()
+            if dedup_key in seen_timed_prompt_keys:
+                continue
+            seen_timed_prompt_keys.add(dedup_key)
+            timed_prompts.append({"exercise": exercise_name})
 
         return render_template(
             'result.html',
@@ -523,6 +619,7 @@ def register_workout_routes(app):
             date=date_str,
             exercise_count=int(exercise_count or 0),
             set_count=int(set_count or 0),
+            timed_prompts=timed_prompts,
         )
 
     @login_required
@@ -2823,6 +2920,19 @@ def register_workout_routes(app):
 
         try:
             summary = handle_workout_log(Session, user, parsed)
+            timed_prompt_rows = []
+            seen_timed_prompt_keys = set()
+            for row in (summary or []):
+                if not row.get("timed_prompt_needed"):
+                    continue
+                exercise_name = str(row.get("timed_prompt_exercise") or row.get("name") or "").strip()
+                if not exercise_name:
+                    continue
+                dedup_key = exercise_name.lower()
+                if dedup_key in seen_timed_prompt_keys:
+                    continue
+                seen_timed_prompt_keys.add(dedup_key)
+                timed_prompt_rows.append({"exercise": exercise_name})
             exercises = parsed.get('exercises') or []
             exercise_count = len(exercises)
             set_count = sum(
@@ -2838,6 +2948,7 @@ def register_workout_routes(app):
                 "date_str": parsed['date'].strftime('%Y-%m-%d'),
                 "exercise_count": exercise_count,
                 "set_count": set_count,
+                "timed_prompts": timed_prompt_rows,
                 "needs_bodyweight_info": needs_bodyweight_info,
                 "already_exists": False,
             }, None
@@ -2873,7 +2984,31 @@ def register_workout_routes(app):
             date=result.get("date_str"),
             exercise_count=int(result.get("exercise_count") or 0),
             set_count=int(result.get("set_count") or 0),
+            timed_prompts=result.get("timed_prompts") or [],
         )
+
+    @login_required
+    def set_timed_preference():
+        user = current_user
+        exercise_name = (request.args.get('exercise') or '').strip()
+        choice = (request.args.get('is_timed') or '').strip().lower()
+        next_url = (request.args.get('next') or '').strip()
+
+        if not exercise_name or choice not in {'yes', 'no'}:
+            flash("Invalid timed exercise preference request.", "error")
+            return redirect(next_url or url_for('log_workout'))
+
+        try:
+            set_timed_exercise_preference(Session, user.id, exercise_name, choice == 'yes')
+            Session.commit()
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Error saving timed preference: {e}", exc_info=True)
+            flash("Could not save timed preference. Please try again.", "error")
+
+        if next_url.startswith('/'):
+            return redirect(next_url)
+        return redirect(url_for('log_workout'))
 
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
     app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])
@@ -2897,5 +3032,6 @@ def register_workout_routes(app):
     app.add_url_rule('/workout/<date_str>/delete', endpoint='delete_workout', view_func=delete_workout, methods=['POST'])
     app.add_url_rule('/workouts/delete-selected', endpoint='bulk_delete_workouts', view_func=bulk_delete_workouts, methods=['POST'])
     app.add_url_rule('/log', endpoint='log_workout', view_func=log_workout, methods=['GET', 'POST'])
+    app.add_url_rule('/timed-preference/set', endpoint='set_timed_preference', view_func=set_timed_preference, methods=['GET'])
     app.add_url_rule('/api/recommend-workout', endpoint='recommend_workout_api', view_func=recommend_workout_api, methods=['GET'])
     app.add_url_rule('/api/history-qa', endpoint='history_qa_api', view_func=history_qa_api, methods=['POST'])

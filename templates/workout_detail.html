@@ -91,12 +91,12 @@
                     align-items: center;
                     justify-content: center;
                     gap: 4px;
-                    width: 118px;
-                    min-height: 26px;
-                    padding: 3px 6px;
+                    width: min(100%, 150px);
+                    min-height: 30px;
+                    padding: 3px 8px;
                     border-radius: 999px;
                     border: 1px solid transparent;
-                    font-size: 0.6875rem;
+                    font-size: 0.67rem;
                     letter-spacing: 0.2px;
                     font-weight: 700;
                     text-align: center;
@@ -134,7 +134,7 @@
                     color: var(--text-muted);
                     background: rgba(113, 113, 122, 0.18);
                     border-color: rgba(113, 113, 122, 0.35);
-                    font-size: 0.6rem;
+                    font-size: 0.72rem;
                     font-weight: 600;
                     line-height: 1.1;
                 }
@@ -173,6 +173,9 @@
                     flex: 1 1 260px;
                     min-width: 0;
                 }
+                .exercise-main-link {
+                    cursor: pointer;
+                }
 
                 .exercise-title {
                     margin-bottom: 8px;
@@ -208,15 +211,101 @@
                 }
 
                 .exercise-vs-title {
-                    font-size: 0.65rem;
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: min(100%, 150px);
+                    min-height: 30px;
+                    font-size: 0.66rem;
                     letter-spacing: 0.75px;
                     text-transform: uppercase;
                     color: var(--text-muted);
-                    font-weight: 600;
+                    font-weight: 700;
                     margin-bottom: 0;
-                    padding-bottom: 2px;
+                    padding: 0.2rem 0.5rem;
+                    border-radius: 999px;
+                    background: rgba(212, 175, 55, 0.08);
+                    border: 1px solid rgba(212, 175, 55, 0.2);
                     line-height: 1.35;
                     white-space: nowrap;
+                }
+                .exercise-vs-title-link {
+                    color: inherit;
+                    text-decoration: none;
+                    transition: color var(--transition-base), opacity var(--transition-base);
+                }
+                .exercise-vs-title-link:hover {
+                    color: var(--gold-primary);
+                    opacity: 0.9;
+                }
+                .exercise-rail-link {
+                    text-decoration: none;
+                    cursor: pointer;
+                    transition: transform 0.18s ease, box-shadow 0.18s ease, filter 0.18s ease, border-color 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+                }
+                .exercise-rail-link:hover {
+                    transform: translateY(-1px);
+                    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+                }
+                .exercise-vs-title.exercise-rail-link:hover {
+                    color: #f7d87b;
+                    border-color: rgba(212, 175, 55, 0.58);
+                    background: rgba(212, 175, 55, 0.17);
+                    box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.18), 0 8px 20px rgba(212, 175, 55, 0.18);
+                }
+                .delta-positive.exercise-rail-link:hover {
+                    background: rgba(34, 197, 94, 0.28);
+                    border-color: rgba(34, 197, 94, 0.62);
+                    box-shadow: 0 8px 18px rgba(34, 197, 94, 0.22);
+                }
+                .delta-negative.exercise-rail-link:hover {
+                    background: rgba(239, 68, 68, 0.3);
+                    border-color: rgba(239, 68, 68, 0.62);
+                    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.2);
+                }
+                .delta-flat.exercise-rail-link:hover {
+                    background: rgba(113, 113, 122, 0.38);
+                    border-color: rgba(148, 148, 160, 0.58);
+                    box-shadow: 0 8px 18px rgba(113, 113, 122, 0.24);
+                }
+                .perf-gold_strength.exercise-rail-link:hover,
+                .perf-gold_load.exercise-rail-link:hover,
+                .perf-first_log.exercise-rail-link:hover {
+                    filter: brightness(1.06);
+                    box-shadow: 0 8px 20px rgba(212, 175, 55, 0.34);
+                }
+                .perf-silver_strength.exercise-rail-link:hover,
+                .perf-silver_load.exercise-rail-link:hover {
+                    filter: brightness(1.05);
+                    box-shadow: 0 8px 18px rgba(192, 192, 192, 0.32);
+                }
+                .perf-bronze_strength.exercise-rail-link:hover,
+                .perf-bronze_load.exercise-rail-link:hover {
+                    filter: brightness(1.05);
+                    box-shadow: 0 8px 18px rgba(205, 127, 50, 0.3);
+                }
+                .perf-consistent.exercise-rail-link:hover {
+                    background: rgba(113, 113, 122, 0.36);
+                    border-color: rgba(113, 113, 122, 0.62);
+                    box-shadow: 0 8px 18px rgba(113, 113, 122, 0.26);
+                }
+                .perf-slightly_off.exercise-rail-link:hover {
+                    background: rgba(245, 158, 11, 0.34);
+                    border-color: rgba(245, 158, 11, 0.62);
+                    box-shadow: 0 8px 18px rgba(245, 158, 11, 0.24);
+                }
+                .perf-moderately_off.exercise-rail-link:hover {
+                    background: rgba(239, 106, 0, 0.35);
+                    border-color: rgba(239, 106, 0, 0.65);
+                    box-shadow: 0 8px 18px rgba(239, 106, 0, 0.24);
+                }
+                .perf-significantly_off.exercise-rail-link:hover {
+                    background: rgba(239, 68, 68, 0.35);
+                    border-color: rgba(239, 68, 68, 0.65);
+                    box-shadow: 0 8px 18px rgba(239, 68, 68, 0.22);
+                }
+                .exercise-card-link {
+                    cursor: pointer;
                 }
 
                 .exercise-vs-row {
@@ -302,6 +391,48 @@
                     .workout-action-buttons {
                         max-width: 100%;
                     }
+
+                    .workout-result-stats {
+                        gap: 8px;
+                    }
+
+                    .workout-stat-badge {
+                        padding: 8px 10px;
+                        min-height: 44px;
+                    }
+
+                    .workout-detail-action-btn {
+                        min-height: 44px;
+                        padding-left: 0.55rem;
+                        padding-right: 0.55rem;
+                        white-space: normal;
+                        line-height: 1.2;
+                    }
+
+                    .perf-badge,
+                    .delta-badge {
+                        width: min(100%, 150px);
+                        min-height: 30px;
+                        font-size: 0.66rem;
+                        padding: 3px 7px;
+                    }
+
+                    .exercise-previous-rail,
+                    .exercise-right-rail {
+                        gap: 10px;
+                    }
+
+                    .exercise-vs-title {
+                        width: min(100%, 150px);
+                        min-height: 30px;
+                        font-size: 0.64rem;
+                        letter-spacing: 0.58px;
+                    }
+
+                    .exercise-row-link[data-row-url]:not([data-row-url=""]) {
+                        cursor: pointer;
+                    }
+
                     .exercise-card-content {
                         flex-direction: column;
                         align-items: stretch;
@@ -322,10 +453,24 @@
                     }
                     .exercise-right-rail {
                         align-items: center;
-                        gap: 12px;
+                        gap: 10px;
                     }
                     .exercise-vs-row {
                         justify-content: center;
+                    }
+                }
+                @media (max-width: 430px) {
+                    .workout-action-buttons {
+                        grid-template-columns: 1fr;
+                    }
+                    .workout-detail-action-btn {
+                        min-height: 44px;
+                        font-size: 0.76rem;
+                    }
+                    .exercise-main .d-flex.gap-3 {
+                        gap: 0.5rem !important;
+                        flex-direction: column;
+                        align-items: flex-start;
                     }
                 }
             </style>
@@ -337,9 +482,9 @@
 
                 <div class="list-group">
                     {% for log in logs %}
-                    <a href="{{ url_for('stats_index') }}?exercise={{ log.exercise | urlencode }}" class="list-group-item bg-dark border-subtle mb-2 text-decoration-none exercise-card-link" style="border-radius: 12px; border-color: var(--border-subtle); cursor: pointer; transition: all var(--transition-base);">
+                    <div class="list-group-item bg-dark border-subtle mb-2 text-decoration-none exercise-card-link" data-stats-url="{{ url_for('stats_index') }}?exercise={{ log.exercise | urlencode }}" style="border-radius: 12px; border-color: var(--border-subtle); transition: all var(--transition-base);">
                         <div class="exercise-card-content">
-                            <div class="exercise-main">
+                            <div class="exercise-main exercise-main-link exercise-row-link" data-row-url="{{ log.stats_url }}">
                                 <h6 class="exercise-title text-white" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ log.exercise }}</h6>
                                 <div class="text-muted" style="font-size: var(--fs-xs);">
                                     {% if log.sets_display %}
@@ -362,28 +507,50 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            <div class="exercise-previous-rail">
-                                <div class="exercise-vs-title">
-                                    Vs Previous{% if log.prev_date_label %} ({{ log.prev_date_label }}){% endif %}
-                                </div>
+                            <div class="exercise-previous-rail exercise-row-link" data-row-url="{{ log.prev_workout_url or '' }}">
+                                {% if log.prev_workout_url and log.prev_date_label %}
+                                    <a href="{{ log.prev_workout_url }}" class="exercise-vs-title exercise-rail-link">Vs Previous ({{ log.prev_date_label }})</a>
+                                {% else %}
+                                    <span class="exercise-vs-title">Vs Previous</span>
+                                {% endif %}
                                 <div class="d-flex justify-content-center w-100">
                                     {% if log.improvement_pct is not none %}
                                         {% set delta = log.improvement_pct %}
-                                        <span class="delta-badge {% if delta > 0 %}delta-positive{% elif delta < 0 %}delta-negative{% else %}delta-flat{% endif %}">
-                                            {% if delta > 0 %}
-                                            <i class="bi bi-arrow-up-circle-fill flex-shrink-0"></i>
-                                            {% elif delta < 0 %}
-                                            <i class="bi bi-arrow-down-circle-fill flex-shrink-0"></i>
-                                            {% else %}
-                                            <i class="bi bi-dash-circle flex-shrink-0"></i>
-                                            {% endif %}
-                                            {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
-                                        </span>
+                                        {% if log.prev_workout_url %}
+                                            <a href="{{ log.prev_workout_url }}" class="delta-badge exercise-rail-link {% if delta > 0 %}delta-positive{% elif delta < 0 %}delta-negative{% else %}delta-flat{% endif %}">
+                                                {% if delta > 0 %}
+                                                <i class="bi bi-arrow-up-circle-fill flex-shrink-0"></i>
+                                                {% elif delta < 0 %}
+                                                <i class="bi bi-arrow-down-circle-fill flex-shrink-0"></i>
+                                                {% else %}
+                                                <i class="bi bi-dash-circle flex-shrink-0"></i>
+                                                {% endif %}
+                                                {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
+                                            </a>
+                                        {% else %}
+                                            <span class="delta-badge {% if delta > 0 %}delta-positive{% elif delta < 0 %}delta-negative{% else %}delta-flat{% endif %}">
+                                                {% if delta > 0 %}
+                                                <i class="bi bi-arrow-up-circle-fill flex-shrink-0"></i>
+                                                {% elif delta < 0 %}
+                                                <i class="bi bi-arrow-down-circle-fill flex-shrink-0"></i>
+                                                {% else %}
+                                                <i class="bi bi-dash-circle flex-shrink-0"></i>
+                                                {% endif %}
+                                                {{ '+' if delta > 0 else '' }}{{ "%.1f"|format(delta) }}%
+                                            </span>
+                                        {% endif %}
                                     {% elif log.prev_1rm %}
-                                        <span class="delta-badge delta-flat">
-                                            <i class="bi bi-dash-circle flex-shrink-0"></i>
-                                            0.0%
-                                        </span>
+                                        {% if log.prev_workout_url %}
+                                            <a href="{{ log.prev_workout_url }}" class="delta-badge delta-flat exercise-rail-link">
+                                                <i class="bi bi-dash-circle flex-shrink-0"></i>
+                                                0.0%
+                                            </a>
+                                        {% else %}
+                                            <span class="delta-badge delta-flat">
+                                                <i class="bi bi-dash-circle flex-shrink-0"></i>
+                                                0.0%
+                                            </span>
+                                        {% endif %}
                                     {% else %}
                                         <span class="delta-badge delta-none">
                                             No prior
@@ -391,16 +558,24 @@
                                     {% endif %}
                                 </div>
                             </div>
-                            <div class="exercise-right-rail">
-                                <div class="exercise-vs-title">Vs All-Time Best</div>
+                            <div class="exercise-right-rail exercise-row-link" data-row-url="{{ log.best_workout_url or '' }}">
+                                {% if log.best_workout_url and log.best_date_label %}
+                                    <a href="{{ log.best_workout_url }}" class="exercise-vs-title exercise-rail-link">Vs Best ({{ log.best_date_label }})</a>
+                                {% else %}
+                                    <span class="exercise-vs-title">Vs Best</span>
+                                {% endif %}
                                 <div class="exercise-vs-row">
                                     {% if log.performance_label %}
-                                        <span class="perf-badge perf-{{ log.performance_key }}">{{ log.performance_label }}</span>
+                                        {% if log.best_workout_url %}
+                                            <a href="{{ log.best_workout_url }}" class="perf-badge perf-{{ log.performance_key }} exercise-rail-link">{{ log.performance_label }}</a>
+                                        {% else %}
+                                            <span class="perf-badge perf-{{ log.performance_key }}">{{ log.performance_label }}</span>
+                                        {% endif %}
                                     {% endif %}
                                 </div>
                             </div>
                         </div>
-                    </a>
+                    </div>
                     {% endfor %}
                 </div>
 
@@ -417,7 +592,7 @@
             </div>
 
             <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                <a href="{{ back_url or '/' }}" class="text-muted text-decoration-none small hover-gold tracking-wide">
                     <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
                 </a>
             </div>
@@ -460,6 +635,30 @@
 
         button.addEventListener('click', async () => {
             await copyFallback();
+        });
+
+        const isMobileLayout = () => window.matchMedia('(max-width: 576px)').matches;
+
+        document.querySelectorAll('.exercise-row-link').forEach((row) => {
+            row.addEventListener('click', (event) => {
+                if (!isMobileLayout()) return;
+                if (event.target.closest('a, button, input, textarea, select')) return;
+                const targetUrl = row.dataset.rowUrl;
+                if (!targetUrl) return;
+                event.stopPropagation();
+                window.location.href = targetUrl;
+            });
+        });
+
+        document.querySelectorAll('.exercise-card-link').forEach((card) => {
+            card.addEventListener('click', (event) => {
+                if (isMobileLayout()) return;
+                if (event.target.closest('a, button, input, textarea, select')) return;
+                const statsUrl = card.dataset.statsUrl;
+                if (statsUrl) {
+                    window.location.href = statsUrl;
+                }
+            });
         });
     })();
 </script>

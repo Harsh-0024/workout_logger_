@@ -32,27 +32,29 @@
             <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Manage your account details</p>
         </div>
 
-        <div class="settings-nav-buttons mb-4 d-lg-none">
-            <button type="button" onclick="scrollToSection('quick-actions')" class="btn btn-gold-outline" data-shortcut="1" aria-keyshortcuts="1">
-                <i class="bi bi-lightning-charge"></i>
-                <span class="d-none d-md-inline">Quick Actions</span>
-                <span class="d-md-none">Actions</span>
-            </button>
-            <button type="button" onclick="scrollToSection('ai-keys')" class="btn btn-gold-outline" data-shortcut="2" aria-keyshortcuts="2">
-                <i class="bi bi-stars"></i>
-                <span class="d-none d-md-inline">AI Keys</span>
-                <span class="d-md-none">AI</span>
-            </button>
-            <button type="button" onclick="scrollToSection('profile-appearance')" class="btn btn-gold-outline" data-shortcut="3" aria-keyshortcuts="3">
-                <i class="bi bi-palette"></i>
-                <span class="d-none d-md-inline">Profile &amp; Style</span>
-                <span class="d-md-none">Profile</span>
-            </button>
-            <button type="button" onclick="scrollToSection('account-security')" class="btn btn-gold-outline" data-shortcut="4" aria-keyshortcuts="4">
-                <i class="bi bi-shield-lock"></i>
-                <span class="d-none d-md-inline">Account &amp; Security</span>
-                <span class="d-md-none">Account</span>
-            </button>
+        <div class="settings-mobile-toc card mb-4 d-lg-none">
+            <div class="settings-mobile-toc-header">
+                <span class="settings-mobile-toc-label"><i class="bi bi-list-ul me-2"></i>Contents</span>
+                <small class="text-muted">Tap to jump</small>
+            </div>
+            <div class="settings-mobile-toc-grid">
+                <button type="button" onclick="scrollToSection('quick-actions')" class="btn btn-gold-outline settings-mobile-toc-btn" data-shortcut="1" aria-keyshortcuts="1">
+                    <i class="bi bi-lightning-charge"></i>
+                    <span>Quick Actions</span>
+                </button>
+                <button type="button" onclick="scrollToSection('profile-appearance')" class="btn btn-gold-outline settings-mobile-toc-btn" data-shortcut="2" aria-keyshortcuts="2">
+                    <i class="bi bi-palette"></i>
+                    <span>Profile &amp; Style</span>
+                </button>
+                <button type="button" onclick="scrollToSection('ai-keys')" class="btn btn-gold-outline settings-mobile-toc-btn" data-shortcut="3" aria-keyshortcuts="3">
+                    <i class="bi bi-stars"></i>
+                    <span>AI Keys</span>
+                </button>
+                <button type="button" onclick="scrollToSection('account-security')" class="btn btn-gold-outline settings-mobile-toc-btn" data-shortcut="4" aria-keyshortcuts="4">
+                    <i class="bi bi-shield-lock"></i>
+                    <span>Account &amp; Security</span>
+                </button>
+            </div>
         </div>
 
         <div class="card mb-4" id="quick-actions">
@@ -748,50 +750,50 @@
         box-shadow: 0 0 0 0.2rem rgba(212, 175, 55, 0.18);
     }
 
-    .settings-nav-buttons {
-        display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 12px;
+    .settings-mobile-toc {
+        padding: 0.9rem;
+        border: 1px solid var(--border-subtle);
+        background: var(--card-bg-solid);
     }
 
-    .settings-nav-buttons .btn {
-        padding: 12px 8px;
-        font-size: 0.75rem;
+    .settings-mobile-toc-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+    }
+
+    .settings-mobile-toc-label {
+        font-size: 0.72rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+        font-weight: 700;
+    }
+
+    .settings-mobile-toc-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .settings-mobile-toc-btn {
+        padding: 10px 8px;
+        font-size: 0.72rem;
         font-weight: 600;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.35px;
         border-radius: 12px;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 4px;
-        min-height: 60px;
-        white-space: nowrap;
+        gap: 5px;
+        min-height: 64px;
     }
 
-    .settings-nav-buttons .btn i {
-        font-size: 1.25rem;
+    .settings-mobile-toc-btn i {
+        font-size: 1.05rem;
         margin: 0 !important;
-    }
-
-    @media (min-width: 768px) {
-        .settings-nav-buttons {
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 14px;
-        }
-
-        .settings-nav-buttons .btn {
-            flex-direction: row;
-            padding: 12px 20px;
-            font-size: 0.78rem;
-            letter-spacing: 0.6px;
-            gap: 8px;
-        }
-
-        .settings-nav-buttons .btn i {
-            font-size: 1rem;
-            margin: 0 !important;
-        }
     }
 
     @media (max-width: 576px) {
@@ -833,6 +835,19 @@
         .theme-toggle-btn i {
             margin-right: 6px !important;
             font-size: 0.9rem;
+        }
+
+        .settings-mobile-toc-grid {
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        .settings-mobile-toc-btn {
+            min-height: 50px;
+            flex-direction: row;
+            justify-content: flex-start;
+            padding: 10px 12px;
+            font-size: 0.74rem;
         }
 
         .export-choice-grid {

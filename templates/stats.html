@@ -79,10 +79,10 @@
 
             <!-- Filters below chart -->
             <div class="stats-filters mb-3">
-                <div class="d-flex flex-column flex-sm-row gap-2 gap-sm-3">
-                    <div class="flex-fill">
+                <div class="stats-filter-layout">
+                    <div class="stats-filter-block stats-filter-range">
                         <label class="text-muted mb-1 d-block stats-filter-label">Time range</label>
-                        <div class="d-flex gap-2 range-pill-group">
+                        <div class="range-pill-group">
                             <button class="range-pill" data-range="7">7 days</button>
                             <button class="range-pill" data-range="30">30 days</button>
                             <button class="range-pill" data-range="90">90 days</button>
@@ -91,18 +91,18 @@
                             <button class="range-pill active" data-range="all">All</button>
                         </div>
                     </div>
-                    <div>
+                    <div class="stats-filter-block stats-filter-ma">
                         <label class="text-muted mb-1 d-block stats-filter-label">Moving average window</label>
-                        <div class="d-flex gap-2 ma-pill-group">
+                        <div class="ma-pill-group">
                             <button class="ma-pill" data-ma="7">7d</button>
                             <button class="ma-pill active" data-ma="14">14d</button>
                             <button class="ma-pill" data-ma="30">30d</button>
                             <button class="ma-pill" data-ma="48">48d</button>
                         </div>
                     </div>
-                    <div id="metricControls" style="display: none;">
+                    <div class="stats-filter-block" id="metricControls" style="display: none;">
                         <label class="text-muted mb-1 d-block stats-filter-label">Metric</label>
-                        <div class="d-flex gap-2 metric-pill-group">
+                        <div class="metric-pill-group">
                             <button class="metric-pill active" data-metric="e1rm">e1RM</button>
                             <button class="metric-pill" data-metric="top_weight">Top Weight</button>
                             <button class="metric-pill" data-metric="tonnage">Tonnage</button>
@@ -218,11 +218,29 @@
         background: var(--card-bg, #141414);
         border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.2));
         border-radius: 20px;
-        padding: 0.85rem 1rem;
+        padding: 0.95rem 1rem;
     }
 
-    .stats-filters .d-flex > div {
+    .stats-filter-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
+        gap: 0.9rem 1rem;
+    }
+
+    .stats-filter-block {
         min-width: 0;
+    }
+
+    .stats-filter-range {
+        grid-column: 1;
+    }
+
+    .stats-filter-ma {
+        grid-column: 2;
+    }
+
+    #metricControls {
+        grid-column: 1 / -1;
     }
 
     [data-theme="light"] .stats-filters {
@@ -320,21 +338,27 @@
     .range-pill-group,
     .ma-pill-group,
     .metric-pill-group {
+        display: flex;
         flex-wrap: wrap;
+        gap: 0.5rem;
     }
 
     .range-pill, .ma-pill, .overall-pill, .metric-pill {
         background: rgba(22, 22, 22, 0.7);
         color: var(--text-muted, #b5b5b5);
         border-radius: 999px;
-        padding: 0.45rem 0.95rem;
+        padding: 0.5rem 0.95rem;
         font-size: 0.78rem;
-        font-weight: 500;
+        font-weight: 600;
         cursor: pointer;
         transition: all 0.2s ease;
         border: 1px solid rgba(212, 175, 55, 0.25);
         white-space: nowrap;
         text-align: center;
+        min-height: 38px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .range-pill-group .range-pill {
@@ -429,13 +453,24 @@
 
         .stats-filters {
             margin-bottom: var(--space-sm);
-            padding: 0.7rem 0.85rem;
+            padding: 0.85rem;
+        }
+
+        .stats-filter-layout {
+            grid-template-columns: 1fr;
+            gap: 0.85rem;
+        }
+
+        .stats-filter-range,
+        .stats-filter-ma,
+        #metricControls {
+            grid-column: auto;
         }
 
         .range-pill-group {
             display: grid !important;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 0.35rem;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0.5rem;
             width: 100%;
         }
 
@@ -443,15 +478,15 @@
         .metric-pill-group {
             display: grid !important;
             grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.4rem;
+            gap: 0.45rem;
             width: 100%;
         }
 
         .range-pill {
             width: 100%;
-            padding: 0.4rem 0.2rem;
-            font-size: 0.62rem;
-            height: 34px;
+            padding: 0.48rem 0.2rem;
+            font-size: 0.68rem;
+            min-height: 38px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -461,9 +496,9 @@
         .ma-pill,
         .metric-pill {
             width: 100%;
-            padding: 0.4rem 0.15rem;
-            font-size: 0.58rem;
-            height: 32px;
+            padding: 0.45rem 0.15rem;
+            font-size: 0.64rem;
+            min-height: 36px;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -540,6 +575,95 @@
         }
     };
 
+    function getLastFinitePoint(values) {
+        if (!Array.isArray(values) || !values.length) return { index: null, value: null };
+        for (let i = values.length - 1; i >= 0; i--) {
+            const num = Number(values[i]);
+            if (Number.isFinite(num)) return { index: i, value: num };
+        }
+        return { index: null, value: null };
+    }
+
+    const drawRoundedRect = (ctx, x, y, width, height, radius) => {
+        if (typeof ctx.roundRect === 'function') {
+            ctx.beginPath();
+            ctx.roundRect(x, y, width, height, radius);
+            return;
+        }
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + width - radius, y);
+        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+        ctx.lineTo(x + width, y + height - radius);
+        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+        ctx.lineTo(x + radius, y + height);
+        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+    };
+
+    const currentProjectionPlugin = {
+        id: 'currentProjection',
+        afterDatasetsDraw(chart) {
+            const projection = chart && chart.$currentProjection;
+            if (!projection || !Number.isFinite(Number(projection.value))) return;
+            const yScale = chart.scales && chart.scales.y;
+            const area = chart.chartArea;
+            if (!yScale || !area) return;
+
+            const y = yScale.getPixelForValue(Number(projection.value));
+            if (!Number.isFinite(y) || y < area.top - 2 || y > area.bottom + 2) return;
+
+            const datasetIndex = Number.isInteger(projection.datasetIndex) ? projection.datasetIndex : 0;
+            const pointIndex = Number.isInteger(projection.pointIndex) ? projection.pointIndex : null;
+            let xTo = area.right;
+            const meta = typeof chart.getDatasetMeta === 'function' ? chart.getDatasetMeta(datasetIndex) : null;
+            const point = (meta && Array.isArray(meta.data) && pointIndex !== null) ? meta.data[pointIndex] : null;
+            if (point && Number.isFinite(point.x)) {
+                xTo = point.x;
+            }
+            xTo = Math.max(area.left + 2, Math.min(area.right, xTo));
+
+            const ctx = chart.ctx;
+            ctx.save();
+            ctx.strokeStyle = projection.lineColor || 'rgba(212, 175, 55, 0.5)';
+            ctx.lineWidth = Number(projection.lineWidth) || 1.4;
+            ctx.setLineDash(Array.isArray(projection.dash) ? projection.dash : [4, 4]);
+            ctx.beginPath();
+            ctx.moveTo(area.left, y);
+            ctx.lineTo(xTo, y);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            const labelText = String(projection.label || '').trim();
+            if (labelText) {
+                const tickPadding = Number(yScale.options && yScale.options.ticks && yScale.options.ticks.padding) || 12;
+                ctx.font = projection.font || '600 11px Inter, sans-serif';
+                const boxPaddingX = 7;
+                const boxHeight = 18;
+                const boxWidth = ctx.measureText(labelText).width + (boxPaddingX * 2);
+                const boxRight = area.left - tickPadding - 8;
+                const boxX = Math.max(4, boxRight - boxWidth);
+                const boxY = Math.min(area.bottom - boxHeight, Math.max(area.top, y - (boxHeight / 2)));
+
+                drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, 9);
+                ctx.fillStyle = projection.labelBackground || 'rgba(255, 251, 242, 0.95)';
+                ctx.fill();
+                if (projection.labelBorder) {
+                    ctx.strokeStyle = projection.labelBorder;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+
+                ctx.fillStyle = projection.labelColor || '#8A6D1D';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(labelText, boxX + boxPaddingX, boxY + (boxHeight / 2));
+            }
+            ctx.restore();
+        }
+    };
+
     function updateOverallToggleLabels() {
         const label = currentOverallMode === 'rate' ? 'Improvement Rate' : 'Strength Index';
         document.querySelectorAll('.overall-toggle-btn').forEach(btn => {
@@ -570,7 +694,7 @@
     function getLoggedIndexSet(rawLabels, data) {
         const labels = Array.isArray(rawLabels) ? rawLabels : [];
         const workoutDays = (data && Array.isArray(data.workout_days)) ? data.workout_days : [];
-        const loggedDaySet = new Set(workoutDays.length ? workoutDays : labels);
+        const loggedDaySet = new Set(workoutDays);
         const loggedIndexSet = new Set();
         labels.forEach((label, idx) => {
             if (loggedDaySet.has(label)) {
@@ -1051,15 +1175,26 @@
         if (days <= 0 || data.labels.length === 0) return data;
 
         const cutoffIndex = Math.max(0, data.labels.length - days);
+        const filteredLabels = data.labels.slice(cutoffIndex);
+        const rangeStartLabel = filteredLabels[0] || null;
+        const rangeEndLabel = filteredLabels[filteredLabels.length - 1] || null;
+        const filteredWorkoutDays = Array.isArray(data.workout_days)
+            ? data.workout_days.filter((d) => {
+                if (!d) return false;
+                if (rangeStartLabel && d < rangeStartLabel) return false;
+                if (rangeEndLabel && d > rangeEndLabel) return false;
+                return true;
+            })
+            : data.workout_days;
         const filteredSeries = (data.series && typeof data.series === 'object')
             ? Object.fromEntries(Object.entries(data.series).map(([k, v]) => [k, (Array.isArray(v) ? v.slice(cutoffIndex) : [])]))
             : {};
 
         return {
             ...data,
-            labels: data.labels.slice(cutoffIndex),
+            labels: filteredLabels,
             data: data.data.slice(cutoffIndex),
-            workout_days: Array.isArray(data.workout_days) ? data.workout_days.slice(cutoffIndex) : data.workout_days,
+            workout_days: filteredWorkoutDays,
             workout_titles: Array.isArray(data.workout_titles) ? data.workout_titles.slice(cutoffIndex) : data.workout_titles,
             log_data: Array.isArray(data.log_data) ? data.log_data.slice(cutoffIndex) : data.log_data,
             quality_adjusted_1rm: Array.isArray(data.quality_adjusted_1rm) ? data.quality_adjusted_1rm.slice(cutoffIndex) : data.quality_adjusted_1rm,
@@ -1171,14 +1306,14 @@
 
         const formatShortLabel = (rawLabel) => formatDateLabel(rawLabel, { month: 'short', day: 'numeric' });
 
-        const rawLabels = data.labels || [];
-        const loggedIndexSet = getLoggedIndexSet(rawLabels, data);
+        const rawLabels = filteredData.labels || [];
+        const loggedIndexSet = getLoggedIndexSet(rawLabels, filteredData);
         const loggedIndices = getLoggedIndicesFromSet(loggedIndexSet);
         const rangeBounds = getRangeBounds(rawLabels, rangeDays);
         const shortLabels = rawLabels.map(formatShortLabel);
 
         const metricConfig = getMetricConfig(currentMetric, data);
-        const primaryValues = getSeriesValues(data, currentMetric);
+        const primaryValues = getSeriesValues(filteredData, currentMetric);
 
         const overallMode = (data && data.overall_mode) ? String(data.overall_mode) : '';
         const isOverallRate = !currentExercise && data && data.unit === 'percent' && overallMode === 'rate';
@@ -1186,7 +1321,7 @@
             if (!isOverallRate) {
                 return movingAverage(primaryValues || [], currentMAWindow);
             }
-            const logSeries = (data && Array.isArray(data.log_data)) ? data.log_data : [];
+            const logSeries = (filteredData && Array.isArray(filteredData.log_data)) ? filteredData.log_data : [];
             const maLog = movingAverage(logSeries, currentMAWindow);
             return maLog.map(v => (Math.exp(Number(v) || 0) - 1) * 100);
         })();
@@ -1251,17 +1386,7 @@
             return set && set.has(ctx.dataIndex) ? primaryPointHoverRadius : 0;
         };
         const segmentFn = {
-            borderDash: (ctx) => {
-                const loggedSet = ctx.chart && ctx.chart.$loggedIndexSet;
-                if (!loggedSet) return undefined;
-                return loggedSet.has(ctx.p0DataIndex) ? [] : [4, 4];
-            },
-            borderColor: (ctx) => {
-                const loggedSet = ctx.chart && ctx.chart.$loggedIndexSet;
-                if (!loggedSet || loggedSet.has(ctx.p0DataIndex)) return undefined;
-                return document.documentElement.getAttribute('data-theme') === 'light'
-                    ? 'rgba(120,110,80,0.4)' : 'rgba(180,160,100,0.4)';
-            },
+            borderDash: () => [4, 4],
         };
         const isPercent = filteredData.unit === 'percent';
         const isRateMode = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
@@ -1277,10 +1402,6 @@
             else decimals = 2;
             const rounded = Number(num.toFixed(decimals));
             return String(rounded);
-        };
-        const yTickCallback = (value) => {
-            if (isPercent) return `${formatTickNumber(value)}${percentSuffix}`;
-            return formatTickNumber(value);
         };
         const tooltipValueSuffix = isPercent ? percentSuffix : '';
         const valueSuffix = metricConfig.suffix || tooltipValueSuffix;
@@ -1316,10 +1437,48 @@
         gradient.addColorStop(1, 'rgba(212, 175, 55, 0.05)');
 
         const avgColor = isLightMode ? 'rgba(212, 175, 55, 0.6)' : 'rgba(212, 175, 55, 0.5)';
+        const projectionLineColor = isLightMode ? 'rgba(212, 175, 55, 0.58)' : 'rgba(212, 175, 55, 0.5)';
+        const projectionLabelColor = isLightMode ? '#7A5B0C' : '#D4AF37';
+        const projectionLabelBackground = isLightMode ? 'rgba(255, 251, 242, 0.96)' : 'rgba(9, 9, 9, 0.9)';
+        const projectionLabelBorder = isLightMode ? 'rgba(148, 126, 86, 0.45)' : 'rgba(212, 175, 55, 0.52)';
+        const maProjectionPoint = getLastFinitePoint(maValues);
+        const projectionValue = Number.isFinite(Number(maProjectionPoint.value)) ? Number(maProjectionPoint.value) : null;
+        const projectionLabel = Number.isFinite(projectionValue) ? formatValueText(projectionValue) : '';
+        const shouldHideTickForProjection = function(value) {
+            const tickValue = Number(value);
+            if (!Number.isFinite(tickValue) || !Number.isFinite(projectionValue)) return false;
+            const scale = this;
+            const min = Number(scale && scale.min);
+            const max = Number(scale && scale.max);
+            const height = Number(scale && scale.height);
+            if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(height) || height <= 0) return false;
+            const unitsPerPixel = Math.abs(max - min) / height;
+            const hideThreshold = Math.max(unitsPerPixel * 14, unitsPerPixel || 0.0001);
+            return Math.abs(tickValue - projectionValue) <= hideThreshold;
+        };
+        const yTickCallback = function(value) {
+            if (shouldHideTickForProjection.call(this, value)) return '';
+            if (isPercent) return `${formatTickNumber(value)}${percentSuffix}`;
+            return formatTickNumber(value);
+        };
+        const projectionConfig = Number.isFinite(projectionValue)
+            ? {
+                value: projectionValue,
+                label: projectionLabel,
+                datasetIndex: 1,
+                pointIndex: maProjectionPoint.index,
+                lineColor: projectionLineColor,
+                lineWidth: 1.4,
+                dash: [4, 5],
+                labelColor: projectionLabelColor,
+                labelBackground: projectionLabelBackground,
+                labelBorder: projectionLabelBorder,
+            }
+            : null;
 
-        const primarySeries = getSeriesValues(data, currentMetric);
-        const workoutTitles = (data && Array.isArray(data.workout_titles)) ? data.workout_titles : [];
-        const qualitySeries = (data && data.quality) ? data.quality : [];
+        const primarySeries = getSeriesValues(filteredData, currentMetric);
+        const workoutTitles = (filteredData && Array.isArray(filteredData.workout_titles)) ? filteredData.workout_titles : [];
+        const qualitySeries = (filteredData && filteredData.quality) ? filteredData.quality : [];
         const showQuality = !!(qualitySeries && qualitySeries.length) && filteredData.unit !== 'percent';
 
         const showBaseline100 = isPercent && !isRateMode;
@@ -1342,9 +1501,9 @@
                 : null;
 
             let topSet = '';
-            const weightVal = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : null;
-            const repsVal = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : null;
-            const _isTimedExercise = !!(data && data.is_timed);
+            const weightVal = (filteredData && Array.isArray(filteredData.weight)) ? Number(filteredData.weight[idx]) : null;
+            const repsVal = (filteredData && Array.isArray(filteredData.reps)) ? Number(filteredData.reps[idx]) : null;
+            const _isTimedExercise = !!(filteredData && filteredData.is_timed);
             if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
                 topSet = _isTimedExercise
                     ? `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
@@ -1352,7 +1511,7 @@
             }
 
             let tonnage = '';
-            const tonnageVal = (data && Array.isArray(data.volume)) ? Number(data.volume[idx]) : null;
+            const tonnageVal = (filteredData && Array.isArray(filteredData.volume)) ? Number(filteredData.volume[idx]) : null;
             if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
                 tonnage = `${formatTickNumber(tonnageVal)}kg`;
             }
@@ -1403,16 +1562,16 @@
                     lines.push(`Change: ${formatDeltaText(delta, prevValue)}`);
                 }
 
-                const weightVal = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : null;
-                const repsVal = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : null;
-                const _isTEx = !!(data && data.is_timed);
+                const weightVal = (filteredData && Array.isArray(filteredData.weight)) ? Number(filteredData.weight[idx]) : null;
+                const repsVal = (filteredData && Array.isArray(filteredData.reps)) ? Number(filteredData.reps[idx]) : null;
+                const _isTEx = !!(filteredData && filteredData.is_timed);
                 if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
                     lines.push(_isTEx
                         ? `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
                         : `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`);
                 }
 
-                const tonnageVal = (data && Array.isArray(data.volume)) ? Number(data.volume[idx]) : null;
+                const tonnageVal = (filteredData && Array.isArray(filteredData.volume)) ? Number(filteredData.volume[idx]) : null;
                 if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
                     lines.push(`Tonnage: ${formatTickNumber(tonnageVal)}kg`);
                 }
@@ -1446,6 +1605,7 @@
             myChart.$loggedIndices = loggedIndices;
             myChart.$metricConfig = metricConfig;
             myChart.$primarySeries = primarySeries;
+            myChart.$currentProjection = projectionConfig;
 
             myChart.data.labels = shortLabels;
             myChart.data.datasets[0].data = primarySeries || [];
@@ -1524,7 +1684,7 @@
             myChart.update();
         } else {
             myChart = new Chart(ctx, {
-                plugins: [baseline100Plugin],
+                plugins: [baseline100Plugin, currentProjectionPlugin],
                 type: 'line',
                 data: {
                     labels: shortLabels,
@@ -1669,6 +1829,7 @@
             myChart.$loggedIndices = loggedIndices;
             myChart.$metricConfig = metricConfig;
             myChart.$primarySeries = primarySeries;
+            myChart.$currentProjection = projectionConfig;
             myChart.update();
         }
     }
@@ -1676,7 +1837,7 @@
     function loadAverageChart() {
         const params = new URLSearchParams({
             mode: currentOverallMode,
-            baseline_days: '24',
+            baseline_sessions: '5',
             min_sessions: '3',
             fade_start_days: '60',
             fade_end_days: '90'

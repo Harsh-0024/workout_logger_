@@ -1322,6 +1322,7 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             raw_text = request.form.get('bulk_workouts_text', '') or ''
             raw_text = raw_text.strip()
+            confirm_import = (request.form.get('confirm_import') or '').strip() == '1'
 
             if not raw_text:
                 flash('Paste your bulk workout text first.', 'error')
@@ -1329,19 +1330,81 @@ def register_auth_routes(app, email_service):
 
             lines = [ln.rstrip() for ln in raw_text.splitlines()]
 
-            header_re = re.compile(r'^\s*(\d{1,2})\s*/\s*(\d{1,2})\b')
+            month_map = {
+                "jan": 1, "january": 1,
+                "feb": 2, "february": 2,
+                "mar": 3, "march": 3,
+                "apr": 4, "april": 4,
+                "may": 5,
+                "jun": 6, "june": 6,
+                "jul": 7, "july": 7,
+                "aug": 8, "august": 8,
+                "sep": 9, "sept": 9, "september": 9,
+                "oct": 10, "october": 10,
+                "nov": 11, "november": 11,
+                "dec": 12, "december": 12,
+            }
+
+            def _parse_year(y_str: str | None):
+                if not y_str:
+                    return None
+                try:
+                    y = int(y_str)
+                except Exception:
+                    return None
+                return 2000 + y if y < 100 else y
+
+            def _try_parse_date_header(line: str):
+                s = (line or "").strip()
+                if not s or s.startswith("#"):
+                    return None
+
+                # dd/mm[/yy]
+                m = re.match(r"^\s*(\d{1,2})\s*/\s*(\d{1,2})(?:\s*/\s*(\d{2,4}))?", s)
+                if m:
+                    day = int(m.group(1))
+                    month = int(m.group(2))
+                    year = _parse_year(m.group(3))
+                    return {"day": day, "month": month, "year": year, "year_str": m.group(3)}
+
+                # dd Mon [yy] e.g. "20 nov - ..." / "11 Jan 24 - ..."
+                m = re.match(
+                    r"^\s*(\d{1,2})\s*([A-Za-z]{3,9})\b(?:\.|)?\s*(\d{2,4})?",
+                    s,
+                    flags=re.IGNORECASE,
+                )
+                if m:
+                    day = int(m.group(1))
+                    mon_token = (m.group(2) or "").lower()
+                    mo = month_map.get(mon_token) or month_map.get(mon_token[:3])
+                    if not mo:
+                        return None
+                    year = _parse_year(m.group(3))
+                    return {"day": day, "month": mo, "year": year, "year_str": m.group(3)}
+
+                return None
+
+            # Build (block_text, start_line_no, end_line_no, header_components).
             blocks = []
             current = []
-            for line in lines:
-                if header_re.match(line) and current:
-                    blocks.append("\n".join(current).strip())
+            current_start = None
+            current_header = None
+            for idx, line in enumerate(lines, start=1):
+                header = _try_parse_date_header(line)
+                if header is not None:
+                    if current:
+                        blocks.append(("\n".join(current).strip(), current_start, idx - 1, current_header))
                     current = [line]
+                    current_start = idx
+                    current_header = header
                 else:
-                    current.append(line)
-            if current:
-                blocks.append("\n".join(current).strip())
+                    if current:
+                        current.append(line)
 
-            blocks = [b for b in blocks if b.strip()]
+            if current:
+                blocks.append(("\n".join(current).strip(), current_start, len(lines), current_header))
+
+            blocks = [(b, s, e, h) for (b, s, e, h) in blocks if b and b.strip() and h]
             if not blocks:
                 flash('No workout days found. Make sure each day starts with a date like 03/02.', 'error')
                 return render_template('bulk_import.html', prefill=raw_text)
@@ -1349,22 +1412,118 @@ def register_auth_routes(app, email_service):
             from datetime import timedelta
             successes = []
             skipped = []
+            skipped_details: list[str] = []
             failures = []
+            invalid_exercise_count = 0
+            invalid_details: list[str] = []
+            date_assumptions: list[str] = []
+            ignored_section_details: list[str] = []
 
-            for block in blocks:
+            def _infer_year_for_block(idx: int):
+                header = blocks[idx][3] or {}
+                if header.get("year") is not None:
+                    return header["year"]
+
+                day = int(header["day"])
+                month = int(header["month"])
+
+                prev_i = None
+                next_i = None
+                for j in range(idx - 1, -1, -1):
+                    h = blocks[j][3] or {}
+                    if h.get("year") is not None:
+                        prev_i = j
+                        break
+                for j in range(idx + 1, len(blocks)):
+                    h = blocks[j][3] or {}
+                    if h.get("year") is not None:
+                        next_i = j
+                        break
+
+                if prev_i is None and next_i is None:
+                    return datetime.now().year
+
+                if next_i is not None:
+                    next_h = blocks[next_i][3]
+                    next_year = int(next_h["year"])
+                    next_day = int(next_h["day"])
+                    next_month = int(next_h["month"])
+                    if prev_i is not None:
+                        prev_h = blocks[prev_i][3]
+                        prev_year = int(prev_h["year"])
+                        if (month, day) > (next_month, next_day):
+                            return next_year - 1
+                        return prev_year
+
+                    # No previous anchor: date likely belongs before next explicit header.
+                    if (month, day) > (next_month, next_day):
+                        return next_year - 1
+                    return next_year
+
+                # Only previous anchor exists.
+                prev_h = blocks[prev_i][3]
+                prev_year = int(prev_h["year"])
+                prev_day = int(prev_h["day"])
+                prev_month = int(prev_h["month"])
+                if (month, day) < (prev_month, prev_day):
+                    return prev_year + 1
+                return prev_year
+
+            for block_idx, (block, block_start_line, block_end_line, header) in enumerate(blocks):
                 parsed = None
                 try:
                     parsed = workout_parser(block, bodyweight=user.bodyweight)
                 except Exception:
                     parsed = None
 
-                if not parsed or not parsed.get('date'):
+                if not parsed:
                     first_line = (block.splitlines()[0] if block.splitlines() else '').strip()
-                    failures.append(f"{first_line or 'Unknown day'}: could not parse")
+                    failures.append(
+                        f"{first_line or 'Unknown day'} (lines {block_start_line}-{block_end_line}): could not parse"
+                    )
                     continue
 
-                workout_dt = parsed['date']
-                workout_date = workout_dt.date()
+                inferred_year = _infer_year_for_block(block_idx)
+                if inferred_year is None:
+                    first_line = (block.splitlines()[0] if block.splitlines() else '').strip()
+                    failures.append(
+                        f"{first_line or 'Unknown day'} (lines {block_start_line}-{block_end_line}): could not infer year"
+                    )
+                    continue
+
+                try:
+                    workout_date = datetime(
+                        int(inferred_year),
+                        int(header["month"]),
+                        int(header["day"]),
+                    ).date()
+                except Exception:
+                    first_line = (block.splitlines()[0] if block.splitlines() else '').strip()
+                    failures.append(
+                        f"{first_line or 'Unknown day'} (lines {block_start_line}-{block_end_line}): invalid date header"
+                    )
+                    continue
+                if header.get("year") is None:
+                    month_abbr = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+                    in_dd = int(header["day"])
+                    in_mm = int(header["month"])
+                    assumed_yy = str(inferred_year)[-2:]
+                    date_assumptions.append(
+                        f"{in_dd:02d} {month_abbr[in_mm-1]} -> {in_dd:02d}/{in_mm:02d}/{assumed_yy} (lines {block_start_line}-{block_end_line})."
+                    )
+
+                # Explicitly report section/comment lines that we ignore (e.g., "#Gym")
+                # so you understand why they don't show up as parse issues.
+                local_lines = block.splitlines()
+                for local_i, raw in enumerate(local_lines):
+                    t = (raw or "").strip()
+                    if t.startswith("#"):
+                        abs_line = block_start_line + local_i
+                        snippet = t[:60]
+                        ignored_section_details.append(
+                            f"{workout_date.strftime('%d-%m-%Y')} (pasted line {abs_line}): ignored section '{snippet}'"
+                        )
+
                 start_dt = datetime.combine(workout_date, datetime.min.time())
                 end_dt = start_dt + timedelta(days=1)
 
@@ -1377,36 +1536,91 @@ def register_auth_routes(app, email_service):
                 )
                 if conflict:
                     skipped.append(workout_date.strftime('%Y-%m-%d'))
+                    skipped_details.append(
+                        f"{workout_date.strftime('%d-%m-%Y')} (lines {block_start_line}-{block_end_line}): already exists in DB (conflict)."
+                    )
                     continue
 
                 parsed['date'] = start_dt
 
+                # Collect per-exercise parse failures (workout-day can still be partially imported).
+                invalid_exercises = [
+                    ex
+                    for ex in (parsed.get("exercises") or [])
+                    if not ex.get("valid", True)
+                ]
+
+                def _preview(s: str, head_words: int = 4, tail_words: int = 4) -> str:
+                    text = re.sub(r"\s+", " ", (s or "").strip())
+                    if not text:
+                        return ""
+                    words = text.split(" ")
+                    if len(words) <= (head_words + tail_words):
+                        return " ".join(words)
+                    head = words[:head_words]
+                    tail = words[-tail_words:]
+                    return f"{' '.join(head)} … {' '.join(tail)}"
+
                 try:
-                    handle_workout_log(Session, user, parsed)
-                    Session.commit()
                     successes.append(workout_date.strftime('%Y-%m-%d'))
+                    if confirm_import:
+                        handle_workout_log(Session, user, parsed)
+                        Session.commit()
+                    if invalid_exercises:
+                        invalid_exercise_count += len(invalid_exercises)
+                        for ex in invalid_exercises:
+                            ex_name = (ex.get("name") or "Unknown Exercise").strip()
+                            ex_src = ex.get("exercise_string") or ex.get("name") or ""
+                            detail = (
+                                f"{workout_date.strftime('%Y-%m-%d')}: could not parse "
+                                f"\"{ex_name}\" near: \"{_preview(ex_src)}\" "
+                                f"(lines {block_start_line}-{block_end_line})"
+                            )
+                            invalid_details.append(detail)
                 except Exception as e:
-                    Session.rollback()
+                    if confirm_import:
+                        Session.rollback()
                     failures.append(f"{workout_date.strftime('%Y-%m-%d')}: {str(e)}")
 
-            if successes:
-                flash(f"Imported {len(successes)} workout day(s).", 'success')
-            if skipped:
-                flash(
-                    f"Skipped {len(skipped)} day(s) (already exist): {', '.join(skipped[:6])}{'…' if len(skipped) > 6 else ''}",
-                    'info',
-                )
-            if failures:
-                flash(
-                    f"Failed to import {len(failures)} day(s): {failures[0]}",
-                    'error',
-                )
+            if confirm_import:
+                if successes:
+                    flash(f"Imported {len(successes)} workout day(s).", 'success')
+                if skipped:
+                    flash(
+                        f"Skipped {len(skipped)} day(s) (already exist): {', '.join(skipped[:6])}{'…' if len(skipped) > 6 else ''}",
+                        'info',
+                    )
+                if failures:
+                    flash(
+                        f"Failed to import {len(failures)} day(s): {failures[0]}",
+                        'error',
+                    )
+                if invalid_exercise_count:
+                    # Keep flash concise; full details are shown on the page below.
+                    flash(
+                        f"Note: {invalid_exercise_count} exercise line(s) couldn't be parsed. See details below.",
+                        'info',
+                    )
+                return redirect(url_for('user_dashboard', username=user.username))
 
-            if successes and not failures:
-                return redirect(url_for('user_settings') + '#quick-actions')
-            return render_template('bulk_import.html', prefill=raw_text)
+            import_feedback = {
+                "success_day_count": len(successes),
+                "skipped_day_count": len(skipped),
+                "failed_day_count": len(failures),
+                "invalid_exercise_count": invalid_exercise_count,
+                "invalid_details": invalid_details[:20],  # avoid giant pages
+                "failed_details": failures[:10],
+                "skipped_details": skipped_details[:10],
+                "date_assumptions": date_assumptions[:20],
+                "total_blocks": len(blocks),
+                "ignored_section_count": len(ignored_section_details),
+                "ignored_section_details": ignored_section_details[:20],
+                "preview_mode": not confirm_import,
+            }
 
-        return render_template('bulk_import.html', prefill='')
+            return render_template('bulk_import.html', prefill=raw_text, import_feedback=import_feedback)
+
+        return render_template('bulk_import.html', prefill='', import_feedback=None)
 
     @dev_only
     @require_admin

@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import re
+from typing import Dict, Optional
 
 from config import Config
 from models import Plan, RepRange, User, UserRole, WorkoutLog
@@ -11,6 +12,7 @@ from services.exercise_matching import (
     normalize_exercise_name,
     resolve_equivalent_names,
 )
+from parsers.workout import _extract_declared_sets, _extract_sets_from_bracket
 
 
 def _normalize_text(text: str) -> str:
@@ -210,17 +212,29 @@ def generate_retrieve_output(db_session, user, category, day_id):
         set_count = 0
         
         for ex in exercises:
-            ex_key = ex.lower()
-            ex_key_norm = normalize_exercise_name(ex)
+            parsed_plan_ex = _parse_plan_exercise_line(ex)
+            ex_name = str(parsed_plan_ex.get("name") or ex).strip()
+            plan_declared_sets = parsed_plan_ex.get("declared_sets")
+            plan_inline_range = parsed_plan_ex.get("inline_range")
+
+            ex_key = ex_name.lower()
+            ex_key_norm = normalize_exercise_name(ex_name)
             rng = custom_ranges.get(ex_key, "")
             if not rng and ex_key_norm:
                 rng = custom_ranges.get(ex_key_norm, "")
-            declared_sets = custom_sets.get(ex_key)
+            if not rng and plan_inline_range:
+                rng = plan_inline_range
+
+            declared_sets = plan_declared_sets
+            if declared_sets is None:
+                declared_sets = custom_sets.get(ex_key)
             if declared_sets is None and ex_key_norm:
                 declared_sets = custom_sets.get(ex_key_norm)
             fmt_rng = ""
             if rng and declared_sets:
                 fmt_rng = f" - [{declared_sets}, {rng}]"
+            elif declared_sets:
+                fmt_rng = f" - [{declared_sets}]"
             elif rng:
                 fmt_rng = f" - [{rng}]"
 
@@ -231,13 +245,13 @@ def generate_retrieve_output(db_session, user, category, day_id):
             sets_line = _build_best_sets_line_from_logs(
                 db_session,
                 user,
-                ex,
+                ex_name,
                 target_sets=target_sets,
                 target_rep_range=target_rep_range,
                 logged_exercise_index=logged_exercise_index,
             )
 
-            if _is_bw_exercise(ex):
+            if _is_bw_exercise(ex_name):
                 if not sets_line:
                     sets_line = "bw/4, 1"
                 sets_line = _normalize_bw(sets_line)
@@ -248,7 +262,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
             if sets_line:
                 set_count += _count_sets_from_line(sets_line, target_sets=target_sets)
 
-            output_lines.append(f"{ex}{fmt_rng}")
+            output_lines.append(f"{ex_name}{fmt_rng}")
             if sets_line:
                 output_lines.append(sets_line)
             output_lines.append("")
@@ -287,6 +301,55 @@ def _parse_rep_range(value: str):
         n = int(nums[0])
         return n, n
     return None
+
+
+def _parse_plan_exercise_line(raw_line: str) -> Dict[str, Optional[str]]:
+    """
+    Parse plan line variants:
+    - Exercise
+    - Exercise - [n]
+    - Exercise - [a-b]
+    - Exercise - [n, a-b]
+    """
+    line = str(raw_line or "").strip()
+    name = line
+    declared_sets: Optional[int] = None
+    inline_range: Optional[str] = None
+
+    if " - [" in line and "]" in line:
+        name = line.split(" - [", 1)[0].strip()
+        try:
+            inside = line.split("[", 1)[1].split("]", 1)[0].strip()
+        except Exception:
+            inside = ""
+        if inside:
+            first_token = inside.split(",", 1)[0].strip()
+            if re.match(r"^\d+$", first_token):
+                try:
+                    declared_sets = int(first_token)
+                except Exception:
+                    declared_sets = None
+                remainder = inside.split(",", 1)[1].strip() if "," in inside else ""
+                if remainder:
+                    inline_range = remainder
+            else:
+                inline_range = inside
+
+    if not declared_sets:
+        bracket_sets = _extract_sets_from_bracket(line)
+        if isinstance(bracket_sets, int) and bracket_sets > 0:
+            declared_sets = int(bracket_sets)
+
+    explicit_sets, cleaned = _extract_declared_sets(name)
+    if isinstance(explicit_sets, int) and explicit_sets > 0:
+        declared_sets = int(explicit_sets)
+        name = cleaned
+
+    return {
+        "name": name.strip(),
+        "declared_sets": declared_sets if isinstance(declared_sets, int) and declared_sets > 0 else None,
+        "inline_range": (inline_range or "").strip() or None,
+    }
 
 
 def _compress_shorthand_values(values):

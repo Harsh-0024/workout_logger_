@@ -347,7 +347,15 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
     if not workout_day_received or not workout_day_received.strip():
         return None
     
-    raw_lines = [line.strip() for line in workout_day_received.strip().split("\n") if line.strip()]
+    raw_lines: List[str] = []
+    for line in workout_day_received.strip().split("\n"):
+        stripped = (line or "").strip()
+        if not stripped:
+            continue
+        # Treat comment / section markers (e.g., "#Gym") as separators, not exercises.
+        if stripped.startswith("#"):
+            continue
+        raw_lines.append(stripped)
     if not raw_lines:
         return None
 
@@ -483,7 +491,12 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
 
         inferred_sets = max(len(weights), len(reps)) if (weights or reps) else 0
         if declared_sets is not None:
-            target_sets = max(int(declared_sets), inferred_sets) if inferred_sets else int(declared_sets)
+            # Declared set counts are authoritative for this exercise line.
+            # If extra tokens were parsed, cap to the declared count first.
+            target_sets = int(declared_sets)
+            if target_sets > 0 and inferred_sets > target_sets:
+                weights = list(weights[:target_sets])
+                reps = list(reps[:target_sets])
         else:
             target_sets = inferred_sets if inferred_sets > 3 else 3
 

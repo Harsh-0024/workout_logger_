@@ -269,6 +269,27 @@ class WorkoutLog(Base):
         return None
 
 
+# --- 5B. TIMED EXERCISE USER PREFERENCES ---
+class TimedExercisePreference(Base):
+    __tablename__ = 'timed_exercise_preferences'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    exercise_key = Column(String(160), nullable=False, index=True)
+    is_timed = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    __table_args__ = (
+        Index('idx_user_exercise_timed_pref', 'user_id', 'exercise_key', unique=True),
+    )
+
+    def __repr__(self):
+        return (
+            f"<TimedExercisePreference(id={self.id}, user_id={self.user_id}, "
+            f"exercise_key='{self.exercise_key}', is_timed={self.is_timed})>"
+        )
+
+
 # --- MIGRATION HELPERS ---
 def migrate_schema():
     """Add missing columns to existing database tables."""
@@ -424,6 +445,9 @@ def migrate_schema():
 
             if 'shortcut_key_maps' not in inspector.get_table_names():
                 ShortcutKeyMap.__table__.create(bind=conn, checkfirst=True)
+
+            if 'timed_exercise_preferences' not in inspector.get_table_names():
+                TimedExercisePreference.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]

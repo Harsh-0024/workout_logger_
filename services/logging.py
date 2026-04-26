@@ -1,12 +1,19 @@
 """
 Workout logging service for processing and saving workout data.
 """
-from typing import Any, List, Dict, Optional
+from collections import Counter, defaultdict
+from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, date, timedelta
 import re
 
-from models import Lift, RepRange, WorkoutLog
-from parsers.workout import align_sets, extract_numbers
+from list_of_exercise import get_workout_days
+from models import Lift, RepRange, TimedExercisePreference, WorkoutLog
+from parsers.workout import (
+    align_sets,
+    extract_numbers,
+    _extract_declared_sets,
+    _extract_sets_from_bracket,
+)
 from services.best_scoring import (
     best_workout_strength_score,
     best_workout_timed_score,
@@ -34,6 +41,26 @@ _PERFORMANCE_LABELS: Dict[str, Dict[str, str]] = {
     "moderately_off": {"label": "↓ Moderately Off", "short": "Moderately Off"},
     "significantly_off": {"label": "↓ Significantly Off", "short": "Significantly Off"},
     "first_log": {"label": "First Log", "short": "First Log"},
+}
+
+_KNOWN_TIMED_EXERCISES = {
+    "plank",
+    "dead hang",
+    "farmer's walk",
+    "trap bar farmer's walk",
+    "dumbbell farmer's walk",
+    "wall sit",
+    "hanging",
+}
+
+
+def _timed_lookup_key(exercise_name: str) -> str:
+    normalized = normalize_exercise_name(exercise_name or "")
+    return (normalized or "").replace("'", "").strip()
+
+
+_KNOWN_TIMED_EXERCISE_KEYS = {
+    _timed_lookup_key(name) for name in _KNOWN_TIMED_EXERCISES if _timed_lookup_key(name)
 }
 
 
@@ -114,6 +141,217 @@ def _first_score_diff_index(left_scores: List[float], right_scores: List[float],
     return None, 0
 
 
+def _set_count_from_sets_json(sets_json: Optional[Dict]) -> int:
+    normalized = _normalize_sets(sets_json)
+    if not normalized:
+        return 0
+    return max(len(normalized.get("weights") or []), len(normalized.get("reps") or []))
+
+
+def _raw_set_count_from_exercise_string(exercise_string: str) -> int:
+    text = str(exercise_string or "")
+    if not text:
+        return 0
+
+    lines = [line.strip() for line in text.splitlines() if line and line.strip()]
+    if not lines:
+        return 0
+
+    max_count = 0
+    numeric_lines: List[str] = []
+    for line in lines:
+        if " - [" in line:
+            tail = line.split("]", 1)[1].strip() if "]" in line else ""
+            tail = tail.lstrip("-:").strip()
+            if tail:
+                numeric_lines.append(tail)
+            continue
+        if re.match(r'^(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|,|-?\d)', line, flags=re.IGNORECASE):
+            numeric_lines.append(line)
+
+    for line in numeric_lines:
+        x_matches = re.findall(
+            r'(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*[x×]\s*(?:\d+)',
+            line,
+            flags=re.IGNORECASE,
+        )
+        if x_matches:
+            max_count = max(max_count, len(x_matches))
+            continue
+
+        if "," in line:
+            left, right = line.split(",", 1)
+            left_tokens = re.findall(r'(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)', left, flags=re.IGNORECASE)
+            right_tokens = re.findall(r'-?\d+(?:\.\d+)?', right)
+            max_count = max(max_count, max(len(left_tokens), len(right_tokens)))
+            continue
+
+        tokens = re.findall(r'(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)', line, flags=re.IGNORECASE)
+        if tokens:
+            max_count = max(max_count, len(tokens))
+
+    if max_count <= 0 and len(numeric_lines) >= 2:
+        left_tokens = re.findall(r'(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)', numeric_lines[-2], flags=re.IGNORECASE)
+        right_tokens = re.findall(r'-?\d+(?:\.\d+)?', numeric_lines[-1])
+        max_count = max(max_count, max(len(left_tokens), len(right_tokens)))
+
+    return int(max_count or 0)
+
+
+def comparison_set_count(sets_json: Optional[Dict], exercise_string: str = "") -> int:
+    raw_count = _raw_set_count_from_exercise_string(exercise_string)
+    if raw_count > 0:
+        return raw_count
+    return _set_count_from_sets_json(sets_json)
+
+
+def _extract_explicit_target_sets(exercise_string: str) -> Optional[int]:
+    text = str(exercise_string or "").strip()
+    if not text:
+        return None
+    for raw_line in text.splitlines():
+        line = (raw_line or "").strip()
+        if not line:
+            continue
+        bracket_sets = _extract_sets_from_bracket(line)
+        if isinstance(bracket_sets, int) and bracket_sets > 0:
+            return int(bracket_sets)
+        declared_sets, _cleaned = _extract_declared_sets(line)
+        if isinstance(declared_sets, int) and declared_sets > 0:
+            return int(declared_sets)
+    return None
+
+
+def _parse_plan_target_sets(plan_text: str) -> Dict[str, int]:
+    target_counters: Dict[str, Counter] = defaultdict(Counter)
+    try:
+        plan_data = get_workout_days(plan_text or "")
+        workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
+    except Exception:
+        workout_map = {}
+
+    for category_days in (workout_map or {}).values():
+        if not isinstance(category_days, dict):
+            continue
+        for exercises in category_days.values():
+            if not isinstance(exercises, list):
+                continue
+            for raw_exercise in exercises:
+                line = str(raw_exercise or "").strip()
+                if not line:
+                    continue
+                bracket_sets = _extract_sets_from_bracket(line)
+                if not (isinstance(bracket_sets, int) and bracket_sets > 0):
+                    continue
+                base_name = line
+                if " - [" in line:
+                    base_name = line.split(" - [", 1)[0].strip()
+                declared_sets, cleaned_name = _extract_declared_sets(base_name)
+                if isinstance(declared_sets, int) and declared_sets > 0:
+                    base_name = cleaned_name
+                key = normalize_exercise_name(base_name or "")
+                if not key:
+                    continue
+                target_counters[key][int(bracket_sets)] += 1
+
+    resolved: Dict[str, int] = {}
+    for key, counter in target_counters.items():
+        if not counter:
+            continue
+        # Pick most-common declared count; if tied, prefer the larger count.
+        count = max(counter.items(), key=lambda item: (item[1], item[0]))[0]
+        if count > 0:
+            resolved[key] = int(count)
+    return resolved
+
+
+def _get_plan_target_sets(db_session, user) -> Dict[str, int]:
+    try:
+        from services.retrieve import get_effective_plan_text
+
+        plan_text = get_effective_plan_text(db_session, user)
+    except Exception:
+        return {}
+    return _parse_plan_target_sets(plan_text or "")
+
+
+def resolve_target_sets_for_exercise(
+    *,
+    exercise_name: str,
+    exercise_string: str,
+    rep_target_sets: Optional[Dict[str, int]] = None,
+    plan_target_sets: Optional[Dict[str, int]] = None,
+    inferred_set_count: int = 0,
+    default_sets: int = 3,
+) -> Tuple[int, bool]:
+    """
+    Resolve comparison set-target and whether the target is strict.
+
+    Priority:
+    1) Explicit declaration in exercise text ([n] / [n, a-b] / "n sets")
+    2) Rep-range config set prefix (n, a-b)
+    3) Workout-plan declaration ([n])
+    4) Inferred set count when > default
+    5) Default
+
+    Returns:
+        (target_sets, strict_target_sets)
+    """
+    explicit_sets = _extract_explicit_target_sets(exercise_string)
+    if isinstance(explicit_sets, int) and explicit_sets > 0:
+        return int(explicit_sets), True
+
+    key = normalize_exercise_name(exercise_name or "")
+    if key and rep_target_sets:
+        mapped = rep_target_sets.get(key)
+        if isinstance(mapped, int) and mapped > 0:
+            return int(mapped), True
+
+    if key and plan_target_sets:
+        mapped = plan_target_sets.get(key)
+        if isinstance(mapped, int) and mapped > 0:
+            return int(mapped), True
+
+    inferred = int(inferred_set_count) if isinstance(inferred_set_count, int) else 0
+    default_n = int(default_sets) if isinstance(default_sets, int) and default_sets > 0 else 3
+    if inferred > default_n:
+        return inferred, False
+    return default_n, False
+
+
+def get_plan_target_sets_for_user(db_session, user) -> Dict[str, int]:
+    return _get_plan_target_sets(db_session, user)
+
+
+def parse_rep_target_sets_text(rep_text: str) -> Dict[str, int]:
+    return _parse_rep_target_sets(rep_text)
+
+
+def get_best_log_for_exercise(
+    db_session,
+    user_id: int,
+    exercise_name: str,
+    *,
+    target_sets: int = 3,
+    strict_target_sets: bool = False,
+    log_ex_index=None,
+    is_timed: bool = False,
+) -> Optional[WorkoutLog]:
+    """
+    Public wrapper so route/UI code can select "best log" using the same
+    top-N/strict-set logic as backend comparison flows.
+    """
+    return _get_best_log(
+        db_session,
+        user_id,
+        exercise_name,
+        target_sets=target_sets,
+        strict_target_sets=strict_target_sets,
+        log_ex_index=log_ex_index,
+        is_timed=is_timed,
+    )
+
+
 def classify_exercise_performance(
     db_session,
     user_id: int,
@@ -121,9 +359,11 @@ def classify_exercise_performance(
     current_sets: Optional[Dict],
     *,
     target_sets: int = 3,
+    strict_target_sets: bool = False,
     log_ex_index=None,
     is_timed: bool = False,
     current_log_id: Optional[int] = None,
+    current_exercise_string: str = "",
     summary_mode: bool = False,
 ) -> Dict[str, Any]:
     """
@@ -143,6 +383,15 @@ def classify_exercise_performance(
         return _performance_payload("first_log", summary_mode=summary_mode)
 
     top_n = max(1, int(target_sets) if isinstance(target_sets, int) and target_sets > 0 else 3)
+    current_set_count = comparison_set_count(normalized_current, current_exercise_string or "")
+    compare_n = top_n
+    min_required_sets = top_n
+    if strict_target_sets and current_set_count > 0 and current_set_count < top_n:
+        # In strict mode, incomplete current sessions should still receive a normal
+        # badge by comparing completed sets against historical logs with at least as
+        # many sets completed.
+        compare_n = current_set_count
+        min_required_sets = current_set_count
     logs = (
         db_session.query(WorkoutLog)
         .filter(WorkoutLog.user_id == user_id)
@@ -152,11 +401,16 @@ def classify_exercise_performance(
     )
 
     rows: List[Dict[str, Any]] = []
+    had_historical_with_sets = False
     for log in logs:
         log_sets = _normalize_sets(getattr(log, "sets_json", None))
         if not log_sets:
             continue
-        vectors = _rank_vectors_for_sets(log_sets, top_n=top_n, is_timed=is_timed)
+        if current_log_id is None or getattr(log, "id", None) != current_log_id:
+            had_historical_with_sets = True
+        if strict_target_sets and comparison_set_count(log_sets, getattr(log, "exercise_string", "") or "") < min_required_sets:
+            continue
+        vectors = _rank_vectors_for_sets(log_sets, top_n=compare_n, is_timed=is_timed)
         if not vectors.get("scores"):
             continue
         rows.append(
@@ -178,7 +432,7 @@ def classify_exercise_performance(
                 break
 
     if current_row is None:
-        vectors = _rank_vectors_for_sets(normalized_current, top_n=top_n, is_timed=is_timed)
+        vectors = _rank_vectors_for_sets(normalized_current, top_n=compare_n, is_timed=is_timed)
         if not vectors.get("scores"):
             return _performance_payload("consistent", summary_mode=summary_mode)
         current_row = {
@@ -192,6 +446,17 @@ def classify_exercise_performance(
 
     competitors = [row for row in rows if not row.get("is_current")]
     if not competitors:
+        if (
+            strict_target_sets
+            and current_set_count > 0
+            and current_set_count < top_n
+            and had_historical_with_sets
+        ):
+            return {
+                "key": "first_log",
+                "label": "No Comparable Baseline",
+                "short": "No Comparable Baseline",
+            }
         return _performance_payload("first_log", summary_mode=summary_mode)
 
     tie_group = [
@@ -248,7 +513,7 @@ def classify_exercise_performance(
     diff_idx, cmp_to_reference = _first_score_diff_index(
         current_row.get("scores") or [],
         reference_row.get("scores") or [],
-        top_n=top_n,
+        top_n=compare_n,
     )
 
     if cmp_to_reference > 0:
@@ -344,7 +609,14 @@ def _has_time_hint_in_exercise_string(exercise_string: str) -> bool:
     text = str(exercise_string or "")
     if not text:
         return False
-    return bool(re.search(r"\[[^\]]*\d+\s*[-–—]\s*\d+\s*s[^\]]*\]", text, flags=re.IGNORECASE))
+    bracket_parts = re.findall(r"\[([^\]]*)\]", text)
+    for part in bracket_parts:
+        token = str(part or "").strip().lower()
+        if not token:
+            continue
+        if re.search(r"(?:\b(?:s|sec|secs|second|seconds)\b|\d+\s*s(?:ec(?:onds?)?)?\b)", token):
+            return True
+    return False
 
 
 def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_index=None) -> bool:
@@ -364,6 +636,85 @@ def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_in
         if _has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '')):
             return True
     return False
+
+
+def get_timed_exercise_preference(db_session, user_id: int, exercise_name: str) -> Optional[bool]:
+    key = _timed_lookup_key(exercise_name)
+    if not key:
+        return None
+    row = (
+        db_session.query(TimedExercisePreference)
+        .filter(TimedExercisePreference.user_id == user_id)
+        .filter(TimedExercisePreference.exercise_key == key)
+        .first()
+    )
+    if not row:
+        return None
+    return bool(row.is_timed)
+
+
+def set_timed_exercise_preference(db_session, user_id: int, exercise_name: str, is_timed: bool) -> bool:
+    key = _timed_lookup_key(exercise_name)
+    if not key:
+        return False
+    row = (
+        db_session.query(TimedExercisePreference)
+        .filter(TimedExercisePreference.user_id == user_id)
+        .filter(TimedExercisePreference.exercise_key == key)
+        .first()
+    )
+    if row:
+        row.is_timed = bool(is_timed)
+    else:
+        row = TimedExercisePreference(
+            user_id=user_id,
+            exercise_key=key,
+            is_timed=bool(is_timed),
+        )
+        db_session.add(row)
+    return True
+
+
+def resolve_timed_exercise_status(
+    db_session,
+    user_id: int,
+    exercise_name: str,
+    exercise_string: str,
+    *,
+    log_ex_index=None,
+) -> Dict[str, Any]:
+    """
+    Determine whether an exercise should be treated as timed.
+
+    Priority:
+    1) Explicit string hint (e.g. [1, 30-90s])
+    2) Stored user preference for this exercise (permanent)
+    3) Known timed fallback list (prompts once when first encountered without hint)
+    4) Historical timed hint presence
+    """
+    has_explicit_hint = _has_time_hint_in_exercise_string(exercise_string or "")
+    if has_explicit_hint:
+        return {"is_timed": True, "prompt_needed": False, "reason": "explicit_hint"}
+
+    pref = get_timed_exercise_preference(db_session, user_id, exercise_name)
+    if pref is not None:
+        return {"is_timed": bool(pref), "prompt_needed": False, "reason": "stored_preference"}
+
+    key = _timed_lookup_key(exercise_name)
+    if key and key in _KNOWN_TIMED_EXERCISE_KEYS:
+        return {"is_timed": True, "prompt_needed": True, "reason": "known_timed_fallback"}
+
+    is_timed_from_history = _has_time_history(
+        db_session,
+        user_id,
+        exercise_name,
+        log_ex_index=log_ex_index,
+    )
+    return {
+        "is_timed": bool(is_timed_from_history),
+        "prompt_needed": False,
+        "reason": "time_history" if is_timed_from_history else "default_strength",
+    }
 
 
 def _extract_time_seconds(exercise_string: str, expected_sets: int) -> List[int]:
@@ -428,6 +779,7 @@ def _get_best_log(
     exercise_name: str,
     *,
     target_sets: int = 3,
+    strict_target_sets: bool = False,
     log_ex_index=None,
     is_timed: bool = False,
 ) -> Optional[WorkoutLog]:
@@ -457,7 +809,7 @@ def _get_best_log(
         else:
             metrics = best_workout_strength_score(normalized_sets, top_n=required_sets)
         score = float(metrics.get("score") or 0.0)
-        set_count = int(metrics.get("set_count") or 0)
+        set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
         if score <= 0:
             continue
         row = (log, score, set_count)
@@ -466,7 +818,7 @@ def _get_best_log(
         else:
             fallback.append(row)
 
-    pool = preferred if preferred else fallback
+    pool = preferred if strict_target_sets else (preferred if preferred else fallback)
     if not pool:
         return None
 
@@ -516,6 +868,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
     workout_name = parsed_data.get('workout_name')
     rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
     rep_target_sets = _parse_rep_target_sets(rep_row.text_content if rep_row else "")
+    plan_target_sets = _get_plan_target_sets(db_session, user)
 
     # Build indices once per log submission so minimal normalization like hyphen/space
     # and safe word-order swaps can match existing history/Lift rows.
@@ -540,18 +893,21 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
 
     for item in parsed_data["exercises"]:
         ex_name = item['name']
-        target_sets = int(rep_target_sets.get(normalize_exercise_name(ex_name or ""), 3) or 3)
         new_sets = {"weights": item["weights"], "reps": item["reps"]}
         new_str = item['exercise_string']
         is_valid = item.get('valid', True)
         time_based = False
 
+        timed_status = {"is_timed": False, "prompt_needed": False}
         if is_valid:
-            has_explicit_hint = _has_time_hint_in_exercise_string(new_str)
-            time_based = has_explicit_hint or (
-                not has_explicit_hint
-                and _has_time_history(db_session, user.id, ex_name, log_ex_index=log_ex_index)
+            timed_status = resolve_timed_exercise_status(
+                db_session,
+                user.id,
+                ex_name,
+                new_str,
+                log_ex_index=log_ex_index,
             )
+            time_based = bool(timed_status.get("is_timed"))
             current_reps = [int(r) for r in (new_sets.get('reps') or []) if r is not None]
             if time_based and current_reps and all(r <= 1 for r in current_reps):
                 seconds = _extract_time_seconds(new_str, expected_sets=len(new_sets.get('weights') or []))
@@ -562,6 +918,16 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                         len(new_sets.get('weights') or []) or None,
                     )
                     new_sets = {'weights': weights, 'reps': reps}
+
+        inferred_set_count = _set_count_from_sets_json(new_sets)
+        target_sets, strict_target_sets = resolve_target_sets_for_exercise(
+            exercise_name=ex_name,
+            exercise_string=new_str,
+            rep_target_sets=rep_target_sets,
+            plan_target_sets=plan_target_sets,
+            inferred_set_count=inferred_set_count,
+            default_sets=3,
+        )
         
         # Format display string from sets data
         formatted_display = _format_sets_display(new_sets) if is_valid else new_str
@@ -583,6 +949,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             user.id,
             ex_name,
             target_sets=target_sets,
+            strict_target_sets=strict_target_sets,
             log_ex_index=log_ex_index,
             is_timed=time_based,
         )
@@ -592,6 +959,8 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             'name': ex_name, 'old': '-', 'new': formatted_display,
             'status': '-', 'class': 'neutral', 'valid': is_valid,
             'is_timed': time_based if is_valid else False,
+            'timed_prompt_needed': bool(timed_status.get("prompt_needed")) if is_valid else False,
+            'timed_prompt_exercise': ex_name,
             'performance_key': None,
             'performance_label': None,
         }
@@ -625,10 +994,12 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 user.id,
                 ex_name,
                 new_sets,
-                target_sets=3,
+                target_sets=target_sets,
+                strict_target_sets=strict_target_sets,
                 log_ex_index=log_ex_index,
                 is_timed=time_based,
                 current_log_id=(getattr(history_log, 'id', None) if history_log else None),
+                current_exercise_string=new_str,
                 summary_mode=True,
             )
             row['performance_key'] = perf.get('key')
@@ -637,7 +1008,10 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             improvement = None
             is_new_best = False
 
-            if best_log_sets:
+            current_count = comparison_set_count(new_sets, new_str)
+            can_compare = (not strict_target_sets) or (current_count >= target_sets)
+
+            if best_log_sets and can_compare:
                 row['old'] = _format_best_string(best_log)
                 if time_based:
                     comparison = compare_timed_workouts(best_log_sets, new_sets, top_n=target_sets)
@@ -653,10 +1027,16 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                     else:
                         improvement = "CONSISTENCY"
             else:
-                row['old'] = 'First Log'
-                row['status'] = "NEW"
-                row['class'] = 'new'
-                is_new_best = True
+                if best_log_sets:
+                    row['old'] = _format_best_string(best_log)
+                    row['status'] = "-"
+                    row['class'] = 'neutral'
+                    is_new_best = False
+                else:
+                    row['old'] = 'First Log'
+                    row['status'] = "NEW"
+                    row['class'] = 'new'
+                    is_new_best = True
 
             if improvement:
                 row['status'] = improvement
@@ -703,6 +1083,7 @@ def _get_best_log_before_date(
     exercise_name: str,
     *,
     target_sets: int = 3,
+    strict_target_sets: bool = False,
     log_ex_index=None,
     is_timed: bool = False,
     workout_day_start_dt: Optional[datetime] = None,
@@ -746,7 +1127,7 @@ def _get_best_log_before_date(
             metrics = best_workout_strength_score(normalized_sets, top_n=required_sets)
 
         score = float(metrics.get("score") or 0.0)
-        set_count = int(metrics.get("set_count") or 0)
+        set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
         if score <= 0:
             continue
 
@@ -756,7 +1137,7 @@ def _get_best_log_before_date(
         else:
             fallback.append(row)
 
-    pool = preferred if preferred else fallback
+    pool = preferred if strict_target_sets else (preferred if preferred else fallback)
     if not pool:
         return None
 
@@ -793,6 +1174,7 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
 
     rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
     rep_target_sets = _parse_rep_target_sets(rep_row.text_content if rep_row else "")
+    plan_target_sets = _get_plan_target_sets(db_session, user)
 
     distinct_exercises: list[str] = []
     seen: set[str] = set()
@@ -820,13 +1202,24 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
 
     for log in unique_logs:
         ex_name = log.exercise
-        target_sets = int(rep_target_sets.get(normalize_exercise_name(ex_name or ""), 3) or 3)
-
         new_sets = _normalize_sets(log.sets_json)
         valid = bool(new_sets)
-        has_explicit_hint = _has_time_hint_in_exercise_string(getattr(log, "exercise_string", "") or "")
-        time_based = has_explicit_hint or (
-            (not has_explicit_hint) and _has_time_history(db_session, user.id, ex_name, log_ex_index=log_ex_index)
+        timed_status = resolve_timed_exercise_status(
+            db_session,
+            user.id,
+            ex_name,
+            getattr(log, "exercise_string", "") or "",
+            log_ex_index=log_ex_index,
+        )
+        time_based = bool(timed_status.get("is_timed"))
+        inferred_set_count = _set_count_from_sets_json(new_sets)
+        target_sets, strict_target_sets = resolve_target_sets_for_exercise(
+            exercise_name=ex_name,
+            exercise_string=getattr(log, "exercise_string", "") or "",
+            rep_target_sets=rep_target_sets,
+            plan_target_sets=plan_target_sets,
+            inferred_set_count=inferred_set_count,
+            default_sets=3,
         )
 
         formatted_display = _format_sets_display(new_sets) if valid else (getattr(log, "exercise_string", "") or "")
@@ -839,6 +1232,8 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
             "class": "neutral",
             "valid": valid,
             "is_timed": time_based if valid else False,
+            "timed_prompt_needed": bool(timed_status.get("prompt_needed")) if valid else False,
+            "timed_prompt_exercise": ex_name,
             "performance_key": None,
             "performance_label": None,
         }
@@ -849,10 +1244,12 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
                 user.id,
                 ex_name,
                 new_sets,
-                target_sets=3,
+                target_sets=target_sets,
+                strict_target_sets=strict_target_sets,
                 log_ex_index=log_ex_index,
                 is_timed=time_based,
                 current_log_id=getattr(log, "id", None),
+                current_exercise_string=getattr(log, "exercise_string", "") or "",
                 summary_mode=True,
             )
             row["performance_key"] = perf.get("key")
@@ -868,13 +1265,17 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
                 user.id,
                 ex_name,
                 target_sets=target_sets,
+                strict_target_sets=strict_target_sets,
                 log_ex_index=log_ex_index,
                 is_timed=time_based,
                 workout_day_start_dt=workout_day_start_dt,
             )
             best_log_sets = _normalize_sets(best_log.sets_json) if best_log else None
 
-            if best_log_sets:
+            current_count = comparison_set_count(new_sets, getattr(log, "exercise_string", "") or "")
+            can_compare = (not strict_target_sets) or (current_count >= target_sets)
+
+            if best_log_sets and can_compare:
                 row["old"] = _format_best_string(best_log)
 
                 if time_based:
@@ -890,9 +1291,14 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
                         row["status"] = "CONSISTENCY"
                     row["class"] = "improved"
             else:
-                row["old"] = "First Log"
-                row["status"] = "NEW"
-                row["class"] = "new"
+                if best_log_sets:
+                    row["old"] = _format_best_string(best_log)
+                    row["status"] = "-"
+                    row["class"] = "neutral"
+                else:
+                    row["old"] = "First Log"
+                    row["status"] = "NEW"
+                    row["class"] = "new"
 
             if isinstance(log.sets_json, dict):
                 weights = log.sets_json.get("weights") or []

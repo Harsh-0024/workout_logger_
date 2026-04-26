@@ -199,6 +199,62 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[0]['reps'], [50, 54, 40])
         self.assertTrue(exs[0]['valid'])
 
+    def test_bracket_single_number_is_set_count(self):
+        raw_text = """
+        12/01 Test Day
+        Barbell Curl - [4]
+        5 2.5, 10
+        """
+        result = workout_parser(raw_text)
+        exs = result["exercises"]
+        self.assertEqual(exs[0]["name"], "Barbell Curl")
+        self.assertEqual(len(exs[0]["weights"]), 4)
+        self.assertEqual(exs[0]["reps"], [10, 10, 10, 10])
+
+    def test_bracket_prefix_sets_count(self):
+        raw_text = """
+        12/01 Test Day
+        Barbell Curl - [2, 6-10]
+        5 2.5, 10
+        """
+        result = workout_parser(raw_text)
+        exs = result["exercises"]
+        self.assertEqual(len(exs[0]["weights"]), 2)
+        self.assertEqual(exs[0]["reps"], [10, 10])
+
+    def test_bracket_prefix_sets_count_caps_extra_parsed_tokens(self):
+        raw_text = """
+        20/04 Back & Triceps
+        Triceps Rod Pushdown - [2, 10-15]
+        55 52.8 50, 14 15
+        """
+        result = workout_parser(raw_text)
+        exs = result["exercises"]
+        self.assertEqual(exs[0]["weights"], [55.0, 52.8])
+        self.assertEqual(exs[0]["reps"], [14, 15])
+
+    def test_bracket_range_without_set_prefix_uses_minimum_three(self):
+        raw_text = """
+        12/01 Test Day
+        Barbell Curl - [6-10]
+        5 2.5, 10
+        """
+        result = workout_parser(raw_text)
+        exs = result["exercises"]
+        self.assertEqual(len(exs[0]["weights"]), 3)
+        self.assertEqual(exs[0]["reps"], [10, 10, 10])
+
+    def test_stretch_to_match_larger_list_when_over_three(self):
+        raw_text = """
+        12/01 Test Day
+        Barbell Curl - [6-10]
+        5 2.5 1, 10 10 10 10 10
+        """
+        result = workout_parser(raw_text)
+        exs = result["exercises"]
+        self.assertEqual(len(exs[0]["weights"]), 5)
+        self.assertEqual(exs[0]["reps"], [10, 10, 10, 10, 10])
+
 
 class TestPlanParser(unittest.TestCase):
 
@@ -305,11 +361,11 @@ class TestWorkoutQualityScorer(unittest.TestCase):
         )
         self.assertGreater(score["volume_consistency"], 0.55)
 
-    def test_high_rep_1rm_not_inflated_like_epley(self):
+    def test_high_rep_1rm_uses_classic_epley(self):
         score_10 = WorkoutQualityScorer.calculate_workout_score({"weights": [50], "reps": [10]})
         score_20 = WorkoutQualityScorer.calculate_workout_score({"weights": [50], "reps": [20]})
-        self.assertGreater(score_20["peak_1rm"], score_10["peak_1rm"])
-        self.assertLess(score_20["peak_1rm"], score_10["peak_1rm"] * 1.2)
+        self.assertAlmostEqual(score_10["peak_1rm"], 50 * (1 + 10 / 30), places=6)
+        self.assertAlmostEqual(score_20["peak_1rm"], 50 * (1 + 20 / 30), places=6)
 
 
 if __name__ == '__main__':

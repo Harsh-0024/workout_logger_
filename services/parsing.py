@@ -80,9 +80,16 @@ class WorkoutParsingService:
                         all_weights.append(numbers[i])
                         all_reps.append(int(numbers[i + 1]))
         
-        # Align sets if we have a declared count
+        # Align sets if we have a declared count.
+        # Declared count is authoritative: trim extras before normalization.
         if declared_sets and (all_weights or all_reps):
-            all_weights, all_reps = align_sets(all_weights, all_reps, declared_sets)
+            declared_n = int(declared_sets)
+            if declared_n > 0:
+                if len(all_weights) > declared_n:
+                    all_weights = list(all_weights[:declared_n])
+                if len(all_reps) > declared_n:
+                    all_reps = list(all_reps[:declared_n])
+            all_weights, all_reps = align_sets(all_weights, all_reps, declared_n)
         
         # Calculate metrics
         sets_json = {'weights': all_weights, 'reps': all_reps}
