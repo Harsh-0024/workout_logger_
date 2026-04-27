@@ -491,12 +491,7 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
 
         inferred_sets = max(len(weights), len(reps)) if (weights or reps) else 0
         if declared_sets is not None:
-            # Declared set counts are authoritative for this exercise line.
-            # If extra tokens were parsed, cap to the declared count first.
-            target_sets = int(declared_sets)
-            if target_sets > 0 and inferred_sets > target_sets:
-                weights = list(weights[:target_sets])
-                reps = list(reps[:target_sets])
+            target_sets = max(int(declared_sets), inferred_sets)
         else:
             target_sets = inferred_sets if inferred_sets > 3 else 3
 

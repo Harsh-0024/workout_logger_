@@ -21,7 +21,7 @@ from services.logging import (
     resolve_timed_exercise_status,
     set_timed_exercise_preference,
     comparison_set_count,
-    get_best_log_for_exercise,
+    get_best_log_for_exercise_before_date,
     get_plan_target_sets_for_user,
     parse_rep_target_sets_text,
     resolve_target_sets_for_exercise,
@@ -458,6 +458,7 @@ def register_workout_routes(app):
                     current_log_id=getattr(log, 'id', None),
                     current_exercise_string=exercise_text,
                     summary_mode=False,
+                    historical_before_dt=start_dt,
                 )
                 log.performance_key = perf.get('key')
                 log.performance_label = perf.get('label')
@@ -539,13 +540,14 @@ def register_workout_routes(app):
                         log.performance_label = "No Comparable Baseline"
                     else:
                         log.performance_label = "No baseline"
-                best_log = get_best_log_for_exercise(
+                best_log = get_best_log_for_exercise_before_date(
                     Session,
                     user.id,
                     log.exercise,
                     target_sets=target_sets,
                     strict_target_sets=strict_target_sets,
                     is_timed=log.is_timed,
+                    workout_day_start_dt=start_dt,
                 )
                 log.best_date_label = (
                     best_log.date.strftime('%d-%m-%y')

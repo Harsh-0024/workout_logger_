@@ -13,6 +13,7 @@ from models import Base, Lift, User, UserRole, WorkoutLog
 from services.exercise_matching import build_name_index
 from services.logging import (
     _get_best_log,
+    classify_exercise_performance,
     comparison_set_count,
     handle_workout_log,
     resolve_target_sets_for_exercise,
@@ -197,6 +198,197 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(best_link_date, expected_date)
 
+    def test_workout_detail_vs_best_ignores_future_logs(self):
+        user = self._create_logged_in_user(username="workout_user_future_best")
+        exercise = "Flat Dumbbell Press"
+
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 1, 9, 0, 0),
+                workout_name="Session 1",
+                exercise=exercise,
+                exercise_string="Flat Dumbbell Press - [8-12]\n80 80 80, 8 8 8",
+                sets_json={"weights": [80, 80, 80], "reps": [8, 8, 8]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=101.33,
+            )
+        )
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 10, 9, 0, 0),
+                workout_name="Session 2",
+                exercise=exercise,
+                exercise_string="Flat Dumbbell Press - [8-12]\n90 90 90, 8 8 8",
+                sets_json={"weights": [90, 90, 90], "reps": [8, 8, 8]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=114.0,
+            )
+        )
+        # This future log should not affect the /workout/2026-01-10 "Vs Best" rail.
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 20, 9, 0, 0),
+                workout_name="Session 3",
+                exercise=exercise,
+                exercise_string="Flat Dumbbell Press - [8-12]\n130 130 130, 5 5 5",
+                sets_json={"weights": [130, 130, 130], "reps": [5, 5, 5]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=151.67,
+            )
+        )
+        self.session.commit()
+
+        def _fake_render(template_name, **kwargs):
+            if template_name == "workout_detail.html":
+                return {
+                    "rows": [
+                        {
+                            "exercise": log.exercise,
+                            "best_workout_url": getattr(log, "best_workout_url", None),
+                            "performance_key": getattr(log, "performance_key", None),
+                        }
+                        for log in kwargs.get("logs", [])
+                    ]
+                }
+            return {"template": template_name}
+
+        with patch("workout_tracker.routes.workouts.render_template", side_effect=_fake_render):
+            response = self.client.get("/workout/2026-01-10")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIsNotNone(data)
+        self.assertTrue(data.get("rows"))
+
+        row = data["rows"][0]
+        best_url = row.get("best_workout_url") or ""
+        m = re.search(r"/workout/(\d{4}-\d{2}-\d{2})", best_url)
+        self.assertIsNotNone(m, msg=f"best_workout_url missing date: {best_url}")
+        best_link_date = m.group(1)
+
+        self.assertEqual(best_link_date, "2026-01-01")
+        self.assertEqual(row.get("performance_key"), "gold_strength")
+
+    def test_classifier_awards_gold_load_only_when_top_weight_beats_reference(self):
+        user = self._create_logged_in_user(username="gold_load_user")
+        exercise = "Tie Lift"
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 1, 9, 0, 0),
+                workout_name="Baseline",
+                exercise=exercise,
+                exercise_string="Tie Lift\n22.5 18 15, 10 20 30",
+                sets_json={"weights": [22.5, 18, 15], "reps": [10, 20, 30]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=30.0,
+            )
+        )
+        current = WorkoutLog(
+            user_id=user.id,
+            date=datetime(2026, 1, 10, 9, 0, 0),
+            workout_name="Current",
+            exercise=exercise,
+            exercise_string="Tie Lift\n25 22.5 18, 6 10 20",
+            sets_json={"weights": [25, 22.5, 18], "reps": [6, 10, 20]},
+            bodyweight=user.bodyweight,
+            estimated_1rm=30.0,
+        )
+        self.session.add(current)
+        self.session.commit()
+
+        perf = classify_exercise_performance(
+            self.session,
+            user.id,
+            exercise,
+            current.sets_json,
+            current_log_id=current.id,
+            current_exercise_string=current.exercise_string,
+        )
+
+        self.assertEqual(perf["key"], "gold_load")
+
+    def test_classifier_awards_silver_load_when_second_weight_beats_reference(self):
+        user = self._create_logged_in_user(username="silver_load_user")
+        exercise = "Tie Lift"
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 1, 9, 0, 0),
+                workout_name="Baseline",
+                exercise=exercise,
+                exercise_string="Tie Lift\n25 18 15, 6 20 30",
+                sets_json={"weights": [25, 18, 15], "reps": [6, 20, 30]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=30.0,
+            )
+        )
+        current = WorkoutLog(
+            user_id=user.id,
+            date=datetime(2026, 1, 10, 9, 0, 0),
+            workout_name="Current",
+            exercise=exercise,
+            exercise_string="Tie Lift\n25 22.5 18, 6 10 20",
+            sets_json={"weights": [25, 22.5, 18], "reps": [6, 10, 20]},
+            bodyweight=user.bodyweight,
+            estimated_1rm=30.0,
+        )
+        self.session.add(current)
+        self.session.commit()
+
+        perf = classify_exercise_performance(
+            self.session,
+            user.id,
+            exercise,
+            current.sets_json,
+            current_log_id=current.id,
+            current_exercise_string=current.exercise_string,
+        )
+
+        self.assertEqual(perf["key"], "silver_load")
+
+    def test_classifier_is_consistent_when_tied_scores_and_loads_do_not_beat_reference(self):
+        user = self._create_logged_in_user(username="consistent_load_user")
+        exercise = "Tie Lift"
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 1, 9, 0, 0),
+                workout_name="Baseline",
+                exercise=exercise,
+                exercise_string="Tie Lift\n25 22.5 18, 6 10 20",
+                sets_json={"weights": [25, 22.5, 18], "reps": [6, 10, 20]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=30.0,
+            )
+        )
+        current = WorkoutLog(
+            user_id=user.id,
+            date=datetime(2026, 1, 10, 9, 0, 0),
+            workout_name="Current",
+            exercise=exercise,
+            exercise_string="Tie Lift\n25 18 15, 6 20 30",
+            sets_json={"weights": [25, 18, 15], "reps": [6, 20, 30]},
+            bodyweight=user.bodyweight,
+            estimated_1rm=30.0,
+        )
+        self.session.add(current)
+        self.session.commit()
+
+        perf = classify_exercise_performance(
+            self.session,
+            user.id,
+            exercise,
+            current.sets_json,
+            current_log_id=current.id,
+            current_exercise_string=current.exercise_string,
+        )
+
+        self.assertEqual(perf["key"], "consistent")
+
     def test_incomplete_strict_session_gets_compared_badge_not_consistent_short_circuit(self):
         user = self._create_logged_in_user(username="incomplete_badge_user")
         exercise = "Flat Dumbbell Press"
@@ -250,8 +442,8 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIsNotNone(key)
         self.assertNotEqual(key, "consistent")
 
-    def test_incomplete_strict_session_does_not_update_pr_record(self):
-        user = self._create_logged_in_user(username="incomplete_pr_user")
+    def test_declared_set_count_expands_shorthand_before_pr_update(self):
+        user = self._create_logged_in_user(username="declared_set_pr_user")
         exercise = "Flat Dumbbell Press"
         baseline_date = datetime(2026, 1, 1, 9, 0, 0)
         baseline_sets = {"weights": [100, 95, 90], "reps": [5, 5, 5]}
@@ -302,15 +494,15 @@ class TestRouteRegressions(unittest.TestCase):
             .filter(Lift.user_id == user.id, Lift.exercise == exercise)
             .one()
         )
-        self.assertEqual(lift.sets_json, baseline_sets)
-        self.assertEqual(lift.best_string, baseline_best_string)
-        self.assertEqual(lift.updated_at, baseline_date)
+        self.assertEqual(lift.sets_json, {"weights": [130.0, 130.0, 130.0], "reps": [5, 5, 5]})
+        self.assertEqual(lift.best_string, "Flat Dumbbell Press - [3, 6-8]\n130 130, 5 5")
+        self.assertEqual(lift.updated_at, datetime(2026, 1, 10, 9, 0, 0))
 
-    def test_incomplete_strict_with_only_smaller_history_shows_no_comparable_baseline_label(self):
-        user = self._create_logged_in_user(username="incomplete_no_baseline_user")
+    def test_declared_set_count_expands_smaller_history_for_comparison(self):
+        user = self._create_logged_in_user(username="expanded_baseline_user")
         exercise = "Flat Dumbbell Press"
 
-        # Historical log exists but has fewer sets than the current incomplete log.
+        # Historical shorthand expands to three sets, so it remains comparable.
         self.session.add(
             WorkoutLog(
                 user_id=user.id,
@@ -358,8 +550,8 @@ class TestRouteRegressions(unittest.TestCase):
         data = response.get_json()
         self.assertTrue(data.get("rows"))
         row = data["rows"][0]
-        self.assertEqual(row.get("performance_key"), "first_log")
-        self.assertEqual(row.get("performance_label"), "No Comparable Baseline")
+        self.assertEqual(row.get("performance_key"), "significantly_off")
+        self.assertEqual(row.get("performance_label"), "↓ Significantly Off")
 
 
 if __name__ == "__main__":

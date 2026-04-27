@@ -13,7 +13,11 @@ from services.best_scoring import (
     compare_strength_workouts,
 )
 from services.exercise_matching import build_name_index, resolve_equivalent_names
-from services.logging import _parse_rep_target_sets
+from services.logging import (
+    _parse_rep_target_sets,
+    comparison_set_count,
+    resolve_target_sets_for_exercise,
+)
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from services.retrieve import _build_best_sets_line_from_logs
 
@@ -133,6 +137,49 @@ class TestRepTargetParsing(unittest.TestCase):
         self.assertEqual(parsed.get("wrist extension dumbbell"), 4)
         # No explicit set-count prefix here, so it should not be present.
         self.assertNotIn("flat dumbbell press", parsed)
+
+
+class TestSetCountRule(unittest.TestCase):
+    def test_uses_sets_json_count_before_raw_string_count(self):
+        count = comparison_set_count(
+            {"weights": [5, 5, 5], "reps": [21, 20]},
+            "V Tucks\n5, 21 20",
+        )
+        self.assertEqual(count, 3)
+
+    def test_no_explicit_uses_json_count_above_default(self):
+        count = comparison_set_count(
+            {"weights": [5, 5], "reps": [21, 20, 20, 20]},
+            "V Tucks\n5 5, 21 20 20 20",
+        )
+        self.assertEqual(count, 4)
+
+    def test_explicit_count_above_json_count_wins(self):
+        count = comparison_set_count(
+            {"weights": [5, 5], "reps": [21, 20]},
+            "V Tucks - [4]\n5 5, 21 20",
+        )
+        self.assertEqual(count, 4)
+
+    def test_json_count_above_explicit_count_wins(self):
+        count = comparison_set_count(
+            {"weights": [5, 5, 5, 5], "reps": [21, 20, 20, 20]},
+            "V Tucks - [2]\n5 5 5 5, 21 20 20 20",
+        )
+        self.assertEqual(count, 4)
+
+    def test_empty_defaults_to_three_sets(self):
+        self.assertEqual(comparison_set_count(None, ""), 3)
+
+    def test_resolved_target_uses_larger_of_explicit_and_inferred(self):
+        target_sets, strict = resolve_target_sets_for_exercise(
+            exercise_name="V Tucks",
+            exercise_string="V Tucks - [2]\n5 5 5 5, 21 20 20 20",
+            inferred_set_count=4,
+            default_sets=3,
+        )
+        self.assertEqual(target_sets, 4)
+        self.assertTrue(strict)
 
 
 class TestRetrieveBestLineSelection(unittest.TestCase):

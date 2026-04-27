@@ -222,7 +222,7 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(len(exs[0]["weights"]), 2)
         self.assertEqual(exs[0]["reps"], [10, 10])
 
-    def test_bracket_prefix_sets_count_caps_extra_parsed_tokens(self):
+    def test_bracket_prefix_sets_count_keeps_extra_parsed_tokens(self):
         raw_text = """
         20/04 Back & Triceps
         Triceps Rod Pushdown - [2, 10-15]
@@ -230,8 +230,8 @@ class TestWorkoutParser(unittest.TestCase):
         """
         result = workout_parser(raw_text)
         exs = result["exercises"]
-        self.assertEqual(exs[0]["weights"], [55.0, 52.8])
-        self.assertEqual(exs[0]["reps"], [14, 15])
+        self.assertEqual(exs[0]["weights"], [55.0, 52.8, 50.0])
+        self.assertEqual(exs[0]["reps"], [14, 15, 15])
 
     def test_bracket_range_without_set_prefix_uses_minimum_three(self):
         raw_text = """

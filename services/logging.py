@@ -148,6 +148,19 @@ def _set_count_from_sets_json(sets_json: Optional[Dict]) -> int:
     return max(len(normalized.get("weights") or []), len(normalized.get("reps") or []))
 
 
+def _align_sets_to_count(sets_json: Optional[Dict], target_count: int) -> Optional[Dict]:
+    normalized = _normalize_sets(sets_json)
+    if not normalized:
+        return None
+    target = int(target_count) if isinstance(target_count, int) and target_count > 0 else 3
+    weights, reps = align_sets(
+        list(normalized.get("weights") or []),
+        list(normalized.get("reps") or []),
+        target,
+    )
+    return {"weights": weights, "reps": reps}
+
+
 def _raw_set_count_from_exercise_string(exercise_string: str) -> int:
     text = str(exercise_string or "")
     if not text:
@@ -199,10 +212,11 @@ def _raw_set_count_from_exercise_string(exercise_string: str) -> int:
 
 
 def comparison_set_count(sets_json: Optional[Dict], exercise_string: str = "") -> int:
-    raw_count = _raw_set_count_from_exercise_string(exercise_string)
-    if raw_count > 0:
-        return raw_count
-    return _set_count_from_sets_json(sets_json)
+    json_count = _set_count_from_sets_json(sets_json)
+    explicit_sets = _extract_explicit_target_sets(exercise_string)
+    if isinstance(explicit_sets, int) and explicit_sets > 0:
+        return max(explicit_sets, json_count)
+    return json_count if json_count > 3 else 3
 
 
 def _extract_explicit_target_sets(exercise_string: str) -> Optional[int]:
@@ -298,8 +312,9 @@ def resolve_target_sets_for_exercise(
         (target_sets, strict_target_sets)
     """
     explicit_sets = _extract_explicit_target_sets(exercise_string)
+    inferred = int(inferred_set_count) if isinstance(inferred_set_count, int) else 0
     if isinstance(explicit_sets, int) and explicit_sets > 0:
-        return int(explicit_sets), True
+        return max(int(explicit_sets), inferred), True
 
     key = normalize_exercise_name(exercise_name or "")
     if key and rep_target_sets:
@@ -312,7 +327,6 @@ def resolve_target_sets_for_exercise(
         if isinstance(mapped, int) and mapped > 0:
             return int(mapped), True
 
-    inferred = int(inferred_set_count) if isinstance(inferred_set_count, int) else 0
     default_n = int(default_sets) if isinstance(default_sets, int) and default_sets > 0 else 3
     if inferred > default_n:
         return inferred, False
@@ -352,6 +366,33 @@ def get_best_log_for_exercise(
     )
 
 
+def get_best_log_for_exercise_before_date(
+    db_session,
+    user_id: int,
+    exercise_name: str,
+    *,
+    target_sets: int = 3,
+    strict_target_sets: bool = False,
+    log_ex_index=None,
+    is_timed: bool = False,
+    workout_day_start_dt: Optional[datetime] = None,
+) -> Optional[WorkoutLog]:
+    """
+    Public wrapper for selecting "best log before the viewed day" using
+    the same top-N/strict-set logic as backend comparison flows.
+    """
+    return _get_best_log_before_date(
+        db_session,
+        user_id,
+        exercise_name,
+        target_sets=target_sets,
+        strict_target_sets=strict_target_sets,
+        log_ex_index=log_ex_index,
+        is_timed=is_timed,
+        workout_day_start_dt=workout_day_start_dt,
+    )
+
+
 def classify_exercise_performance(
     db_session,
     user_id: int,
@@ -365,6 +406,7 @@ def classify_exercise_performance(
     current_log_id: Optional[int] = None,
     current_exercise_string: str = "",
     summary_mode: bool = False,
+    historical_before_dt: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """
     Classify today's exercise performance against all historical logs of the exercise.
@@ -392,13 +434,19 @@ def classify_exercise_performance(
         # many sets completed.
         compare_n = current_set_count
         min_required_sets = current_set_count
-    logs = (
+    logs_query = (
         db_session.query(WorkoutLog)
         .filter(WorkoutLog.user_id == user_id)
         .filter(WorkoutLog.exercise.in_(candidates))
-        .order_by(WorkoutLog.date.asc(), WorkoutLog.id.asc())
-        .all()
     )
+    if historical_before_dt is not None:
+        if current_log_id is not None:
+            logs_query = logs_query.filter(
+                (WorkoutLog.date < historical_before_dt) | (WorkoutLog.id == current_log_id)
+            )
+        else:
+            logs_query = logs_query.filter(WorkoutLog.date < historical_before_dt)
+    logs = logs_query.order_by(WorkoutLog.date.asc(), WorkoutLog.id.asc()).all()
 
     rows: List[Dict[str, Any]] = []
     had_historical_with_sets = False
@@ -408,9 +456,11 @@ def classify_exercise_performance(
             continue
         if current_log_id is None or getattr(log, "id", None) != current_log_id:
             had_historical_with_sets = True
-        if strict_target_sets and comparison_set_count(log_sets, getattr(log, "exercise_string", "") or "") < min_required_sets:
+        log_set_count = comparison_set_count(log_sets, getattr(log, "exercise_string", "") or "")
+        if strict_target_sets and log_set_count < min_required_sets:
             continue
-        vectors = _rank_vectors_for_sets(log_sets, top_n=compare_n, is_timed=is_timed)
+        aligned_log_sets = _align_sets_to_count(log_sets, max(log_set_count, compare_n)) or log_sets
+        vectors = _rank_vectors_for_sets(aligned_log_sets, top_n=compare_n, is_timed=is_timed)
         if not vectors.get("scores"):
             continue
         rows.append(
@@ -432,7 +482,8 @@ def classify_exercise_performance(
                 break
 
     if current_row is None:
-        vectors = _rank_vectors_for_sets(normalized_current, top_n=compare_n, is_timed=is_timed)
+        aligned_current = _align_sets_to_count(normalized_current, max(current_set_count, compare_n)) or normalized_current
+        vectors = _rank_vectors_for_sets(aligned_current, top_n=compare_n, is_timed=is_timed)
         if not vectors.get("scores"):
             return _performance_payload("consistent", summary_mode=summary_mode)
         current_row = {
@@ -458,34 +509,6 @@ def classify_exercise_performance(
                 "short": "No Comparable Baseline",
             }
         return _performance_payload("first_log", summary_mode=summary_mode)
-
-    tie_group = [
-        row
-        for row in rows
-        if _lex_compare_desc(row.get("scores") or [], current_row.get("scores") or []) == 0
-    ]
-
-    if len(tie_group) > 1:
-        # If another workout is identical on load vector too, treat as consistent
-        # instead of awarding a load medal for a non-unique rank.
-        has_exact_load_tie = any(
-            row is not current_row
-            and _lex_compare_desc(row.get("weights") or [], current_row.get("weights") or []) == 0
-            for row in tie_group
-        )
-        if has_exact_load_tie:
-            return _performance_payload("consistent", summary_mode=summary_mode)
-
-        weight_rank = 1 + sum(
-            1
-            for row in tie_group
-            if row is not current_row
-            and _lex_compare_desc(row.get("weights") or [], current_row.get("weights") or []) > 0
-        )
-        if weight_rank <= 3:
-            load_key = {1: "gold_load", 2: "silver_load", 3: "bronze_load"}.get(weight_rank, "consistent")
-            return _performance_payload(load_key, summary_mode=summary_mode)
-        return _performance_payload("consistent", summary_mode=summary_mode)
 
     best_row = max(
         rows,
@@ -513,7 +536,7 @@ def classify_exercise_performance(
     diff_idx, cmp_to_reference = _first_score_diff_index(
         current_row.get("scores") or [],
         reference_row.get("scores") or [],
-        top_n=compare_n,
+        top_n=min(compare_n, 3),
     )
 
     if cmp_to_reference > 0:
@@ -529,6 +552,18 @@ def classify_exercise_performance(
         if diff_idx == 1:
             return _performance_payload("moderately_off", summary_mode=summary_mode)
         return _performance_payload("slightly_off", summary_mode=summary_mode)
+
+    current_weights = current_row.get("weights") or []
+    reference_weights = reference_row.get("weights") or []
+    for idx in range(min(compare_n, 3)):
+        current_weight = float(current_weights[idx]) if idx < len(current_weights) else 0.0
+        reference_weight = float(reference_weights[idx]) if idx < len(reference_weights) else 0.0
+        if current_weight > reference_weight:
+            if idx == 0:
+                return _performance_payload("gold_load", summary_mode=summary_mode)
+            if idx == 1:
+                return _performance_payload("silver_load", summary_mode=summary_mode)
+            return _performance_payload("bronze_load", summary_mode=summary_mode)
 
     return _performance_payload("consistent", summary_mode=summary_mode)
 
@@ -804,12 +839,13 @@ def _get_best_log(
         normalized_sets = _normalize_sets(log.sets_json)
         if not normalized_sets:
             continue
-        if is_timed:
-            metrics = best_workout_timed_score(normalized_sets, top_n=required_sets)
-        else:
-            metrics = best_workout_strength_score(normalized_sets, top_n=required_sets)
-        score = float(metrics.get("score") or 0.0)
         set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
+        scoring_sets = _align_sets_to_count(normalized_sets, set_count) or normalized_sets
+        if is_timed:
+            metrics = best_workout_timed_score(scoring_sets, top_n=required_sets)
+        else:
+            metrics = best_workout_strength_score(scoring_sets, top_n=required_sets)
+        score = float(metrics.get("score") or 0.0)
         if score <= 0:
             continue
         row = (log, score, set_count)
@@ -928,6 +964,10 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             inferred_set_count=inferred_set_count,
             default_sets=3,
         )
+        if is_valid and _set_count_from_sets_json(new_sets) > 0:
+            aligned_new_sets = _align_sets_to_count(new_sets, target_sets)
+            if aligned_new_sets:
+                new_sets = aligned_new_sets
         
         # Format display string from sets data
         formatted_display = _format_sets_display(new_sets) if is_valid else new_str
@@ -1120,14 +1160,15 @@ def _get_best_log_before_date(
         normalized_sets = _normalize_sets(log.sets_json)
         if not normalized_sets:
             continue
+        set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
+        scoring_sets = _align_sets_to_count(normalized_sets, set_count) or normalized_sets
 
         if is_timed:
-            metrics = best_workout_timed_score(normalized_sets, top_n=required_sets)
+            metrics = best_workout_timed_score(scoring_sets, top_n=required_sets)
         else:
-            metrics = best_workout_strength_score(normalized_sets, top_n=required_sets)
+            metrics = best_workout_strength_score(scoring_sets, top_n=required_sets)
 
         score = float(metrics.get("score") or 0.0)
-        set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
         if score <= 0:
             continue
 
