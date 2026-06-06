@@ -25,10 +25,6 @@ def _normalize_token(tok: str) -> str:
     if t in {"tricep", "triceps"}:
         return "triceps"
 
-    # Optional/common filler tokens.
-    if t == "forearm":
-        return ""
-
     # Generic plural normalization (keeps 'ss' words like 'press').
     if (
         t not in _TOKEN_PLURAL_EXCEPTIONS
@@ -89,7 +85,7 @@ def token_signature(name: str) -> Tuple[str, ...]:
     normalized match is missing.
 
     Important: signature is intentionally conservative:
-    - It uses a normalized token stream (plural/oh/forearm normalized).
+    - It uses a normalized token stream (plural/oh normalized).
     - It keeps all remaining tokens (including 'machine', 'barbell', etc.) to reduce accidental merging.
     """
     norm = normalize_exercise_name(name)
@@ -151,4 +147,3 @@ def resolve_equivalent_names(input_name: str, index: Dict[str, Dict]) -> List[st
         return [by_sig[sig][0]]
 
     return []
-

@@ -1,15 +1,14 @@
 """
 project_extractor.py
 --------------------
-Drop this file into any project folder and run it.
-It will generate:
+Place the folder containing this file inside any project folder and run it.
+It will generate inside project_code_extractor/:
   - structure_1.txt, structure_2.txt, ... → full folder/file tree
   - content_1.txt, content_2.txt, ...     → every line of every file with filenames
 Each output file is capped at 100MB.
 """
 
 import os
-import sys
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 MAX_BYTES = 100 * 1024 * 1024  # 100 MB per output file
@@ -19,6 +18,7 @@ SKIP_DIRS = {
     ".git", ".svn", ".hg", "__pycache__", "node_modules",
     ".venv", "venv", "env", ".env", "dist", "build",
     ".idea", ".vscode", ".mypy_cache", ".pytest_cache",
+    "project_extraction_output",  # skip output folder on re-runs
 }
 SKIP_FILES = {
     "project_extractor.py",   # skip itself
@@ -120,15 +120,15 @@ def write_chunked(output_dir: str, base_name: str, chunks: list[str]):
 
 
 def main():
-    # Run from any folder; script's own folder is the project root
+    # script lives in project_code_extractor/ which is inside the project root
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    root = script_dir
-    output_dir = os.path.join(root, "project_extraction_output")
+    root = os.path.dirname(script_dir)          # ← one level up = actual project root
+    output_dir = os.path.join(script_dir, "project_extraction_output")  # stays inside extractor folder
     os.makedirs(output_dir, exist_ok=True)
 
     print(f"\n{'='*60}")
     print(f"  Project Extractor")
-    print(f"  Root : {root}")
+    print(f"  Root  : {root}")
     print(f"  Output: {output_dir}")
     print(f"{'='*60}\n")
 

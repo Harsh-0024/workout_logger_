@@ -1,6 +1,6 @@
 import re
 import unittest
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
@@ -19,6 +19,7 @@ from services.logging import (
     resolve_target_sets_for_exercise,
 )
 from workout_tracker import create_app
+from workout_tracker.routes.auth import _infer_bulk_import_dates
 
 
 class _RouteTestConfig(Config):
@@ -103,6 +104,54 @@ class TestRouteRegressions(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("Failed days", page)
         self.assertIn("32/13", page)
+
+    def test_bulk_import_missing_year_rolls_forward_chronologically(self):
+        inferred = _infer_bulk_import_dates(
+            [
+                {"day": 30, "month": 12, "year": 2023},
+                {"day": 31, "month": 12, "year": None},
+                {"day": 1, "month": 1, "year": None},
+                {"day": 2, "month": 1, "year": None},
+            ],
+            today=date(2026, 6, 6),
+        )
+
+        self.assertEqual(
+            inferred,
+            [
+                date(2023, 12, 30),
+                date(2023, 12, 31),
+                date(2024, 1, 1),
+                date(2024, 1, 2),
+            ],
+        )
+
+    def test_bulk_import_preview_shows_detected_date_range(self):
+        self._create_logged_in_user(username="bulk_range_user")
+
+        payload = "\n".join(
+            [
+                "30/12/23 Year End",
+                "Flat Dumbbell Press - [8-12]",
+                "30, 8",
+                "",
+                "01/01 New Year",
+                "Flat Dumbbell Press - [8-12]",
+                "35, 8",
+            ]
+        )
+
+        response = self.client.post(
+            "/bulk-import",
+            data={
+                "bulk_workouts_text": payload,
+                "confirm_import": "0",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Detected date range: 30-12-2023 to 01-01-2024", page)
 
     def test_workout_detail_best_link_uses_same_selection_as_topn_best_logic(self):
         user = self._create_logged_in_user(username="workout_user")
@@ -449,25 +498,23 @@ class TestRouteRegressions(unittest.TestCase):
         baseline_sets = {"weights": [100, 95, 90], "reps": [5, 5, 5]}
         baseline_best_string = "Flat Dumbbell Press - [3, 6-8]\n100 95 90, 5 5 5"
 
-        self.session.add(
-            WorkoutLog(
-                user_id=user.id,
-                date=baseline_date,
-                workout_name="Session 1",
-                exercise=exercise,
-                exercise_string=baseline_best_string,
-                sets_json=baseline_sets,
-                bodyweight=user.bodyweight,
-                estimated_1rm=116.67,
-            )
+        baseline_log = WorkoutLog(
+            user_id=user.id,
+            date=baseline_date,
+            workout_name="Session 1",
+            exercise=exercise,
+            exercise_string=baseline_best_string,
+            sets_json=baseline_sets,
+            bodyweight=user.bodyweight,
+            estimated_1rm=116.67,
         )
+        self.session.add(baseline_log)
+        self.session.flush()
         self.session.add(
             Lift(
                 user_id=user.id,
                 exercise=exercise,
-                best_string=baseline_best_string,
-                sets_json=baseline_sets,
-                updated_at=baseline_date,
+                best_log_id=baseline_log.id,
             )
         )
         self.session.commit()
@@ -494,9 +541,10 @@ class TestRouteRegressions(unittest.TestCase):
             .filter(Lift.user_id == user.id, Lift.exercise == exercise)
             .one()
         )
-        self.assertEqual(lift.sets_json, {"weights": [130.0, 130.0, 130.0], "reps": [5, 5, 5]})
-        self.assertEqual(lift.best_string, "Flat Dumbbell Press - [3, 6-8]\n130 130, 5 5")
-        self.assertEqual(lift.updated_at, datetime(2026, 1, 10, 9, 0, 0))
+        self.assertIsNotNone(lift.best_log)
+        self.assertEqual(lift.best_log.sets_json, {"weights": [130.0, 130.0, 130.0], "reps": [5, 5, 5]})
+        self.assertEqual(lift.best_log.exercise_string, "Flat Dumbbell Press - [3, 6-8]\n130 130, 5 5")
+        self.assertEqual(lift.best_log.date, datetime(2026, 1, 10, 9, 0, 0))
 
     def test_declared_set_count_expands_smaller_history_for_comparison(self):
         user = self._create_logged_in_user(username="expanded_baseline_user")

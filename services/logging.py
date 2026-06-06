@@ -15,8 +15,6 @@ from parsers.workout import (
     _extract_sets_from_bracket,
 )
 from services.best_scoring import (
-    best_workout_strength_score,
-    best_workout_timed_score,
     compare_strength_workouts,
     compare_timed_workouts,
 )
@@ -364,6 +362,130 @@ def get_best_log_for_exercise(
         log_ex_index=log_ex_index,
         is_timed=is_timed,
     )
+
+
+def _resolve_pointer_target_context(
+    db_session,
+    user,
+    exercise_name: str,
+    *,
+    exercise_string: str = "",
+    sets_json: Optional[Dict] = None,
+    rep_target_sets: Optional[Dict[str, int]] = None,
+    plan_target_sets: Optional[Dict[str, int]] = None,
+    log_ex_index=None,
+) -> Tuple[int, bool, bool]:
+    rep_targets = rep_target_sets
+    if rep_targets is None:
+        rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
+        rep_targets = _parse_rep_target_sets(rep_row.text_content if rep_row else "")
+
+    plan_targets = plan_target_sets if plan_target_sets is not None else _get_plan_target_sets(db_session, user)
+    inferred_set_count = _set_count_from_sets_json(sets_json) if sets_json else 0
+    target_sets, strict_target_sets = resolve_target_sets_for_exercise(
+        exercise_name=exercise_name,
+        exercise_string=exercise_string,
+        rep_target_sets=rep_targets,
+        plan_target_sets=plan_targets,
+        inferred_set_count=inferred_set_count,
+        default_sets=3,
+    )
+    timed_status = resolve_timed_exercise_status(
+        db_session,
+        user.id,
+        exercise_name,
+        exercise_string,
+        log_ex_index=log_ex_index,
+    )
+    return target_sets, strict_target_sets, bool(timed_status.get("is_timed"))
+
+
+def refresh_best_lift_pointer(
+    db_session,
+    user,
+    exercise_name: str,
+    *,
+    exercise_string: str = "",
+    sets_json: Optional[Dict] = None,
+    rep_target_sets: Optional[Dict[str, int]] = None,
+    plan_target_sets: Optional[Dict[str, int]] = None,
+    log_ex_index=None,
+    lift_ex_index=None,
+) -> Optional[Lift]:
+    target_sets, strict_target_sets, is_timed = _resolve_pointer_target_context(
+        db_session,
+        user,
+        exercise_name,
+        exercise_string=exercise_string,
+        sets_json=sets_json,
+        rep_target_sets=rep_target_sets,
+        plan_target_sets=plan_target_sets,
+        log_ex_index=log_ex_index,
+    )
+    best_log = _get_best_log(
+        db_session,
+        user.id,
+        exercise_name,
+        target_sets=target_sets,
+        strict_target_sets=strict_target_sets,
+        log_ex_index=log_ex_index,
+        is_timed=is_timed,
+    )
+    lift_record = _get_lift_record(db_session, user.id, exercise_name, lift_ex_index=lift_ex_index)
+    if lift_record is None:
+        lift_record = Lift(user_id=user.id, exercise=exercise_name)
+        db_session.add(lift_record)
+    lift_record.best_log_id = getattr(best_log, "id", None)
+    return lift_record
+
+
+def refresh_best_lift_pointers(
+    db_session,
+    user,
+    exercise_names,
+    *,
+    rep_target_sets: Optional[Dict[str, int]] = None,
+    plan_target_sets: Optional[Dict[str, int]] = None,
+) -> None:
+    names = [str(name or "").strip() for name in exercise_names or [] if str(name or "").strip()]
+    if not names:
+        return
+
+    distinct_logs = (
+        db_session.query(WorkoutLog.exercise)
+        .filter(WorkoutLog.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    log_ex_index = build_name_index([row[0] for row in distinct_logs or []])
+    distinct_lifts = (
+        db_session.query(Lift.exercise)
+        .filter(Lift.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    lift_ex_index = build_name_index([row[0] for row in distinct_lifts or []])
+    rep_targets = rep_target_sets
+    if rep_targets is None:
+        rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
+        rep_targets = _parse_rep_target_sets(rep_row.text_content if rep_row else "")
+    plan_targets = plan_target_sets if plan_target_sets is not None else _get_plan_target_sets(db_session, user)
+
+    seen = set()
+    for name in names:
+        key = normalize_exercise_name(name)
+        if key in seen:
+            continue
+        seen.add(key)
+        refresh_best_lift_pointer(
+            db_session,
+            user,
+            name,
+            rep_target_sets=rep_targets,
+            plan_target_sets=plan_targets,
+            log_ex_index=log_ex_index,
+            lift_ex_index=lift_ex_index,
+        )
 
 
 def get_best_log_for_exercise_before_date(
@@ -841,14 +963,12 @@ def _get_best_log(
             continue
         set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
         scoring_sets = _align_sets_to_count(normalized_sets, set_count) or normalized_sets
-        if is_timed:
-            metrics = best_workout_timed_score(scoring_sets, top_n=required_sets)
-        else:
-            metrics = best_workout_strength_score(scoring_sets, top_n=required_sets)
-        score = float(metrics.get("score") or 0.0)
-        if score <= 0:
+        vectors = _rank_vectors_for_sets(scoring_sets, top_n=required_sets, is_timed=is_timed)
+        scores = vectors.get("scores") or []
+        if not scores:
             continue
-        row = (log, score, set_count)
+        rank_key = (tuple(scores), tuple(vectors.get("weights") or []))
+        row = (log, rank_key, set_count)
         if set_count >= required_sets:
             preferred.append(row)
         else:
@@ -882,7 +1002,7 @@ def _get_lift_record(db_session, user_id: int, exercise_name: str, *, lift_ex_in
     if not matches:
         return None
     for match in matches:
-        if match.best_string and match.best_string.strip():
+        if match.best_log_id:
             return match
     return matches[0]
 
@@ -1082,33 +1202,17 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 row['status'] = improvement
                 row['class'] = 'improved'
 
-            lift_record = _get_lift_record(db_session, user.id, ex_name, lift_ex_index=lift_ex_index)
-            if is_new_best:
-                lift_sets_json = new_sets
-                lift_best_string = new_str
-                lift_updated_at = workout_date
-            else:
-                lift_sets_json = best_log.sets_json if best_log else new_sets
-                lift_best_string = (
-                    best_log.exercise_string
-                    if best_log and best_log.exercise_string
-                    else _format_sets_display(lift_sets_json)
-                )
-                lift_updated_at = best_log.date if best_log else workout_date
-
-            if lift_record:
-                lift_record.sets_json = lift_sets_json
-                lift_record.best_string = lift_best_string
-                lift_record.updated_at = lift_updated_at
-            else:
-                new_rec = Lift(
-                    user_id=user.id,
-                    exercise=ex_name,
-                    best_string=lift_best_string,
-                    sets_json=lift_sets_json,
-                    updated_at=lift_updated_at,
-                )
-                db_session.add(new_rec)
+            refresh_best_lift_pointer(
+                db_session,
+                user,
+                ex_name,
+                exercise_string=new_str,
+                sets_json=new_sets,
+                rep_target_sets=rep_target_sets,
+                plan_target_sets=plan_target_sets,
+                log_ex_index=log_ex_index,
+                lift_ex_index=lift_ex_index,
+            )
         else:
             row['status'] = "ERROR"
 
@@ -1163,16 +1267,13 @@ def _get_best_log_before_date(
         set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
         scoring_sets = _align_sets_to_count(normalized_sets, set_count) or normalized_sets
 
-        if is_timed:
-            metrics = best_workout_timed_score(scoring_sets, top_n=required_sets)
-        else:
-            metrics = best_workout_strength_score(scoring_sets, top_n=required_sets)
-
-        score = float(metrics.get("score") or 0.0)
-        if score <= 0:
+        vectors = _rank_vectors_for_sets(scoring_sets, top_n=required_sets, is_timed=is_timed)
+        scores = vectors.get("scores") or []
+        if not scores:
             continue
 
-        row = (log, score, set_count)
+        rank_key = (tuple(scores), tuple(vectors.get("weights") or []))
+        row = (log, rank_key, set_count)
         if set_count >= required_sets:
             preferred.append(row)
         else:

@@ -115,7 +115,28 @@
         const counter = document.getElementById('lineCount');
         const suggestionBox = document.getElementById('exerciseSuggestions');
         const exerciseData = document.getElementById('exerciseData');
-        const exerciseList = exerciseData ? JSON.parse(exerciseData.textContent || '[]') : [];
+        const rawExerciseList = exerciseData ? JSON.parse(exerciseData.textContent || '[]') : [];
+        const normalizeExerciseKey = (name) => {
+            return String(name || '')
+                .toLowerCase()
+                .replace(/[‐‑‒–—−-]+/g, ' ')
+                .replace(/[^a-z0-9\s]+/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .split(' ')
+                .filter(Boolean)
+                .sort()
+                .join(' ');
+        };
+        const seenExerciseKeys = new Set();
+        const exerciseList = Array.isArray(rawExerciseList)
+            ? rawExerciseList.filter((name) => {
+                const key = normalizeExerciseKey(name);
+                if (!key || seenExerciseKeys.has(key)) return false;
+                seenExerciseKeys.add(key);
+                return true;
+            })
+            : [];
         if (!textarea || !counter) return;
 
         document.addEventListener('keydown', function(e) {

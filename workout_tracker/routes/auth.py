@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 import re
 import json
 from pathlib import Path
@@ -29,6 +29,74 @@ from collections import deque
 
 _RATE_LIMIT_BUCKETS = {}
 _RATE_LIMIT_LOCK = threading.Lock()
+
+
+def _infer_bulk_import_dates(headers, today: date | None = None):
+    """
+    Assign dates to parsed bulk-import headers.
+
+    Missing years are inferred in pasted order. If a missing-year block would
+    land before the previous block, the year rolls forward.
+    """
+    today = today or datetime.now().date()
+    resolved = []
+
+    for idx, header in enumerate(headers or []):
+        if not header:
+            resolved.append(None)
+            continue
+
+        day = int(header["day"])
+        month = int(header["month"])
+
+        if header.get("year") is not None:
+            try:
+                resolved.append(date(int(header["year"]), month, day))
+            except ValueError:
+                resolved.append(None)
+            continue
+
+        prev_date = next((d for d in reversed(resolved) if d is not None), None)
+        if prev_date is not None:
+            year = prev_date.year
+            while True:
+                try:
+                    candidate = date(year, month, day)
+                except ValueError:
+                    candidate = None
+                    break
+                if candidate >= prev_date:
+                    break
+                year += 1
+            resolved.append(candidate)
+            continue
+
+        next_explicit = None
+        for future in headers[idx + 1:]:
+            if future and future.get("year") is not None:
+                next_explicit = future
+                break
+
+        year = today.year
+        if next_explicit is not None:
+            next_year = int(next_explicit["year"])
+            next_month = int(next_explicit["month"])
+            next_day = int(next_explicit["day"])
+            year = next_year
+            try:
+                next_date = date(next_year, next_month, next_day)
+                candidate = date(year, month, day)
+                if candidate > next_date:
+                    year -= 1
+            except ValueError:
+                pass
+
+        try:
+            resolved.append(date(year, month, day))
+        except ValueError:
+            resolved.append(None)
+
+    return resolved
 
 
 def register_auth_routes(app, email_service):
@@ -1419,55 +1487,15 @@ def register_auth_routes(app, email_service):
             date_assumptions: list[str] = []
             ignored_section_details: list[str] = []
 
-            def _infer_year_for_block(idx: int):
-                header = blocks[idx][3] or {}
-                if header.get("year") is not None:
-                    return header["year"]
-
-                day = int(header["day"])
-                month = int(header["month"])
-
-                prev_i = None
-                next_i = None
-                for j in range(idx - 1, -1, -1):
-                    h = blocks[j][3] or {}
-                    if h.get("year") is not None:
-                        prev_i = j
-                        break
-                for j in range(idx + 1, len(blocks)):
-                    h = blocks[j][3] or {}
-                    if h.get("year") is not None:
-                        next_i = j
-                        break
-
-                if prev_i is None and next_i is None:
-                    return datetime.now().year
-
-                if next_i is not None:
-                    next_h = blocks[next_i][3]
-                    next_year = int(next_h["year"])
-                    next_day = int(next_h["day"])
-                    next_month = int(next_h["month"])
-                    if prev_i is not None:
-                        prev_h = blocks[prev_i][3]
-                        prev_year = int(prev_h["year"])
-                        if (month, day) > (next_month, next_day):
-                            return next_year - 1
-                        return prev_year
-
-                    # No previous anchor: date likely belongs before next explicit header.
-                    if (month, day) > (next_month, next_day):
-                        return next_year - 1
-                    return next_year
-
-                # Only previous anchor exists.
-                prev_h = blocks[prev_i][3]
-                prev_year = int(prev_h["year"])
-                prev_day = int(prev_h["day"])
-                prev_month = int(prev_h["month"])
-                if (month, day) < (prev_month, prev_day):
-                    return prev_year + 1
-                return prev_year
+            inferred_dates = _infer_bulk_import_dates([block[3] for block in blocks])
+            valid_inferred_dates = [d for d in inferred_dates if d is not None]
+            detected_date_range = ""
+            if valid_inferred_dates:
+                first_detected = min(valid_inferred_dates)
+                last_detected = max(valid_inferred_dates)
+                detected_date_range = (
+                    f"{first_detected.strftime('%d-%m-%Y')} to {last_detected.strftime('%d-%m-%Y')}"
+                )
 
             for block_idx, (block, block_start_line, block_end_line, header) in enumerate(blocks):
                 parsed = None
@@ -1483,21 +1511,8 @@ def register_auth_routes(app, email_service):
                     )
                     continue
 
-                inferred_year = _infer_year_for_block(block_idx)
-                if inferred_year is None:
-                    first_line = (block.splitlines()[0] if block.splitlines() else '').strip()
-                    failures.append(
-                        f"{first_line or 'Unknown day'} (lines {block_start_line}-{block_end_line}): could not infer year"
-                    )
-                    continue
-
-                try:
-                    workout_date = datetime(
-                        int(inferred_year),
-                        int(header["month"]),
-                        int(header["day"]),
-                    ).date()
-                except Exception:
+                workout_date = inferred_dates[block_idx] if block_idx < len(inferred_dates) else None
+                if workout_date is None:
                     first_line = (block.splitlines()[0] if block.splitlines() else '').strip()
                     failures.append(
                         f"{first_line or 'Unknown day'} (lines {block_start_line}-{block_end_line}): invalid date header"
@@ -1507,7 +1522,7 @@ def register_auth_routes(app, email_service):
                     month_abbr = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
                     in_dd = int(header["day"])
                     in_mm = int(header["month"])
-                    assumed_yy = str(inferred_year)[-2:]
+                    assumed_yy = str(workout_date.year)[-2:]
                     date_assumptions.append(
                         f"{in_dd:02d} {month_abbr[in_mm-1]} -> {in_dd:02d}/{in_mm:02d}/{assumed_yy} (lines {block_start_line}-{block_end_line})."
                     )
@@ -1612,6 +1627,7 @@ def register_auth_routes(app, email_service):
                 "failed_details": failures[:10],
                 "skipped_details": skipped_details[:10],
                 "date_assumptions": date_assumptions[:20],
+                "detected_date_range": detected_date_range,
                 "total_blocks": len(blocks),
                 "ignored_section_count": len(ignored_section_details),
                 "ignored_section_details": ignored_section_details[:20],

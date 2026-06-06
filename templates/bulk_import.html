@@ -69,6 +69,9 @@
                         {{"Imported " ~ import_feedback.success_day_count ~ " day(s) • Skipped " ~ import_feedback.skipped_day_count ~ " • Failed " ~ import_feedback.failed_day_count ~ " • Couldn't parse " ~ import_feedback.invalid_exercise_count ~ " exercise line(s) • Detected " ~ import_feedback.total_blocks ~ " day blocks from your paste."}}
                     {% endif %}
                 </div>
+                {% if import_feedback.preview_mode and import_feedback.detected_date_range %}
+                <div class="mt-2 fw-semibold">Detected date range: {{ import_feedback.detected_date_range }}</div>
+                {% endif %}
                 {% if import_feedback.failed_day_count and import_feedback.failed_details %}
                 {% set ns.n = ns.n + 1 %}
                 <div class="mt-2 fw-semibold">Issue {{ ns.n }}: Failed days</div>

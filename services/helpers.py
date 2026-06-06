@@ -96,8 +96,8 @@ def find_best_match(db_session, user_id, exercise_name):
 
     if not matches: return None
 
-    # Prioritize record with data
+    # Prioritize record with a best-log pointer.
     for m in matches:
-        if m.best_string and m.best_string.strip():
+        if m.best_log_id:
             return m
     return matches[0]

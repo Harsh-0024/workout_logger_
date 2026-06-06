@@ -25,6 +25,7 @@ from services.logging import (
     get_plan_target_sets_for_user,
     parse_rep_target_sets_text,
     resolve_target_sets_for_exercise,
+    refresh_best_lift_pointers,
 )
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
@@ -2765,12 +2766,15 @@ def register_workout_routes(app):
                 parsed['date'] = new_start_dt
                 parsed['workout_name'] = title
 
+                old_exercises = [log.exercise for log in logs]
+
                 Session.query(WorkoutLog).filter_by(user_id=user.id).filter(
                     WorkoutLog.date >= start_dt,
                     WorkoutLog.date < end_dt,
                 ).delete(synchronize_session=False)
 
                 handle_workout_log(Session, user, parsed)
+                refresh_best_lift_pointers(Session, user, old_exercises)
                 Session.commit()
 
                 flash("Workout updated successfully!", "success")
@@ -2805,6 +2809,17 @@ def register_workout_routes(app):
             start_dt = datetime.combine(workout_date, datetime.min.time())
             end_dt = start_dt + timedelta(days=1)
 
+            affected_exercises = [
+                row[0] for row in (
+                    Session.query(WorkoutLog.exercise)
+                    .filter_by(user_id=user.id)
+                    .filter(WorkoutLog.date >= start_dt)
+                    .filter(WorkoutLog.date < end_dt)
+                    .distinct()
+                    .all()
+                )
+            ]
+
             deleted = (
                 Session.query(WorkoutLog)
                 .filter_by(user_id=user.id)
@@ -2812,6 +2827,8 @@ def register_workout_routes(app):
                 .filter(WorkoutLog.date < end_dt)
                 .delete(synchronize_session=False)
             )
+            if deleted:
+                refresh_best_lift_pointers(Session, user, affected_exercises)
             Session.commit()
 
             if deleted:
@@ -2852,6 +2869,7 @@ def register_workout_routes(app):
             return redirect(url_for('user_dashboard', username=user.username))
 
         total_deleted_days = 0
+        affected_exercises = set()
         try:
             for date_str in unique_dates:
                 try:
@@ -2861,6 +2879,17 @@ def register_workout_routes(app):
 
                 start_dt = datetime.combine(workout_date, datetime.min.time())
                 end_dt = start_dt + timedelta(days=1)
+
+                affected_exercises.update(
+                    row[0] for row in (
+                        Session.query(WorkoutLog.exercise)
+                        .filter_by(user_id=user.id)
+                        .filter(WorkoutLog.date >= start_dt)
+                        .filter(WorkoutLog.date < end_dt)
+                        .distinct()
+                        .all()
+                    )
+                )
 
                 deleted = (
                     Session.query(WorkoutLog)
@@ -2872,6 +2901,8 @@ def register_workout_routes(app):
                 if deleted:
                     total_deleted_days += 1
 
+            if affected_exercises:
+                refresh_best_lift_pointers(Session, user, affected_exercises)
             Session.commit()
 
             if total_deleted_days:

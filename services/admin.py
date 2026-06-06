@@ -128,8 +128,7 @@ class AdminService:
 
                     dup_lifts = session.query(Lift).filter(
                         Lift.user_id == dup.id,
-                        Lift.best_string.isnot(None),
-                        Lift.best_string != '',
+                        Lift.best_log_id.isnot(None),
                     ).all()
                     for lift in dup_lifts:
                         keep_lift = session.query(Lift).filter_by(
@@ -140,18 +139,14 @@ class AdminService:
                             lift.user_id = keep_user.id
                             continue
 
-                        if not keep_lift.best_string or not keep_lift.best_string.strip():
-                            keep_lift.best_string = lift.best_string
-                            keep_lift.sets_json = lift.sets_json
-                            keep_lift.updated_at = lift.updated_at or datetime.now()
+                        if not keep_lift.best_log_id:
+                            keep_lift.best_log_id = lift.best_log_id
                             continue
 
-                        keep_updated = keep_lift.updated_at or datetime.min
-                        dup_updated = lift.updated_at or datetime.min
-                        if dup_updated > keep_updated:
-                            keep_lift.best_string = lift.best_string
-                            keep_lift.sets_json = lift.sets_json
-                            keep_lift.updated_at = dup_updated
+                        keep_date = keep_lift.best_log.date if keep_lift.best_log else datetime.min
+                        dup_date = lift.best_log.date if lift.best_log else datetime.min
+                        if dup_date > keep_date:
+                            keep_lift.best_log_id = lift.best_log_id
 
                     session.query(WorkoutLog).filter_by(user_id=dup.id).delete(synchronize_session=False)
                     session.query(Lift).filter(Lift.user_id == dup.id).delete(synchronize_session=False)

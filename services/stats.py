@@ -15,6 +15,7 @@ from models import WorkoutLog, RepRange
 from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
 from services.logging import resolve_timed_exercise_status
+from services.exercise_matching import token_signature
 from utils.dates import local_date
 
 
@@ -211,7 +212,8 @@ def _normalize_exercise_name(exercise: str) -> str:
     value = re.sub(r'[-–—]+', ' ', value)
     value = re.sub(r'[^a-z0-9\s]+', ' ', value)
     value = re.sub(r'\s+', ' ', value).strip()
-    return value
+    signature = token_signature(value)
+    return ' '.join(signature) if signature else value
 
 
 def _clean_workout_title(title: str) -> str:

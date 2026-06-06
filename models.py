@@ -1,14 +1,14 @@
 """
 Database models for the Workout Tracker application.
 """
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index, Boolean, Enum
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index, Boolean, Enum, event
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session, relationship
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy_utils import JSONType
 from datetime import datetime
 import os
 from config import Config
-from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, DEFAULT_PLAN, BW_EXERCISES
+from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, DEFAULT_PLAN
 import enum
 
 # --- DATABASE CONNECTION ---
@@ -32,6 +32,17 @@ engine = create_engine(
     pool_recycle=3600,   # Recycle connections after 1 hour
     echo=False
 )
+
+
+@event.listens_for(engine, "connect")
+def _enable_sqlite_foreign_keys(dbapi_connection, connection_record):
+    if not isinstance(database_url, str) or not database_url.startswith("sqlite"):
+        return
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
+
 session_factory = sessionmaker(bind=engine)
 Session = scoped_session(session_factory)
 Base = declarative_base()
@@ -144,11 +155,10 @@ class Lift(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
 
     exercise = Column(String(100), nullable=False, index=True)
-    best_string = Column(Text)
-    sets_json = Column(JSONType)
-    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, index=True)
+    best_log_id = Column(Integer, ForeignKey('workout_logs.id', ondelete='SET NULL'), nullable=True, index=True)
 
     user = relationship("User", back_populates="lifts")
+    best_log = relationship("WorkoutLog", foreign_keys=[best_log_id], passive_deletes=True)
     
     # Composite index for faster lookups
     __table_args__ = (
@@ -156,7 +166,7 @@ class Lift(Base):
     )
     
     def __repr__(self):
-        return f"<Lift(id={self.id}, user_id={self.user_id}, exercise='{self.exercise}')>"
+        return f"<Lift(id={self.id}, user_id={self.user_id}, exercise='{self.exercise}', best_log_id={self.best_log_id})>"
 
 
 # --- 3. PLANS TABLE ---
@@ -471,6 +481,27 @@ def migrate_schema():
                     if 'bodyweight' not in logs_columns:
                         logger.info("Adding bodyweight column to workout_logs table")
                         conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN bodyweight {float_type}"))
+
+            if 'lifts' in inspector.get_table_names():
+                lift_columns = [col['name'] for col in inspector.get_columns('lifts')]
+
+                if dialect == 'postgresql':
+                    conn.execute(text("ALTER TABLE lifts ADD COLUMN IF NOT EXISTS best_log_id INTEGER"))
+                    conn.execute(text(
+                        "DO $$ BEGIN "
+                        "IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_lifts_best_log_id_workout_logs') THEN "
+                        "ALTER TABLE lifts ADD CONSTRAINT fk_lifts_best_log_id_workout_logs "
+                        "FOREIGN KEY (best_log_id) REFERENCES workout_logs(id) ON DELETE SET NULL; "
+                        "END IF; END $$;"
+                    ))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lifts_best_log_id ON lifts (best_log_id)"))
+                    for old_col in ("best_string", "sets_json", "updated_at"):
+                        conn.execute(text(f"ALTER TABLE lifts DROP COLUMN IF EXISTS {old_col}"))
+                else:
+                    if 'best_log_id' not in lift_columns:
+                        logger.info("Adding best_log_id column to lifts table")
+                        conn.execute(text("ALTER TABLE lifts ADD COLUMN best_log_id INTEGER REFERENCES workout_logs(id) ON DELETE SET NULL"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lifts_best_log_id ON lifts (best_log_id)"))
                 
     except Exception as e:
         logger.warning(f"Migration warning (may be expected): {e}")
@@ -569,67 +600,11 @@ def _bootstrap_admin_user(session):
 
 
 def _seed_user_data(session, user):
-    def is_all_ones(values) -> bool:
-        return bool(values) and all(v == 1 or v == 1.0 for v in values)
-
-    def default_for_exercise(exercise: str):
-        if exercise in BW_EXERCISES:
-            return {"weights": [1], "reps": [1]}, "bw/4, 1"
-        return {"weights": [1, 1, 1], "reps": [1, 1, 1]}, "1 1 1, 1 1 1"
-
-    def is_default_sets(exercise: str, weights, reps) -> bool:
-        if exercise in BW_EXERCISES:
-            return weights == [1] and reps == [1]
-        return weights == [1, 1, 1] and reps == [1, 1, 1]
-
     existing_lifts = session.query(Lift).filter(Lift.user_id == user.id).all()
     existing_by_exercise = {lift.exercise: lift for lift in existing_lifts}
-    if not existing_lifts:
-        for ex in list_of_exercises:
-            sets_json, best_string = default_for_exercise(ex)
-            session.add(
-                Lift(
-                    user_id=user.id,
-                    exercise=ex,
-                    best_string=best_string,
-                    sets_json=sets_json,
-                )
-            )
-    else:
-        for ex in list_of_exercises:
-            lift = existing_by_exercise.get(ex)
-            if not lift:
-                sets_json, best_string = default_for_exercise(ex)
-                session.add(
-                    Lift(
-                        user_id=user.id,
-                        exercise=ex,
-                        best_string=best_string,
-                        sets_json=sets_json,
-                    )
-                )
-                continue
-
-            sets_json = lift.sets_json if isinstance(lift.sets_json, dict) else {}
-            weights = sets_json.get("weights") if isinstance(sets_json, dict) else None
-            reps = sets_json.get("reps") if isinstance(sets_json, dict) else None
-            best_string_value = (lift.best_string or "").strip()
-            has_default_best = not best_string_value or best_string_value.lower() in {
-                "1 1 1, 1 1 1",
-                "bw/4, 1",
-                "bw, 1",
-            }
-            if has_default_best:
-                default_sets, default_best = default_for_exercise(ex)
-                if ex in BW_EXERCISES and is_all_ones(weights) and is_all_ones(reps):
-                    lift.sets_json = default_sets
-                    lift.best_string = default_best
-                    continue
-                if not weights and not reps:
-                    lift.sets_json = default_sets
-                    lift.best_string = default_best
-                elif is_default_sets(ex, weights, reps):
-                    lift.best_string = default_best
+    for ex in list_of_exercises:
+        if ex not in existing_by_exercise:
+            session.add(Lift(user_id=user.id, exercise=ex))
 
     existing_plan = session.query(Plan).filter(Plan.user_id == user.id).first()
     if not existing_plan:

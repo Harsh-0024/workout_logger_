@@ -196,7 +196,8 @@ def generate_retrieve_output(db_session, user, category, day_id):
                         custom_ranges[exercise_key_norm] = value
 
     ist_offset = timedelta(hours=5, minutes=30)
-    today_str = (datetime.utcnow() + ist_offset).strftime("%d/%m")
+    today = datetime.utcnow() + ist_offset
+    today_str = f"{today.day}/{today.month}/{today.year % 100:02d}"
     header_line = f"{today_str} - {day_key}"
     if str(category).strip().lower() == "session":
         titles = all_plans.get("session_titles") if isinstance(all_plans, dict) else None

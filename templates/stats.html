@@ -1289,6 +1289,7 @@
 
         const rangeDays = _getRangeDaysForData(data);
         const filteredData = filterDataByRange(data, rangeDays);
+        const chartData = data;
         const ctx = document.getElementById('progressChart').getContext('2d');
 
         const metricControls = document.getElementById('metricControls');
@@ -1306,14 +1307,14 @@
 
         const formatShortLabel = (rawLabel) => formatDateLabel(rawLabel, { month: 'short', day: 'numeric' });
 
-        const rawLabels = filteredData.labels || [];
-        const loggedIndexSet = getLoggedIndexSet(rawLabels, filteredData);
+        const rawLabels = (chartData && Array.isArray(chartData.labels)) ? chartData.labels : [];
+        const loggedIndexSet = getLoggedIndexSet(rawLabels, chartData);
         const loggedIndices = getLoggedIndicesFromSet(loggedIndexSet);
         const rangeBounds = getRangeBounds(rawLabels, rangeDays);
         const shortLabels = rawLabels.map(formatShortLabel);
 
         const metricConfig = getMetricConfig(currentMetric, data);
-        const primaryValues = getSeriesValues(filteredData, currentMetric);
+        const primaryValues = getSeriesValues(chartData, currentMetric);
 
         const overallMode = (data && data.overall_mode) ? String(data.overall_mode) : '';
         const isOverallRate = !currentExercise && data && data.unit === 'percent' && overallMode === 'rate';
@@ -1321,12 +1322,12 @@
             if (!isOverallRate) {
                 return movingAverage(primaryValues || [], currentMAWindow);
             }
-            const logSeries = (filteredData && Array.isArray(filteredData.log_data)) ? filteredData.log_data : [];
+            const logSeries = (chartData && Array.isArray(chartData.log_data)) ? chartData.log_data : [];
             const maLog = movingAverage(logSeries, currentMAWindow);
             return maLog.map(v => (Math.exp(Number(v) || 0) - 1) * 100);
         })();
-        const xMinLabel = shortLabels[rangeBounds.startIndex] || shortLabels[0] || '';
-        const xMaxLabel = shortLabels[rangeBounds.endIndex] || shortLabels[shortLabels.length - 1] || '';
+        const xMinIndex = Math.max(0, rangeBounds.startIndex);
+        const xMaxIndex = Math.max(xMinIndex, rangeBounds.endIndex);
 
         if (document.getElementById('chartPlaceholder')) {
             document.getElementById('chartPlaceholder').style.display = 'none';
@@ -1476,10 +1477,10 @@
             }
             : null;
 
-        const primarySeries = getSeriesValues(filteredData, currentMetric);
-        const workoutTitles = (filteredData && Array.isArray(filteredData.workout_titles)) ? filteredData.workout_titles : [];
-        const qualitySeries = (filteredData && filteredData.quality) ? filteredData.quality : [];
-        const showQuality = !!(qualitySeries && qualitySeries.length) && filteredData.unit !== 'percent';
+        const primarySeries = getSeriesValues(chartData, currentMetric);
+        const workoutTitles = (chartData && Array.isArray(chartData.workout_titles)) ? chartData.workout_titles : [];
+        const qualitySeries = (chartData && chartData.quality) ? chartData.quality : [];
+        const showQuality = !!(qualitySeries && qualitySeries.length) && chartData.unit !== 'percent';
 
         const showBaseline100 = isPercent && !isRateMode;
         const filteredPrimary = getSeriesValues(filteredData, currentMetric) || [];
@@ -1501,9 +1502,9 @@
                 : null;
 
             let topSet = '';
-            const weightVal = (filteredData && Array.isArray(filteredData.weight)) ? Number(filteredData.weight[idx]) : null;
-            const repsVal = (filteredData && Array.isArray(filteredData.reps)) ? Number(filteredData.reps[idx]) : null;
-            const _isTimedExercise = !!(filteredData && filteredData.is_timed);
+            const weightVal = (chartData && Array.isArray(chartData.weight)) ? Number(chartData.weight[idx]) : null;
+            const repsVal = (chartData && Array.isArray(chartData.reps)) ? Number(chartData.reps[idx]) : null;
+            const _isTimedExercise = !!(chartData && chartData.is_timed);
             if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
                 topSet = _isTimedExercise
                     ? `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
@@ -1511,7 +1512,7 @@
             }
 
             let tonnage = '';
-            const tonnageVal = (filteredData && Array.isArray(filteredData.volume)) ? Number(filteredData.volume[idx]) : null;
+            const tonnageVal = (chartData && Array.isArray(chartData.volume)) ? Number(chartData.volume[idx]) : null;
             if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
                 tonnage = `${formatTickNumber(tonnageVal)}kg`;
             }
@@ -1562,16 +1563,16 @@
                     lines.push(`Change: ${formatDeltaText(delta, prevValue)}`);
                 }
 
-                const weightVal = (filteredData && Array.isArray(filteredData.weight)) ? Number(filteredData.weight[idx]) : null;
-                const repsVal = (filteredData && Array.isArray(filteredData.reps)) ? Number(filteredData.reps[idx]) : null;
-                const _isTEx = !!(filteredData && filteredData.is_timed);
+                const weightVal = (chartData && Array.isArray(chartData.weight)) ? Number(chartData.weight[idx]) : null;
+                const repsVal = (chartData && Array.isArray(chartData.reps)) ? Number(chartData.reps[idx]) : null;
+                const _isTEx = !!(chartData && chartData.is_timed);
                 if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
                     lines.push(_isTEx
                         ? `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
                         : `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`);
                 }
 
-                const tonnageVal = (filteredData && Array.isArray(filteredData.volume)) ? Number(filteredData.volume[idx]) : null;
+                const tonnageVal = (chartData && Array.isArray(chartData.volume)) ? Number(chartData.volume[idx]) : null;
                 if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
                     lines.push(`Tonnage: ${formatTickNumber(tonnageVal)}kg`);
                 }
@@ -1667,8 +1668,8 @@
                 delete myChart.options.scales.y.suggestedMin;
                 delete myChart.options.scales.y.suggestedMax;
             }
-            myChart.options.scales.x.min = xMinLabel;
-            myChart.options.scales.x.max = xMaxLabel;
+            myChart.options.scales.x.min = xMinIndex;
+            myChart.options.scales.x.max = xMaxIndex;
             myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
             myChart.options.onClick = (evt, elements) => {
                 if (!elements || !elements.length) {
@@ -1812,8 +1813,8 @@
                                 maxTicksLimit: window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4,
                                 maxRotation: 0
                             },
-                            min: xMinLabel,
-                            max: xMaxLabel
+                            min: xMinIndex,
+                            max: xMaxIndex
                         }
                     }
                 }

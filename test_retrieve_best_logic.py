@@ -12,7 +12,7 @@ from services.best_scoring import (
     coerce_equal_len_sets,
     compare_strength_workouts,
 )
-from services.exercise_matching import build_name_index, resolve_equivalent_names
+from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names, token_signature
 from services.logging import (
     _parse_rep_target_sets,
     comparison_set_count,
@@ -109,11 +109,32 @@ class TestExerciseMatching(unittest.TestCase):
             ["Single-Arm Dumbbell Oh Extension"],
         )
 
-    def test_forearm_optional_token(self):
-        idx = build_name_index(["Barbell Forearm Ulnar/Radial Deviation"])
+    def test_forearm_is_identity_token(self):
+        self.assertNotEqual(
+            normalize_exercise_name("Barbell Forearm Radial Deviation"),
+            normalize_exercise_name("Barbell Radial Deviation"),
+        )
+        self.assertNotEqual(
+            token_signature("Barbell Forearm Radial Deviation"),
+            token_signature("Barbell Radial Deviation"),
+        )
+
+    def test_forearm_exercises_do_not_resolve_as_equivalent(self):
+        idx = build_name_index([
+            "Barbell Forearm Radial Deviation",
+            "Barbell Radial Deviation",
+        ])
         self.assertEqual(
-            resolve_equivalent_names("Barbell Ulnar/Radial Deviation", idx),
-            ["Barbell Forearm Ulnar/Radial Deviation"],
+            resolve_equivalent_names("Barbell Forearm Radial Deviation", idx),
+            ["Barbell Forearm Radial Deviation"],
+        )
+        self.assertEqual(
+            resolve_equivalent_names("Barbell Radial Deviation", idx),
+            ["Barbell Radial Deviation"],
+        )
+        self.assertEqual(
+            resolve_equivalent_names("Forearm Barbell Radial Deviation", idx),
+            ["Barbell Forearm Radial Deviation"],
         )
 
     def test_ordering_does_not_matter_when_unambiguous(self):
@@ -322,6 +343,7 @@ class TestRetrieveIntegration(unittest.TestCase):
         output, exercise_count, set_count = generate_retrieve_output(self.db, self.user, "Session", 13)
         self.assertEqual(exercise_count, 1)
         self.assertEqual(set_count, 3)
+        self.assertRegex(output.splitlines()[0], r"^\d{1,2}/\d{1,2}/\d{2}\b")
         self.assertIn("Flat Dumbbell Press - [3, 8-12]", output)
         self.assertIn("25 22.5, 6 10 7", output)
         self.assertNotIn("45, 3", output)
