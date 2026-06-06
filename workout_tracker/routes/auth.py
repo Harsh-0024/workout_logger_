@@ -19,6 +19,7 @@ from sqlalchemy import desc
 from services.auth import AuthService, AuthenticationError
 from utils.errors import ValidationError
 from utils.logger import logger
+from utils.profile_images import get_local_profile_image_path, get_profile_image_url, normalize_profile_image_key
 from utils.validators import sanitize_text_input, validate_username
 
 from .decorators import dev_only, require_admin
@@ -138,7 +139,6 @@ def register_auth_routes(app, email_service):
         return ext in {'png', 'jpg', 'jpeg', 'webp'}
 
     def _save_profile_image(user_id: int, file_storage) -> str:
-        import boto3
         import os
         from io import BytesIO
 
@@ -157,19 +157,26 @@ def register_auth_routes(app, email_service):
         image.save(buffer, format='PNG', optimize=True)
         buffer.seek(0)
 
-        s3 = boto3.client(
-            's3',
-            aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-            aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-            region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
-        )
-        bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
-        s3.put_object(
-            Bucket=bucket,
-            Key=output_name,
-            Body=buffer,
-            ContentType='image/png',
-        )
+        if os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'):
+            import boto3
+            s3 = boto3.client(
+                's3',
+                aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
+            )
+            bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+            s3.put_object(
+                Bucket=bucket,
+                Key=output_name,
+                Body=buffer,
+                ContentType='image/png',
+            )
+        else:
+            local_path = get_local_profile_image_path(output_name)
+            os.makedirs(os.path.dirname(local_path), exist_ok=True)
+            with open(local_path, 'wb') as f:
+                f.write(buffer.getvalue())
 
         return output_name
 
@@ -636,15 +643,21 @@ def register_auth_routes(app, email_service):
                 if form_type == 'remove_photo':
                     try:
                         if user.profile_image:
-                            import boto3, os
-                            s3 = boto3.client(
-                                's3',
-                                aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-                                aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-                                region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
-                            )
-                            bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
-                            s3.delete_object(Bucket=bucket, Key=user.profile_image)
+                            import os
+                            key = normalize_profile_image_key(user.profile_image)
+                            local_path = get_local_profile_image_path(key)
+                            if local_path and os.path.exists(local_path):
+                                os.remove(local_path)
+                            elif os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'):
+                                import boto3
+                                s3 = boto3.client(
+                                    's3',
+                                    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
+                                    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
+                                    region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
+                                )
+                                bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+                                s3.delete_object(Bucket=bucket, Key=key)
                         user.profile_image = None
                         user.updated_at = datetime.now()
                         Session.commit()
@@ -990,12 +1003,7 @@ def register_auth_routes(app, email_service):
                 flash("Failed to update settings. Please try again.", "error")
                 return redirect(url_for('user_settings'))
 
-        profile_image_url = None
-        if getattr(user, 'profile_image', None):
-            import os
-            bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
-            region = os.environ.get('AWS_S3_REGION', 'ap-southeast-2')
-            profile_image_url = f"https://{bucket}.s3.{region}.amazonaws.com/{user.profile_image}"
+        profile_image_url = get_profile_image_url(getattr(user, 'profile_image', None))
 
         user_api_keys = (
             Session.query(UserApiKey)

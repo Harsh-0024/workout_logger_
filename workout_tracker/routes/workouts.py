@@ -28,8 +28,10 @@ from services.logging import (
     refresh_best_lift_pointers,
 )
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
+from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
+from utils.profile_images import get_profile_image_url
 from utils.validators import sanitize_text_input, validate_username
 
 
@@ -359,12 +361,7 @@ def register_workout_routes(app):
 
             recent_workouts = get_recent_workouts(user, limit=250)
 
-            profile_image_url = None
-            if getattr(user, 'profile_image', None):
-                import os
-                bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
-                region = os.environ.get('AWS_S3_REGION', 'ap-southeast-2')
-                profile_image_url = f"https://{bucket}.s3.{region}.amazonaws.com/{user.profile_image}"
+            profile_image_url = get_profile_image_url(getattr(user, 'profile_image', None))
 
             display_name = (user.full_name or user.username or '').strip()
             return render_template(
@@ -426,6 +423,20 @@ def register_workout_routes(app):
             rep_row = Session.query(RepRange).filter_by(user_id=user.id).first()
             rep_target_sets = parse_rep_target_sets_text(rep_row.text_content if rep_row else "")
             plan_target_sets = get_plan_target_sets_for_user(Session, user)
+            distinct_log_exercises = (
+                Session.query(WorkoutLog.exercise)
+                .filter(WorkoutLog.user_id == user.id)
+                .distinct()
+                .all()
+            )
+            log_ex_index = build_name_index([row[0] for row in distinct_log_exercises or []])
+            for names in (log_ex_index.get("by_sig") or {}).values():
+                if len(names) < 2:
+                    continue
+                for name in names:
+                    norm = normalize_exercise_name(name)
+                    if norm:
+                        log_ex_index.setdefault("by_norm", {})[norm] = list(names)
 
             # Calculate volume for each exercise
             for log in logs:
@@ -446,6 +457,7 @@ def register_workout_routes(app):
                     user.id,
                     log.exercise,
                     exercise_text,
+                    log_ex_index=log_ex_index,
                 )
                 log.is_timed = bool(timed_status.get("is_timed"))
                 perf = classify_exercise_performance(
@@ -460,6 +472,7 @@ def register_workout_routes(app):
                     current_exercise_string=exercise_text,
                     summary_mode=False,
                     historical_before_dt=start_dt,
+                    log_ex_index=log_ex_index,
                 )
                 log.performance_key = perf.get('key')
                 log.performance_label = perf.get('label')
@@ -495,9 +508,11 @@ def register_workout_routes(app):
                         except (ValueError, IndexError):
                             continue
                 log.total_volume = total_volume if total_volume > 0 else None
+                exercise_candidates = resolve_equivalent_names(log.exercise, log_ex_index) or [log.exercise]
                 prev_candidates = (
                     Session.query(WorkoutLog)
-                    .filter_by(user_id=user.id, exercise=log.exercise)
+                    .filter(WorkoutLog.user_id == user.id)
+                    .filter(WorkoutLog.exercise.in_(exercise_candidates))
                     .filter(WorkoutLog.date < start_dt)
                     .order_by(WorkoutLog.date.desc(), WorkoutLog.id.desc())
                     .all()
@@ -547,6 +562,7 @@ def register_workout_routes(app):
                     log.exercise,
                     target_sets=target_sets,
                     strict_target_sets=strict_target_sets,
+                    log_ex_index=log_ex_index,
                     is_timed=log.is_timed,
                     workout_day_start_dt=start_dt,
                 )

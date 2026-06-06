@@ -247,6 +247,82 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(best_link_date, expected_date)
 
+    def test_workout_detail_uses_aliases_for_previous_and_best_rails(self):
+        user = self._create_logged_in_user(username="row_alias_user")
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 12, 9, 0, 0),
+                workout_name="Back",
+                exercise="Neutral-Grip Seated Row",
+                exercise_string="Neutral-Grip Seated Row - [8-12]\n50 45, 8 8",
+                sets_json={"weights": [50, 45], "reps": [8, 8]},
+                bodyweight=user.bodyweight,
+                top_weight=50,
+                top_reps=8,
+                estimated_1rm=63.33,
+            )
+        )
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 6, 5, 9, 0, 0),
+                workout_name="Back",
+                exercise="Seated Neutral-Grip Row",
+                exercise_string="Seated Neutral-Grip Row - [8-12]\n50 45, 8 8",
+                sets_json={"weights": [50, 45], "reps": [8, 8]},
+                bodyweight=user.bodyweight,
+                top_weight=50,
+                top_reps=8,
+                estimated_1rm=63.33,
+            )
+        )
+        self.session.commit()
+
+        response = self.client.get("/workout/2026-06-05")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Vs Previous (12-01-26)", page)
+        self.assertIn("Vs Best (12-01-26)", page)
+        self.assertNotIn("No prior", page)
+        self.assertNotIn("No baseline", page)
+
+    def test_stats_query_alias_loads_specific_exercise_chart(self):
+        user = self._create_logged_in_user(username="stats_alias_user")
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 12, 9, 0, 0),
+                workout_name="Back",
+                exercise="Neutral-Grip Seated Row",
+                exercise_string="Neutral-Grip Seated Row - [8-12]\n50 45, 8 8",
+                sets_json={"weights": [50, 45], "reps": [8, 8]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=63.33,
+            )
+        )
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 6, 5, 9, 0, 0),
+                workout_name="Back",
+                exercise="Seated Neutral-Grip Row",
+                exercise_string="Seated Neutral-Grip Row - [8-12]\n50 45, 8 8",
+                sets_json={"weights": [50, 45], "reps": [8, 8]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=63.33,
+            )
+        )
+        self.session.commit()
+
+        response = self.client.get("/stats?exercise=Seated%20Neutral-Grip%20Row")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn('"value": "Neutral-Grip Seated Row"', page)
+        self.assertIn('"label": "Neutral-Grip Seated Row"', page)
+
     def test_workout_detail_vs_best_ignores_future_logs(self):
         user = self._create_logged_in_user(username="workout_user_future_best")
         exercise = "Flat Dumbbell Press"

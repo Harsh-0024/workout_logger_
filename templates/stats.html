@@ -36,6 +36,7 @@
                         </button>
                     </div>
                     <script type="application/json" id="exerciseOptionsData">{{ exercise_options | tojson }}</script>
+                    <script type="application/json" id="initialExerciseData">{{ {"value": initial_exercise or "", "label": initial_exercise_label or ""} | tojson }}</script>
                 </div>
             </div>
 
@@ -532,6 +533,8 @@
 
     const exerciseOptionsEl = document.getElementById('exerciseOptionsData');
     let exerciseOptions = exerciseOptionsEl ? JSON.parse(exerciseOptionsEl.textContent || '[]') : [];
+    const initialExerciseEl = document.getElementById('initialExerciseData');
+    const initialExercise = initialExerciseEl ? JSON.parse(initialExerciseEl.textContent || '{}') : {};
     let currentExercise = '';
     let selectedSuggestionIndex = -1;
     let currentDaysRange = 'all';
@@ -1942,8 +1945,6 @@
 
     // Auto-select exercise from URL parameter
     window.addEventListener('DOMContentLoaded', () => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const exerciseParam = urlParams.get('exercise');
         renderSuggestions();
 
         const detailsPanel = document.getElementById('chartPointDetails');
@@ -1974,12 +1975,14 @@
             setChartPointDetailsVisible(false);
         });
         
-        if (exerciseParam) {
-            const option = exerciseOptions.find(opt => opt.value === exerciseParam);
-            if (option) {
-                selectExercise(exerciseParam);
-                return;
+        if (initialExercise && initialExercise.value) {
+            currentExercise = initialExercise.value;
+            const searchInput = document.getElementById('exerciseSearch');
+            if (searchInput) {
+                searchInput.value = initialExercise.label || initialExercise.value;
             }
+            loadChart();
+            return;
         }
         loadAverageChart();
     });

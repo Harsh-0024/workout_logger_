@@ -76,6 +76,24 @@ def register_stats_routes(app):
                     'label': label,
                 })
 
+            initial_exercise = ""
+            initial_exercise_label = ""
+            requested_exercise = (request.args.get("exercise") or "").strip()
+            if requested_exercise:
+                requested_exercise = html.unescape(sanitize_text_input(
+                    requested_exercise,
+                    max_length=100,
+                ))
+                requested_key = _normalize_exercise_name(requested_exercise)
+                for option in exercise_options:
+                    if _normalize_exercise_name(option.get("value") or "") == requested_key:
+                        initial_exercise = option.get("value") or requested_exercise
+                        initial_exercise_label = option.get("label") or initial_exercise
+                        break
+                if not initial_exercise:
+                    initial_exercise = requested_exercise
+                    initial_exercise_label = requested_exercise
+
             logs = (
                 Session.query(WorkoutLog)
                 .filter_by(user_id=user.id)
@@ -107,6 +125,8 @@ def register_stats_routes(app):
             return render_template(
                 'stats.html',
                 exercise_options=exercise_options,
+                initial_exercise=initial_exercise,
+                initial_exercise_label=initial_exercise_label,
                 csv_size_kb=csv_size_kb,
                 json_size_kb=json_size_kb,
                 bw_exercises=bw_exercises,
