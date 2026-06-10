@@ -91,6 +91,13 @@ class TestExerciseMatching(unittest.TestCase):
         idx = build_name_index(["Calf Raises Standing", "Standing Calf Raises"])
         self.assertEqual(resolve_equivalent_names("Raises Standing Calf", idx), [])
 
+    def test_order_insensitive_match_allows_duplicate_normalized_originals(self):
+        idx = build_name_index(["Wrist Flexion - Dumbbell", "Wrist Flexion – Dumbbell"])
+        self.assertEqual(
+            resolve_equivalent_names("Dumbbell Wrist Flexion", idx),
+            ["Wrist Flexion - Dumbbell", "Wrist Flexion – Dumbbell"],
+        )
+
     def test_plural_dips_matches_dip(self):
         idx = build_name_index(["Machine Dip"])
         self.assertEqual(resolve_equivalent_names("Machine Dips", idx), ["Machine Dip"])
@@ -383,6 +390,54 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertIn("Dumbbell Curl - [3, 8-12]", output)
         # fallback to <N keeps the best available history line
         self.assertIn("12.5 10, 8 10", output)
+
+    def test_generate_retrieve_output_matches_dash_variant_reordered_exercise(self):
+        plan = Plan(
+            user_id=self.user.id,
+            text_content="\n".join(
+                [
+                    "Session 2 - Shoulders & Forearms",
+                    "Dumbbell Wrist Flexion",
+                ]
+            ),
+        )
+        rep = RepRange(
+            user_id=self.user.id,
+            text_content="Dumbbell Wrist Flexion: 2, 12-20",
+        )
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now() - timedelta(days=1),
+                workout_name="Session 2 - Shoulders & Forearms",
+                exercise="Wrist Flexion – Dumbbell",
+                exercise_string="Wrist Flexion – Dumbbell - [12–20]\n13.75 12.5 10, 16 20 20",
+                sets_json={"weights": [13.75, 12.5, 10], "reps": [16, 20, 20]},
+                bodyweight=80,
+            )
+        )
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now(),
+                workout_name="Session 2 - Shoulders & Forearms",
+                exercise="Wrist Flexion - Dumbbell",
+                exercise_string="Wrist Flexion - Dumbbell - [12–20]\n15 13.8 12.5, 14 18 21",
+                sets_json={"weights": [15, 13.8, 12.5], "reps": [14, 18, 21]},
+                bodyweight=80,
+            )
+        )
+        self.db.commit()
+
+        output, exercise_count, set_count = generate_retrieve_output(self.db, self.user, "Session", 2)
+
+        self.assertEqual(exercise_count, 1)
+        self.assertEqual(set_count, 2)
+        self.assertIn("Dumbbell Wrist Flexion - [2, 12-20]", output)
+        self.assertIn("15 13.8, 14 18", output)
+        self.assertNotIn("1, 1", output)
 
     def test_follow_admin_plan_prefers_non_empty_admin_plan(self):
         admin_one = User(

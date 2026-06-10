@@ -143,7 +143,21 @@ def resolve_equivalent_names(input_name: str, index: Dict[str, Dict]) -> List[st
         return list(by_norm[norm])
 
     sig = token_signature(input_name)
-    if sig and sig in by_sig and len(by_sig[sig]) == 1:
-        return [by_sig[sig][0]]
+    if sig and sig in by_sig:
+        signature_matches = list(by_sig[sig])
+        if len(signature_matches) == 1:
+            return [signature_matches[0]]
+
+        # Multiple stored originals can be the same exercise after punctuation /
+        # dash / casing normalization, e.g. "Wrist Flexion - Dumbbell" and
+        # "Wrist Flexion – Dumbbell". Treat those as safe aliases, but keep
+        # genuinely different word orders blocked as ambiguous.
+        normalized_matches = {
+            normalize_exercise_name(match)
+            for match in signature_matches
+            if normalize_exercise_name(match)
+        }
+        if len(normalized_matches) == 1:
+            return signature_matches
 
     return []
