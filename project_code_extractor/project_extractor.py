@@ -5,6 +5,7 @@ Place the folder containing this file inside any project folder and run it.
 It will generate inside project_code_extractor/:
   - structure_1.txt, structure_2.txt, ... → full folder/file tree
   - content_1.txt, content_2.txt, ...     → every line of every file with filenames
+
 Each output file is capped at 100MB.
 """
 
