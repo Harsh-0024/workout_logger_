@@ -35,7 +35,6 @@ _RATE_LIMIT_LOCK = threading.Lock()
 def _infer_bulk_import_dates(headers, today: date | None = None):
     """
     Assign dates to parsed bulk-import headers.
-
     Missing years are inferred in pasted order. If a missing-year block would
     land before the previous block, the year rolls forward.
     """
