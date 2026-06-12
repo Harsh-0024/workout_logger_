@@ -98,6 +98,13 @@ class TestExerciseMatching(unittest.TestCase):
             ["Wrist Flexion - Dumbbell", "Wrist Flexion – Dumbbell"],
         )
 
+    def test_exact_match_includes_reordered_token_aliases(self):
+        idx = build_name_index(["Machine Rear Delt Fly", "Rear Delt Machine Fly"])
+        self.assertEqual(
+            resolve_equivalent_names("Machine Rear Delt Fly", idx),
+            ["Machine Rear Delt Fly", "Rear Delt Machine Fly"],
+        )
+
     def test_plural_dips_matches_dip(self):
         idx = build_name_index(["Machine Dip"])
         self.assertEqual(resolve_equivalent_names("Machine Dips", idx), ["Machine Dip"])

@@ -128,8 +128,8 @@ def resolve_equivalent_names(input_name: str, index: Dict[str, Dict]) -> List[st
     Resolve input_name to the actual stored exercise names (original strings).
 
     Priority:
-    1) Exact normalized match (can return multiple originals: e.g., different casing).
-    2) Order-insensitive match ONLY if it's unambiguous (exactly one stored name for the signature).
+    1) Exact normalized match, plus same-token aliases for already-saved reordered names.
+    2) Order-insensitive match ONLY if it's unambiguous or only differs by normalized punctuation/casing.
     3) Otherwise, return [].
     """
     if not input_name or not index:
@@ -138,13 +138,18 @@ def resolve_equivalent_names(input_name: str, index: Dict[str, Dict]) -> List[st
     by_norm = (index or {}).get("by_norm") or {}
     by_sig = (index or {}).get("by_sig") or {}
 
+    sig = token_signature(input_name)
+    signature_matches = list(by_sig.get(sig, [])) if sig else []
+
     norm = normalize_exercise_name(input_name)
     if norm and norm in by_norm:
-        return list(by_norm[norm])
+        matches = list(by_norm[norm])
+        for match in signature_matches:
+            if match not in matches:
+                matches.append(match)
+        return matches
 
-    sig = token_signature(input_name)
-    if sig and sig in by_sig:
-        signature_matches = list(by_sig[sig])
+    if signature_matches:
         if len(signature_matches) == 1:
             return [signature_matches[0]]
 

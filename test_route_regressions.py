@@ -14,6 +14,7 @@ from services.exercise_matching import build_name_index
 from services.logging import (
     _get_best_log,
     classify_exercise_performance,
+    compute_workout_summary_for_date,
     comparison_set_count,
     handle_workout_log,
     resolve_target_sets_for_exercise,
@@ -287,6 +288,74 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("Vs Best (12-01-26)", page)
         self.assertNotIn("No prior", page)
         self.assertNotIn("No baseline", page)
+
+    def test_log_summary_uses_aliases_for_reordered_saved_exercises(self):
+        user = self._create_logged_in_user(username="log_summary_alias_user")
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 3, 22, 9, 0, 0),
+                workout_name="Session 2",
+                exercise="Rear Delt Machine Fly",
+                exercise_string="Rear Delt Machine Fly - [12-20]\n60 53.5 50, 14 19 20",
+                sets_json={"weights": [60, 53.5, 50], "reps": [14, 19, 20]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=88.0,
+            )
+        )
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 4, 1, 9, 0, 0),
+                workout_name="Session 2",
+                exercise="Wrist Flexion - Dumbbell",
+                exercise_string="Wrist Flexion - Dumbbell - [12-20]\n15 13.8 12.5, 14 18 21",
+                sets_json={"weights": [15, 13.8, 12.5], "reps": [14, 18, 21]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=22.0,
+            )
+        )
+        self.session.commit()
+
+        parsed = {
+            "date": datetime(2026, 6, 10, 9, 0, 0),
+            "workout_name": "Session 2 - Shoulders & Forearms",
+            "exercises": [
+                {
+                    "name": "Machine Rear Delt Fly",
+                    "exercise_string": "Machine Rear Delt Fly\n60 53.5 50, 14 19 20",
+                    "weights": [60, 53.5, 50],
+                    "reps": [14, 19, 20],
+                    "valid": True,
+                },
+                {
+                    "name": "Dumbbell Wrist Flexion",
+                    "exercise_string": "Dumbbell Wrist Flexion\n15 12.5, 16 20",
+                    "weights": [15, 12.5],
+                    "reps": [16, 20],
+                    "valid": True,
+                },
+            ],
+        }
+
+        immediate_summary = handle_workout_log(self.session, user, parsed)
+        self.session.commit()
+
+        immediate_by_name = {row["name"]: row for row in immediate_summary}
+        self.assertNotEqual(immediate_by_name["Machine Rear Delt Fly"]["old"], "First Log")
+        self.assertNotEqual(immediate_by_name["Dumbbell Wrist Flexion"]["old"], "First Log")
+
+        recomputed_summary, _, _ = compute_workout_summary_for_date(
+            self.session,
+            user,
+            datetime(2026, 6, 10),
+        )
+        recomputed_by_name = {row["name"]: row for row in recomputed_summary}
+
+        self.assertNotEqual(recomputed_by_name["Machine Rear Delt Fly"]["old"], "First Log")
+        self.assertNotEqual(recomputed_by_name["Dumbbell Wrist Flexion"]["old"], "First Log")
+        self.assertIn("60 x 14, 53.5 x 19, 50 x 20", recomputed_by_name["Machine Rear Delt Fly"]["old"])
+        self.assertIn("15 x", recomputed_by_name["Dumbbell Wrist Flexion"]["old"])
 
     def test_stats_query_alias_loads_specific_exercise_chart(self):
         user = self._create_logged_in_user(username="stats_alias_user")
