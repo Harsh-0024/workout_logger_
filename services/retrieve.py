@@ -12,7 +12,7 @@ from services.exercise_matching import (
     normalize_exercise_name,
     resolve_equivalent_names,
 )
-from parsers.workout import _extract_declared_sets, _extract_sets_from_bracket
+from parsers.workout import _extract_declared_sets, _extract_sets_from_bracket, parse_bw_weight
 
 
 def _normalize_text(text: str) -> str:
@@ -422,8 +422,6 @@ def _format_weight_token(
     render_as_bw: bool = False,
 ):
     token = _format_value(weight)
-    if not _is_bw_exercise(exercise):
-        return token
     if force_bw:
         return 'bw'
     if not render_as_bw:
@@ -525,7 +523,13 @@ def _build_best_sets_line_from_logs(
     if not sets_json:
         if use_bw_format and best_log.exercise_string:
             extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
-            return _normalize_bw(extracted) if extracted else ""
+            return _rebase_bw_sets_line(
+                best_log,
+                exercise,
+                extracted,
+                current_bodyweight=getattr(user, "bodyweight", None),
+                target_sets=required_sets,
+            )
         return ""
     weights = sets_json.get("weights") or []
     reps = sets_json.get("reps") or []
@@ -533,17 +537,23 @@ def _build_best_sets_line_from_logs(
     if not weights or not reps:
         if use_bw_format and best_log.exercise_string:
             extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
-            return _normalize_bw(extracted) if extracted else ""
+            return _rebase_bw_sets_line(
+                best_log,
+                exercise,
+                extracted,
+                current_bodyweight=getattr(user, "bodyweight", None),
+                target_sets=required_sets,
+            )
         return ""
 
     scored = []
-    for w, r in zip(weights, reps):
+    for idx, (w, r) in enumerate(zip(weights, reps)):
         if w is None or r is None:
             continue
         if r <= 0:
             continue
         est = WorkoutQualityScorer.estimate_1rm(float(w), int(r))
-        scored.append((est, float(w), int(r)))
+        scored.append((est, float(w), int(r), idx))
 
     if not scored:
         return ""
@@ -557,16 +567,29 @@ def _build_best_sets_line_from_logs(
 
     log_bodyweight = getattr(best_log, "bodyweight", None)
     current_bodyweight = getattr(user, "bodyweight", None)
-    weight_tokens = [
-        _format_weight_token(
+    original_bw_tokens = (
+        _extract_original_bw_tokens(
+            best_log,
             exercise,
-            w,
-            log_bodyweight or current_bodyweight,
-            force_bw=False,
+            target_sets=max(required_sets, len(weights), len(reps)),
+        )
+        if use_bw_format
+        else []
+    )
+    weight_tokens = [
+        _format_retrieved_weight_token(
+            exercise,
+            t[1],
+            logged_bodyweight=log_bodyweight,
             current_bodyweight=current_bodyweight,
             render_as_bw=use_bw_format,
+            original_token=(
+                original_bw_tokens[t[3]]
+                if t[3] < len(original_bw_tokens)
+                else ""
+            ),
         )
-        for w in weights_top
+        for t in top
     ]
     rep_tokens = [str(int(r)) for r in reps_top]
 
@@ -598,6 +621,106 @@ def _format_sets_json(sets_json):
     if weights_line and reps_line:
         return f"{weights_line}, {reps_line}"
     return weights_line or reps_line
+
+
+def _extract_original_bw_tokens(log, exercise: str, target_sets: int = 3):
+    sets_line = _extract_sets_line(getattr(log, "exercise_string", ""), exercise)
+    if not sets_line:
+        return []
+    weights, _ = _parse_sets_line_tokens(sets_line, target_sets=target_sets)
+    tokens = []
+    for token in weights:
+        token = _normalize_bw(str(token or "").strip())
+        if parse_bw_weight(token, getattr(log, "bodyweight", None)) is not None:
+            tokens.append(token)
+        else:
+            tokens.append("")
+    return tokens
+
+
+def _format_retrieved_weight_token(
+    exercise: str,
+    weight,
+    *,
+    logged_bodyweight=None,
+    current_bodyweight=None,
+    render_as_bw: bool = False,
+    original_token: str = "",
+):
+    if not render_as_bw:
+        return _format_value(weight)
+
+    original_token = _normalize_bw(str(original_token or "").strip())
+    if original_token:
+        try:
+            current_token_weight = parse_bw_weight(original_token, current_bodyweight)
+            stored_weight = float(weight)
+        except (TypeError, ValueError):
+            current_token_weight = None
+            stored_weight = None
+        if (
+            current_token_weight is not None
+            and stored_weight is not None
+            and abs(float(current_token_weight) - stored_weight) < 0.05
+        ):
+            return original_token
+
+    return _format_weight_token(
+        exercise,
+        weight,
+        logged_bodyweight or current_bodyweight,
+        force_bw=False,
+        current_bodyweight=current_bodyweight,
+        render_as_bw=True,
+    )
+
+
+def _rebase_bw_sets_line(log, exercise: str, sets_line: str, *, current_bodyweight=None, target_sets: int = 3) -> str:
+    if not sets_line:
+        return ""
+    weights, reps = _parse_sets_line_tokens(sets_line, target_sets=target_sets)
+    if not weights or not reps:
+        return _normalize_bw(sets_line)
+
+    logged_bodyweight = getattr(log, "bodyweight", None)
+    weight_tokens = []
+    for token in weights:
+        token = _normalize_bw(str(token or "").strip())
+        parsed_weight = parse_bw_weight(token, logged_bodyweight)
+        if parsed_weight is None:
+            weight_tokens.append(token)
+            continue
+        weight_tokens.append(
+            _format_retrieved_weight_token(
+                exercise,
+                parsed_weight,
+                logged_bodyweight=logged_bodyweight,
+                current_bodyweight=current_bodyweight,
+                render_as_bw=True,
+                original_token=token,
+            )
+        )
+    return f"{' '.join(_compress_shorthand_values(weight_tokens))}, {' '.join(_compress_shorthand_values(reps))}"
+
+
+def _parse_sets_line_tokens(sets_line: str, target_sets: int = 3):
+    normalized = _normalize_sets_line(sets_line, target_sets=target_sets)
+    x_matches = re.findall(
+        r'(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*[x×]\s*(\d+)',
+        normalized,
+        flags=re.IGNORECASE,
+    )
+    if x_matches:
+        return [m[0] for m in x_matches], [m[1] for m in x_matches]
+
+    parts = normalized.split(',', 1)
+    weights_part = parts[0].strip() if parts else ""
+    reps_part = parts[1].strip() if len(parts) > 1 else ""
+    weights_part = re.sub(r'(kg|lbs|lb)', '', weights_part, flags=re.IGNORECASE)
+    reps_part = re.sub(r'(kg|lbs|lb)', '', reps_part, flags=re.IGNORECASE)
+    weights = [t for t in weights_part.replace(',', ' ').split() if t]
+    reps = [t for t in reps_part.replace(',', ' ').split() if t]
+    return weights, reps
 
 
 def _is_default_numeric_sets(value: str) -> bool:
@@ -668,7 +791,7 @@ def _normalize_sets_line(sets_line: str, default_weight: str = "1", target_sets:
         return ""
 
     x_matches = re.findall(
-        r'(bw(?:/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)\s*[x×]\s*(\d+)',
+        r'(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*[x×]\s*(\d+)',
         sets_line,
         flags=re.IGNORECASE,
     )
@@ -722,7 +845,7 @@ def _count_sets_from_line(sets_line: str, target_sets: int = 3) -> int:
         return 0
 
     # Check for 'x' notation (e.g., 'bw x5 x5 x5' or '100kg x5 x5')
-    x_matches = re.findall(r'(bw(?:/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)\s*x\s*\d+', sets_line, flags=re.IGNORECASE)
+    x_matches = re.findall(r'(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*x\s*\d+', sets_line, flags=re.IGNORECASE)
     if x_matches:
         raw = len(x_matches)
         return int(target_sets) if target_sets and raw < int(target_sets) else raw

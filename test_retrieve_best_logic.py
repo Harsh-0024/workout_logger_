@@ -397,6 +397,151 @@ class TestRetrieveIntegration(unittest.TestCase):
 
         self.assertIn("Body Weight - 180 lbs", output)
 
+    def test_logged_bw_notation_is_preserved_for_non_catalog_bodyweight_exercise(self):
+        plan = Plan(
+            user_id=self.user.id,
+            text_content="\n".join(
+                [
+                    "Session 5 - Chest & Triceps",
+                    "Bodyweight Knuckle Push-Ups",
+                ]
+            ),
+        )
+        rep = RepRange(
+            user_id=self.user.id,
+            text_content="Bodyweight Knuckle Push-Ups: 1",
+        )
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now(),
+                workout_name="Session 5 - Chest & Triceps",
+                exercise="Bodyweight Knuckle Push-Ups",
+                exercise_string="Bodyweight Knuckle Push-Ups - [1]\nBw, 18",
+                sets_json={"weights": [80], "reps": [18]},
+                bodyweight=80,
+            )
+        )
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 5)
+
+        self.assertIn("Bodyweight Knuckle Push-Ups - [1]", output)
+        self.assertIn("bw, 18", output)
+        self.assertNotIn("80, 18", output)
+
+    def test_logged_bw_notation_rebases_when_current_bodyweight_changed(self):
+        self.user.bodyweight = 72
+        plan = Plan(
+            user_id=self.user.id,
+            text_content="\n".join(
+                [
+                    "Session 5 - Chest & Triceps",
+                    "Bodyweight Knuckle Push-Ups",
+                ]
+            ),
+        )
+        rep = RepRange(
+            user_id=self.user.id,
+            text_content="Bodyweight Knuckle Push-Ups: 1",
+        )
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now(),
+                workout_name="Session 5 - Chest & Triceps",
+                exercise="Bodyweight Knuckle Push-Ups",
+                exercise_string="Bodyweight Knuckle Push-Ups - [1]\nBw, 18",
+                sets_json={"weights": [60], "reps": [18]},
+                bodyweight=60,
+            )
+        )
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 5)
+
+        self.assertIn("Body Weight - 72 kg", output)
+        self.assertIn("Bodyweight Knuckle Push-Ups - [1]", output)
+        self.assertIn("bw-12, 18", output)
+        self.assertNotIn("bw, 18", output)
+        self.assertNotIn("60, 18", output)
+
+    def test_logged_bw_divisor_notation_is_preserved(self):
+        plan = Plan(
+            user_id=self.user.id,
+            text_content="\n".join(
+                [
+                    "Session 8 - Core",
+                    "Hanging Leg Raises",
+                ]
+            ),
+        )
+        rep = RepRange(
+            user_id=self.user.id,
+            text_content="Hanging Leg Raises: 1, 10-15",
+        )
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now(),
+                workout_name="Session 8 - Core",
+                exercise="Hanging Leg Raises",
+                exercise_string="Hanging Leg Raises - [10-15]\nBw/2, 12",
+                sets_json={"weights": [40], "reps": [12]},
+                bodyweight=80,
+            )
+        )
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 8)
+
+        self.assertIn("Hanging Leg Raises - [1, 10-15]", output)
+        self.assertIn("bw/2, 12", output)
+        self.assertNotIn("40, 12", output)
+
+    def test_logged_bw_divisor_rebases_when_current_bodyweight_changed(self):
+        self.user.bodyweight = 72
+        plan = Plan(
+            user_id=self.user.id,
+            text_content="\n".join(
+                [
+                    "Session 8 - Core",
+                    "Hanging Leg Raises",
+                ]
+            ),
+        )
+        rep = RepRange(
+            user_id=self.user.id,
+            text_content="Hanging Leg Raises: 1, 10-15",
+        )
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now(),
+                workout_name="Session 8 - Core",
+                exercise="Hanging Leg Raises",
+                exercise_string="Hanging Leg Raises - [10-15]\nBw/2, 12",
+                sets_json={"weights": [30], "reps": [12]},
+                bodyweight=60,
+            )
+        )
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 8)
+
+        self.assertIn("Hanging Leg Raises - [1, 10-15]", output)
+        self.assertIn("bw-42, 12", output)
+        self.assertNotIn("bw/2, 12", output)
+        self.assertNotIn("30, 12", output)
+
     def test_generate_retrieve_output_falls_back_to_lt_n_when_needed(self):
         plan = Plan(
             user_id=self.user.id,
