@@ -1022,6 +1022,19 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
     summary = []
     workout_date = parsed_data.get('date', datetime.now())
     workout_name = parsed_data.get('workout_name')
+    parsed_bodyweight = parsed_data.get('bodyweight')
+    if parsed_bodyweight is not None:
+        try:
+            parsed_bodyweight = float(parsed_bodyweight)
+            if parsed_bodyweight > 0:
+                user.bodyweight = parsed_bodyweight
+                db_session.flush()
+        except (TypeError, ValueError):
+            logger.warning(
+                "Ignoring invalid parsed bodyweight for user %s: %r",
+                getattr(user, "username", user.id),
+                parsed_data.get('bodyweight'),
+            )
     rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
     rep_target_sets = _parse_rep_target_sets(rep_row.text_content if rep_row else "")
     plan_target_sets = _get_plan_target_sets(db_session, user)

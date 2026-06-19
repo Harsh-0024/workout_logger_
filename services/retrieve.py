@@ -206,6 +206,9 @@ def generate_retrieve_output(db_session, user, category, day_id):
             if session_title:
                 header_line = f"{today_str} - Session {day_id} - {session_title}"
     output_lines = [header_line, ""]
+    bodyweight_line = _format_bodyweight_line(db_session, user)
+    if bodyweight_line:
+        output_lines.extend([bodyweight_line, ""])
 
     try:
         exercises = all_plans["workout"][category][day_key]
@@ -290,6 +293,40 @@ def _exercise_candidates(exercise_name: str):
         name.replace("–", " "),
     ]
     return list(dict.fromkeys(candidates))
+
+
+def _format_bodyweight_line(db_session, user) -> str:
+    bodyweight = getattr(user, "bodyweight", None)
+    if bodyweight is None:
+        return ""
+    try:
+        value = float(bodyweight)
+    except (TypeError, ValueError):
+        return ""
+    if value <= 0:
+        return ""
+    return f"Body Weight - {_format_value(value)} {_infer_weight_unit(db_session, user)}"
+
+
+def _infer_weight_unit(db_session, user) -> str:
+    try:
+        logs = (
+            db_session.query(WorkoutLog.exercise_string)
+            .filter(WorkoutLog.user_id == user.id)
+            .order_by(WorkoutLog.date.desc(), WorkoutLog.id.desc())
+            .limit(50)
+            .all()
+        )
+    except Exception:
+        return "kg"
+
+    counts = {"kg": 0, "lbs": 0}
+    for row in logs or []:
+        text = str(row[0] or "").lower()
+        counts["kg"] += len(re.findall(r"\bkg(?:s)?\b", text))
+        counts["lbs"] += len(re.findall(r"\blbs?\b", text))
+
+    return "lbs" if counts["lbs"] > counts["kg"] else "kg"
 
 
 def _parse_rep_range(value: str):

@@ -102,6 +102,29 @@ def _has_time_range_hint(line: str) -> bool:
     return 's' in inside
 
 
+def parse_bodyweight_line(line: str) -> Tuple[Optional[float], Optional[str]]:
+    line = (line or '').strip()
+    if not line:
+        return None, None
+    match = re.match(
+        r'^(?:body\s*weight|bodyweight)\s*[-:]\s*(\d+(?:\.\d+)?)\s*(kg|kgs|lb|lbs)?\s*$',
+        line,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None, None
+    try:
+        value = float(match.group(1))
+    except ValueError:
+        return None, None
+    unit = (match.group(2) or '').lower()
+    if unit == 'kgs':
+        unit = 'kg'
+    if unit == 'lb':
+        unit = 'lbs'
+    return value, unit or None
+
+
 def parse_weight_x_reps(segment, base_weight=None):
     segment = (segment or '').replace('×', 'x').replace('*', 'x').lower()
     segment = re.sub(r'(kg|lbs|lb)', '', segment)
@@ -348,12 +371,19 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
         return None
     
     raw_lines: List[str] = []
+    parsed_bodyweight: Optional[float] = None
+    parsed_bodyweight_unit: Optional[str] = None
     for line in workout_day_received.strip().split("\n"):
         stripped = (line or "").strip()
         if not stripped:
             continue
         # Treat comment / section markers (e.g., "#Gym") as separators, not exercises.
         if stripped.startswith("#"):
+            continue
+        bw_value, bw_unit = parse_bodyweight_line(stripped)
+        if bw_value is not None:
+            parsed_bodyweight = bw_value
+            parsed_bodyweight_unit = bw_unit
             continue
         raw_lines.append(stripped)
     if not raw_lines:
@@ -382,7 +412,14 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
     workout_name = html.unescape(workout_name)
     workout_name = workout_name.lstrip('-–—').strip()
 
-    workout_day = {"date": date_obj, "workout_name": workout_name, "exercises": []}
+    effective_bodyweight = parsed_bodyweight if parsed_bodyweight is not None else bodyweight
+    workout_day = {
+        "date": date_obj,
+        "workout_name": workout_name,
+        "bodyweight": parsed_bodyweight,
+        "bodyweight_unit": parsed_bodyweight_unit,
+        "exercises": [],
+    }
 
     # Exercises
     list_of_lines = []
@@ -453,12 +490,12 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
             data_part = ""
 
         if data_part:
-            w_list, r_list = parse_weight_x_reps(data_part, bodyweight)
+            w_list, r_list = parse_weight_x_reps(data_part, effective_bodyweight)
             if w_list:
                 weights, reps = w_list, r_list
             elif ',' in data_part:
                 subparts = data_part.split(',', 1)
-                weights = extract_weights(subparts[0], bodyweight)
+                weights = extract_weights(subparts[0], effective_bodyweight)
                 reps = extract_numbers(subparts[1])
 
                 if not weights and reps:
@@ -469,7 +506,7 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
                 max_rep_value = 600 if time_range_hint else 30
                 w_pairs, r_pairs = parse_weight_reps_pairs(
                     data_part,
-                    bodyweight,
+                    effective_bodyweight,
                     max_rep_value=max_rep_value,
                 )
                 if w_pairs and r_pairs:
@@ -477,13 +514,13 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
                 else:
                     w_halves, r_halves = parse_weight_reps_halves(
                         data_part,
-                        bodyweight,
+                        effective_bodyweight,
                         max_rep_value=max_rep_value,
                     )
                     if w_halves and r_halves:
                         weights, reps = w_halves, r_halves
                     else:
-                        weights = extract_weights(data_part, bodyweight)
+                        weights = extract_weights(data_part, effective_bodyweight)
                         reps = [1] * len(weights)
 
         if not name:

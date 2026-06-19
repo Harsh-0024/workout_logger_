@@ -255,6 +255,49 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(len(exs[0]["weights"]), 5)
         self.assertEqual(exs[0]["reps"], [10, 10, 10, 10, 10])
 
+    def test_bodyweight_line_is_metadata_and_updates_bw_sets(self):
+        raw_text = """
+        17/6/26 - Session 13 - Chest & Triceps
+        Body Weight - 72.5 kg
+        Dips - [8-12]
+        Bw-40, 8
+        """
+        result = workout_parser(raw_text, bodyweight=70)
+        exs = result["exercises"]
+
+        self.assertEqual(result["bodyweight"], 72.5)
+        self.assertEqual(result["bodyweight_unit"], "kg")
+        self.assertEqual(len(exs), 1)
+        self.assertEqual(exs[0]["name"], "Dips")
+        self.assertEqual(exs[0]["weights"], [32.5, 32.5, 32.5])
+        self.assertEqual(exs[0]["reps"], [8, 8, 8])
+
+    def test_bodyweight_line_accepts_lbs_and_bare_values(self):
+        lbs_result = workout_parser(
+            """
+            17/6 Push
+            Bodyweight: 180 lbs
+            Push Ups
+            Bw, 10
+            """,
+            bodyweight=70,
+        )
+        bare_result = workout_parser(
+            """
+            17/6 Push
+            Body Weight - 72
+            Push Ups
+            Bw, 10
+            """,
+            bodyweight=70,
+        )
+
+        self.assertEqual(lbs_result["bodyweight"], 180.0)
+        self.assertEqual(lbs_result["bodyweight_unit"], "lbs")
+        self.assertEqual(lbs_result["exercises"][0]["weights"], [180.0, 180.0, 180.0])
+        self.assertEqual(bare_result["bodyweight"], 72.0)
+        self.assertIsNone(bare_result["bodyweight_unit"])
+
 
 class TestPlanParser(unittest.TestCase):
 

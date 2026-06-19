@@ -358,9 +358,44 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertEqual(exercise_count, 1)
         self.assertEqual(set_count, 3)
         self.assertRegex(output.splitlines()[0], r"^\d{1,2}/\d{1,2}/\d{2}\b")
+        self.assertIn("Body Weight - 80 kg", output)
         self.assertIn("Flat Dumbbell Press - [3, 8-12]", output)
         self.assertIn("25 22.5, 6 10 7", output)
         self.assertNotIn("45, 3", output)
+
+    def test_generate_retrieve_output_infers_lbs_from_recent_logs(self):
+        plan = Plan(
+            user_id=self.user.id,
+            text_content="\n".join(
+                [
+                    "Session 1 - Push",
+                    "Bench Press",
+                ]
+            ),
+        )
+        rep = RepRange(
+            user_id=self.user.id,
+            text_content="Bench Press: 1, 8-12",
+        )
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now(),
+                workout_name="Session 1 - Push",
+                exercise="Bench Press",
+                exercise_string="Bench Press - [8-12]\n135 lbs, 8",
+                sets_json={"weights": [135], "reps": [8]},
+                bodyweight=180,
+            )
+        )
+        self.user.bodyweight = 180
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 1)
+
+        self.assertIn("Body Weight - 180 lbs", output)
 
     def test_generate_retrieve_output_falls_back_to_lt_n_when_needed(self):
         plan = Plan(

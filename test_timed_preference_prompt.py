@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from models import Base, User, UserRole
+from models import Base, User, UserRole, WorkoutLog
 from services.logging import handle_workout_log, set_timed_exercise_preference
 
 
@@ -76,6 +76,30 @@ class TestTimedPreferencePrompt(unittest.TestCase):
         self.assertFalse(second_rows["Dead Hang"]["timed_prompt_needed"])
         self.assertFalse(second_rows["Plank"]["is_timed"])
         self.assertTrue(second_rows["Dead Hang"]["is_timed"])
+
+    def test_parsed_bodyweight_updates_user_and_saved_logs(self):
+        payload = {
+            "date": datetime.now().replace(microsecond=0),
+            "workout_name": "Bodyweight Update",
+            "bodyweight": 72.5,
+            "bodyweight_unit": "kg",
+            "exercises": [
+                {
+                    "name": "Dips",
+                    "weights": [32.5],
+                    "reps": [8],
+                    "exercise_string": "Dips - [8-12]\nBw-40, 8",
+                    "valid": True,
+                },
+            ],
+        }
+
+        handle_workout_log(self.db, self.user, payload)
+        self.db.commit()
+
+        log = self.db.query(WorkoutLog).filter_by(user_id=self.user.id, exercise="Dips").one()
+        self.assertEqual(self.user.bodyweight, 72.5)
+        self.assertEqual(log.bodyweight, 72.5)
 
 
 if __name__ == "__main__":
