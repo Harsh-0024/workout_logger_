@@ -1,6 +1,7 @@
 import re
 import unittest
 from datetime import date, datetime
+from urllib.parse import urlsplit
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
@@ -77,6 +78,57 @@ class TestRouteRegressions(unittest.TestCase):
             sess["_fresh"] = True
             sess["_id"] = "route-test-session"
         return user
+
+    def test_shortcut_pick_url_is_available_to_regular_users(self):
+        self._create_logged_in_user(username="shortcut_pick_user")
+
+        response = self.client.get("/shortcut/pick")
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIsNotNone(data)
+        self.assertTrue(data.get("ok"))
+        shortcut_url = data.get("url") or ""
+        self.assertIn("/shortcut/pick/", shortcut_url)
+        self.assertEqual(data.get("query_param"), "key")
+
+        token_path = urlsplit(shortcut_url).path
+        token_response = self.client.get(token_path)
+        self.assertEqual(token_response.status_code, 400)
+        self.assertIn("Missing key", token_response.get_data(as_text=True))
+
+    def test_settings_shows_shortcut_urls_for_regular_users(self):
+        self._create_logged_in_user(username="shortcut_settings_user")
+
+        response = self.client.get("/settings")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Shortcut URLs", page)
+        self.assertNotIn("Shortcut Retrieve URL", page)
+
+    def test_shortcut_urls_page_groups_shortcut_links_for_regular_users(self):
+        self._create_logged_in_user(username="shortcut_urls_user")
+
+        response = self.client.get("/shortcut/urls")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Log URL", page)
+        self.assertIn("Retrieve URL", page)
+        self.assertIn("/shortcut/log/", page)
+        self.assertIn("/shortcut/pick/", page)
+        self.assertIn("Shortcut Session Mapping", page)
+
+    def test_shortcut_mapping_is_available_to_regular_users(self):
+        self._create_logged_in_user(username="shortcut_mapping_user")
+
+        response = self.client.get("/shortcut/mapping")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Shortcut Session Mapping", page)
+        self.assertNotIn("Access denied", page)
 
     def test_bulk_import_invalid_header_date_is_handled_as_failed_block(self):
         self._create_logged_in_user(username="bulk_user")

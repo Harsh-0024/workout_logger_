@@ -70,15 +70,12 @@
                 <a href="{{ url_for('set_exercises') }}" class="btn btn-gold-outline">
                     <i class="bi bi-sliders me-2"></i>Edit Rep Ranges
                 </a>
-                <a href="{{ url_for('shortcut_log_url') }}" class="btn btn-gold-outline">
-                    <i class="bi bi-phone-vibrate me-2"></i>Shortcut Log URL
+                <a href="{{ url_for('shortcut_urls') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-link-45deg me-2"></i>Shortcut URLs
                 </a>
                 {% if current_user.is_admin() %}
                 <a href="{{ url_for('admin_dashboard') }}" class="btn btn-gold-outline">
                     <i class="bi bi-shield-lock me-2"></i>Admin Dashboard
-                </a>
-                <a href="{{ url_for('shortcut_key_map_settings') }}" class="btn btn-gold-outline">
-                    <i class="bi bi-grid-3x3-gap me-2"></i>Shortcut Session Mapping
                 </a>
                 {% endif %}
             </div>

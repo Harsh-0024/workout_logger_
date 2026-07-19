@@ -2420,6 +2420,16 @@ def register_workout_routes(app):
         return None, f"No workout day matched '{raw_key}'. Try one of: {sample}"
 
     @login_required
+    def shortcut_urls():
+        log_token = _make_shortcut_log_token(current_user.id)
+        pick_token = _make_shortcut_pick_token(current_user.id)
+        return render_template(
+            'shortcut_urls.html',
+            log_url=url_for('shortcut_log', token=log_token, _external=True),
+            retrieve_url=url_for('shortcut_pick', token=pick_token, _external=True),
+        )
+
+    @login_required
     def shortcut_recommend_url():
         token = _make_shortcut_token(current_user.id)
         shortcut_url = url_for('shortcut_recommend', token=token, _external=True)
@@ -2427,8 +2437,6 @@ def register_workout_routes(app):
 
     @login_required
     def shortcut_pick_url():
-        if not current_user.is_admin():
-            return jsonify({"ok": False, "error": "Shortcut picker is currently admin-only."}), 403
         token = _make_shortcut_pick_token(current_user.id)
         shortcut_url = url_for('shortcut_pick', token=token, _external=True)
         return jsonify({"ok": True, "url": shortcut_url, "query_param": "key"})
@@ -2485,9 +2493,6 @@ def register_workout_routes(app):
         except Exception as e:
             logger.error(f"Shortcut token error: {e}", exc_info=True)
             return Response("Invalid shortcut token.", status=401, mimetype="text/plain")
-
-        if not user.is_admin():
-            return Response("Shortcut picker is currently admin-only.", status=403, mimetype="text/plain")
 
         raw_key = str(request.args.get("key") or request.args.get("session") or request.args.get("word") or "").strip()
         if len(raw_key) > 140:
@@ -2610,9 +2615,6 @@ def register_workout_routes(app):
     @login_required
     def shortcut_key_map_settings():
         user = current_user
-        if not user.is_admin():
-            flash("Access denied. Admin privileges required.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
 
         rows = _build_shortcut_plan_day_rows(user)
         if request.method == 'POST':
@@ -3062,6 +3064,7 @@ def register_workout_routes(app):
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
     app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])
     app.add_url_rule('/share/<token>', endpoint='shared_workout', view_func=shared_workout, methods=['GET'])
+    app.add_url_rule('/shortcut/urls', endpoint='shortcut_urls', view_func=shortcut_urls, methods=['GET'])
     app.add_url_rule('/shortcut/recommend', endpoint='shortcut_recommend_url', view_func=shortcut_recommend_url, methods=['GET'])
     app.add_url_rule('/shortcut/recommend/<token>', endpoint='shortcut_recommend', view_func=shortcut_recommend, methods=['GET'])
     app.add_url_rule('/shortcut/pick', endpoint='shortcut_pick_url', view_func=shortcut_pick_url, methods=['GET'])

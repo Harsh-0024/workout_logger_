@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-10">
+        <div class="card">
+            <div class="text-center mb-4">
+                <div class="mb-3">
+                    <i class="bi bi-link-45deg" style="font-size: clamp(2.75rem, 8vw, 3.5rem); color: var(--gold-primary); opacity: 0.65;"></i>
+                </div>
+                <h2 class="fw-bold mb-2" style="font-size: clamp(1.4rem, 5vw, 2rem);">Shortcut URLs</h2>
+                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Use these private URLs in Apple Shortcuts.</p>
+            </div>
+
+            <div class="shortcut-url-list">
+                <section class="shortcut-url-item">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-phone-vibrate text-gold"></i>
+                        <h6 class="fw-semibold mb-0">Log URL</h6>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" class="form-control shortcut-url-input" value="{{ log_url }}" readonly aria-label="Shortcut log URL">
+                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ log_url }}">
+                            <i class="bi bi-copy me-2"></i>Copy
+                        </button>
+                    </div>
+                    <div class="text-muted mt-2" style="font-size: var(--fs-xs);">POST body field: <code>workout_text</code></div>
+                </section>
+
+                <section class="shortcut-url-item">
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="bi bi-clipboard2-check text-gold"></i>
+                        <h6 class="fw-semibold mb-0">Retrieve URL</h6>
+                    </div>
+                    <div class="input-group">
+                        <input type="text" class="form-control shortcut-url-input" value="{{ retrieve_url }}" readonly aria-label="Shortcut retrieve URL">
+                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ retrieve_url }}">
+                            <i class="bi bi-copy me-2"></i>Copy
+                        </button>
+                    </div>
+                    <div class="text-muted mt-2" style="font-size: var(--fs-xs);">Add <code>?key=URL%20Encoded%20Text</code> to pick a session.</div>
+                </section>
+            </div>
+
+            <div class="d-grid gap-2 gap-md-3 mt-4">
+                <a href="{{ url_for('shortcut_key_map_settings') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-grid-3x3-gap me-2"></i>Shortcut Session Mapping
+                </a>
+                <a href="{{ url_for('user_settings') }}#quick-actions" class="btn btn-gold-outline">
+                    <i class="bi bi-arrow-left me-2"></i>Back to Settings
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .shortcut-url-list {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .shortcut-url-item {
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        padding: 1rem;
+        background: rgba(255, 255, 255, 0.025);
+    }
+
+    .shortcut-url-input {
+        font-size: var(--fs-sm);
+        min-width: 0;
+    }
+
+    .shortcut-copy-btn {
+        white-space: nowrap;
+    }
+
+    [data-theme="light"] .shortcut-url-item {
+        background: rgba(201, 169, 97, 0.06);
+    }
+
+    @media (max-width: 575.98px) {
+        .shortcut-url-item .input-group {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .shortcut-url-item .input-group > .form-control,
+        .shortcut-url-item .input-group > .btn {
+            width: 100%;
+            border-radius: 0.5rem !important;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.shortcut-copy-btn').forEach((button) => {
+            button.addEventListener('click', async () => {
+                const value = button.getAttribute('data-copy-value') || '';
+                if (!value || !navigator.clipboard) return;
+                try {
+                    await navigator.clipboard.writeText(value);
+                    const original = button.innerHTML;
+                    button.innerHTML = '<i class="bi bi-check2 me-2"></i>Copied';
+                    window.setTimeout(() => {
+                        button.innerHTML = original;
+                    }, 1200);
+                } catch (err) {
+                    const input = button.closest('.shortcut-url-item')?.querySelector('.shortcut-url-input');
+                    if (input) {
+                        input.focus();
+                        input.select();
+                    }
+                }
+            });
+        });
+    });
+</script>
+{% endblock %}
