@@ -10,6 +10,7 @@ from utils.logger import logger
 from wait_for_db import wait_for_db
 from workout_tracker import create_app
 
+
 logger.info("Importing app module (Flask app factory).")
 app = create_app(init_db=False)
 
