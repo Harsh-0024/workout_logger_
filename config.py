@@ -58,6 +58,12 @@ class Config:
 
     # Google Gemini API (Google AI Studio)
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
+
+    # Profile image storage (Cloudflare R2)
+    R2_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID')
+    R2_SECRET_ACCESS_KEY = os.environ.get('R2_SECRET_ACCESS_KEY')
+    R2_BUCKET_NAME = os.environ.get('R2_BUCKET_NAME', 'workout-tracker-avatars')
+    R2_ACCOUNT_ID = os.environ.get('R2_ACCOUNT_ID', 'c60933f634439b0fb2e6c7762535ba6c')
     
     # Authentication
     REMEMBER_COOKIE_DURATION = 30  # days

@@ -19,7 +19,14 @@ from sqlalchemy import desc
 from services.auth import AuthService, AuthenticationError
 from utils.errors import ValidationError
 from utils.logger import logger
-from utils.profile_images import get_local_profile_image_path, get_profile_image_url, normalize_profile_image_key
+from utils.profile_images import (
+    get_local_profile_image_path,
+    get_profile_image_url,
+    get_r2_bucket_name,
+    get_r2_profile_image_client,
+    has_r2_profile_image_storage,
+    normalize_profile_image_key,
+)
 from utils.validators import sanitize_text_input, validate_username
 
 from .decorators import dev_only, require_admin
@@ -156,15 +163,9 @@ def register_auth_routes(app, email_service):
         image.save(buffer, format='PNG', optimize=True)
         buffer.seek(0)
 
-        if os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'):
-            import boto3
-            s3 = boto3.client(
-                's3',
-                aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-                aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-                region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
-            )
-            bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+        if has_r2_profile_image_storage():
+            s3 = get_r2_profile_image_client()
+            bucket = get_r2_bucket_name()
             s3.put_object(
                 Bucket=bucket,
                 Key=output_name,
@@ -647,15 +648,9 @@ def register_auth_routes(app, email_service):
                             local_path = get_local_profile_image_path(key)
                             if local_path and os.path.exists(local_path):
                                 os.remove(local_path)
-                            elif os.environ.get('AWS_ACCESS_KEY_ID') and os.environ.get('AWS_SECRET_ACCESS_KEY'):
-                                import boto3
-                                s3 = boto3.client(
-                                    's3',
-                                    aws_access_key_id=os.environ.get('AWS_ACCESS_KEY_ID'),
-                                    aws_secret_access_key=os.environ.get('AWS_SECRET_ACCESS_KEY'),
-                                    region_name=os.environ.get('AWS_S3_REGION', 'ap-southeast-2'),
-                                )
-                                bucket = os.environ.get('AWS_S3_BUCKET', 'workout-logger-uploads')
+                            elif has_r2_profile_image_storage():
+                                s3 = get_r2_profile_image_client()
+                                bucket = get_r2_bucket_name()
                                 s3.delete_object(Bucket=bucket, Key=key)
                         user.profile_image = None
                         user.updated_at = datetime.now()

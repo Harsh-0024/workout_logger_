@@ -1,9 +1,13 @@
 import re
 import unittest
+import os
+import sys
+from io import BytesIO
 from datetime import date, datetime
 from urllib.parse import urlsplit
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
+from PIL import Image
 from sqlalchemy import create_engine
 from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -22,6 +26,7 @@ from services.logging import (
 )
 from workout_tracker import create_app
 from workout_tracker.routes.auth import _infer_bulk_import_dates
+from utils import profile_images
 
 
 class _RouteTestConfig(Config):
@@ -106,6 +111,94 @@ class TestRouteRegressions(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("Shortcut URLs", page)
         self.assertNotIn("Shortcut Retrieve URL", page)
+
+    def test_profile_photo_upload_writes_to_r2_when_configured(self):
+        user = self._create_logged_in_user(username="avatar_upload_user")
+        image_bytes = BytesIO()
+        Image.new("RGB", (32, 32), "red").save(image_bytes, format="PNG")
+        image_bytes.seek(0)
+        s3 = Mock()
+
+        with patch("workout_tracker.routes.auth.has_r2_profile_image_storage", return_value=True), \
+             patch("workout_tracker.routes.auth.get_r2_profile_image_client", return_value=s3), \
+             patch("workout_tracker.routes.auth.get_r2_bucket_name", return_value="workout-tracker-avatars"):
+            response = self.client.post(
+                "/settings",
+                data={
+                    "form_type": "profile_photo",
+                    "profile_image": (image_bytes, "avatar.png"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        self.assertEqual(response.status_code, 302)
+        s3.put_object.assert_called_once()
+        put_kwargs = s3.put_object.call_args.kwargs
+        self.assertEqual(put_kwargs["Bucket"], "workout-tracker-avatars")
+        self.assertEqual(put_kwargs["Key"], f"avatars/user_{user.id}.png")
+        self.assertEqual(put_kwargs["ContentType"], "image/png")
+        stored_user = self.session.query(User).filter_by(id=user.id).one()
+        self.assertEqual(stored_user.profile_image, f"avatars/user_{user.id}.png")
+
+    def test_r2_client_uses_configured_endpoint_credentials_region_and_bucket(self):
+        s3 = object()
+
+        boto3 = Mock()
+        boto3.client.return_value = s3
+
+        with patch.dict(
+            os.environ,
+            {
+                "R2_ACCESS_KEY_ID": "test-access-key",
+                "R2_SECRET_ACCESS_KEY": "test-secret-key",
+                "R2_BUCKET_NAME": "workout-tracker-avatars",
+                "R2_ACCOUNT_ID": "c60933f634439b0fb2e6c7762535ba6c",
+            },
+        ), patch.dict(sys.modules, {"boto3": boto3}):
+            client = profile_images.get_r2_profile_image_client()
+            bucket = profile_images.get_r2_bucket_name()
+
+        self.assertIs(client, s3)
+        self.assertEqual(bucket, "workout-tracker-avatars")
+        boto3.client.assert_called_once_with(
+            "s3",
+            endpoint_url="https://c60933f634439b0fb2e6c7762535ba6c.r2.cloudflarestorage.com",
+            aws_access_key_id="test-access-key",
+            aws_secret_access_key="test-secret-key",
+            region_name="auto",
+        )
+
+    def test_remote_profile_image_url_uses_public_r2_bucket(self):
+        with self.app.test_request_context(), patch("utils.profile_images.os.path.exists", return_value=False):
+            url = profile_images.get_profile_image_url("avatars/user_123.png")
+
+        self.assertEqual(
+            url,
+            "https://pub-b7699fec85f44832bc1255cae990054b.r2.dev/avatars/user_123.png",
+        )
+
+    def test_profile_photo_removal_deletes_from_r2_when_no_local_file_exists(self):
+        user = self._create_logged_in_user(username="avatar_remove_user")
+        stored_user = self.session.query(User).filter_by(id=user.id).one()
+        stored_user.profile_image = "avatars/remote-only.png"
+        self.session.commit()
+        s3 = Mock()
+
+        with patch("workout_tracker.routes.auth.has_r2_profile_image_storage", return_value=True), \
+             patch("workout_tracker.routes.auth.get_r2_profile_image_client", return_value=s3), \
+             patch("workout_tracker.routes.auth.get_r2_bucket_name", return_value="workout-tracker-avatars"):
+            response = self.client.post(
+                "/settings",
+                data={"form_type": "remove_photo"},
+            )
+
+        self.assertEqual(response.status_code, 302)
+        s3.delete_object.assert_called_once_with(
+            Bucket="workout-tracker-avatars",
+            Key="avatars/remote-only.png",
+        )
+        updated_user = self.session.query(User).filter_by(id=user.id).one()
+        self.assertIsNone(updated_user.profile_image)
 
     def test_shortcut_urls_page_groups_shortcut_links_for_regular_users(self):
         self._create_logged_in_user(username="shortcut_urls_user")
