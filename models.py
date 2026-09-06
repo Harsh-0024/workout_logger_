@@ -90,6 +90,7 @@ class User(Base):
     shortcut_key_map = relationship("ShortcutKeyMap", uselist=False, back_populates="user", cascade="all, delete-orphan")
     logs = relationship("WorkoutLog", back_populates="user", cascade="all, delete-orphan")
     api_keys = relationship("UserApiKey", back_populates="user", cascade="all, delete-orphan")
+    bodyweight_preferences = relationship("BodyweightExercisePreference", back_populates="user", cascade="all, delete-orphan")
     
     def is_admin(self):
         """Check if user has admin role."""
@@ -223,6 +224,7 @@ class WorkoutLog(Base):
     exercise_string = Column(Text)
     sets_json = Column(JSONType)
     bodyweight = Column(Float)
+    uses_bodyweight = Column(Boolean, nullable=True)
     top_weight = Column(Float)  # Heaviest weight moved that day
     top_reps = Column(Integer)  # Reps at that top weight
     estimated_1rm = Column(Float, index=True)  # Calculated strength metric
@@ -297,6 +299,31 @@ class TimedExercisePreference(Base):
         return (
             f"<TimedExercisePreference(id={self.id}, user_id={self.user_id}, "
             f"exercise_key='{self.exercise_key}', is_timed={self.is_timed})>"
+        )
+
+
+# --- 5C. BODYWEIGHT EXERCISE USER PREFERENCES ---
+class BodyweightExercisePreference(Base):
+    __tablename__ = 'bodyweight_exercise_preferences'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    exercise_key = Column(String(160), nullable=False, index=True)
+    exercise_name = Column(String(160), nullable=False)
+    is_bodyweight = Column(Boolean, nullable=False, default=True)
+    source = Column(String(32), nullable=False, default='manual')
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", back_populates="bodyweight_preferences")
+
+    __table_args__ = (
+        Index('idx_user_bodyweight_exercise_pref', 'user_id', 'exercise_key', unique=True),
+    )
+
+    def __repr__(self):
+        return (
+            f"<BodyweightExercisePreference(id={self.id}, user_id={self.user_id}, "
+            f"exercise_key='{self.exercise_key}', is_bodyweight={self.is_bodyweight})>"
         )
 
 
@@ -459,6 +486,9 @@ def migrate_schema():
             if 'timed_exercise_preferences' not in inspector.get_table_names():
                 TimedExercisePreference.__table__.create(bind=conn, checkfirst=True)
 
+            if 'bodyweight_exercise_preferences' not in inspector.get_table_names():
+                BodyweightExercisePreference.__table__.create(bind=conn, checkfirst=True)
+
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
 
@@ -468,6 +498,7 @@ def migrate_schema():
                     conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS exercise_string TEXT"))
                     conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS sets_json {json_type}"))
                     conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS bodyweight {float_type}"))
+                    conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN IF NOT EXISTS uses_bodyweight {bool_type}"))
                 else:
                     if 'workout_name' not in logs_columns:
                         logger.info("Adding workout_name column to workout_logs table")
@@ -481,6 +512,9 @@ def migrate_schema():
                     if 'bodyweight' not in logs_columns:
                         logger.info("Adding bodyweight column to workout_logs table")
                         conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN bodyweight {float_type}"))
+                    if 'uses_bodyweight' not in logs_columns:
+                        logger.info("Adding uses_bodyweight column to workout_logs table")
+                        conn.execute(text(f"ALTER TABLE workout_logs ADD COLUMN uses_bodyweight {bool_type}"))
 
             if 'lifts' in inspector.get_table_names():
                 lift_columns = [col['name'] for col in inspector.get_columns('lifts')]

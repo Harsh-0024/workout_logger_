@@ -19,6 +19,13 @@ from services.best_scoring import (
     compare_timed_workouts,
 )
 from services.helpers import get_set_stats, get_timed_set_stats
+from services.bodyweight import (
+    effective_sets_for_current,
+    effective_sets_for_log,
+    has_bodyweight_token,
+    is_bodyweight_enabled,
+    set_bodyweight_preference,
+)
 from services.exercise_matching import (
     build_name_index,
     normalize_exercise_name,
@@ -573,7 +580,7 @@ def classify_exercise_performance(
     rows: List[Dict[str, Any]] = []
     had_historical_with_sets = False
     for log in logs:
-        log_sets = _normalize_sets(getattr(log, "sets_json", None))
+        log_sets = _normalize_sets(effective_sets_for_log(db_session, log))
         if not log_sets:
             continue
         if current_log_id is None or getattr(log, "id", None) != current_log_id:
@@ -958,7 +965,7 @@ def _get_best_log(
     preferred = []
     fallback = []
     for log in logs:
-        normalized_sets = _normalize_sets(log.sets_json)
+        normalized_sets = _normalize_sets(effective_sets_for_log(db_session, log))
         if not normalized_sets:
             continue
         set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
@@ -1102,20 +1109,42 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             if aligned_new_sets:
                 new_sets = aligned_new_sets
         
+        uses_bodyweight = bool(is_bodyweight_enabled(
+            db_session,
+            user.id,
+            ex_name,
+            exercise_text=new_str,
+        )) if is_valid else False
+        if is_valid and has_bodyweight_token(new_str):
+            set_bodyweight_preference(
+                db_session,
+                user.id,
+                ex_name,
+                True,
+                source="auto",
+            )
+        effective_new_sets = effective_sets_for_current(
+            new_sets,
+            getattr(user, "bodyweight", None),
+            uses_bodyweight,
+        )
+
         # Format display string from sets data
         formatted_display = _format_sets_display(new_sets) if is_valid else new_str
 
         # 1. Calculate Stats for Today
-        p_peak, p_sum, p_vol = get_set_stats(new_sets)
+        p_peak, p_sum, p_vol = get_set_stats(effective_new_sets)
 
         # Find the heaviest weight used today (for history)
         daily_max_weight = 0
         daily_max_reps = 0
-        if is_valid and new_sets['weights']:
-            daily_max_weight = max(new_sets['weights'])
+        effective_weights = list((effective_new_sets or {}).get("weights") or [])
+        effective_reps = list((effective_new_sets or {}).get("reps") or [])
+        if is_valid and effective_weights:
+            daily_max_weight = max(effective_weights)
             # Find reps corresponding to that max weight
-            idx = new_sets['weights'].index(daily_max_weight)
-            daily_max_reps = new_sets['reps'][idx]
+            idx = effective_weights.index(daily_max_weight)
+            daily_max_reps = effective_reps[idx] if idx < len(effective_reps) else 0
 
         best_log = _get_best_log(
             db_session,
@@ -1126,7 +1155,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             log_ex_index=log_ex_index,
             is_timed=time_based,
         )
-        best_log_sets = _normalize_sets(best_log.sets_json) if best_log else None
+        best_log_sets = _normalize_sets(effective_sets_for_log(db_session, best_log)) if best_log else None
 
         row = {
             'name': ex_name, 'old': '-', 'new': formatted_display,
@@ -1140,7 +1169,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
 
         if is_valid:
             if time_based:
-                p_peak, p_sum, p_vol = get_timed_set_stats(new_sets)
+                p_peak, p_sum, p_vol = get_timed_set_stats(effective_new_sets)
             # --- SAVE TO HISTORY ---
             history_log = None
             try:
@@ -1152,6 +1181,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                     exercise_string=new_str,
                     sets_json=new_sets,
                     bodyweight=user.bodyweight,
+                    uses_bodyweight=uses_bodyweight,
                     top_weight=daily_max_weight if daily_max_weight > 0 else None,
                     top_reps=daily_max_reps if daily_max_reps > 0 else None,
                     estimated_1rm=p_peak if p_peak > 0 else None
@@ -1166,7 +1196,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 db_session,
                 user.id,
                 ex_name,
-                new_sets,
+                effective_new_sets,
                 target_sets=target_sets,
                 strict_target_sets=strict_target_sets,
                 log_ex_index=log_ex_index,
@@ -1187,9 +1217,9 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             if best_log_sets and can_compare:
                 row['old'] = _format_best_string(best_log)
                 if time_based:
-                    comparison = compare_timed_workouts(best_log_sets, new_sets, top_n=target_sets)
+                    comparison = compare_timed_workouts(best_log_sets, effective_new_sets, top_n=target_sets)
                 else:
-                    comparison = compare_strength_workouts(best_log_sets, new_sets, top_n=target_sets)
+                    comparison = compare_strength_workouts(best_log_sets, effective_new_sets, top_n=target_sets)
 
                 # Peak-first, then lexicographic set comparison, then lexicographic weight comparison.
                 if comparison.get("cmp", 0) > 0:
@@ -1274,7 +1304,7 @@ def _get_best_log_before_date(
     fallback = []
 
     for log in logs:
-        normalized_sets = _normalize_sets(log.sets_json)
+        normalized_sets = _normalize_sets(effective_sets_for_log(db_session, log))
         if not normalized_sets:
             continue
         set_count = comparison_set_count(normalized_sets, getattr(log, "exercise_string", "") or "")
@@ -1357,7 +1387,8 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
 
     for log in unique_logs:
         ex_name = log.exercise
-        new_sets = _normalize_sets(log.sets_json)
+        raw_new_sets = _normalize_sets(log.sets_json)
+        new_sets = _normalize_sets(effective_sets_for_log(db_session, log))
         valid = bool(new_sets)
         timed_status = resolve_timed_exercise_status(
             db_session,
@@ -1377,7 +1408,7 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
             default_sets=3,
         )
 
-        formatted_display = _format_sets_display(new_sets) if valid else (getattr(log, "exercise_string", "") or "")
+        formatted_display = _format_sets_display(raw_new_sets) if raw_new_sets else (getattr(log, "exercise_string", "") or "")
 
         row = {
             "name": ex_name,
@@ -1425,7 +1456,7 @@ def compute_workout_summary_for_date(db_session, user, workout_date: date | date
                 is_timed=time_based,
                 workout_day_start_dt=workout_day_start_dt,
             )
-            best_log_sets = _normalize_sets(best_log.sets_json) if best_log else None
+            best_log_sets = _normalize_sets(effective_sets_for_log(db_session, best_log)) if best_log else None
 
             current_count = comparison_set_count(new_sets, getattr(log, "exercise_string", "") or "")
             can_compare = (not strict_target_sets) or (current_count >= target_sets)

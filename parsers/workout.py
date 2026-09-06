@@ -127,6 +127,7 @@ def parse_bodyweight_line(line: str) -> Tuple[Optional[float], Optional[str]]:
 
 def parse_weight_x_reps(segment, base_weight=None):
     segment = (segment or '').replace('×', 'x').replace('*', 'x').lower()
+    segment = re.sub(r'\bbody\s*weight\b', 'bw', segment)
     segment = re.sub(r'(kg|lbs|lb)', '', segment)
     matches = re.findall(
         r'(?:(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*)?x\s*(\d+)',
@@ -163,6 +164,8 @@ def extract_numbers(segment):
 
 def parse_bw_weight(token, base_weight=None):
     token = token.strip().lower()
+    token = re.sub(r'^body\s*weight', 'bw', token)
+    token = re.sub(r'^bodyweight', 'bw', token)
     if not token.startswith('bw'):
         return None
     token = token.replace('bw', '', 1)
@@ -198,6 +201,7 @@ def parse_bw_weight(token, base_weight=None):
 
 def extract_weights(segment, base_weight=None):
     segment = re.sub(r'(kg|lbs|lb)', '', segment.lower())
+    segment = re.sub(r'\bbody\s*weight\b', 'bw', segment)
     segment = segment.replace(',', ' ')
     numbers = []
     for t in segment.split():
@@ -221,7 +225,7 @@ def is_data_line(line):
     tokens = stripped.split()
     if len(tokens) > 1 and re.match(r'^\d+(?:[.)\-:])?$', tokens[0]) and re.match(r'^[A-Za-z]', tokens[1]):
         return False
-    return bool(re.match(r'^(?:,|-?\d|bw)', stripped.lower()))
+    return bool(re.match(r'^(?:,|-?\d|bw|body\s*weight|bodyweight)', stripped.lower()))
 
 
 def is_probable_data_segment(segment: str) -> bool:
@@ -229,7 +233,7 @@ def is_probable_data_segment(segment: str) -> bool:
     if not segment:
         return False
 
-    lowered = segment.lower()
+    lowered = re.sub(r'\bbody\s*weight\b', 'bw', segment.lower())
     if re.search(r'[x×*]', lowered):
         return True
     if ',' in lowered:
@@ -240,7 +244,7 @@ def is_probable_data_segment(segment: str) -> bool:
         if not token:
             continue
         cleaned = re.sub(r'[,:]+$', '', token)
-        if cleaned.startswith('bw'):
+        if cleaned.startswith('bw') or cleaned.startswith('bodyweight') or cleaned == 'body':
             continue
         cleaned = re.sub(r'(kg|lbs|lb)', '', cleaned)
         if re.match(r'^-?\d+(?:\.\d+)?$', cleaned):
@@ -251,7 +255,7 @@ def is_probable_data_segment(segment: str) -> bool:
 
 
 def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None, max_rep_value: int = 30):
-    segment = (segment or '').strip()
+    segment = re.sub(r'\bbody\s*weight\b', 'bw', (segment or '').strip(), flags=re.IGNORECASE)
     if not segment:
         return None, None
     if ',' in segment:
@@ -315,7 +319,7 @@ def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None, max_re
 
 
 def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_rep_value: int = 30):
-    segment = (segment or '').strip()
+    segment = re.sub(r'\bbody\s*weight\b', 'bw', (segment or '').strip(), flags=re.IGNORECASE)
     if not segment:
         return None, None
     if ',' in segment:
@@ -357,7 +361,11 @@ def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_r
     return weights, reps
 
 
-def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None) -> Optional[Dict]:
+def workout_parser(
+    workout_day_received: str,
+    bodyweight: Optional[float] = None,
+    preserve_bodyweight_offsets: bool = False,
+) -> Optional[Dict]:
     """
     Parse raw workout text into structured data.
     
@@ -412,7 +420,9 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
     workout_name = html.unescape(workout_name)
     workout_name = workout_name.lstrip('-–—').strip()
 
-    effective_bodyweight = parsed_bodyweight if parsed_bodyweight is not None else bodyweight
+    effective_bodyweight = None if preserve_bodyweight_offsets else (
+        parsed_bodyweight if parsed_bodyweight is not None else bodyweight
+    )
     workout_day = {
         "date": date_obj,
         "workout_name": workout_name,
@@ -465,7 +475,14 @@ def workout_parser(workout_day_received: str, bodyweight: Optional[float] = None
             tokens = clean_line.split()
             first_num_idx = -1
             for idx, token in enumerate(tokens):
-                if re.match(r'^-?\d', token) or token.startswith(',') or token.lower().startswith('bw'):
+                token_lower = token.lower()
+                if (
+                    re.match(r'^-?\d', token)
+                    or token.startswith(',')
+                    or token_lower.startswith('bw')
+                    or token_lower.startswith('bodyweight')
+                    or (token_lower == 'body' and idx + 1 < len(tokens) and tokens[idx + 1].lower().startswith('weight'))
+                ):
                     first_num_idx = idx
                     break
             if first_num_idx != -1:

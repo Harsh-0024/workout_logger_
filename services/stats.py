@@ -10,8 +10,8 @@ from statistics import median
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta, date, time
 from sqlalchemy import func, desc
-from list_of_exercise import BW_EXERCISES
 from models import WorkoutLog, RepRange
+from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweight
 from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
 from services.logging import resolve_timed_exercise_status
@@ -68,10 +68,7 @@ def _normalize_sets(sets_json) -> List[List[float]]:
 
 
 def _log_uses_bw(log) -> bool:
-    if log.exercise in BW_EXERCISES:
-        return True
-    exercise_string = (log.exercise_string or '').lower()
-    return 'bw' in exercise_string
+    return bool(getattr(log, "uses_bodyweight", None))
 
 
 def _apply_bodyweight(weights, reps, bodyweight):
@@ -121,12 +118,8 @@ def _get_target_rep_range(db_session, user, exercise_name: str) -> Optional[Tupl
     return rep_map.get((exercise_name or '').strip().lower())
 
 
-def _normalize_sets_for_log(log):
-    weights, reps = _normalize_sets(log.sets_json)
-
-    if _log_uses_bw(log):
-        weights, reps = _apply_bodyweight(weights, reps, log.bodyweight)
-
+def _normalize_sets_for_log(db_session, log):
+    weights, reps = _normalize_sets(effective_sets_for_log(db_session, log))
     if weights and reps:
         return {"weights": weights, "reps": reps}
     return {}
@@ -144,15 +137,12 @@ def _get_top_weight(weights, reps):
     return top_weight, top_reps
 
 
-def _get_log_metrics(log):
-    weights, reps = _normalize_sets(log.sets_json)
+def _get_log_metrics(db_session, log):
+    weights, reps = _normalize_sets(effective_sets_for_log(db_session, log))
 
     if (not weights or not reps) and log.top_weight is not None and log.top_reps is not None:
         weights = [float(log.top_weight)]
         reps = [int(log.top_reps)]
-
-    if _log_uses_bw(log):
-        weights, reps = _apply_bodyweight(weights, reps, log.bodyweight)
 
     if weights and reps:
         peak, _, _ = get_set_stats({'weights': weights, 'reps': reps})
@@ -235,15 +225,15 @@ def _resolve_exercise_aliases(db_session, user, exercise_name: str) -> List[str]
     return aliases or [exercise_name]
 
 
-def _get_peak_1rm_for_log(log) -> float:
-    weights, reps = _normalize_sets(log.sets_json)
+def _get_peak_1rm_for_log(db_session, log=None) -> float:
+    if log is None:
+        log = db_session
+        db_session = None
+    weights, reps = _normalize_sets(effective_sets_for_log(db_session, log))
 
     if (not weights or not reps) and log.top_weight is not None and log.top_reps is not None:
         weights = [float(log.top_weight)]
         reps = [int(log.top_reps)]
-
-    if _log_uses_bw(log):
-        weights, reps = _apply_bodyweight(weights, reps, log.bodyweight)
 
     if not weights or not reps:
         return float(log.estimated_1rm) if getattr(log, 'estimated_1rm', None) else 0.0
@@ -388,18 +378,18 @@ def get_chart_data(db_session, user, exercise_name):
         labels.append(local_date(log.date).isoformat() if log.date else "")
         workout_titles.append(_clean_workout_title(getattr(log, 'workout_name', None)))
 
-        sets_for_quality = _normalize_sets_for_log(log)
+        sets_for_quality = _normalize_sets_for_log(db_session, log)
 
         if exercise_is_timed:
             quality = WorkoutQualityScorer.calculate_timed_workout_score(sets_for_quality, timed_target)
             e1rm = quality.get('peak_1rm') or 0
         else:
-            one_rm, top_weight_m, top_reps_m = _get_log_metrics(log)
+            one_rm, top_weight_m, top_reps_m = _get_log_metrics(db_session, log)
             quality = WorkoutQualityScorer.calculate_workout_score(sets_for_quality, target_rep_range)
             e1rm = quality.get('peak_1rm') or one_rm
 
         top_weight, top_reps = 0, 0
-        weights_raw, reps_raw = _normalize_sets(log.sets_json)
+        weights_raw, reps_raw = _normalize_sets(effective_sets_for_log(db_session, log))
         if weights_raw and reps_raw:
             top_weight, top_reps = _get_top_weight(weights_raw, reps_raw)
         elif log.top_weight is not None:
@@ -467,7 +457,7 @@ def get_exercise_summary(db_session, user, exercise_name: str) -> Dict:
 
     metrics = []
     for log in logs:
-        one_rm, top_weight, top_reps = _get_log_metrics(log)
+        one_rm, top_weight, top_reps = _get_log_metrics(db_session, log)
         metrics.append((log, one_rm, top_weight, top_reps))
 
     first_log, first_1rm, _, _ = metrics[0]
@@ -529,7 +519,7 @@ def get_average_growth_data(db_session, user) -> Dict:
         for log in exercise_logs:
             if not log.date:
                 continue
-            one_rm = _get_peak_1rm_for_log(log)
+            one_rm = _get_peak_1rm_for_log(db_session, log)
             if not one_rm or one_rm <= 0:
                 continue
             if base is None:
@@ -660,7 +650,7 @@ def get_overall_progress_data(
         day = local_date(log.date)
         workout_days.add(day)
         title_by_day.setdefault(day, _clean_workout_title(getattr(log, 'workout_name', None)))
-        value = _get_peak_1rm_for_log(log)
+        value = _get_peak_1rm_for_log(db_session, log)
         if not value or value <= 0:
             continue
         per_day = exercise_day_values.setdefault(key, {})

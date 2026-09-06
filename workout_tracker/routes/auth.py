@@ -14,6 +14,16 @@ from services.logging import handle_workout_log
 
 from config import Config
 from models import Session, User, UserRole, UserApiKey, WorkoutLog
+from services.bodyweight import (
+    backfill_bodyweight_log_flags,
+    build_bodyweight_settings_rows,
+    bodyweight_exercise_key,
+    get_bodyweight_conflict_info,
+    matching_logs_for_exercise,
+    recalculate_log_metrics,
+    set_bodyweight_preference,
+)
+from services.logging import refresh_best_lift_pointers
 from services.stats import get_csv_export, get_json_export
 from sqlalchemy import desc
 from services.auth import AuthService, AuthenticationError
@@ -718,7 +728,7 @@ def register_auth_routes(app, email_service):
                     for block in blocks:
                         parsed = None
                         try:
-                            parsed = workout_parser(block, bodyweight=user.bodyweight)
+                            parsed = workout_parser(block, bodyweight=user.bodyweight, preserve_bodyweight_offsets=True)
                         except Exception as e:
                             parsed = None
 
@@ -998,6 +1008,12 @@ def register_auth_routes(app, email_service):
                 return redirect(url_for('user_settings'))
 
         profile_image_url = get_profile_image_url(getattr(user, 'profile_image', None))
+        try:
+            if backfill_bodyweight_log_flags(Session, user.id):
+                Session.commit()
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Bodyweight log backfill failed: {e}", exc_info=True)
 
         user_api_keys = (
             Session.query(UserApiKey)
@@ -1036,6 +1052,86 @@ def register_auth_routes(app, email_service):
             user_api_keys=user_api_keys,
             csv_size_kb=csv_size_kb,
             json_size_kb=json_size_kb,
+        )
+
+    @login_required
+    def more_settings():
+        user = current_user
+        pending_bodyweight = None
+
+        try:
+            if backfill_bodyweight_log_flags(Session, user.id):
+                Session.commit()
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Bodyweight log backfill failed: {e}", exc_info=True)
+
+        if request.method == 'POST':
+            form_type = request.form.get('form_type') or ''
+            try:
+                if form_type == 'bodyweight_exercise':
+                    exercise_name = sanitize_text_input(
+                        request.form.get('exercise_name', ''),
+                        max_length=160,
+                    )
+                    enabled_raw = (request.form.get('is_bodyweight') or '').strip().lower()
+                    is_enabled = enabled_raw in {'1', 'true', 'yes', 'on'}
+                    resolution = (request.form.get('history_resolution') or '').strip()
+
+                    if not exercise_name or not bodyweight_exercise_key(exercise_name):
+                        flash("Choose a valid exercise.", "error")
+                        return redirect(url_for('more_settings') + '#bodyweight-exercises')
+
+                    if not is_enabled:
+                        conflict = get_bodyweight_conflict_info(Session, user.id, exercise_name)
+                        if conflict.get("has_conflict") and resolution not in {'future_only', 'keep_offsets', 'literal'}:
+                            pending_bodyweight = {
+                                "exercise": exercise_name,
+                                "conflict": conflict,
+                            }
+                        else:
+                            logs_to_refresh = matching_logs_for_exercise(Session, user.id, exercise_name)
+                            if resolution in {'keep_offsets', 'literal'}:
+                                for log in logs_to_refresh:
+                                    log.uses_bodyweight = (resolution == 'keep_offsets')
+                                    recalculate_log_metrics(Session, log)
+                            set_bodyweight_preference(
+                                Session,
+                                user.id,
+                                exercise_name,
+                                False,
+                                source="manual",
+                            )
+                            refresh_best_lift_pointers(Session, user, [exercise_name])
+                            Session.commit()
+                            flash("Bodyweight exercise setting updated.", "success")
+                            return redirect(url_for('more_settings') + '#bodyweight-exercises')
+                    else:
+                        set_bodyweight_preference(
+                            Session,
+                            user.id,
+                            exercise_name,
+                            True,
+                            source="manual",
+                        )
+                        Session.commit()
+                        flash("Bodyweight exercise setting updated.", "success")
+                        return redirect(url_for('more_settings') + '#bodyweight-exercises')
+                else:
+                    flash("Invalid settings request.", "error")
+                    return redirect(url_for('more_settings'))
+            except Exception as e:
+                Session.rollback()
+                logger.error(f"More settings update error: {e}", exc_info=True)
+                flash("Failed to update more settings. Please try again.", "error")
+                return redirect(url_for('more_settings'))
+
+        bodyweight_rows = build_bodyweight_settings_rows(Session, user.id)
+        return render_template(
+            'more_settings.html',
+            user=user,
+            bodyweight_rows=bodyweight_rows,
+            pending_bodyweight=pending_bodyweight,
         )
 
     @login_required
@@ -1502,7 +1598,7 @@ def register_auth_routes(app, email_service):
             for block_idx, (block, block_start_line, block_end_line, header) in enumerate(blocks):
                 parsed = None
                 try:
-                    parsed = workout_parser(block, bodyweight=user.bodyweight)
+                    parsed = workout_parser(block, bodyweight=user.bodyweight, preserve_bodyweight_offsets=True)
                 except Exception:
                     parsed = None
 
@@ -1659,6 +1755,7 @@ def register_auth_routes(app, email_service):
     app.add_url_rule('/resend-verification', endpoint='resend_verification', view_func=resend_verification, methods=['POST'])
     app.add_url_rule('/logout', endpoint='logout', view_func=logout, methods=['GET'])
     app.add_url_rule('/settings', endpoint='user_settings', view_func=user_settings, methods=['GET', 'POST'])
+    app.add_url_rule('/settings/more', endpoint='more_settings', view_func=more_settings, methods=['GET', 'POST'])
     app.add_url_rule(
         '/settings/verify-otp',
         endpoint='verify_profile_update_otp',

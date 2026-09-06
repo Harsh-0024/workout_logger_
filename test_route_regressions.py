@@ -14,7 +14,9 @@ from sqlalchemy.pool import StaticPool
 
 import workout_tracker
 from config import Config
-from models import Base, Lift, User, UserRole, WorkoutLog
+from models import Base, BodyweightExercisePreference, Lift, User, UserRole, WorkoutLog
+from parsers.workout import workout_parser
+from services.bodyweight import bodyweight_exercise_key
 from services.exercise_matching import build_name_index
 from services.logging import (
     _get_best_log,
@@ -111,6 +113,115 @@ class TestRouteRegressions(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("Shortcut URLs", page)
         self.assertNotIn("Shortcut Retrieve URL", page)
+
+    def test_more_settings_shows_bodyweight_exercise_controls(self):
+        self._create_logged_in_user(username="more_settings_user")
+
+        response = self.client.get("/settings/more")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Bodyweight Exercises", page)
+        self.assertIn("Crunches A", page)
+
+    def test_bodyweight_log_uses_offsets_for_saved_strength(self):
+        user = self._create_logged_in_user(username="bw_offset_user")
+        user.bodyweight = 80.0
+        parsed = {
+            "date": datetime(2026, 9, 6),
+            "workout_name": "Core",
+            "exercises": [
+                {
+                    "name": "Crunches A",
+                    "exercise_string": "Crunches A\n2.5 1, 14 21",
+                    "weights": [2.5, 1.0],
+                    "reps": [14, 21],
+                    "valid": True,
+                }
+            ],
+        }
+
+        handle_workout_log(self.session, user, parsed)
+        self.session.commit()
+
+        log = self.session.query(WorkoutLog).filter_by(user_id=user.id, exercise="Crunches A").one()
+        self.assertTrue(log.uses_bodyweight)
+        self.assertEqual(log.sets_json["weights"][0], 2.5)
+        self.assertGreater(log.estimated_1rm, 120)
+
+    def test_explicit_bw_token_auto_selects_bodyweight_exercise(self):
+        user = self._create_logged_in_user(username="bw_auto_user")
+        parsed = {
+            "date": datetime(2026, 9, 6),
+            "workout_name": "Core",
+            "exercises": [
+                {
+                    "name": "Cable Core Raise",
+                    "exercise_string": "Cable Core Raise\nBW+3, 10",
+                    "weights": [3.0],
+                    "reps": [10],
+                    "valid": True,
+                }
+            ],
+        }
+
+        handle_workout_log(self.session, user, parsed)
+        self.session.commit()
+
+        pref = self.session.query(BodyweightExercisePreference).filter_by(
+            user_id=user.id,
+            exercise_key=bodyweight_exercise_key("Cable Core Raise"),
+        ).one()
+        self.assertTrue(pref.is_bodyweight)
+        self.assertEqual(pref.source, "auto")
+
+    def test_bodyweight_parser_accepts_uppercase_bw_and_bodyweight(self):
+        bw_result = workout_parser(
+            "06/09 Core\nCable Core Raise\nBW+3, 10",
+            bodyweight=80,
+            preserve_bodyweight_offsets=True,
+        )
+        bodyweight_result = workout_parser(
+            "06/09 Core\nCable Core Raise\nbodyweight, 10",
+            bodyweight=80,
+            preserve_bodyweight_offsets=True,
+        )
+
+        self.assertEqual(bw_result["exercises"][0]["weights"], [3.0, 3.0, 3.0])
+        self.assertEqual(bodyweight_result["exercises"][0]["weights"], [0.0, 0.0, 0.0])
+
+    def test_deselect_bodyweight_exercise_requires_history_resolution(self):
+        user = self._create_logged_in_user(username="bw_deselect_user")
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 9, 1),
+                workout_name="Core",
+                exercise="Crunches A",
+                exercise_string="Crunches A\nBW+2, 15",
+                sets_json={"weights": [2.0], "reps": [15]},
+                bodyweight=user.bodyweight,
+                uses_bodyweight=True,
+                estimated_1rm=123.0,
+            )
+        )
+        self.session.commit()
+
+        response = self.client.post(
+            "/settings/more",
+            data={
+                "form_type": "bodyweight_exercise",
+                "exercise_name": "Crunches A",
+                "is_bodyweight": "0",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("previous bodyweight history", page)
+        self.assertTrue(
+            self.session.query(WorkoutLog).filter_by(exercise="Crunches A").one().uses_bodyweight
+        )
 
     def test_profile_photo_upload_writes_to_r2_when_configured(self):
         user = self._create_logged_in_user(username="avatar_upload_user")

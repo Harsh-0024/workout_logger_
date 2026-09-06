@@ -20,6 +20,7 @@ from services.stats import (
     get_overall_progress_data,
     get_json_export,
 )
+from services.bodyweight import backfill_bodyweight_log_flags
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -52,6 +53,7 @@ def register_stats_routes(app):
 
         try:
             updated = backfill_log_bodyweight(Session, user)
+            updated += backfill_bodyweight_log_flags(Session, user.id)
             if updated:
                 Session.commit()
             exercises = (
@@ -145,6 +147,7 @@ def register_stats_routes(app):
             exercise = sanitize_text_input(exercise, max_length=100, allow_html=True)
             exercise = html.unescape(exercise)
             updated = backfill_log_bodyweight(Session, user)
+            updated += backfill_bodyweight_log_flags(Session, user.id)
             if updated:
                 Session.commit()
             return jsonify(get_chart_data(Session, user, exercise))
@@ -158,6 +161,7 @@ def register_stats_routes(app):
 
         try:
             updated = backfill_log_bodyweight(Session, user)
+            updated += backfill_bodyweight_log_flags(Session, user.id)
             if updated:
                 Session.commit()
 

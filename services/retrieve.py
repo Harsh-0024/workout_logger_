@@ -6,6 +6,7 @@ from config import Config
 from models import Plan, RepRange, User, UserRole, WorkoutLog
 from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
 from services.best_scoring import best_workout_strength_score, coerce_equal_len_sets
+from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweight, is_bodyweight_enabled
 from services.workout_quality import WorkoutQualityScorer
 from services.exercise_matching import (
     build_name_index,
@@ -255,7 +256,7 @@ def generate_retrieve_output(db_session, user, category, day_id):
                 logged_exercise_index=logged_exercise_index,
             )
 
-            if _is_bw_exercise(ex_name):
+            if _is_bw_exercise(db_session, user.id, ex_name):
                 if not sets_line:
                     sets_line = "bw/4, 1"
                 sets_line = _normalize_bw(sets_line)
@@ -402,7 +403,9 @@ def _compress_shorthand_values(values):
     return list(values)
 
 
-def _is_bw_exercise(exercise: str) -> bool:
+def _is_bw_exercise(db_session, user_id: int, exercise: str) -> bool:
+    if is_bodyweight_enabled(db_session, user_id, exercise):
+        return True
     if exercise in BW_EXERCISES:
         return True
     normalized = exercise.strip().lower().replace("-", " ").replace("_", " ")
@@ -485,7 +488,8 @@ def _build_best_sets_line_from_logs(
     fallback = []
 
     for log in logs:
-        sets_json = log.sets_json if isinstance(log.sets_json, dict) else None
+        sets_json = effective_sets_for_log(db_session, log)
+        sets_json = sets_json if isinstance(sets_json, dict) else None
         if not sets_json:
             continue
         weights = sets_json.get("weights") or []
@@ -519,7 +523,8 @@ def _build_best_sets_line_from_logs(
 
     use_bw_format = _log_uses_bw_notation(best_log, exercise)
 
-    sets_json = best_log.sets_json if isinstance(best_log.sets_json, dict) else None
+    sets_json = effective_sets_for_log(db_session, best_log)
+    sets_json = sets_json if isinstance(sets_json, dict) else None
     if not sets_json:
         if use_bw_format and best_log.exercise_string:
             extracted = _extract_sets_line(best_log.exercise_string, best_log.exercise)
@@ -753,6 +758,8 @@ def _extract_sets_line(best_string: str, exercise: str) -> str:
 
 
 def _log_uses_bw_notation(log, exercise: str) -> bool:
+    if infer_log_uses_bodyweight(None, log):
+        return True
     sets_line = _extract_sets_line(getattr(log, "exercise_string", ""), exercise)
     if not sets_line:
         return False

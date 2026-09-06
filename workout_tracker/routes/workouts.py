@@ -29,6 +29,12 @@ from services.logging import (
 )
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names
+from services.bodyweight import (
+    backfill_bodyweight_log_flags,
+    effective_sets_for_log,
+    infer_log_uses_bodyweight,
+    has_bodyweight_token,
+)
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
 from utils.profile_images import get_profile_image_url
@@ -127,8 +133,7 @@ def register_workout_routes(app):
         )
 
     def _log_uses_bw(log):
-        haystack = f"{getattr(log, 'exercise_string', '')} {getattr(log, 'sets_display', '')}".lower()
-        return 'bw' in haystack
+        return infer_log_uses_bodyweight(Session, log)
 
     def build_exercise_text(logs):
         lines = []
@@ -400,6 +405,17 @@ def register_workout_routes(app):
                 flash("Workout not found.", "error")
                 return redirect(url_for('user_dashboard', username=user.username))
 
+            if backfill_bodyweight_log_flags(Session, user.id):
+                Session.commit()
+                logs = (
+                    Session.query(WorkoutLog)
+                    .filter_by(user_id=user.id)
+                    .filter(WorkoutLog.date >= start_dt)
+                    .filter(WorkoutLog.date < end_dt)
+                    .order_by(WorkoutLog.id)
+                    .all()
+                )
+
             default_back_url = url_for('user_dashboard', username=user.username)
             back_url = default_back_url
             return_to = (request.args.get('return_to') or '').strip()
@@ -480,9 +496,10 @@ def register_workout_routes(app):
                 if user.bodyweight is None and _log_uses_bw(log):
                     missing_bw_exercises.add(log.exercise)
                 total_volume = 0
-                if log.sets_json and isinstance(log.sets_json, dict):
-                    weights = log.sets_json.get('weights') or []
-                    reps_list = log.sets_json.get('reps') or []
+                effective_sets = effective_sets_for_log(Session, log)
+                if effective_sets and isinstance(effective_sets, dict):
+                    weights = effective_sets.get('weights') or []
+                    reps_list = effective_sets.get('reps') or []
                     for weight, reps in zip(weights, reps_list):
                         try:
                             total_volume += float(weight) * int(reps)
@@ -2777,7 +2794,7 @@ def register_workout_routes(app):
                 header_date = new_date.strftime('%d/%m')
                 raw_text = f"{header_date} {title}\n{exercises_input}"
 
-                parsed = workout_parser(raw_text, bodyweight=user.bodyweight)
+                parsed = workout_parser(raw_text, bodyweight=user.bodyweight, preserve_bodyweight_offsets=True)
                 if not parsed:
                     raise ParsingError("Could not parse workout data. Please check the format.")
 
@@ -2941,7 +2958,7 @@ def register_workout_routes(app):
             return None, "Please enter workout data."
 
         try:
-            parsed = workout_parser(text, bodyweight=user.bodyweight)
+            parsed = workout_parser(text, bodyweight=user.bodyweight, preserve_bodyweight_offsets=True)
             if not parsed:
                 raise ParsingError("Could not parse workout data. Please check the format.")
         except ParsingError as e:
@@ -2950,9 +2967,7 @@ def register_workout_routes(app):
             logger.error(f"Parsing error: {e}", exc_info=True)
             return None, "Error parsing workout data. Please check the format."
 
-        needs_bodyweight_info = bool(
-            user.bodyweight is None and re.search(r'\bbw[+-]?\d*\b', text, re.IGNORECASE)
-        )
+        needs_bodyweight_info = bool(user.bodyweight is None and has_bodyweight_token(text))
 
         parsed_date = parsed.get('date')
         if parsed_date:

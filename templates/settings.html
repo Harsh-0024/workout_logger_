@@ -73,6 +73,9 @@
                 <a href="{{ url_for('shortcut_urls') }}" class="btn btn-gold-outline">
                     <i class="bi bi-link-45deg me-2"></i>Shortcut URLs
                 </a>
+                <a href="{{ url_for('more_settings') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-sliders2-vertical me-2"></i>More Settings
+                </a>
                 {% if current_user.is_admin() %}
                 <a href="{{ url_for('admin_dashboard') }}" class="btn btn-gold-outline">
                     <i class="bi bi-shield-lock me-2"></i>Admin Dashboard

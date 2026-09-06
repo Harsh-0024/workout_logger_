@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-3 mt-md-4">
+    <div class="col-12 col-xl-10">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+            <div>
+                <h2 class="fw-bold mb-2" style="font-size: clamp(1.5rem, 6vw, 2rem);">More Settings</h2>
+                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Advanced workout behavior</p>
+            </div>
+            <a href="{{ url_for('user_settings') }}#quick-actions" class="btn btn-gold-outline">
+                <i class="bi bi-arrow-left me-2"></i>Back to Settings
+            </a>
+        </div>
+
+        <div class="card mb-4" id="bodyweight-exercises">
+            <div class="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-person-arms-up text-gold"></i>
+                    <h5 class="mb-0 fw-bold">Bodyweight Exercises</h5>
+                </div>
+                <div class="settings-search-wrap">
+                    <i class="bi bi-search"></i>
+                    <input type="search" id="bodyweightSearch" class="form-control" placeholder="Search exercises">
+                </div>
+            </div>
+
+            {% if pending_bodyweight %}
+            <div class="bodyweight-clarify mb-4">
+                <div class="d-flex align-items-start gap-3 mb-3">
+                    <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+                    <div>
+                        <h6 class="fw-bold mb-1">{{ pending_bodyweight.exercise }}</h6>
+                        <p class="text-muted mb-0" style="font-size: var(--fs-sm);">
+                            This exercise has previous bodyweight history. Choose how old logs should be read before deselecting it.
+                        </p>
+                    </div>
+                </div>
+                <form method="POST" action="{{ url_for('more_settings') }}#bodyweight-exercises">
+                    <input type="hidden" name="form_type" value="bodyweight_exercise">
+                    <input type="hidden" name="exercise_name" value="{{ pending_bodyweight.exercise }}">
+                    <input type="hidden" name="is_bodyweight" value="0">
+                    <div class="clarify-options">
+                        <label class="clarify-option">
+                            <input type="radio" name="history_resolution" value="future_only" checked>
+                            <span>
+                                <strong>Future only</strong>
+                                <small>Old logs keep their saved meaning.</small>
+                            </span>
+                        </label>
+                        <label class="clarify-option">
+                            <input type="radio" name="history_resolution" value="keep_offsets">
+                            <span>
+                                <strong>Keep old logs as BW offsets</strong>
+                                <small>Past plain numbers mean BW plus that number.</small>
+                            </span>
+                        </label>
+                        <label class="clarify-option">
+                            <input type="radio" name="history_resolution" value="literal">
+                            <span>
+                                <strong>Treat old logs as literal weights</strong>
+                                <small>Past plain numbers mean the written kg value.</small>
+                            </span>
+                        </label>
+                    </div>
+                    <div class="d-flex flex-column flex-sm-row gap-2 mt-3">
+                        <button type="submit" class="btn btn-gold-solid flex-fill">
+                            <i class="bi bi-check2-circle me-2"></i>Apply
+                        </button>
+                        <a href="{{ url_for('more_settings') }}#bodyweight-exercises" class="btn btn-gold-outline flex-fill">
+                            Cancel
+                        </a>
+                    </div>
+                </form>
+            </div>
+            {% endif %}
+
+            <div class="bodyweight-list" id="bodyweightList">
+                {% for row in bodyweight_rows %}
+                <div class="bodyweight-row" data-exercise-row data-name="{{ row.name|lower }}">
+                    <div class="bodyweight-row-main">
+                        <div class="bodyweight-name">{{ row.name }}</div>
+                        <div class="bodyweight-meta">
+                            {% if row.enabled %}
+                                <span class="bodyweight-pill enabled">Included</span>
+                            {% else %}
+                                <span class="bodyweight-pill">Excluded</span>
+                            {% endif %}
+                            {% if row.source == 'auto' %}
+                                <span class="bodyweight-pill auto">Auto</span>
+                            {% elif row.source == 'default' %}
+                                <span class="bodyweight-pill default">Default</span>
+                            {% endif %}
+                            {% if row.conflict.total %}
+                                <span class="bodyweight-count">{{ row.conflict.total }} log{{ '' if row.conflict.total == 1 else 's' }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <form method="POST" action="{{ url_for('more_settings') }}#bodyweight-exercises" class="m-0">
+                        <input type="hidden" name="form_type" value="bodyweight_exercise">
+                        <input type="hidden" name="exercise_name" value="{{ row.name }}">
+                        <input type="hidden" name="is_bodyweight" value="{{ 0 if row.enabled else 1 }}">
+                        <button type="submit" class="btn {{ 'btn-gold-outline' if row.enabled else 'btn-gold-solid' }} bodyweight-toggle-btn">
+                            {% if row.enabled %}
+                                <i class="bi bi-toggle-on me-2"></i>Deselect
+                            {% else %}
+                                <i class="bi bi-toggle-off me-2"></i>Select
+                            {% endif %}
+                        </button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .settings-search-wrap {
+        position: relative;
+        width: min(100%, 360px);
+    }
+
+    .settings-search-wrap i {
+        position: absolute;
+        left: 1rem;
+        top: 50%;
+        transform: translateY(-50%);
+        color: var(--text-muted);
+        pointer-events: none;
+    }
+
+    .settings-search-wrap .form-control {
+        padding-left: 2.75rem;
+    }
+
+    .bodyweight-list {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .bodyweight-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.03);
+    }
+
+    .bodyweight-row-main {
+        min-width: 0;
+    }
+
+    .bodyweight-name {
+        color: var(--text-primary);
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+    }
+
+    .bodyweight-meta {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .bodyweight-pill,
+    .bodyweight-count {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.45rem;
+        padding: 0.18rem 0.55rem;
+        border-radius: 999px;
+        font-size: var(--fs-xs);
+        color: var(--text-muted);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border-subtle);
+    }
+
+    .bodyweight-pill.enabled {
+        color: #bbf7d0;
+        background: rgba(34, 197, 94, 0.16);
+        border-color: rgba(34, 197, 94, 0.36);
+    }
+
+    .bodyweight-pill.auto,
+    .bodyweight-pill.default {
+        color: var(--gold-primary);
+        background: var(--gold-subtle);
+        border-color: rgba(212, 175, 55, 0.35);
+    }
+
+    .bodyweight-toggle-btn {
+        min-width: 8.5rem;
+    }
+
+    .bodyweight-clarify {
+        border: 1px solid rgba(245, 158, 11, 0.45);
+        border-radius: 8px;
+        background: rgba(245, 158, 11, 0.08);
+        padding: 1rem;
+    }
+
+    .clarify-options {
+        display: grid;
+        gap: 0.65rem;
+    }
+
+    .clarify-option {
+        display: flex;
+        gap: 0.75rem;
+        padding: 0.85rem;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        background: rgba(0, 0, 0, 0.18);
+        cursor: pointer;
+    }
+
+    .clarify-option input {
+        margin-top: 0.2rem;
+    }
+
+    .clarify-option strong,
+    .clarify-option small {
+        display: block;
+    }
+
+    .clarify-option small {
+        color: var(--text-muted);
+        margin-top: 0.15rem;
+    }
+
+    @media (max-width: 576px) {
+        .bodyweight-row {
+            align-items: stretch;
+            flex-direction: column;
+        }
+
+        .bodyweight-toggle-btn {
+            width: 100%;
+        }
+    }
+</style>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const search = document.getElementById('bodyweightSearch');
+        const rows = Array.from(document.querySelectorAll('[data-exercise-row]'));
+        if (!search || !rows.length) return;
+        search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            rows.forEach(row => {
+                const name = row.dataset.name || '';
+                row.style.display = !q || name.includes(q) ? '' : 'none';
+            });
+        });
+    });
+</script>
+{% endblock %}
