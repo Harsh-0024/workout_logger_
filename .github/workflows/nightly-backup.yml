@@ -22,8 +22,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      # Step 2: Install the official PostgreSQL command-line tools.
-      # These include:
+      # Step 2: Install the official PostgreSQL 18 command-line tools.
+      # Ubuntu's default apt repository provides an older pg_dump version.
+      # pg_dump must be the same major version as, or newer than, the database
+      # server being backed up, so we use PostgreSQL's official apt repository.
+      # These tools include:
       # - pg_dump: creates the backup from Neon
       # - pg_restore: restores the backup into Supabase
       # - psql: general PostgreSQL command-line tool, useful for troubleshooting
@@ -31,7 +34,19 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install --yes postgresql-client
+          sudo apt-get install --yes curl ca-certificates
+
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+            --fail https://www.postgresql.org/media/keys/ACCC4CF8.asc
+
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-18
+
+          /usr/lib/postgresql/18/bin/pg_dump --version
 
       # Step 3: Create a timestamped backup file from the Neon database.
       # The database URL comes from the NEON_DIRECT_URL GitHub secret.
@@ -44,7 +59,7 @@ jobs:
           BACKUP_TIMESTAMP="$(date -u +'%Y-%m-%d_%H-%M-%S')"
           DUMP_FILE="backup_${BACKUP_TIMESTAMP}.dump"
 
-          pg_dump "$NEON_DIRECT_URL" \
+          /usr/lib/postgresql/18/bin/pg_dump "$NEON_DIRECT_URL" \
             --format=custom \
             --file="$DUMP_FILE"
 
@@ -59,7 +74,7 @@ jobs:
           SUPABASE_RESTORE_URL: ${{ secrets.SUPABASE_RESTORE_URL }}
         run: |
           set -euo pipefail
-          pg_restore \
+          /usr/lib/postgresql/18/bin/pg_restore \
             --dbname="$SUPABASE_RESTORE_URL" \
             --no-owner \
             --no-privileges \
