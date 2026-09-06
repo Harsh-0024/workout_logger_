@@ -1,0 +1,97 @@
+# Nightly database backup and restore workflow.
+#
+# This workflow runs every night at 2:00 AM UTC. It can also be started manually
+# from the GitHub Actions tab using "Run workflow", which is useful for testing.
+name: Nightly Backup
+
+on:
+  schedule:
+    # Run every day at 2:00 AM UTC.
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+jobs:
+  backup-restore-and-upload:
+    name: Backup Neon, restore Supabase, upload to Drive
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Download this repository onto the GitHub Actions runner.
+      # This gives the workflow a normal working folder where it can create the
+      # backup file before uploading it.
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      # Step 2: Install the official PostgreSQL command-line tools.
+      # These include:
+      # - pg_dump: creates the backup from Neon
+      # - pg_restore: restores the backup into Supabase
+      # - psql: general PostgreSQL command-line tool, useful for troubleshooting
+      - name: Install PostgreSQL client tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      # Step 3: Create a timestamped backup file from the Neon database.
+      # The database URL comes from the NEON_DIRECT_URL GitHub secret.
+      # The custom dump format (-Fc) is required so pg_restore can use this file.
+      - name: Create timestamped Neon backup
+        env:
+          NEON_DIRECT_URL: ${{ secrets.NEON_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          BACKUP_TIMESTAMP="$(date -u +'%Y-%m-%d_%H-%M-%S')"
+          DUMP_FILE="backup_${BACKUP_TIMESTAMP}.dump"
+
+          pg_dump "$NEON_DIRECT_URL" \
+            --format=custom \
+            --file="$DUMP_FILE"
+
+          echo "DUMP_FILE=$DUMP_FILE" >> "$GITHUB_ENV"
+
+      # Step 4: Restore that same backup file into the Supabase database.
+      # The --clean and --if-exists flags remove existing database objects first,
+      # so the nightly restore replaces yesterday's data instead of failing with
+      # "already exists" errors.
+      - name: Restore backup into Supabase
+        env:
+          SUPABASE_RESTORE_URL: ${{ secrets.SUPABASE_RESTORE_URL }}
+        run: |
+          set -euo pipefail
+          pg_restore \
+            --dbname="$SUPABASE_RESTORE_URL" \
+            --no-owner \
+            --no-privileges \
+            --clean \
+            --if-exists \
+            "$DUMP_FILE"
+
+      # Step 5a: Install the official Google Python client libraries.
+      # These libraries let the upload script refresh an OAuth token and upload
+      # directly to Google Drive without relying on a third-party action.
+      - name: Install Google Drive upload libraries
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          python -m pip install google-api-python-client google-auth
+
+      # Step 5b: Upload the same dump file to the Google Drive folder.
+      # This uses OAuth 2.0 credentials for the repository owner's Google account,
+      # not a service account. The refresh token was generated manually once and
+      # stored as a GitHub secret so this workflow can run without opening a
+      # browser or asking anyone to sign in during the nightly run.
+      # The target Google Drive folder ID must be stored in GDRIVE_FOLDER_ID.
+      - name: Upload backup dump to Google Drive
+        env:
+          GDRIVE_FOLDER_ID: ${{ secrets.GDRIVE_FOLDER_ID }}
+          GDRIVE_OAUTH_CLIENT_ID: ${{ secrets.GDRIVE_OAUTH_CLIENT_ID }}
+          GDRIVE_OAUTH_CLIENT_SECRET: ${{ secrets.GDRIVE_OAUTH_CLIENT_SECRET }}
+          GDRIVE_OAUTH_REFRESH_TOKEN: ${{ secrets.GDRIVE_OAUTH_REFRESH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/upload_to_drive.py
+
+      # If the backup, restore, or upload step fails, GitHub Actions will stop the
+      # job and mark the whole workflow run as failed. That makes the problem
+      # visible in the GitHub Actions tab.
