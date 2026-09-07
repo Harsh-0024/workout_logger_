@@ -1,0 +1,596 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center custom-retrieve-page">
+    <div class="col-12 col-md-10 col-lg-8">
+        <form method="POST" action="{{ url_for('retrieve_custom') }}" id="customRetrieveForm" class="card custom-retrieve-card">
+            {% if ENABLE_CSRF %}
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            {% endif %}
+            <div class="text-center mb-4">
+                <div class="mb-3">
+                    <i class="bi bi-sliders2-vertical retrieve-icon" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.7;"></i>
+                </div>
+                <h2 class="mb-0 fw-bold" style="font-size: clamp(1.5rem, 5vw, 2rem);">Custom Retrieve</h2>
+            </div>
+
+            <div class="input-group mb-3 custom-search-wrap">
+                <span class="input-group-text"><i class="bi bi-search" aria-hidden="true"></i></span>
+                <input type="search" id="exerciseSearch" class="form-control" placeholder="Search exercises" autocomplete="off" aria-label="Search exercises">
+                <button type="button" class="btn btn-gold-outline" id="clearSearchBtn" aria-label="Clear search" title="Clear search" hidden>
+                    <i class="bi bi-x-lg" aria-hidden="true"></i>
+                </button>
+            </div>
+
+            <div id="selectionStatus" class="visually-hidden" aria-live="polite"></div>
+            <div class="exercise-picker-panel" aria-label="Exercise selection">
+                <div class="d-flex align-items-center justify-content-between gap-3 mb-2 custom-exercise-list-header">
+                    <h3 class="available-exercises-heading mb-0">Exercises</h3>
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="availableCount" class="text-muted small"></span>
+                        <div class="custom-sort-menu" id="customSortMenu">
+                            <button type="button" class="custom-sort-trigger" id="customSortTrigger" aria-haspopup="menu" aria-expanded="false" aria-controls="customSortOptions" data-sort-mode="{{ sort_mode }}">
+                                <i class="bi bi-sort-down" aria-hidden="true"></i>
+                                <span id="customSortLabel"></span>
+                                <i class="bi bi-chevron-down custom-sort-chevron" aria-hidden="true"></i>
+                            </button>
+                            <div class="custom-sort-options" id="customSortOptions" role="menu" aria-label="Sort exercises" hidden>
+                                <button type="button" role="menuitemradio" class="custom-sort-option" data-sort-mode="most_retrieved" aria-checked="false">Most retrieved</button>
+                                <button type="button" role="menuitemradio" class="custom-sort-option" data-sort-mode="alpha_asc" aria-checked="false">A-Z</button>
+                                <button type="button" role="menuitemradio" class="custom-sort-option" data-sort-mode="alpha_desc" aria-checked="false">Z-A</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="selectedSection" class="selected-exercises-section" hidden>
+                    <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                        <h3 class="selected-exercises-heading mb-0">Selected <span id="selectedCount">0</span></h3>
+                        <button type="button" class="btn btn-gold-outline btn-sm icon-only-button" id="clearSelectionBtn" aria-label="Clear selected exercises" title="Clear selected exercises">
+                            <i class="bi bi-x-lg" aria-hidden="true"></i>
+                        </button>
+                    </div>
+                    <div id="selectedExerciseList" class="exercise-picker-list" aria-label="Selected exercises"></div>
+                </div>
+                <div id="availableExerciseList" class="exercise-picker-list" aria-label="Available exercises">
+                    {% for exercise in exercises %}
+                    <div class="exercise-picker-item" data-key="{{ exercise.key }}" data-search="{{ exercise.name | lower }}" data-retrieval-count="{{ exercise.retrieval_count }}" data-last-retrieved="{{ exercise.last_retrieved_at.strftime('%Y-%m-%dT%H:%M:%S') if exercise.last_retrieved_at else '' }}">
+                        <input class="form-check-input exercise-picker-checkbox" type="checkbox" value="{{ exercise.key }}" id="exercise-option-{{ loop.index }}">
+                        <label class="exercise-picker-name" for="exercise-option-{{ loop.index }}">{{ exercise.name }}</label>
+                        <button type="button" class="set-count-toggle" data-key="{{ exercise.key }}" role="switch" aria-checked="false" aria-label="Set count for {{ exercise.name }}" hidden>
+                            <span class="set-count-label">3 sets</span>
+                        </button>
+                        <i class="bi bi-check-lg exercise-picker-check" aria-hidden="true"></i>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div id="noExercisesFound" class="text-muted text-center py-4" hidden>No exercises found.</div>
+            </div>
+
+            <div id="selectedExerciseFields"></div>
+            <div class="custom-retrieve-actions">
+                <button type="submit" id="getWorkoutBtn" class="btn btn-gold-solid w-100 py-3 fw-bold" disabled>
+                    <i class="bi bi-clipboard2-pulse-fill me-2" aria-hidden="true"></i>Get Workout <span id="getWorkoutCount"></span>
+                </button>
+            </div>
+
+            <div class="text-center pt-3 mt-3 border-top" style="border-color: var(--border-subtle) !important;">
+                <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                    <i class="bi bi-arrow-left me-1"></i>Back Home
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    (function() {
+        const maxSelections = 30;
+        const form = document.getElementById('customRetrieveForm');
+        const searchInput = document.getElementById('exerciseSearch');
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+        const selectedSection = document.getElementById('selectedSection');
+        const selectedList = document.getElementById('selectedExerciseList');
+        const availableList = document.getElementById('availableExerciseList');
+        const selectedCount = document.getElementById('selectedCount');
+        const availableCount = document.getElementById('availableCount');
+        const getWorkoutBtn = document.getElementById('getWorkoutBtn');
+        const getWorkoutCount = document.getElementById('getWorkoutCount');
+        const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+        const selectedFields = document.getElementById('selectedExerciseFields');
+        const status = document.getElementById('selectionStatus');
+        const noExercisesFound = document.getElementById('noExercisesFound');
+        const sortMenu = document.getElementById('customSortMenu');
+        const sortTrigger = document.getElementById('customSortTrigger');
+        const sortLabel = document.getElementById('customSortLabel');
+        const sortOptions = Array.from(document.querySelectorAll('.custom-sort-option'));
+        const sortOptionsPanel = document.getElementById('customSortOptions');
+        const items = Array.from(availableList.querySelectorAll('.exercise-picker-item'));
+        const itemByKey = new Map(items.map(item => [item.dataset.key, item]));
+        let selectedKeys = [];
+        const twoSetKeys = new Set();
+        let sortMode = sortTrigger.dataset.sortMode || 'most_retrieved';
+
+        const sortLabels = {
+            most_retrieved: 'Most retrieved',
+            alpha_asc: 'A-Z',
+            alpha_desc: 'Z-A',
+        };
+
+        const normalize = (value) => String(value || '')
+            .toLowerCase()
+            .replace(/[‐‑‒–—−-]+/g, ' ')
+            .replace(/[^a-z0-9\s]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        const syncSelection = () => {
+            const selected = new Set(selectedKeys);
+            for (const item of items) {
+                const checkbox = item.querySelector('input');
+                const setToggle = item.querySelector('.set-count-toggle');
+                const isSelected = selected.has(item.dataset.key);
+                checkbox.checked = isSelected;
+                item.classList.toggle('is-selected', isSelected);
+                setToggle.hidden = !isSelected;
+                const usesTwoSets = twoSetKeys.has(item.dataset.key);
+                setToggle.classList.toggle('is-active', usesTwoSets);
+                setToggle.setAttribute('aria-checked', String(usesTwoSets));
+                setToggle.querySelector('.set-count-label').textContent = usesTwoSets ? '2 sets' : '3 sets';
+            }
+        };
+
+        const sortItems = () => {
+            const mode = sortMode;
+            items.sort((left, right) => {
+                const leftName = left.dataset.search || '';
+                const rightName = right.dataset.search || '';
+                if (mode === 'alpha_desc') return rightName.localeCompare(leftName);
+                if (mode === 'alpha_asc') return leftName.localeCompare(rightName);
+
+                const countDiff = Number(right.dataset.retrievalCount || 0) - Number(left.dataset.retrievalCount || 0);
+                if (countDiff) return countDiff;
+                const leftTimestamp = Date.parse(left.dataset.lastRetrieved || '');
+                const rightTimestamp = Date.parse(right.dataset.lastRetrieved || '');
+                const lastRetrievedDiff = (Number.isFinite(rightTimestamp) ? rightTimestamp : 0)
+                    - (Number.isFinite(leftTimestamp) ? leftTimestamp : 0);
+                if (lastRetrievedDiff) return lastRetrievedDiff;
+                return leftName.localeCompare(rightName);
+            });
+        };
+
+        const closeSortMenu = () => {
+            sortOptionsPanel.hidden = true;
+            sortTrigger.setAttribute('aria-expanded', 'false');
+            sortMenu.classList.remove('is-open');
+        };
+
+        const syncSortMenu = () => {
+            sortLabel.textContent = sortLabels[sortMode] || sortLabels.most_retrieved;
+            sortTrigger.dataset.sortMode = sortMode;
+            for (const option of sortOptions) {
+                const isActive = option.dataset.sortMode === sortMode;
+                option.classList.toggle('is-active', isActive);
+                option.setAttribute('aria-checked', String(isActive));
+            }
+        };
+
+        const saveSortPreference = () => {
+            const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+            fetch('{{ url_for("save_custom_retrieval_sort_preference") }}', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                    'X-CSRFToken': csrfToken,
+                },
+                body: new URLSearchParams({ sort_mode: sortMode }).toString(),
+            }).then(response => {
+                if (!response.ok) throw new Error('Unable to save sort preference');
+            }).catch(() => {
+                status.textContent = 'Unable to save the sort preference right now.';
+            });
+        };
+
+        const render = () => {
+            const selected = new Set(selectedKeys);
+            sortItems();
+            selectedList.replaceChildren();
+            availableList.replaceChildren();
+
+            for (const key of selectedKeys) {
+                const item = itemByKey.get(key);
+                if (item) selectedList.append(item);
+            }
+            for (const item of items) {
+                if (!selected.has(item.dataset.key)) availableList.append(item);
+            }
+
+            selectedSection.hidden = selectedKeys.length === 0;
+            selectedCount.textContent = String(selectedKeys.length);
+            getWorkoutCount.textContent = selectedKeys.length ? `(${selectedKeys.length})` : '';
+            getWorkoutBtn.disabled = selectedKeys.length === 0;
+            applySearch();
+        };
+
+        const applySearch = () => {
+            const query = normalize(searchInput.value);
+            let visibleAvailable = 0;
+            for (const item of availableList.querySelectorAll('.exercise-picker-item')) {
+                const matches = !query || normalize(item.dataset.search).includes(query);
+                item.hidden = !matches;
+                if (matches) visibleAvailable += 1;
+            }
+            availableCount.textContent = `${visibleAvailable} available`;
+            noExercisesFound.hidden = visibleAvailable !== 0;
+            clearSearchBtn.hidden = !searchInput.value;
+        };
+
+        const clearSelection = () => {
+            selectedKeys = [];
+            twoSetKeys.clear();
+            syncSelection();
+            render();
+            status.textContent = 'Selection cleared.';
+        };
+
+        items.forEach(item => {
+            const checkbox = item.querySelector('input');
+            checkbox.addEventListener('change', () => {
+                const key = item.dataset.key;
+                if (checkbox.checked) {
+                    if (selectedKeys.length >= maxSelections) {
+                        checkbox.checked = false;
+                        status.textContent = `You can select up to ${maxSelections} exercises.`;
+                        return;
+                    }
+                    if (!selectedKeys.includes(key)) selectedKeys.push(key);
+                } else {
+                    selectedKeys = selectedKeys.filter(selectedKey => selectedKey !== key);
+                    twoSetKeys.delete(key);
+                }
+                syncSelection();
+                render();
+                status.textContent = `${selectedKeys.length} exercise${selectedKeys.length === 1 ? '' : 's'} selected.`;
+            });
+
+            item.addEventListener('click', (event) => {
+                if (event.target.closest('input, label, button')) return;
+                checkbox.click();
+            });
+
+            const setToggle = item.querySelector('.set-count-toggle');
+            setToggle.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const key = item.dataset.key;
+                if (!selectedKeys.includes(key)) return;
+                if (twoSetKeys.has(key)) {
+                    twoSetKeys.delete(key);
+                } else {
+                    twoSetKeys.add(key);
+                }
+                syncSelection();
+                status.textContent = twoSetKeys.has(key)
+                    ? 'Set to 2 sets.'
+                    : 'Set to 3 sets.';
+            });
+        });
+
+        searchInput.addEventListener('input', applySearch);
+        clearSearchBtn.addEventListener('click', () => {
+            searchInput.value = '';
+            applySearch();
+            searchInput.focus();
+        });
+        clearSelectionBtn.addEventListener('click', clearSelection);
+        sortTrigger.addEventListener('click', () => {
+            const isOpen = !sortOptionsPanel.hidden;
+            sortOptionsPanel.hidden = isOpen;
+            sortTrigger.setAttribute('aria-expanded', String(!isOpen));
+            sortMenu.classList.toggle('is-open', !isOpen);
+        });
+        sortOptions.forEach(option => option.addEventListener('click', () => {
+            sortMode = option.dataset.sortMode || 'most_retrieved';
+            syncSortMenu();
+            render();
+            closeSortMenu();
+            saveSortPreference();
+        }));
+        document.addEventListener('click', event => {
+            if (!sortMenu.contains(event.target)) closeSortMenu();
+        });
+        document.addEventListener('keydown', event => {
+            if (event.key === 'Escape') closeSortMenu();
+        });
+
+        form.addEventListener('submit', (event) => {
+            if (!selectedKeys.length) {
+                event.preventDefault();
+                return;
+            }
+            selectedFields.replaceChildren();
+            for (const key of selectedKeys) {
+                const field = document.createElement('input');
+                field.type = 'hidden';
+                field.name = 'exercise';
+                field.value = key;
+                selectedFields.append(field);
+
+                if (twoSetKeys.has(key)) {
+                    const twoSetField = document.createElement('input');
+                    twoSetField.type = 'hidden';
+                    twoSetField.name = 'two_set_exercise';
+                    twoSetField.value = key;
+                    selectedFields.append(twoSetField);
+                }
+            }
+        });
+
+        syncSortMenu();
+        render();
+    })();
+</script>
+
+<style>
+    .custom-retrieve-card {
+        max-width: 760px;
+        margin: 0 auto;
+    }
+
+    .custom-search-wrap .input-group-text {
+        color: var(--gold-primary);
+        border-color: var(--border-subtle);
+        background: var(--card-bg-solid);
+    }
+
+    .selected-exercises-section {
+        margin-bottom: 1.25rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .custom-exercise-list-header {
+        position: sticky;
+        top: -0.85rem;
+        z-index: 4;
+        margin: -0.85rem -0.85rem 0.85rem !important;
+        padding: 0.85rem;
+        border-bottom: 1px solid var(--border-subtle);
+        background: var(--card-bg-solid);
+    }
+
+    .exercise-picker-panel {
+        height: clamp(20rem, 52svh, 36rem);
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 0.85rem;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.015);
+    }
+
+    .selected-exercises-heading,
+    .available-exercises-heading {
+        font-size: var(--fs-sm);
+        font-weight: 700;
+        letter-spacing: 0;
+        text-transform: uppercase;
+    }
+
+    .selected-exercises-heading {
+        color: var(--gold-bright);
+    }
+
+    .custom-sort-menu {
+        position: relative;
+        flex: 0 0 auto;
+    }
+
+    .custom-sort-trigger {
+        min-width: 10.5rem;
+        min-height: 2.25rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.55rem;
+        padding: 0.4rem 0.65rem;
+        border: 1px solid var(--border-gold);
+        border-radius: 8px;
+        background: var(--card-bg-solid);
+        color: var(--text-primary);
+        font-size: var(--fs-sm);
+        font-weight: 600;
+        text-align: left;
+    }
+
+    .custom-sort-trigger:hover,
+    .custom-sort-menu.is-open .custom-sort-trigger {
+        border-color: var(--gold-primary);
+        background: var(--gold-subtle);
+    }
+
+    .custom-sort-trigger:focus-visible,
+    .set-count-toggle:focus-visible {
+        outline: 2px solid var(--gold-primary);
+        outline-offset: 2px;
+    }
+
+    .custom-sort-chevron {
+        color: var(--gold-primary);
+        font-size: 0.75rem;
+    }
+
+    .custom-sort-menu.is-open .custom-sort-chevron {
+        transform: rotate(180deg);
+    }
+
+    .custom-sort-options {
+        position: absolute;
+        z-index: 10;
+        top: calc(100% + 0.4rem);
+        right: 0;
+        min-width: 100%;
+        padding: 0.35rem;
+        border: 1px solid var(--border-gold);
+        border-radius: 8px;
+        background: var(--card-bg-solid);
+        box-shadow: var(--shadow-md);
+    }
+
+    .custom-sort-option {
+        width: 100%;
+        min-height: 2.25rem;
+        display: flex;
+        align-items: center;
+        padding: 0.35rem 0.6rem;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--text-secondary);
+        font-size: var(--fs-sm);
+        font-weight: 600;
+        text-align: left;
+    }
+
+    .custom-sort-option:hover,
+    .custom-sort-option:focus-visible,
+    .custom-sort-option.is-active {
+        background: var(--gold-subtle);
+        color: var(--gold-bright);
+        outline: none;
+    }
+
+    .icon-only-button {
+        width: 2rem;
+        height: 2rem;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .exercise-picker-list {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    .exercise-picker-item {
+        min-height: 3.1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        padding: 0.7rem 0.85rem;
+        cursor: pointer;
+        border: 1px solid var(--border-subtle);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.02);
+        transition: border-color var(--transition-base), background var(--transition-base), transform var(--transition-base);
+    }
+
+    .exercise-picker-item:hover {
+        border-color: var(--border-gold);
+        background: var(--gold-subtle);
+    }
+
+    .exercise-picker-item:has(input:focus-visible) {
+        outline: 2px solid var(--gold-primary);
+        outline-offset: 2px;
+    }
+
+    .exercise-picker-item.is-selected {
+        border-color: var(--gold-primary);
+        background: var(--gold-subtle);
+    }
+
+    .exercise-picker-checkbox.form-check-input {
+        flex: 0 0 auto;
+        width: 1.15rem;
+        height: 1.15rem;
+        margin: 0;
+        border-color: var(--border-gold);
+        background-color: rgba(212, 175, 55, 0.08);
+        accent-color: var(--gold-primary);
+    }
+
+    .exercise-picker-checkbox.form-check-input:checked {
+        background-color: var(--gold-primary);
+        border-color: var(--gold-primary);
+    }
+
+    .exercise-picker-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        color: var(--text-primary);
+        font-size: var(--fs-sm);
+        font-weight: 600;
+        overflow-wrap: anywhere;
+        cursor: pointer;
+    }
+
+    .set-count-toggle {
+        min-width: 4.6rem;
+        min-height: 2rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.2rem 0.55rem;
+        border: 1px solid var(--border-gold);
+        border-radius: 999px;
+        background: var(--card-bg-solid);
+        color: var(--text-secondary);
+        font-size: var(--fs-xs);
+        font-weight: 700;
+        white-space: nowrap;
+        transition: none;
+    }
+
+    .set-count-toggle.is-active {
+        background: var(--gold-primary);
+        border-color: var(--gold-primary);
+        color: #111111;
+    }
+
+    .exercise-picker-check {
+        flex: 0 0 auto;
+        color: var(--gold-primary);
+        opacity: 0;
+    }
+
+    .exercise-picker-item.is-selected .exercise-picker-check {
+        opacity: 1;
+    }
+
+    .custom-retrieve-actions {
+        padding-top: 1rem;
+        margin-top: 0.25rem;
+    }
+
+    @media (max-width: 576px) {
+        .custom-retrieve-page {
+            margin-bottom: 1rem;
+        }
+
+        .exercise-picker-item {
+            min-height: 3.35rem;
+            padding: 0.75rem;
+        }
+
+        .exercise-picker-panel {
+            height: clamp(19rem, 48svh, 30rem);
+            padding: 0.65rem;
+        }
+
+        .custom-exercise-list-header {
+            top: -0.65rem;
+            margin: -0.65rem -0.65rem 0.65rem !important;
+            padding: 0.65rem;
+            align-items: flex-start !important;
+            flex-direction: column;
+        }
+
+        .custom-sort-menu,
+        .custom-sort-trigger {
+            width: 100%;
+        }
+    }
+</style>
+{% endblock %}

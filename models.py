@@ -91,6 +91,8 @@ class User(Base):
     logs = relationship("WorkoutLog", back_populates="user", cascade="all, delete-orphan")
     api_keys = relationship("UserApiKey", back_populates="user", cascade="all, delete-orphan")
     bodyweight_preferences = relationship("BodyweightExercisePreference", back_populates="user", cascade="all, delete-orphan")
+    custom_retrieval_events = relationship("CustomRetrievalEvent", back_populates="user", cascade="all, delete-orphan")
+    custom_retrieval_preference = relationship("CustomRetrievalPreference", uselist=False, back_populates="user", cascade="all, delete-orphan")
     
     def is_admin(self):
         """Check if user has admin role."""
@@ -327,6 +329,32 @@ class BodyweightExercisePreference(Base):
         )
 
 
+# --- 5D. CUSTOM RETRIEVAL HISTORY AND PREFERENCES ---
+class CustomRetrievalEvent(Base):
+    __tablename__ = 'custom_retrieval_events'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    exercise_key = Column(String(160), nullable=False, index=True)
+    retrieved_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("User", back_populates="custom_retrieval_events")
+
+    __table_args__ = (
+        Index('idx_custom_retrieval_event_user_date', 'user_id', 'retrieved_at'),
+        Index('idx_custom_retrieval_event_user_exercise_date', 'user_id', 'exercise_key', 'retrieved_at'),
+    )
+
+
+class CustomRetrievalPreference(Base):
+    __tablename__ = 'custom_retrieval_preferences'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), unique=True, nullable=False, index=True)
+    sort_mode = Column(String(32), nullable=False, default='most_retrieved')
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", back_populates="custom_retrieval_preference")
+
+
 # --- MIGRATION HELPERS ---
 def migrate_schema():
     """Add missing columns to existing database tables."""
@@ -488,6 +516,12 @@ def migrate_schema():
 
             if 'bodyweight_exercise_preferences' not in inspector.get_table_names():
                 BodyweightExercisePreference.__table__.create(bind=conn, checkfirst=True)
+
+            if 'custom_retrieval_events' not in inspector.get_table_names():
+                CustomRetrievalEvent.__table__.create(bind=conn, checkfirst=True)
+
+            if 'custom_retrieval_preferences' not in inspector.get_table_names():
+                CustomRetrievalPreference.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]

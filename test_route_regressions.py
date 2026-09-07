@@ -3,7 +3,7 @@ import unittest
 import os
 import sys
 from io import BytesIO
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from urllib.parse import urlsplit
 from unittest.mock import Mock, patch
 
@@ -14,10 +14,20 @@ from sqlalchemy.pool import StaticPool
 
 import workout_tracker
 from config import Config
-from models import Base, BodyweightExercisePreference, Lift, User, UserRole, WorkoutLog
+from models import (
+    Base,
+    BodyweightExercisePreference,
+    CustomRetrievalEvent,
+    CustomRetrievalPreference,
+    Lift,
+    Plan,
+    User,
+    UserRole,
+    WorkoutLog,
+)
 from parsers.workout import workout_parser
 from services.bodyweight import bodyweight_exercise_key
-from services.exercise_matching import build_name_index
+from services.exercise_matching import build_name_index, normalize_exercise_name
 from services.logging import (
     _get_best_log,
     classify_exercise_performance,
@@ -103,6 +113,143 @@ class TestRouteRegressions(unittest.TestCase):
         token_response = self.client.get(token_path)
         self.assertEqual(token_response.status_code, 400)
         self.assertIn("Missing key", token_response.get_data(as_text=True))
+
+    def test_custom_retrieve_uses_selected_exercises_in_selection_order(self):
+        user = self._create_logged_in_user(username="custom_retrieve_user")
+        self.session.add(
+            Plan(
+                user_id=user.id,
+                text_content="Custom Focus 1\nCustom Lift - [4, 6-8]",
+            )
+        )
+        self.session.commit()
+
+        selection_page = self.client.get("/retrieve/custom")
+        self.assertEqual(selection_page.status_code, 200)
+        selection_html = selection_page.get_data(as_text=True)
+        self.assertIn("Custom Lift", selection_html)
+        self.assertIn('class="exercise-picker-panel"', selection_html)
+        header_position = selection_html.index('custom-exercise-list-header')
+        self.assertLess(
+            selection_html.index('class="exercise-picker-panel"'),
+            header_position,
+        )
+        self.assertLess(
+            header_position,
+            selection_html.index('id="selectedSection"'),
+        )
+        self.assertLess(
+            header_position,
+            selection_html.index('id="getWorkoutBtn"'),
+        )
+
+        response = self.client.post(
+            "/retrieve/custom",
+            data={
+                "exercise": [
+                    normalize_exercise_name("Barbell Curl"),
+                    normalize_exercise_name("Custom Lift"),
+                ],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Custom Workout", page)
+        self.assertIn("Custom Lift - [4, 6-8]", page)
+        self.assertIn("2 Exercises", page)
+        self.assertLess(page.index("Barbell Curl"), page.index("Custom Lift - [4, 6-8]"))
+        self.assertEqual(
+            self.session.query(CustomRetrievalEvent)
+            .filter_by(user_id=user.id)
+            .count(),
+            2,
+        )
+
+    def test_custom_retrieve_two_set_override_replaces_plan_set_target(self):
+        user = self._create_logged_in_user(username="custom_retrieve_two_sets_user")
+        self.session.add(
+            Plan(
+                user_id=user.id,
+                text_content="Custom Focus 1\nCustom Lift - [4, 6-8]",
+            )
+        )
+        self.session.commit()
+        custom_lift_key = normalize_exercise_name("Custom Lift")
+
+        response = self.client.post(
+            "/retrieve/custom",
+            data={
+                "exercise": [custom_lift_key],
+                "two_set_exercise": [custom_lift_key],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Custom Lift - [2, 6-8]", response.get_data(as_text=True))
+
+    def test_custom_retrieve_prefers_recent_retrieval_frequency(self):
+        user = self._create_logged_in_user(username="custom_retrieve_ranking_user")
+        walking_lunge_key = normalize_exercise_name("Walking Dumbbell Lunges")
+        self.session.add_all(
+            [
+                CustomRetrievalEvent(
+                    user_id=user.id,
+                    exercise_key=walking_lunge_key,
+                    retrieved_at=datetime.now() - timedelta(days=1),
+                ),
+                CustomRetrievalEvent(
+                    user_id=user.id,
+                    exercise_key=walking_lunge_key,
+                    retrieved_at=datetime.now() - timedelta(days=2),
+                ),
+                CustomRetrievalEvent(
+                    user_id=user.id,
+                    exercise_key=normalize_exercise_name("Flat Dumbbell Press"),
+                    retrieved_at=datetime.now() - timedelta(days=100),
+                ),
+            ]
+        )
+        self.session.commit()
+
+        response = self.client.get("/retrieve/custom")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertLess(page.index("Walking Dumbbell Lunges"), page.index("Barbell Curl"))
+
+    def test_custom_retrieve_sort_preference_is_saved_per_user(self):
+        user = self._create_logged_in_user(username="custom_retrieve_sort_user")
+
+        response = self.client.post(
+            "/retrieve/custom/sort-preference",
+            data={"sort_mode": "alpha_desc"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"ok": True, "sort_mode": "alpha_desc"})
+        preference = self.session.query(CustomRetrievalPreference).filter_by(user_id=user.id).one()
+        self.assertEqual(preference.sort_mode, "alpha_desc")
+
+        selection_page = self.client.get("/retrieve/custom")
+        self.assertIn(
+            'data-sort-mode="alpha_desc"',
+            selection_page.get_data(as_text=True),
+        )
+
+        invalid_response = self.client.post(
+            "/retrieve/custom/sort-preference",
+            data={"sort_mode": "unknown"},
+        )
+        self.assertEqual(invalid_response.status_code, 400)
+
+    def test_custom_retrieve_rejects_empty_selection(self):
+        self._create_logged_in_user(username="custom_retrieve_empty_user")
+
+        response = self.client.post("/retrieve/custom")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/retrieve/custom"))
 
     def test_settings_shows_shortcut_urls_for_regular_users(self):
         self._create_logged_in_user(username="shortcut_settings_user")

@@ -2,9 +2,25 @@ from datetime import datetime, timedelta
 import re
 from typing import Dict, Optional
 
+from sqlalchemy import func
+
 from config import Config
-from models import Plan, RepRange, User, UserRole, WorkoutLog
-from list_of_exercise import BW_EXERCISES, DEFAULT_PLAN, DEFAULT_REP_RANGES, get_workout_days
+from models import (
+    CustomRetrievalEvent,
+    CustomRetrievalPreference,
+    Plan,
+    RepRange,
+    User,
+    UserRole,
+    WorkoutLog,
+)
+from list_of_exercise import (
+    BW_EXERCISES,
+    DEFAULT_PLAN,
+    DEFAULT_REP_RANGES,
+    get_workout_days,
+    list_of_exercises,
+)
 from services.best_scoring import best_workout_strength_score, coerce_equal_len_sets
 from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweight, is_bodyweight_enabled
 from services.workout_quality import WorkoutQualityScorer
@@ -14,6 +30,15 @@ from services.exercise_matching import (
     resolve_equivalent_names,
 )
 from parsers.workout import _extract_declared_sets, _extract_sets_from_bracket, parse_bw_weight
+
+
+CUSTOM_RETRIEVAL_SORT_MODES = {
+    "alpha_asc",
+    "alpha_desc",
+    "most_retrieved",
+}
+DEFAULT_CUSTOM_RETRIEVAL_SORT_MODE = "most_retrieved"
+CUSTOM_RETRIEVAL_HISTORY_DAYS = 90
 
 
 def _normalize_text(text: str) -> str:
@@ -158,6 +183,201 @@ def generate_retrieve_output(db_session, user, category, day_id):
         return "Plan not found.", 0, 0
 
     all_plans = get_workout_days(plan_text)
+    try:
+        exercises = all_plans["workout"][category][day_key]
+    except KeyError:
+        return f"Day '{day_key}' not found in plan.", 0, 0
+
+    today_str = _retrieve_date_string()
+    header_line = f"{today_str} - {day_key}"
+    if str(category).strip().lower() == "session":
+        titles = all_plans.get("session_titles") if isinstance(all_plans, dict) else None
+        if isinstance(titles, dict):
+            session_title = titles.get(str(day_id))
+            if session_title:
+                header_line = f"{today_str} - Session {day_id} - {session_title}"
+
+    return _generate_retrieve_output_for_exercises(
+        db_session,
+        user,
+        exercises,
+        header_line=header_line,
+    )
+
+
+def generate_custom_retrieve_output(db_session, user, exercises, *, set_overrides=None):
+    """Generate the normal retrieve output for an explicitly selected exercise list."""
+    return _generate_retrieve_output_for_exercises(
+        db_session,
+        user,
+        exercises,
+        header_line=f"{_retrieve_date_string()} - Custom Workout",
+        set_overrides=set_overrides,
+    )
+
+
+def get_custom_retrieval_sort_preference(db_session, user) -> str:
+    preference = (
+        db_session.query(CustomRetrievalPreference)
+        .filter(CustomRetrievalPreference.user_id == user.id)
+        .first()
+    )
+    mode = str(getattr(preference, "sort_mode", "") or "")
+    return mode if mode in CUSTOM_RETRIEVAL_SORT_MODES else DEFAULT_CUSTOM_RETRIEVAL_SORT_MODE
+
+
+def set_custom_retrieval_sort_preference(db_session, user, sort_mode: str) -> str:
+    mode = str(sort_mode or "").strip()
+    if mode not in CUSTOM_RETRIEVAL_SORT_MODES:
+        raise ValueError("Invalid custom retrieval sort mode.")
+
+    preference = (
+        db_session.query(CustomRetrievalPreference)
+        .filter(CustomRetrievalPreference.user_id == user.id)
+        .first()
+    )
+    if preference is None:
+        preference = CustomRetrievalPreference(user_id=user.id, sort_mode=mode)
+        db_session.add(preference)
+    else:
+        preference.sort_mode = mode
+        preference.updated_at = datetime.now()
+    db_session.commit()
+    return mode
+
+
+def record_custom_retrieval(db_session, user, exercise_keys):
+    unique_keys = []
+    seen_keys = set()
+    for key in exercise_keys or []:
+        normalized_key = normalize_exercise_name(str(key or ""))
+        if normalized_key and normalized_key not in seen_keys:
+            seen_keys.add(normalized_key)
+            unique_keys.append(normalized_key)
+
+    if not unique_keys:
+        return
+
+    retrieved_at = datetime.now()
+    db_session.add_all(
+        CustomRetrievalEvent(
+            user_id=user.id,
+            exercise_key=exercise_key,
+            retrieved_at=retrieved_at,
+        )
+        for exercise_key in unique_keys
+    )
+    db_session.commit()
+
+
+def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
+    """Return selectable exercises from the plan, shared catalogue, and user history."""
+    catalog = {}
+
+    def add_exercise(raw_exercise, *, preserve_plan_details=False):
+        raw_value = str(raw_exercise or "").strip()
+        if not raw_value:
+            return
+
+        parsed = _parse_plan_exercise_line(raw_value)
+        display_name = str(parsed.get("name") or raw_value).strip()
+        key = normalize_exercise_name(display_name)
+        if not key:
+            return
+
+        # A plan item may carry inline set/rep targets, so it wins over the
+        # generic catalogue or a logged-name variant for the same exercise.
+        if key not in catalog or preserve_plan_details:
+            catalog[key] = {
+                "key": key,
+                "name": display_name,
+                "exercise_line": raw_value if preserve_plan_details else display_name,
+            }
+
+    plan_text = get_effective_plan_text(db_session, user)
+    plan_data = get_workout_days(plan_text or "")
+    workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
+    if isinstance(workout_map, dict):
+        for day_map in workout_map.values():
+            if not isinstance(day_map, dict):
+                continue
+            for exercises in day_map.values():
+                if not isinstance(exercises, list):
+                    continue
+                for exercise in exercises:
+                    add_exercise(exercise, preserve_plan_details=True)
+
+    for exercise in list_of_exercises:
+        add_exercise(exercise)
+
+    logged_exercises = (
+        db_session.query(WorkoutLog.exercise)
+        .filter(WorkoutLog.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    for row in logged_exercises or []:
+        try:
+            add_exercise(row[0])
+        except (IndexError, KeyError, TypeError):
+            add_exercise(row)
+
+    cutoff = datetime.now() - timedelta(days=CUSTOM_RETRIEVAL_HISTORY_DAYS)
+    usage_rows = (
+        db_session.query(
+            CustomRetrievalEvent.exercise_key,
+            func.count(CustomRetrievalEvent.id),
+            func.max(CustomRetrievalEvent.retrieved_at),
+        )
+        .filter(
+            CustomRetrievalEvent.user_id == user.id,
+            CustomRetrievalEvent.retrieved_at >= cutoff,
+        )
+        .group_by(CustomRetrievalEvent.exercise_key)
+        .all()
+    )
+    usage_by_key = {
+        str(row[0]): {
+            "count": int(row[1] or 0),
+            "last_retrieved_at": row[2],
+        }
+        for row in usage_rows or []
+    }
+
+    for key, item in catalog.items():
+        usage = usage_by_key.get(key, {})
+        item["retrieval_count"] = int(usage.get("count") or 0)
+        item["last_retrieved_at"] = usage.get("last_retrieved_at")
+
+    mode = sort_mode if sort_mode in CUSTOM_RETRIEVAL_SORT_MODES else get_custom_retrieval_sort_preference(db_session, user)
+    return _sort_custom_retrieval_catalog(list(catalog.values()), mode)
+
+
+def _sort_custom_retrieval_catalog(catalog, sort_mode):
+    if sort_mode == "alpha_desc":
+        return sorted(catalog, key=lambda item: item["name"].casefold(), reverse=True)
+    if sort_mode == "most_retrieved":
+        def most_retrieved_key(item):
+            last_retrieved_at = item.get("last_retrieved_at")
+            timestamp = last_retrieved_at.timestamp() if isinstance(last_retrieved_at, datetime) else 0
+            return (-int(item.get("retrieval_count") or 0), -timestamp, item["name"].casefold())
+
+        return sorted(catalog, key=most_retrieved_key)
+    return sorted(catalog, key=lambda item: item["name"].casefold())
+
+
+def _retrieve_date_string() -> str:
+    ist_offset = timedelta(hours=5, minutes=30)
+    today = datetime.utcnow() + ist_offset
+    return f"{today.day}/{today.month}/{today.year % 100:02d}"
+
+
+def _generate_retrieve_output_for_exercises(db_session, user, exercises, *, header_line, set_overrides=None):
+    exercise_lines = [str(exercise or "").strip() for exercise in exercises or []]
+    exercise_lines = [exercise for exercise in exercise_lines if exercise]
+    if not exercise_lines:
+        return "No exercises selected.", 0, 0
+
     # Build once per request so we can do conservative aliasing like
     # "Standing Calf Raises" <-> "Calf Raises Standing" (only when unambiguous).
     distinct_logged = (
@@ -196,85 +416,80 @@ def generate_retrieve_output(db_session, user, category, day_id):
                     if exercise_key_norm:
                         custom_ranges[exercise_key_norm] = value
 
-    ist_offset = timedelta(hours=5, minutes=30)
-    today = datetime.utcnow() + ist_offset
-    today_str = f"{today.day}/{today.month}/{today.year % 100:02d}"
-    header_line = f"{today_str} - {day_key}"
-    if str(category).strip().lower() == "session":
-        titles = all_plans.get("session_titles") if isinstance(all_plans, dict) else None
-        if isinstance(titles, dict):
-            session_title = titles.get(str(day_id))
-            if session_title:
-                header_line = f"{today_str} - Session {day_id} - {session_title}"
     output_lines = [header_line, ""]
     bodyweight_line = _format_bodyweight_line(db_session, user)
     if bodyweight_line:
         output_lines.extend([bodyweight_line, ""])
 
-    try:
-        exercises = all_plans["workout"][category][day_key]
-        exercise_count = len(exercises)
-        set_count = 0
-        
-        for ex in exercises:
-            parsed_plan_ex = _parse_plan_exercise_line(ex)
-            ex_name = str(parsed_plan_ex.get("name") or ex).strip()
-            plan_declared_sets = parsed_plan_ex.get("declared_sets")
-            plan_inline_range = parsed_plan_ex.get("inline_range")
+    exercise_count = len(exercise_lines)
+    set_count = 0
+    normalized_set_overrides = {}
+    for key, value in (set_overrides or {}).items():
+        normalized_key = normalize_exercise_name(str(key or ""))
+        try:
+            set_count_override = int(value)
+        except (TypeError, ValueError):
+            continue
+        if normalized_key and set_count_override > 0:
+            normalized_set_overrides[normalized_key] = set_count_override
 
-            ex_key = ex_name.lower()
-            ex_key_norm = normalize_exercise_name(ex_name)
-            rng = custom_ranges.get(ex_key, "")
-            if not rng and ex_key_norm:
-                rng = custom_ranges.get(ex_key_norm, "")
-            if not rng and plan_inline_range:
-                rng = plan_inline_range
+    for ex in exercise_lines:
+        parsed_plan_ex = _parse_plan_exercise_line(ex)
+        ex_name = str(parsed_plan_ex.get("name") or ex).strip()
+        plan_declared_sets = parsed_plan_ex.get("declared_sets")
+        plan_inline_range = parsed_plan_ex.get("inline_range")
 
-            declared_sets = plan_declared_sets
-            if declared_sets is None:
-                declared_sets = custom_sets.get(ex_key)
-            if declared_sets is None and ex_key_norm:
-                declared_sets = custom_sets.get(ex_key_norm)
-            fmt_rng = ""
-            if rng and declared_sets:
-                fmt_rng = f" - [{declared_sets}, {rng}]"
-            elif declared_sets:
-                fmt_rng = f" - [{declared_sets}]"
-            elif rng:
-                fmt_rng = f" - [{rng}]"
+        ex_key = ex_name.lower()
+        ex_key_norm = normalize_exercise_name(ex_name)
+        rng = custom_ranges.get(ex_key, "")
+        if not rng and ex_key_norm:
+            rng = custom_ranges.get(ex_key_norm, "")
+        if not rng and plan_inline_range:
+            rng = plan_inline_range
 
-            target_sets = int(declared_sets) if isinstance(declared_sets, int) and declared_sets > 0 else 3
+        declared_sets = plan_declared_sets
+        if declared_sets is None:
+            declared_sets = custom_sets.get(ex_key)
+        if declared_sets is None and ex_key_norm:
+            declared_sets = custom_sets.get(ex_key_norm)
+        if ex_key_norm in normalized_set_overrides:
+            declared_sets = normalized_set_overrides[ex_key_norm]
+        fmt_rng = ""
+        if rng and declared_sets:
+            fmt_rng = f" - [{declared_sets}, {rng}]"
+        elif declared_sets:
+            fmt_rng = f" - [{declared_sets}]"
+        elif rng:
+            fmt_rng = f" - [{rng}]"
 
-            target_rep_range = _parse_rep_range(rng)
+        target_sets = int(declared_sets) if isinstance(declared_sets, int) and declared_sets > 0 else 3
+        target_rep_range = _parse_rep_range(rng)
 
-            sets_line = _build_best_sets_line_from_logs(
-                db_session,
-                user,
-                ex_name,
-                target_sets=target_sets,
-                target_rep_range=target_rep_range,
-                logged_exercise_index=logged_exercise_index,
-            )
+        sets_line = _build_best_sets_line_from_logs(
+            db_session,
+            user,
+            ex_name,
+            target_sets=target_sets,
+            target_rep_range=target_rep_range,
+            logged_exercise_index=logged_exercise_index,
+        )
 
-            if _is_bw_exercise(db_session, user.id, ex_name):
-                if not sets_line:
-                    sets_line = "bw/4, 1"
-                sets_line = _normalize_bw(sets_line)
-            elif not sets_line:
-                sets_line = "1, 1"
+        if _is_bw_exercise(db_session, user.id, ex_name):
+            if not sets_line:
+                sets_line = "bw/4, 1"
+            sets_line = _normalize_bw(sets_line)
+        elif not sets_line:
+            sets_line = "1, 1"
 
-            # Count sets from sets_line
-            if sets_line:
-                set_count += _count_sets_from_line(sets_line, target_sets=target_sets)
+        if sets_line:
+            set_count += _count_sets_from_line(sets_line, target_sets=target_sets)
 
-            output_lines.append(f"{ex_name}{fmt_rng}")
-            if sets_line:
-                output_lines.append(sets_line)
-            output_lines.append("")
+        output_lines.append(f"{ex_name}{fmt_rng}")
+        if sets_line:
+            output_lines.append(sets_line)
+        output_lines.append("")
 
-        return "\n".join(output_lines).rstrip(), exercise_count, set_count
-    except KeyError:
-        return f"Day '{day_key}' not found in plan.", 0, 0
+    return "\n".join(output_lines).rstrip(), exercise_count, set_count
 
 
 def _exercise_candidates(exercise_name: str):

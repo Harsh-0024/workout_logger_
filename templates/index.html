@@ -29,7 +29,10 @@
                 <a href="/retrieve/categories" class="btn btn-gold-solid">
                     <i class="bi bi-list-ul me-2"></i>Retrieve Plan
                 </a>
-                <button type="button" class="btn btn-gold-outline" id="recommendWorkoutBtn">
+                <a href="{{ url_for('retrieve_custom') }}" class="btn btn-gold-outline">
+                    <i class="bi bi-sliders2-vertical me-2"></i>Custom Retrieve
+                </a>
+                <button type="button" class="btn btn-gold-outline" id="recommendWorkoutBtn" hidden>
                     <i class="bi bi-stars me-2"></i>Suggest Workout
                 </button>
                 <a href="/stats" class="btn btn-gold-outline">

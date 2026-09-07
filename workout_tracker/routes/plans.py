@@ -1,16 +1,22 @@
 from datetime import datetime
 
-from flask import flash, redirect, render_template, request, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 
 from list_of_exercise import get_workout_days
 from models import Plan, RepRange, Session
 from services.retrieve import (
+    CUSTOM_RETRIEVAL_SORT_MODES,
+    generate_custom_retrieve_output,
     generate_retrieve_output,
+    get_custom_retrieval_exercise_catalog,
+    get_custom_retrieval_sort_preference,
     get_admin_display_name,
     get_effective_plan_text,
     _get_admin_plan_text,
     _get_admin_rep_ranges_text,
+    record_custom_retrieval,
+    set_custom_retrieval_sort_preference,
 )
 from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
 from utils.logger import logger
@@ -161,6 +167,93 @@ def register_plan_routes(app):
             return redirect(url_for('retrieve_categories'))
 
     @login_required
+    def retrieve_custom():
+        user = current_user
+
+        try:
+            sort_mode = get_custom_retrieval_sort_preference(Session, user)
+            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode=sort_mode)
+            if not catalog:
+                flash("No exercises are available to retrieve yet.", "info")
+                return redirect(url_for('set_plan'))
+
+            if request.method == 'GET':
+                return render_template(
+                    'retrieve_custom.html',
+                    exercises=catalog,
+                    sort_mode=sort_mode,
+                )
+
+            selected_keys = [str(key or '').strip() for key in request.form.getlist('exercise')]
+            selected_keys = [key for key in selected_keys if key]
+            if not selected_keys:
+                flash("Select at least one exercise.", "error")
+                return redirect(url_for('retrieve_custom'))
+
+            if len(selected_keys) > 30:
+                flash("Select up to 30 exercises at a time.", "error")
+                return redirect(url_for('retrieve_custom'))
+
+            catalog_by_key = {item['key']: item for item in catalog}
+            selected_exercises = []
+            seen_keys = set()
+            for key in selected_keys:
+                exercise = catalog_by_key.get(key)
+                if not exercise or key in seen_keys:
+                    flash("One or more selected exercises are no longer available.", "error")
+                    return redirect(url_for('retrieve_custom'))
+                seen_keys.add(key)
+                selected_exercises.append(exercise['exercise_line'])
+
+            two_set_keys = [str(key or '').strip() for key in request.form.getlist('two_set_exercise')]
+            two_set_keys = [key for key in two_set_keys if key]
+            if len(set(two_set_keys)) != len(two_set_keys) or any(key not in seen_keys for key in two_set_keys):
+                flash("Invalid set selection.", "error")
+                return redirect(url_for('retrieve_custom'))
+            set_overrides = {key: 2 for key in two_set_keys}
+
+            output, exercise_count, set_count = generate_custom_retrieve_output(
+                Session,
+                user,
+                selected_exercises,
+                set_overrides=set_overrides,
+            )
+            try:
+                record_custom_retrieval(Session, user, selected_keys)
+            except Exception as e:
+                Session.rollback()
+                logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
+
+            return render_template(
+                'retrieve_step3.html',
+                output=output,
+                exercise_count=exercise_count,
+                set_count=set_count,
+                category_name=None,
+                day_id=None,
+                back_to_days_url=url_for('retrieve_custom'),
+                custom_retrieval=True,
+            )
+        except Exception as e:
+            logger.error(f"Error generating custom workout: {e}", exc_info=True)
+            flash("Error generating custom workout.", "error")
+            return redirect(url_for('retrieve_custom'))
+
+    @login_required
+    def save_custom_retrieval_sort_preference():
+        sort_mode = str(request.form.get('sort_mode') or '').strip()
+        if sort_mode not in CUSTOM_RETRIEVAL_SORT_MODES:
+            return jsonify({'ok': False, 'error': 'Invalid sort mode.'}), 400
+
+        try:
+            saved_mode = set_custom_retrieval_sort_preference(Session, current_user, sort_mode)
+            return jsonify({'ok': True, 'sort_mode': saved_mode})
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Error saving custom retrieval sort preference: {e}", exc_info=True)
+            return jsonify({'ok': False, 'error': 'Unable to save sort preference.'}), 500
+
+    @login_required
     def set_plan():
         user = current_user
 
@@ -299,6 +392,18 @@ def register_plan_routes(app):
         endpoint='retrieve_final',
         view_func=retrieve_final,
         methods=['GET'],
+    )
+    app.add_url_rule(
+        '/retrieve/custom',
+        endpoint='retrieve_custom',
+        view_func=retrieve_custom,
+        methods=['GET', 'POST'],
+    )
+    app.add_url_rule(
+        '/retrieve/custom/sort-preference',
+        endpoint='save_custom_retrieval_sort_preference',
+        view_func=save_custom_retrieval_sort_preference,
+        methods=['POST'],
     )
     app.add_url_rule('/set_plan', endpoint='set_plan', view_func=set_plan, methods=['GET', 'POST'])
     app.add_url_rule(
