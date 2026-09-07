@@ -42,7 +42,7 @@
                     </div>
                 </div>
                 <div id="selectedSection" class="selected-exercises-section" hidden>
-                    <div class="d-flex align-items-center justify-content-between gap-3 mb-2">
+                    <div class="d-flex align-items-center justify-content-between gap-3 mb-2 selected-exercises-header">
                         <h3 class="selected-exercises-heading mb-0">Selected <span id="selectedCount">0</span></h3>
                         <button type="button" class="btn btn-gold-outline btn-sm icon-only-button" id="clearSelectionBtn" aria-label="Clear selected exercises" title="Clear selected exercises">
                             <i class="bi bi-x-lg" aria-hidden="true"></i>
@@ -69,6 +69,9 @@
             <div class="custom-retrieve-actions">
                 <button type="submit" id="getWorkoutBtn" class="btn btn-gold-solid w-100 py-3 fw-bold" disabled>
                     <i class="bi bi-clipboard2-pulse-fill me-2" aria-hidden="true"></i>Get Workout <span id="getWorkoutCount"></span>
+                </button>
+                <button type="submit" name="flow" value="review" id="reviewExercisesBtn" class="btn btn-gold-solid w-100 py-3 fw-bold mobile-review-button" disabled>
+                    <i class="bi bi-card-checklist me-2" aria-hidden="true"></i>Review Exercises <span id="reviewExercisesCount"></span>
                 </button>
             </div>
 
@@ -110,6 +113,8 @@
         const availableCount = document.getElementById('availableCount');
         const getWorkoutBtn = document.getElementById('getWorkoutBtn');
         const getWorkoutCount = document.getElementById('getWorkoutCount');
+        const reviewExercisesBtn = document.getElementById('reviewExercisesBtn');
+        const reviewExercisesCount = document.getElementById('reviewExercisesCount');
         const clearSelectionBtn = document.getElementById('clearSelectionBtn');
         const selectedFields = document.getElementById('selectedExerciseFields');
         const status = document.getElementById('selectionStatus');
@@ -124,8 +129,8 @@
         const mobileLayout = window.matchMedia('(max-width: 576px)');
         const items = Array.from(availableList.querySelectorAll('.exercise-picker-item'));
         const itemByKey = new Map(items.map(item => [item.dataset.key, item]));
-        let selectedKeys = [];
-        const twoSetKeys = new Set();
+        let selectedKeys = {{ draft_selected_keys | default([]) | tojson }};
+        const twoSetKeys = new Set({{ draft_two_set_keys | default([]) | tojson }});
         let sortMode = sortTrigger.dataset.sortMode || 'most_retrieved';
 
         const sortLabels = {
@@ -227,6 +232,8 @@
             selectedCount.textContent = String(selectedKeys.length);
             getWorkoutCount.textContent = selectedKeys.length ? `(${selectedKeys.length})` : '';
             getWorkoutBtn.disabled = selectedKeys.length === 0;
+            reviewExercisesCount.textContent = selectedKeys.length ? `(${selectedKeys.length})` : '';
+            reviewExercisesBtn.disabled = selectedKeys.length === 0;
             applySearch();
         };
 
@@ -349,6 +356,13 @@
                     twoSetField.value = key;
                     selectedFields.append(twoSetField);
                 }
+            }
+            if (mobileLayout.matches) {
+                const reviewFlowField = document.createElement('input');
+                reviewFlowField.type = 'hidden';
+                reviewFlowField.name = 'flow';
+                reviewFlowField.value = 'review';
+                selectedFields.append(reviewFlowField);
             }
         });
 
@@ -627,6 +641,10 @@
         margin-top: 0.25rem;
     }
 
+    .mobile-review-button {
+        display: none;
+    }
+
     @media (max-width: 576px) {
         .custom-retrieve-page {
             margin-bottom: 1rem;
@@ -635,6 +653,14 @@
         .custom-retrieve-card {
             padding: 1rem;
             border-radius: 16px;
+        }
+
+        #getWorkoutBtn {
+            display: none;
+        }
+
+        .mobile-review-button {
+            display: inline-flex;
         }
 
         .custom-retrieve-heading {
@@ -800,6 +826,36 @@
         .selected-exercises-section {
             margin-bottom: 0.85rem;
             padding-bottom: 0.75rem;
+        }
+
+        .selected-exercises-header {
+            gap: 0.5rem !important;
+            margin-bottom: 0.4rem !important;
+        }
+
+        .selected-exercises-heading {
+            font-size: 0.75rem;
+        }
+
+        #clearSelectionBtn {
+            width: 1.8rem;
+            height: 1.8rem;
+            min-width: 1.8rem;
+            min-height: 1.8rem;
+            flex: 0 0 1.8rem;
+            padding: 0 !important;
+            border-radius: 0.55rem;
+            line-height: 1;
+        }
+
+        #clearSelectionBtn::before {
+            position: absolute;
+            inset: -0.35rem;
+            content: "";
+        }
+
+        #clearSelectionBtn i {
+            font-size: 0.7rem;
         }
 
         .set-count-toggle {

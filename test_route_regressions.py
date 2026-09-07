@@ -131,6 +131,7 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn('class="exercise-picker-panel"', selection_html)
         self.assertIn('id="customSortDialog"', selection_html)
         self.assertIn('id="selectedExerciseList"', selection_html)
+        self.assertIn('id="reviewExercisesBtn"', selection_html)
         header_position = selection_html.index('custom-exercise-list-header')
         self.assertLess(
             selection_html.index('class="exercise-picker-panel"'),
@@ -167,6 +168,64 @@ class TestRouteRegressions(unittest.TestCase):
             .count(),
             2,
         )
+
+    def test_custom_retrieve_review_restores_a_draft_for_adding_exercises(self):
+        user = self._create_logged_in_user(username="custom_retrieve_review_user")
+        self.session.add(
+            Plan(
+                user_id=user.id,
+                text_content="Custom Focus 1\nCustom Lift - [4, 6-8]",
+            )
+        )
+        self.session.commit()
+
+        custom_lift_key = normalize_exercise_name("Custom Lift")
+        review_start = self.client.post(
+            "/retrieve/custom",
+            data={
+                "flow": "review",
+                "exercise": [custom_lift_key],
+                "two_set_exercise": [custom_lift_key],
+            },
+        )
+
+        self.assertEqual(review_start.status_code, 302)
+        self.assertIn("/retrieve/custom/review", review_start.headers["Location"])
+
+        review_page = self.client.get("/retrieve/custom/review")
+        self.assertEqual(review_page.status_code, 200)
+        review_html = review_page.get_data(as_text=True)
+        self.assertIn("Review Exercises", review_html)
+        self.assertIn("Custom Lift", review_html)
+        self.assertIn('id="reviewGetWorkoutBtn"', review_html)
+
+        add_more = self.client.post(
+            "/retrieve/custom/review",
+            data={
+                "review_action": "add_more",
+                "exercise": [custom_lift_key],
+                "two_set_exercise": [custom_lift_key],
+            },
+        )
+        self.assertEqual(add_more.status_code, 302)
+        self.assertIn("/retrieve/custom", add_more.headers["Location"])
+
+        selector_page = self.client.get("/retrieve/custom")
+        selector_html = selector_page.get_data(as_text=True)
+        self.assertIn(f'let selectedKeys = ["{custom_lift_key}"];', selector_html)
+        self.assertIn(f'new Set(["{custom_lift_key}"])', selector_html)
+
+        final_workout = self.client.post(
+            "/retrieve/custom",
+            data={
+                "exercise": [custom_lift_key],
+                "two_set_exercise": [custom_lift_key],
+            },
+        )
+        self.assertEqual(final_workout.status_code, 200)
+        self.assertIn("Custom Lift - [2, 6-8]", final_workout.get_data(as_text=True))
+        with self.client.session_transaction() as browser_session:
+            self.assertNotIn("custom_retrieval_draft", browser_session)
 
     def test_custom_retrieve_two_set_override_replaces_plan_set_target(self):
         user = self._create_logged_in_user(username="custom_retrieve_two_sets_user")
