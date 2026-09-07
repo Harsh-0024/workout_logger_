@@ -129,6 +129,8 @@ class TestRouteRegressions(unittest.TestCase):
         selection_html = selection_page.get_data(as_text=True)
         self.assertIn("Custom Lift", selection_html)
         self.assertIn('class="exercise-picker-panel"', selection_html)
+        self.assertIn('id="customSortDialog"', selection_html)
+        self.assertIn('id="selectedExerciseList"', selection_html)
         header_position = selection_html.index('custom-exercise-list-header')
         self.assertLess(
             selection_html.index('class="exercise-picker-panel"'),
