@@ -2703,58 +2703,12 @@
     </script>
     <script>
         (function() {
-            const alertContainer = document.getElementById('client-alerts');
-            if (!alertContainer) return;
-            let alertShown = false;
-            const alertKey = 'clientAlertShown';
-
-            const hasShownAlert = () => {
-                try {
-                    return sessionStorage.getItem(alertKey) === 'true';
-                } catch (err) {
-                    return false;
-                }
-            };
-
-            const markAlertShown = () => {
-                try {
-                    sessionStorage.setItem(alertKey, 'true');
-                } catch (err) {
-                    // Ignore storage errors
-                }
-            };
-
-            const shouldIgnoreError = (message) => {
-                if (!message) return true;
-                const normalized = String(message).toLowerCase();
-                if (normalized.includes('script error')) return true;
-                if (normalized.includes('resizeobserver')) return true;
-                return false;
-            };
-
-            const showClientAlert = (message) => {
-                if (alertShown || hasShownAlert()) return;
-                alertShown = true;
-                markAlertShown();
-                const alert = document.createElement('div');
-                alert.className = 'alert alert-danger alert-dismissible fade show';
-                alert.role = 'alert';
-                alert.innerHTML = `${message}<button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>`;
-                alertContainer.appendChild(alert);
-            };
-
             window.addEventListener('error', (event) => {
-                const message = event?.error?.message || event?.message || '';
                 console.error('Unhandled error:', event.error || event.message);
-                if (shouldIgnoreError(message)) return;
-                showClientAlert('Something went wrong. Please refresh the page and try again.');
             });
 
             window.addEventListener('unhandledrejection', (event) => {
-                const message = event?.reason?.message || event?.reason || '';
                 console.error('Unhandled promise rejection:', event.reason);
-                if (shouldIgnoreError(message)) return;
-                showClientAlert('Something went wrong. Please refresh the page and try again.');
             });
         })();
     </script>
@@ -3057,88 +3011,18 @@
         })();
     </script>
     <script>
-        (function() {
-            const isTypingContext = (target) => {
-                if (!target) return false;
-                if (target.isContentEditable) return true;
-                const tag = target.tagName;
-                return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
-            };
-
-            const focusSearch = () => {
-                const searchInput = document.getElementById('historySearch') || document.getElementById('recentSearch');
-                if (searchInput) {
-                    searchInput.focus();
-                    searchInput.select();
-                    return true;
-                }
-                return false;
-            };
-
-            const shortcutsModalEl = document.getElementById('shortcutsModal');
-            let shortcutsModalInstance = null;
-
-            const openShortcutsModal = () => {
-                if (!shortcutsModalEl) return;
-                if (!shortcutsModalInstance) {
-                    shortcutsModalInstance = new bootstrap.Modal(shortcutsModalEl);
-                }
-                shortcutsModalInstance.show();
-            };
-
-            document.addEventListener('keydown', (event) => {
-                if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
-                if (isTypingContext(event.target)) return;
-
-                const key = event.key.toLowerCase();
-                if (/^[1-9]$/.test(key)) {
-                    const target = document.querySelector(`[data-shortcut="${key}"]`);
-                    if (target) {
-                        event.preventDefault();
-                        target.click();
-                    }
-                    return;
-                }
-                if (key === 'h') {
-                    event.preventDefault();
-                    window.location.href = '/';
-                } else if (key === 'l') {
-                    event.preventDefault();
-                    window.location.href = '/log';
-                } else if (key === 'r') {
-                    event.preventDefault();
-                    window.location.href = '/retrieve/categories';
-                } else if (key === 's') {
-                    event.preventDefault();
-                    window.location.href = '/settings';
-                } else if (key === 'g') {
-                    event.preventDefault();
-                    window.location.href = '/stats';
-                } else if (key === 'a') {
-                    event.preventDefault();
-                    window.location.href = '/admin';
-                } else if (key === '/') {
-                    event.preventDefault();
-                    if (!focusSearch()) {
-                        openShortcutsModal();
-                    }
-                } else if (key === '?' || (event.shiftKey && event.key === '/')) {
-                    event.preventDefault();
-                    openShortcutsModal();
-                }
-            });
-        })();
-    </script>
-    <script>
         // Enhanced Theme System with System Preference Support
         (function() {
             const THEME_KEY = 'workout-tracker-theme';
             const THEME_PREF_KEY = 'workout-tracker-theme-preference';
             const html = document.documentElement;
+            const systemThemeQuery = typeof window.matchMedia === 'function'
+                ? window.matchMedia('(prefers-color-scheme: dark)')
+                : null;
             
             // Get system preference
             const getSystemTheme = () => {
-                return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                return systemThemeQuery && systemThemeQuery.matches ? 'dark' : 'light';
             };
 
             // Apply theme to document
@@ -3217,15 +3101,23 @@
                 return html.getAttribute('data-theme') || 'dark';
             };
 
-            // Listen for system theme changes
-            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+            // Older mobile browsers expose addListener rather than addEventListener.
+            const handleSystemThemeChange = (event) => {
                 try {
                     const preference = localStorage.getItem(THEME_PREF_KEY);
                     if (preference === 'system') {
-                        applyTheme(e.matches ? 'dark' : 'light');
+                        applyTheme(event.matches ? 'dark' : 'light');
                     }
                 } catch (err) {}
-            });
+            };
+
+            if (systemThemeQuery) {
+                if (typeof systemThemeQuery.addEventListener === 'function') {
+                    systemThemeQuery.addEventListener('change', handleSystemThemeChange);
+                } else if (typeof systemThemeQuery.addListener === 'function') {
+                    systemThemeQuery.addListener(handleSystemThemeChange);
+                }
+            }
 
             initTheme();
         })();
