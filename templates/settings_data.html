@@ -1,0 +1,132 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="row justify-content-center mt-3 mt-md-4">
+    <div class="col-12 col-md-10 col-lg-8">
+        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
+            <div>
+                <h2 class="fw-bold mb-2" style="font-size: clamp(1.5rem, 6vw, 2rem);">Data</h2>
+                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Export, import &amp; manage your workouts</p>
+            </div>
+            <a href="{{ url_for('user_settings') }}" class="btn btn-gold-outline">
+                <i class="bi bi-arrow-left me-2"></i>Back to Settings
+            </a>
+        </div>
+
+        <div class="card mb-4">
+            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                <i class="bi bi-download text-gold"></i>
+                <h5 class="mb-0 fw-bold">Export</h5>
+            </div>
+
+            <div class="export-choice-grid mb-3">
+                <label class="export-choice-card">
+                    <input type="radio" name="export_scope" value="all" checked class="export-choice-input">
+                    <span class="export-choice-text">All workouts</span>
+                </label>
+                <label class="export-choice-card">
+                    <input type="radio" name="export_scope" value="range" class="export-choice-input">
+                    <span class="export-choice-text">Date range</span>
+                </label>
+            </div>
+
+            <div class="export-choice-grid mb-3">
+                <label class="export-choice-card">
+                    <input type="radio" name="export_format" value="csv" checked class="export-choice-input">
+                    <span class="export-choice-text">CSV (~{{ csv_size_kb }}KB)</span>
+                </label>
+                <label class="export-choice-card">
+                    <input type="radio" name="export_format" value="json" class="export-choice-input">
+                    <span class="export-choice-text">JSON (~{{ json_size_kb }}KB)</span>
+                </label>
+            </div>
+
+            <div id="exportDateRange" class="row g-2 mb-3" style="display: none;">
+                <div class="col-12 col-md-6">
+                    <label class="form-label text-muted mb-1" style="font-size: var(--fs-xs);">Start date</label>
+                    <input type="date" id="exportStartDate" class="form-control form-control-sm export-date-input">
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label text-muted mb-1" style="font-size: var(--fs-xs);">End date</label>
+                    <input type="date" id="exportEndDate" class="form-control form-control-sm export-date-input">
+                </div>
+            </div>
+
+            <button type="button" id="downloadExportBtn" class="btn btn-gold-solid w-100">
+                <i class="bi bi-box-arrow-down me-2"></i>Download Export
+            </button>
+        </div>
+
+        <div class="card mb-4">
+            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                <i class="bi bi-journal-plus text-gold"></i>
+                <h5 class="mb-0 fw-bold">Import</h5>
+            </div>
+            <a href="{{ url_for('bulk_import') }}" class="btn btn-gold-outline w-100">
+                <i class="bi bi-box-arrow-in-down me-2"></i>Import Workouts in Bulk
+            </a>
+            <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                <i class="bi bi-info-circle me-1"></i>Paste multiple workout days at once on the next page.
+            </small>
+        </div>
+
+        <div class="card mb-4">
+            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
+                <i class="bi bi-trash3 text-gold"></i>
+                <h5 class="mb-0 fw-bold">Bulk Delete</h5>
+            </div>
+            <a href="{{ url_for('user_dashboard', username=user.username, bulk_delete=1, _anchor='recent-workouts') }}" class="btn btn-gold-outline w-100">
+                <i class="bi bi-check2-square me-2"></i>Select Multiple to Delete
+            </a>
+            <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
+                <i class="bi bi-info-circle me-1"></i>Opens your recent workouts in selection mode.
+            </small>
+        </div>
+
+        <div class="text-center mt-3">
+            <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
+                <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+<style>
+    .export-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .export-choice-card { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--card-bg-solid); color: var(--text-primary); cursor: pointer; transition: border-color var(--transition-base), box-shadow var(--transition-base); }
+    .export-choice-card:hover { border-color: var(--gold-primary); }
+    .export-choice-input { accent-color: var(--gold-primary); margin-top: 0; }
+    .export-choice-text { font-size: 0.78rem; font-weight: 600; }
+    .export-date-input { background-color: var(--bg-secondary); border-color: var(--border-subtle); color: var(--text-primary); box-shadow: none; }
+    .export-date-input:focus { border-color: var(--gold-primary); box-shadow: 0 0 0 0.2rem rgba(212, 175, 55, 0.18); }
+    @media (max-width: 576px) { .export-choice-grid { grid-template-columns: 1fr; } }
+</style>
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const exportScopeInputs = document.querySelectorAll('input[name="export_scope"]');
+        const exportDateRange = document.getElementById('exportDateRange');
+        const exportStartDate = document.getElementById('exportStartDate');
+        const exportEndDate = document.getElementById('exportEndDate');
+        const downloadExportBtn = document.getElementById('downloadExportBtn');
+        const isRangeMode = () => { const selected = document.querySelector('input[name="export_scope"]:checked'); return selected && selected.value === 'range'; };
+        const selectedExportFormat = () => { const selected = document.querySelector('input[name="export_format"]:checked'); return selected ? selected.value : 'csv'; };
+        const syncExportMode = () => { if (!exportDateRange) return; exportDateRange.style.display = isRangeMode() ? '' : 'none'; };
+        exportScopeInputs.forEach((input) => { input.addEventListener('change', syncExportMode); });
+        syncExportMode();
+        if (downloadExportBtn) {
+            downloadExportBtn.addEventListener('click', () => {
+                const format = selectedExportFormat();
+                const baseHref = format === 'json' ? '/export_json' : '/export_csv';
+                const target = new URL(baseHref, window.location.origin);
+                if (isRangeMode()) {
+                    const start = (exportStartDate?.value || '').trim();
+                    const end = (exportEndDate?.value || '').trim();
+                    if (!start || !end) { window.alert('Please select both start and end dates.'); return; }
+                    if (end < start) { window.alert('End date cannot be earlier than start date.'); return; }
+                    target.searchParams.set('start_date', start);
+                    target.searchParams.set('end_date', end);
+                }
+                window.location.href = `${target.pathname}${target.search}`;
+            });
+        }
+    });
+</script>
+{% endblock %}

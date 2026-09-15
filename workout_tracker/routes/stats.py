@@ -199,7 +199,7 @@ def register_stats_routes(app):
             log_count = get_export_log_count(Session, user, start_date=start_date, end_date=end_date)
             if log_count == 0:
                 flash("No workouts found in that date range.", "warning")
-                return redirect(url_for('user_settings') + '#quick-actions')
+                return redirect(url_for('data_settings'))
             csv_data = get_csv_export(Session, user, start_date=start_date, end_date=end_date)
             date_suffix = datetime.now().strftime('%Y%m%d')
             if start_date and end_date:
@@ -213,11 +213,11 @@ def register_stats_routes(app):
             )
         except ValueError as e:
             flash(str(e), "error")
-            return redirect(url_for('user_settings') + '#quick-actions')
+            return redirect(url_for('data_settings'))
         except Exception as e:
             logger.error(f"Error exporting CSV: {e}", exc_info=True)
             flash("Error exporting data.", "error")
-            return redirect(url_for('user_settings') + '#quick-actions')
+            return redirect(url_for('data_settings'))
 
     @login_required
     def export_json():
@@ -228,7 +228,7 @@ def register_stats_routes(app):
             log_count = get_export_log_count(Session, user, start_date=start_date, end_date=end_date)
             if log_count == 0:
                 flash("No workouts found in that date range.", "warning")
-                return redirect(url_for('user_settings') + '#quick-actions')
+                return redirect(url_for('data_settings'))
             data = get_json_export(Session, user, start_date=start_date, end_date=end_date)
             date_suffix = datetime.now().strftime('%Y%m%d')
             if start_date and end_date:
@@ -242,11 +242,11 @@ def register_stats_routes(app):
             )
         except ValueError as e:
             flash(str(e), "error")
-            return redirect(url_for('user_settings') + '#quick-actions')
+            return redirect(url_for('data_settings'))
         except Exception as e:
             logger.error(f"Error exporting JSON: {e}", exc_info=True)
             flash("Error exporting data.", "error")
-            return redirect(url_for('user_settings') + '#quick-actions')
+            return redirect(url_for('data_settings'))
 
     app.add_url_rule('/stats', endpoint='stats_index', view_func=stats_index, methods=['GET'])
     app.add_url_rule(
