@@ -42,7 +42,7 @@ def _resolve_custom_retrieval_selection(catalog, selected_keys, two_set_keys):
         if not exercise or key in seen_keys:
             raise ValueError('One or more selected exercises are no longer available.')
         seen_keys.add(key)
-        selected_exercises.append(exercise['exercise_line'])
+        selected_exercises.append(exercise['name'])
 
     two_set_keys = [str(key or '').strip() for key in two_set_keys if str(key or '').strip()]
     if len(set(two_set_keys)) != len(two_set_keys) or any(key not in seen_keys for key in two_set_keys):
@@ -245,7 +245,8 @@ def register_plan_routes(app):
                 }
                 return redirect(url_for('retrieve_custom_review'))
 
-            set_overrides = {key: 2 for key in two_set_keys}
+            two_set_keys_set = set(two_set_keys)
+            set_overrides = {key: (2 if key in two_set_keys_set else 3) for key in selected_keys}
 
             output, exercise_count, set_count = generate_custom_retrieve_output(
                 Session,
