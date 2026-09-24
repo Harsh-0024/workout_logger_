@@ -33,6 +33,18 @@
                 </div>
             </div>
 
+            {% if custom_retrieval %}
+            <div class="mb-3 mb-md-4 text-start">
+                <label for="customWorkoutTitle" class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
+                    <i class="bi bi-pencil me-2"></i>Workout Title
+                </label>
+                <input type="text" id="customWorkoutTitle" class="form-control" maxlength="80" autocomplete="off"
+                       value="{{ custom_workout_title }}"
+                       placeholder="{{ default_custom_workout_title }}"
+                       data-default-title="{{ default_custom_workout_title }}">
+            </div>
+            {% endif %}
+
             <div class="mb-3 mb-md-5">
                 <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide text-start" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
                     <i class="bi bi-file-text me-2"></i>Workout Plan
@@ -58,6 +70,27 @@
 </div>
 
 <script>
+    (function () {
+        var titleInput = document.getElementById("customWorkoutTitle");
+        var textArea = document.getElementById("planText");
+        if (!titleInput || !textArea) return;
+
+        // Header line looks like "24/9/26 - Chest & Triceps"; keep the date, swap the title.
+        var firstLine = textArea.value.split("\n", 1)[0];
+        var datePrefix = firstLine.split(" - ", 1)[0];
+        var fallback = titleInput.getAttribute("data-default-title") || "Custom Workout";
+
+        titleInput.addEventListener("input", function () {
+            var title = titleInput.value.replace(/\s+/g, " ").trim() || fallback;
+            var lines = textArea.value.split("\n");
+            lines[0] = datePrefix + " - " + title;
+            textArea.value = lines.join("\n");
+        });
+        titleInput.addEventListener("keydown", function (e) {
+            if (e.key === "Enter") { e.preventDefault(); titleInput.blur(); }
+        });
+    })();
+
     function manualCopy() {
         var textArea = document.getElementById("planText");
         var btn = document.getElementById("copyBtn");
@@ -100,6 +133,7 @@
         const key = (e.key || '').toLowerCase();
         if (key !== 'c') return;
 
+        if (document.activeElement && document.activeElement.id === 'customWorkoutTitle') return;
         const btn = document.getElementById('copyBtn');
         if (!btn) return;
         e.preventDefault();

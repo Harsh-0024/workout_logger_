@@ -9,7 +9,9 @@ from services.retrieve import (
     CUSTOM_RETRIEVAL_SORT_MODES,
     generate_custom_retrieve_output,
     generate_retrieve_output,
+    DEFAULT_CUSTOM_WORKOUT_TITLE,
     get_custom_retrieval_exercise_catalog,
+    infer_custom_workout_title,
     get_custom_retrieval_sort_preference,
     get_admin_display_name,
     get_effective_plan_text,
@@ -248,11 +250,19 @@ def register_plan_routes(app):
             two_set_keys_set = set(two_set_keys)
             set_overrides = {key: (2 if key in two_set_keys_set else 3) for key in selected_keys}
 
+            try:
+                workout_title = infer_custom_workout_title(Session, user, selected_exercises)
+            except Exception as e:
+                logger.warning(f"Unable to infer custom workout title: {e}", exc_info=True)
+                workout_title = None
+            workout_title = workout_title or DEFAULT_CUSTOM_WORKOUT_TITLE
+
             output, exercise_count, set_count = generate_custom_retrieve_output(
                 Session,
                 user,
                 selected_exercises,
                 set_overrides=set_overrides,
+                title=workout_title,
             )
             try:
                 record_custom_retrieval(Session, user, selected_keys)
@@ -270,6 +280,8 @@ def register_plan_routes(app):
                 day_id=None,
                 back_to_days_url=url_for('retrieve_custom'),
                 custom_retrieval=True,
+                custom_workout_title=workout_title,
+                default_custom_workout_title=DEFAULT_CUSTOM_WORKOUT_TITLE,
             )
         except Exception as e:
             logger.error(f"Error generating custom workout: {e}", exc_info=True)

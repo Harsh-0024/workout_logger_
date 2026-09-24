@@ -28,7 +28,9 @@ from services.exercise_matching import (
     build_name_index,
     normalize_exercise_name,
     resolve_equivalent_names,
+    token_signature,
 )
+from services.workout_title import infer_workout_title, split_title, title_from_plan_day
 from parsers.workout import _extract_declared_sets, _extract_sets_from_bracket, parse_bw_weight
 
 
@@ -205,13 +207,91 @@ def generate_retrieve_output(db_session, user, category, day_id):
     )
 
 
-def generate_custom_retrieve_output(db_session, user, exercises, *, set_overrides=None):
+DEFAULT_CUSTOM_WORKOUT_TITLE = "Custom Workout"
+
+
+def clean_custom_workout_title(title) -> str:
+    """Single-line, length-capped title that is safe to put in the header line."""
+    cleaned = re.sub(r"\s+", " ", str(title or "")).strip(" -\u2013\u2014")
+    return cleaned[:80].strip()
+
+
+def infer_custom_workout_title(db_session, user, exercises) -> Optional[str]:
+    """
+    Infer a title such as "Chest & Triceps & Legs" for a custom selection by
+    checking which plan sessions (and their titles) each exercise belongs to.
+    Returns None when nothing can be inferred.
+    """
+    selected_names = []
+    for exercise in exercises or []:
+        name = str(_parse_plan_exercise_line(str(exercise or "")).get("name") or "").strip()
+        if name:
+            selected_names.append(name)
+    if not selected_names:
+        return None
+
+    def key_fn(name):
+        parsed = str(_parse_plan_exercise_line(str(name or "")).get("name") or name or "")
+        keys = []
+        norm = normalize_exercise_name(parsed)
+        if norm:
+            keys.append(norm)
+        sig = token_signature(parsed)
+        if sig:
+            keys.append("sig:" + " ".join(sig))
+        return keys
+
+    sessions = []
+    plan_titles = set()
+    plan_data = get_workout_days(get_effective_plan_text(db_session, user) or "")
+    workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
+    session_titles = plan_data.get("session_titles", {}) if isinstance(plan_data, dict) else {}
+    if isinstance(workout_map, dict):
+        for category, day_map in workout_map.items():
+            if not isinstance(day_map, dict):
+                continue
+            for day_name, day_exercises in day_map.items():
+                day_id = str(day_name).rsplit(" ", 1)[-1]
+                title = title_from_plan_day(category, day_name, (session_titles or {}).get(day_id))
+                if title and isinstance(day_exercises, list):
+                    sessions.append((title, day_exercises))
+                    plan_titles.add(split_title_key(title))
+
+    # Exercises that are no longer in the plan may still have been logged in a
+    # plan session before. Only trust history names that match a plan title, so
+    # earlier custom titles never feed back into the inference.
+    if plan_titles:
+        try:
+            history_rows = (
+                db_session.query(WorkoutLog.workout_name, WorkoutLog.exercise)
+                .filter(WorkoutLog.user_id == user.id, WorkoutLog.workout_name.isnot(None))
+                .distinct()
+                .all()
+            )
+        except Exception:
+            history_rows = []
+        for workout_name, exercise_name in history_rows or []:
+            if split_title_key(workout_name) in plan_titles:
+                sessions.append((str(workout_name), [exercise_name]))
+
+    try:
+        return infer_workout_title(selected_names, sessions, key_fn=key_fn)
+    except Exception:
+        return None
+
+
+def split_title_key(title) -> tuple:
+    return tuple(part.lower() for part in split_title(str(title or "")))
+
+
+def generate_custom_retrieve_output(db_session, user, exercises, *, set_overrides=None, title=None):
     """Generate the normal retrieve output for an explicitly selected exercise list."""
+    title = clean_custom_workout_title(title) or DEFAULT_CUSTOM_WORKOUT_TITLE
     return _generate_retrieve_output_for_exercises(
         db_session,
         user,
         exercises,
-        header_line=f"{_retrieve_date_string()} - Custom Workout",
+        header_line=f"{_retrieve_date_string()} - {title}",
         set_overrides=set_overrides,
     )
 
