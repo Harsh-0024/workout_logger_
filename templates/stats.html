@@ -13,7 +13,7 @@
             <div class="row mb-4">
                 <div class="col-12">
                     <label class="text-muted mb-2 d-block" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">
-                        <i class="bi bi-search me-2"></i>proeSearch Exercise
+                        <i class="bi bi-search me-2"></i>Search Exercise
                     </label>
                     <div class="stats-search-bar d-flex flex-column flex-md-row gap-2">
                         <div class="position-relative flex-grow-1 stats-search-input">
@@ -44,6 +44,22 @@
                 <button type="button" class="overall-pill overall-toggle-btn w-100" data-overall="index">
                     Strength Index
                 </button>
+            </div>
+
+            <!-- Plain-language Strength Index summary -->
+            <div id="strengthHeadline" class="strength-headline mb-3" style="display: none;">
+                <div id="strengthHeadlineMain" class="strength-headline-main"></div>
+                <div id="strengthHeadlineSub" class="strength-headline-sub text-muted"></div>
+                <details class="strength-info">
+                    <summary><i class="bi bi-info-circle me-1"></i>What does this chart show?</summary>
+                    <p class="mb-0">
+                        We estimate your max lift (1-rep max) for every exercise you've done at least 3 times and compare it
+                        with your first few sessions of that exercise. <strong>0% / "Start"</strong> is where you started.
+                        <strong>+10%</strong> means you can lift about 10% more than when you started; a negative value means
+                        you're currently below your starting level. Bigger lifts (squat, bench) count more than small ones (curls),
+                        and exercises you haven't done for 2&ndash;3 months slowly drop out.
+                    </p>
+                </details>
             </div>
 
             <!-- Chart Container -->
@@ -200,6 +216,33 @@
         .stats-search-bar {
             max-width: 100%;
         }
+    }
+
+    .strength-headline-main {
+        font-size: clamp(1.05rem, 3.4vw, 1.35rem);
+        font-weight: 600;
+        line-height: 1.35;
+        color: var(--text-primary, inherit);
+    }
+    .strength-headline-main .trend-up { color: var(--gold-primary, #D4AF37); }
+    .strength-headline-main .trend-down { color: #EF4444; }
+    .strength-headline-sub {
+        font-size: var(--fs-sm);
+        margin-top: 4px;
+    }
+    .strength-info {
+        margin-top: 6px;
+        font-size: var(--fs-sm);
+    }
+    .strength-info summary {
+        cursor: pointer;
+        color: var(--gold-primary, #D4AF37);
+        width: fit-content;
+    }
+    .strength-info p {
+        margin-top: 6px;
+        max-width: 70ch;
+        opacity: 0.85;
     }
 
     .chart-container {
@@ -581,6 +624,7 @@
     function getLastFinitePoint(values) {
         if (!Array.isArray(values) || !values.length) return { index: null, value: null };
         for (let i = values.length - 1; i >= 0; i--) {
+            if (values[i] === null || values[i] === undefined) continue;
             const num = Number(values[i]);
             if (Number.isFinite(num)) return { index: i, value: num };
         }
@@ -812,8 +856,47 @@
         return series[config.key] || data.data || [];
     }
 
+    // Strength Index is stored as 100 = starting strength. Users see it as change vs. start.
+    function formatVsStart(raw, decimals = 1) {
+        const num = Number(raw);
+        if (!Number.isFinite(num)) return '-';
+        const diff = Number((num - 100).toFixed(decimals));
+        if (diff === 0) return '0%';
+        const text = Math.abs(diff).toFixed(decimals).replace(/\.0+$/, '');
+        return `${diff > 0 ? '+' : '\u2212'}${text}%`;
+    }
+
+    function updateStrengthHeadline(show, opts) {
+        const wrap = document.getElementById('strengthHeadline');
+        if (!wrap) return;
+        if (!show || !opts || !Number.isFinite(Number(opts.current))) {
+            wrap.style.display = 'none';
+            return;
+        }
+        const main = document.getElementById('strengthHeadlineMain');
+        const sub = document.getElementById('strengthHeadlineSub');
+        const diff = Number(opts.current) - 100;
+        const pct = Math.abs(diff).toFixed(1).replace(/\.0$/, '');
+        if (diff >= 0.5) {
+            main.innerHTML = `You're <span class="trend-up">${pct}% stronger</span> than when you started`;
+        } else if (diff <= -0.5) {
+            main.innerHTML = `You're <span class="trend-down">${pct}% below</span> your starting strength`;
+        } else {
+            main.textContent = "You're right at your starting strength";
+        }
+        const parts = [];
+        if (opts.window) parts.push(`${opts.window}-day average`);
+        if (Number.isFinite(Number(opts.latest))) parts.push(`Last workout: ${formatVsStart(opts.latest)}`);
+        if (opts.startLabel) parts.push(`Tracking since ${opts.startLabel}`);
+        if (Number.isFinite(Number(opts.peak)) && opts.peakLabel) {
+            parts.push(`Best: ${formatVsStart(opts.peak)} on ${opts.peakLabel}`);
+        }
+        sub.textContent = parts.join(' \u00b7 ');
+        wrap.style.display = 'block';
+    }
+
     function computeStats(values) {
-        const cleaned = (values || []).map(v => Number(v)).filter(v => Number.isFinite(v));
+        const cleaned = (values || []).filter(v => v !== null && v !== undefined).map(v => Number(v)).filter(v => Number.isFinite(v));
         if (!cleaned.length) return {};
         const first = cleaned[0];
         const last = cleaned[cleaned.length - 1];
@@ -1173,6 +1256,17 @@
         return result;
     }
 
+    // Like movingAverage, but gaps (null) are skipped instead of being treated as 0.
+    function movingAverageSkipGaps(values, window) {
+        if (!values || values.length === 0) return [];
+        return values.map((_, i) => {
+            const slice = values.slice(Math.max(0, i - window + 1), i + 1)
+                .filter(v => v !== null && v !== undefined && Number.isFinite(Number(v)));
+            if (!slice.length || values[i] === null || values[i] === undefined) return null;
+            return slice.reduce((sum, v) => sum + Number(v), 0) / slice.length;
+        });
+    }
+
     function filterDataByRange(data, days) {
         if (!data || !Array.isArray(data.labels) || !Array.isArray(data.data)) return data;
         if (days <= 0 || data.labels.length === 0) return data;
@@ -1279,6 +1373,9 @@
     }
 
     function renderChart(data, label) {
+        if (data && data.unit === 'percent' && data.overall_mode !== 'rate' && Array.isArray(data.data)) {
+            data.data = data.data.map(v => (Number.isFinite(Number(v)) && Number(v) > 0) ? Number(v) : null);
+        }
         fullChartData = data;
         setChartPointDetailsVisible(false);
 
@@ -1323,6 +1420,9 @@
         const isOverallRate = !currentExercise && data && data.unit === 'percent' && overallMode === 'rate';
         const maValues = (() => {
             if (!isOverallRate) {
+                if (!currentExercise && data && data.unit === 'percent') {
+                    return movingAverageSkipGaps(primaryValues || [], currentMAWindow);
+                }
                 return movingAverage(primaryValues || [], currentMAWindow);
             }
             const logSeries = (chartData && Array.isArray(chartData.log_data)) ? chartData.log_data : [];
@@ -1357,10 +1457,13 @@
                 : (improvementPctValue >= 0 ? '+' : '') + improvementPctValue.toFixed(1) + '%';
 
             if (isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'index') {
-                document.getElementById('current1RMLabel').textContent = 'Current Index';
-                document.getElementById('max1RMLabel').textContent = 'Best Index';
-                document.getElementById('improvementLabel').textContent = 'Index Change';
-                document.getElementById('improvementPctLabel').textContent = 'Avg Index';
+                document.getElementById('current1RM').textContent = formatVsStart(currentValue);
+                document.getElementById('max1RM').textContent = formatVsStart(maxValue);
+                document.getElementById('improvementPct').textContent = formatVsStart(summary.avg);
+                document.getElementById('current1RMLabel').textContent = 'Now vs. start';
+                document.getElementById('max1RMLabel').textContent = 'Best vs. start';
+                document.getElementById('improvementLabel').textContent = 'Change in this period';
+                document.getElementById('improvementPctLabel').textContent = 'Average vs. start';
             } else if (isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate') {
                 document.getElementById('current1RMLabel').textContent = 'Current Rate';
                 document.getElementById('max1RMLabel').textContent = 'Best Rate';
@@ -1395,7 +1498,8 @@
         const isPercent = filteredData.unit === 'percent';
         const isRateMode = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
         const percentSuffix = '%';
-        const tooltipPrimaryLabel = isPercent ? 'Strength' : metricConfig.label;
+        const isIndexMode = isPercent && !isRateMode;
+        const tooltipPrimaryLabel = isIndexMode ? 'Vs. your start' : (isPercent ? 'Strength' : metricConfig.label);
         const formatTickNumber = (raw) => {
             const num = Number(raw);
             if (!Number.isFinite(num)) return raw;
@@ -1412,6 +1516,7 @@
         const formatValueText = (value) => {
             const num = Number(value);
             if (!Number.isFinite(num)) return '-';
+            if (isIndexMode) return formatVsStart(num);
             return `${formatTickNumber(num)}${valueSuffix}`;
         };
         const formatDeltaText = (delta, prev) => {
@@ -1439,6 +1544,8 @@
         const gradient = ctx.createLinearGradient(0, 0, 0, 320);
         gradient.addColorStop(0, 'rgba(212, 175, 55, 0.35)');
         gradient.addColorStop(1, 'rgba(212, 175, 55, 0.05)');
+        const belowStartFill = isLightMode ? 'rgba(220, 38, 38, 0.12)' : 'rgba(239, 68, 68, 0.18)';
+        const maFill = isIndexMode ? { target: { value: 100 }, above: gradient, below: belowStartFill } : true;
 
         const avgColor = isLightMode ? 'rgba(212, 175, 55, 0.6)' : 'rgba(212, 175, 55, 0.5)';
         const projectionLineColor = isLightMode ? 'rgba(212, 175, 55, 0.58)' : 'rgba(212, 175, 55, 0.5)';
@@ -1448,6 +1555,24 @@
         const maProjectionPoint = getLastFinitePoint(maValues);
         const projectionValue = Number.isFinite(Number(maProjectionPoint.value)) ? Number(maProjectionPoint.value) : null;
         const projectionLabel = Number.isFinite(projectionValue) ? formatValueText(projectionValue) : '';
+        (() => {
+            if (!isIndexMode) { updateStrengthHeadline(false); return; }
+            const series = getSeriesValues(chartData, currentMetric) || [];
+            let peakIdx = null;
+            series.forEach((v, i) => {
+                const n = Number(v);
+                if (Number.isFinite(n) && n > 0 && loggedIndexSet.has(i) && (peakIdx === null || n > Number(series[peakIdx]))) peakIdx = i;
+            });
+            const longDate = (raw) => formatDateLabel(raw, { month: 'short', day: 'numeric', year: 'numeric' });
+            updateStrengthHeadline(true, {
+                current: projectionValue,
+                window: currentMAWindow,
+                latest: (() => { for (let i = series.length - 1; i >= 0; i--) { if (loggedIndexSet.has(i) && Number.isFinite(Number(series[i])) && Number(series[i]) > 0) return Number(series[i]); } return null; })(),
+                startLabel: rawLabels.length ? longDate(rawLabels[0]) : '',
+                peak: peakIdx !== null ? Number(series[peakIdx]) : null,
+                peakLabel: peakIdx !== null ? longDate(rawLabels[peakIdx]) : '',
+            });
+        })();
         const shouldHideTickForProjection = function(value) {
             const tickValue = Number(value);
             if (!Number.isFinite(tickValue) || !Number.isFinite(projectionValue)) return false;
@@ -1462,6 +1587,7 @@
         };
         const yTickCallback = function(value) {
             if (shouldHideTickForProjection.call(this, value)) return '';
+            if (isIndexMode) return Math.abs(Number(value) - 100) < 1e-9 ? 'Start' : formatVsStart(value);
             if (isPercent) return `${formatTickNumber(value)}${percentSuffix}`;
             return formatTickNumber(value);
         };
@@ -1600,7 +1726,7 @@
 
         if (myChart) {
             myChart.$showBaseline100 = showBaseline100;
-            myChart.$baselineLabel = 'Baseline';
+            myChart.$baselineLabel = 'Where you started';
             myChart.$baselineStroke = gridColor;
             myChart.$baselineText = tickColor;
             myChart.$rawData = data;
@@ -1635,7 +1761,7 @@
                 myChart.data.datasets[1].backgroundColor = gradient;
                 myChart.data.datasets[1].borderWidth = 3;
                 myChart.data.datasets[1].borderDash = [];
-                myChart.data.datasets[1].fill = true;
+                myChart.data.datasets[1].fill = maFill;
                 myChart.data.datasets[1].pointRadius = 0;
                 myChart.data.datasets[1].pointHoverRadius = 0;
                 myChart.data.datasets[1].pointHitRadius = 0;
@@ -1718,7 +1844,7 @@
                             borderColor: '#D4AF37',
                             borderWidth: 3,
                             borderDash: [],
-                            fill: true,
+                            fill: maFill,
                             backgroundColor: gradient,
                             tension: 0.35,
                             pointRadius: 0,
@@ -1824,7 +1950,7 @@
             });
 
             myChart.$showBaseline100 = showBaseline100;
-            myChart.$baselineLabel = 'Baseline';
+            myChart.$baselineLabel = 'Where you started';
             myChart.$baselineStroke = gridColor;
             myChart.$baselineText = tickColor;
             myChart.$rawData = data;
