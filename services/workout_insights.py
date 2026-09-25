@@ -296,7 +296,6 @@ def sparkline(
             "is_best": bool(point.get("is_best")),
             # Shown when the user slides across the chart.
             "date_text": point.get("date_text") or "",
-            "title": point.get("title") or "",
             "sets": point.get("sets") or "",
             "url": point.get("url") or "",
         })

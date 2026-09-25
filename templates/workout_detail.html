@@ -245,31 +245,24 @@
     .wd-spark { width: 100%; height: auto; display: block; overflow: visible; touch-action: pan-y; cursor: crosshair; }
     .wd-spark .guide { stroke: var(--gold-primary); stroke-width: 1; stroke-dasharray: 2 3; opacity: 0.6; }
     .wd-spark .focus { fill: none; stroke: var(--gold-primary); stroke-width: 2.5; }
-    .wd-spark-hint { font-size: 0.7rem; color: var(--text-subtle); margin-top: 6px; }
     .wd-tip {
         position: absolute; z-index: 15;
-        min-width: 150px; max-width: 240px;
-        padding: 9px 11px;
+        max-width: 260px;
+        padding: 10px 14px;
         border-radius: 10px;
         border: 1px solid var(--border-gold);
         background: var(--card-bg-solid);
         box-shadow: var(--shadow-md);
-        font-size: 0.76rem; line-height: 1.4;
-        color: var(--text-secondary);
+        line-height: 1.45;
+        white-space: nowrap;
         pointer-events: none;
     }
     .wd-tip[hidden] { display: none; }
-    .wd-tip-date { font-weight: 600; color: var(--gold-primary); display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
-    .wd-tip-tag { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); }
-    .wd-tip-title { color: var(--text-muted); }
-    .wd-tip-sets { margin-top: 3px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-    .wd-tip-open { display: inline-block; margin-top: 5px; font-weight: 600; color: var(--gold-primary); text-decoration: none; }
-    .wd-tip-open[hidden] { display: none; }
-    .wd-tip .on-touch { display: none; }
+    .wd-tip-date { font-size: 0.74rem; font-weight: 600; color: var(--gold-primary); }
+    .wd-tip-sets { margin-top: 4px; font-size: 0.84rem; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: normal; }
+    /* Touch: tapping the card opens that session (mouse users click the chart). */
     @media (hover: none) {
-        .wd-tip { pointer-events: auto; }
-        .wd-tip .on-touch { display: inline; }
-        .wd-tip .on-hover { display: none; }
+        .wd-tip { pointer-events: auto; cursor: pointer; }
     }
     .wd-spark .line { fill: none; stroke: var(--text-subtle); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; opacity: 0.8; }
     .wd-spark .avg { stroke: var(--text-subtle); stroke-width: 1.2; stroke-dasharray: 4 5; opacity: 0.7; }
@@ -479,10 +472,8 @@
                             </svg>
                             <div class="wd-spark-axis"><span>{{ row.spark_first }}</span><span>Today</span></div>
                             <div class="wd-tip" role="status" hidden>
-                                <div class="wd-tip-date"><span class="d"></span><span class="wd-tip-tag"></span></div>
-                                <div class="wd-tip-title"></div>
+                                <div class="wd-tip-date"></div>
                                 <div class="wd-tip-sets"></div>
-                                <a class="wd-tip-open" href="#"><span class="on-touch">Open workout →</span><span class="on-hover">Click to open</span></a>
                             </div>
                         </div>
                         <div class="wd-legend">
@@ -490,7 +481,6 @@
                             {% if sp.dots | selectattr('is_best') | list %}<span><i class="wd-key best"></i>Your best</span>{% endif %}
                             {% if sp.average_y is not none %}<span><i class="wd-key avg"></i>Recent average</span>{% endif %}
                         </div>
-                        <div class="wd-spark-hint">Slide or hover across the chart to see each session.</div>
                     </div>
                     {% endif %}
 
@@ -594,7 +584,7 @@
         });
     })();
 
-    // Mini trend chart: slide (or hover) to inspect a session, click / tap "Open" to go to it.
+    // Mini trend chart: slide (or hover) to inspect a session; click the chart, or tap the card, to open it.
     (function() {
         const hoverDevice = window.matchMedia('(hover: hover)').matches;
         const charts = [];
@@ -609,7 +599,6 @@
             const guide = svg.querySelector('.guide');
             const focus = svg.querySelector('.focus');
             const tip = wrap.querySelector('.wd-tip');
-            const open = tip.querySelector('.wd-tip-open');
             let active = -1;
 
             const nearest = (clientX) => {
@@ -638,13 +627,8 @@
                 guide.setAttribute('visibility', 'visible');
                 focus.setAttribute('visibility', 'visible');
 
-                tip.querySelector('.d').textContent = p.date_text;
-                tip.querySelector('.wd-tip-tag').textContent = p.is_today ? 'Today' : (p.is_best ? 'Your best' : '');
-                tip.querySelector('.wd-tip-title').textContent = p.title;
-                tip.querySelector('.wd-tip-title').hidden = !p.title;
+                tip.querySelector('.wd-tip-date').textContent = p.date_text;
                 tip.querySelector('.wd-tip-sets').textContent = p.sets;
-                open.hidden = !p.url;
-                open.href = p.url || '#';
                 tip.hidden = false;
 
                 // Place above the point, flip below near the top, keep inside the chart width.
@@ -665,6 +649,10 @@
             svg.addEventListener('click', () => {
                 // Mouse: clicking a point opens it (like the Stats chart). Touch: use the "Open" link.
                 if (!hoverDevice) return;
+                const p = points[active];
+                if (p && p.url) window.location.href = p.url;
+            });
+            tip.addEventListener('click', () => {
                 const p = points[active];
                 if (p && p.url) window.location.href = p.url;
             });

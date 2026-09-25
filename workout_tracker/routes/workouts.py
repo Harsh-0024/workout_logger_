@@ -600,10 +600,8 @@ def register_workout_routes(app):
                     }
 
                 def _point_details(entry):
-                    title = _clean_workout_title(getattr(entry, "workout_name", "") or "")
                     return {
                         "date_text": insights.long_date(entry.date),
-                        "title": "" if title.lower() == "workout" else title,
                         "sets": " · ".join(item["label"] for item in _ranked(entry)),
                     }
 
