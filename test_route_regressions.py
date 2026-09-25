@@ -99,6 +99,57 @@ class TestRouteRegressions(unittest.TestCase):
             sess["_id"] = "route-test-session"
         return user
 
+    def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
+        from itsdangerous import URLSafeSerializer
+
+        user = self._create_logged_in_user(username="share_owner")
+        exercise = "Flat Dumbbell Press"
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 1, 9, 0, 0),
+                workout_name="Push",
+                exercise=exercise,
+                exercise_string="Flat Dumbbell Press\n30 30 30, 8 8 8",
+                sets_json={"weights": [30, 30, 30], "reps": [8, 8, 8]},
+                bodyweight=user.bodyweight,
+            )
+        )
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 10, 9, 0, 0),
+                workout_name="Push Day",
+                exercise=exercise,
+                exercise_string="Flat Dumbbell Press\n32.5 30 30, 8 8 8",
+                sets_json={"weights": [32.5, 30, 30], "reps": [8, 8, 8]},
+                bodyweight=user.bodyweight,
+            )
+        )
+        self.session.commit()
+
+        token = URLSafeSerializer(self.app.config.get("SECRET_KEY", "workout-share")).dumps(
+            {"user_id": user.id, "date": "2026-01-10"}
+        )
+        visitor = self.app.test_client()  # a friend opening the link, not logged in
+        response = visitor.get(f"/share/{token}")
+
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn("Push Day", page)
+        self.assertIn('property="og:title"', page)
+        self.assertIn("1 new personal best", page)
+        self.assertIn("🥇", page)
+        self.assertIn("32.5×8", page)
+        self.assertIn("Start free", page)
+        self.assertNotIn("Est. 1RM", page)
+        # "Copy" text spells every set out for newcomers instead of the app shorthand.
+        self.assertIn("32.5 kg × 8, 30 kg × 8, 30 kg × 8", page)
+
+        expired = visitor.get("/share/not-a-real-token")
+        self.assertEqual(expired.status_code, 200)
+        self.assertIn("This link has expired", expired.get_data(as_text=True))
+
     def test_shortcut_pick_url_is_available_to_regular_users(self):
         self._create_logged_in_user(username="shortcut_pick_user")
 
@@ -162,9 +213,9 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
         self.assertIn("Custom Workout", page)
-        self.assertIn("Custom Lift - [4, 6-8]", page)
+        self.assertIn("Custom Lift - [3, 6-8]", page)
         self.assertIn("2 Exercises", page)
-        self.assertLess(page.index("Barbell Curl"), page.index("Custom Lift - [4, 6-8]"))
+        self.assertLess(page.index("Barbell Curl"), page.index("Custom Lift - [3, 6-8]"))
         self.assertEqual(
             self.session.query(CustomRetrievalEvent)
             .filter_by(user_id=user.id)
@@ -318,7 +369,12 @@ class TestRouteRegressions(unittest.TestCase):
     def test_settings_shows_shortcut_urls_for_regular_users(self):
         self._create_logged_in_user(username="shortcut_settings_user")
 
-        response = self.client.get("/settings")
+        # Settings is a hub; shortcut URLs live on the Integrations page.
+        hub = self.client.get("/settings")
+        self.assertEqual(hub.status_code, 200)
+        self.assertIn('href="/settings/integrations"', hub.get_data(as_text=True))
+
+        response = self.client.get("/settings/integrations")
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
@@ -332,7 +388,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Bodyweight Exercises", page)
+        self.assertIn("BW Exercises", page)
         self.assertIn("Crunches A", page)
 
     def test_bodyweight_log_uses_offsets_for_saved_strength(self):
@@ -429,7 +485,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("previous bodyweight history", page)
+        self.assertIn("This exercise has bodyweight history", page)
         self.assertTrue(
             self.session.query(WorkoutLog).filter_by(exercise="Crunches A").one().uses_bodyweight
         )

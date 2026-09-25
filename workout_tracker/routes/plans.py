@@ -257,10 +257,17 @@ def register_plan_routes(app):
                 workout_title = None
             workout_title = workout_title or DEFAULT_CUSTOM_WORKOUT_TITLE
 
+            # Give retrieve the full plan line so a plan-only rep range (e.g. "[4, 6-8]")
+            # still guides the output; set_overrides keeps the UI set count authoritative.
+            catalog_by_key = {item['key']: item for item in catalog}
+            selected_lines = [
+                catalog_by_key[key].get('exercise_line') or catalog_by_key[key]['name']
+                for key in selected_keys
+            ]
             output, exercise_count, set_count = generate_custom_retrieve_output(
                 Session,
                 user,
-                selected_exercises,
+                selected_lines,
                 set_overrides=set_overrides,
                 title=workout_title,
             )
