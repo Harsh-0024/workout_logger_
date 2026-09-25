@@ -364,6 +364,23 @@
         .wd-colhead, .wd-ex > summary { column-gap: 10px; }
         .wd-chip.medal { padding: 0 5px; font-size: 0.74rem; }
     }
+
+    /* ---- Laptop / tablet: more air, fewer and fainter lines (phones are styled above) ---- */
+    @media (min-width: 576px) {
+        .wd { --wd-col: 100px; --wd-row-x: 12px; }
+        .wd-card { padding: 36px 40px 40px; }
+        .wd-toolbar { margin-bottom: 20px; }
+        .wd-title { margin-bottom: 8px; }
+        .wd-meta { margin-bottom: 32px; }
+        .wd-stats { margin-bottom: 28px; padding-bottom: 30px; }
+        /* The header needs no rule of its own until it is pinned over the list. */
+        .wd-colhead { border-bottom-color: transparent; padding-bottom: 6px; }
+        .wd-colhead.is-stuck { border-bottom-color: var(--wd-hairline); }
+        .wd-ex { border-bottom-color: color-mix(in srgb, var(--wd-hairline) 65%, transparent); }
+        .wd-ex:last-child { border-bottom-color: transparent; }
+        .wd-ex > summary { padding: 26px var(--wd-row-x); row-gap: 10px; }
+        .wd-body { padding-bottom: 30px; }
+    }
 </style>
 
 <div class="wd">
