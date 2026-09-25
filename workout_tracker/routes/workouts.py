@@ -13,7 +13,7 @@ from sqlalchemy import desc, func
 
 from list_of_exercise import get_workout_days, list_of_exercises
 from models import Session, User, WorkoutLog, UserApiKey, ShortcutKeyMap, RepRange
-from parsers.workout import workout_parser, parse_bw_weight
+from parsers.workout import workout_parser
 from services.logging import (
     handle_workout_log,
     compute_workout_summary_for_date,
@@ -28,6 +28,7 @@ from services.logging import (
     refresh_best_lift_pointers,
 )
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
+from services import workout_insights as insights
 from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names
 from services.bodyweight import (
     backfill_bodyweight_log_flags,
@@ -134,6 +135,29 @@ def register_workout_routes(app):
 
     def _log_uses_bw(log):
         return infer_log_uses_bodyweight(Session, log)
+
+    def _display_sets(log, effective_sets, uses_bw):
+        """Sets as the user thinks of them: added load on top of bodyweight for BW exercises."""
+        if not uses_bw or not effective_sets:
+            return getattr(log, 'sets_json', None)
+        if getattr(log, 'bodyweight', None) is None:
+            # No bodyweight saved: loads were stored as offsets, with 1 as the legacy "just BW" marker.
+            raw = getattr(log, 'sets_json', None) or {}
+            weights = []
+            for weight in raw.get('weights') or []:
+                try:
+                    weights.append(0.0 if float(weight) <= 1 else float(weight))
+                except (TypeError, ValueError):
+                    weights.append(weight)
+            return {'weights': weights, 'reps': list(raw.get('reps') or [])}
+        bodyweight = float(log.bodyweight)
+        weights = []
+        for weight in effective_sets.get('weights') or []:
+            try:
+                weights.append(round(float(weight) - bodyweight, 2))
+            except (TypeError, ValueError):
+                weights.append(weight)
+        return {'weights': weights, 'reps': list(effective_sets.get('reps') or [])}
 
     def build_exercise_text(logs):
         lines = []
@@ -429,9 +453,6 @@ def register_workout_routes(app):
             current_workout_url = url_for('view_workout', date_str=date_str)
 
             workout_name = _clean_workout_title(logs[0].workout_name or "Workout")
-            header_date = workout_date.strftime('%d/%m')
-            workout_text = build_exercise_text(logs)
-            workout_text = f"{header_date} {workout_name}\n\n{workout_text}".strip()
             exercise_count = len(logs)
             set_count = 0
             missing_bw_exercises = set()
@@ -454,7 +475,8 @@ def register_workout_routes(app):
                     if norm:
                         log_ex_index.setdefault("by_norm", {})[norm] = list(names)
 
-            # Calculate volume for each exercise
+            rows = []
+            summary_counts = {"new_best": 0, "up": 0, "down": 0, "steady": 0}
             for log in logs:
                 exercise_text = str(getattr(log, 'exercise_string', '') or '')
                 inferred_set_count = comparison_set_count(getattr(log, "sets_json", None), exercise_text)
@@ -466,16 +488,15 @@ def register_workout_routes(app):
                     inferred_set_count=inferred_set_count,
                     default_sets=3,
                 )
-                log.target_sets = target_sets
-                log.strict_target_sets = strict_target_sets
-                timed_status = resolve_timed_exercise_status(
-                    Session,
-                    user.id,
-                    log.exercise,
-                    exercise_text,
-                    log_ex_index=log_ex_index,
+                is_timed = bool(
+                    resolve_timed_exercise_status(
+                        Session,
+                        user.id,
+                        log.exercise,
+                        exercise_text,
+                        log_ex_index=log_ex_index,
+                    ).get("is_timed")
                 )
-                log.is_timed = bool(timed_status.get("is_timed"))
                 perf = classify_exercise_performance(
                     Session,
                     user.id,
@@ -483,48 +504,18 @@ def register_workout_routes(app):
                     getattr(log, 'sets_json', None),
                     target_sets=target_sets,
                     strict_target_sets=strict_target_sets,
-                    is_timed=log.is_timed,
+                    is_timed=is_timed,
                     current_log_id=getattr(log, 'id', None),
                     current_exercise_string=exercise_text,
                     summary_mode=False,
                     historical_before_dt=start_dt,
                     log_ex_index=log_ex_index,
                 )
-                log.performance_key = perf.get('key')
-                log.performance_label = perf.get('label')
                 set_count += _count_sets(log.sets_json, log.sets_display)
-                if user.bodyweight is None and _log_uses_bw(log):
+                uses_bw = _log_uses_bw(log)
+                if user.bodyweight is None and uses_bw:
                     missing_bw_exercises.add(log.exercise)
-                total_volume = 0
-                effective_sets = effective_sets_for_log(Session, log)
-                if effective_sets and isinstance(effective_sets, dict):
-                    weights = effective_sets.get('weights') or []
-                    reps_list = effective_sets.get('reps') or []
-                    for weight, reps in zip(weights, reps_list):
-                        try:
-                            total_volume += float(weight) * int(reps)
-                        except (TypeError, ValueError):
-                            continue
-                elif log.sets_display:
-                    # Parse sets_display to calculate volume (supports x/×)
-                    sets = log.sets_display.split(', ')
-                    for s in sets:
-                        try:
-                            normalized = s.replace('×', 'x')
-                            parts = [p.strip() for p in normalized.split('x')]
-                            if len(parts) == 2:
-                                weight_token = re.sub(r'\s+', '', parts[0]).lower()
-                                bw_weight = parse_bw_weight(weight_token, user.bodyweight)
-                                if bw_weight is not None:
-                                    weight = bw_weight
-                                else:
-                                    cleaned_weight = re.sub(r'(kg|lbs|lb)', '', parts[0], flags=re.IGNORECASE)
-                                    weight = float(cleaned_weight)
-                                reps = int(parts[1])
-                                total_volume += weight * reps
-                        except (ValueError, IndexError):
-                            continue
-                log.total_volume = total_volume if total_volume > 0 else None
+
                 exercise_candidates = resolve_equivalent_names(log.exercise, log_ex_index) or [log.exercise]
                 prev_candidates = (
                     Session.query(WorkoutLog)
@@ -534,80 +525,165 @@ def register_workout_routes(app):
                     .order_by(WorkoutLog.date.desc(), WorkoutLog.id.desc())
                     .all()
                 )
-                prev_log = None
-                for candidate in prev_candidates:
-                    if strict_target_sets and comparison_set_count(
+                # In strict mode only sessions that reached the target set count are comparable.
+                comparable = [
+                    candidate for candidate in prev_candidates
+                    if not strict_target_sets
+                    or comparison_set_count(
                         getattr(candidate, "sets_json", None),
                         getattr(candidate, "exercise_string", "") or "",
-                    ) < target_sets:
-                        continue
-                    prev_log = candidate
-                    break
-                prev_1rm = prev_log.estimated_1rm if prev_log and prev_log.estimated_1rm else None
-                current_1rm = log.estimated_1rm if log.estimated_1rm else None
-                if prev_1rm and current_1rm:
-                    delta_pct = ((current_1rm - prev_1rm) / prev_1rm) * 100.0
-                    delta_pct = max(-300.0, min(300.0, delta_pct))
-                else:
-                    delta_pct = None
-                log.improvement_pct = delta_pct
-                log.prev_1rm = prev_1rm
-                log.prev_sets_display = prev_log.sets_display if prev_log else None
-                log.prev_date_label = (
-                    prev_log.date.strftime('%d-%m-%y')
-                    if prev_log and getattr(prev_log, 'date', None)
-                    else None
-                )
-                log.prev_date_iso = (
-                    prev_log.date.strftime('%Y-%m-%d')
-                    if prev_log and getattr(prev_log, 'date', None)
-                    else None
-                )
-                log.prev_workout_url = (
-                    url_for('view_workout', date_str=log.prev_date_iso, return_to=current_workout_url)
-                    if log.prev_date_iso else None
-                )
+                    ) >= target_sets
+                ]
+                prev_log = comparable[0] if comparable else None
                 if not prev_log:
-                    log.performance_key = "first_log"
-                    if strict_target_sets and prev_candidates:
-                        log.performance_label = "No Comparable Baseline"
-                    else:
-                        log.performance_label = "No baseline"
-                best_log = get_best_log_for_exercise_before_date(
-                    Session,
-                    user.id,
-                    log.exercise,
-                    target_sets=target_sets,
-                    strict_target_sets=strict_target_sets,
-                    log_ex_index=log_ex_index,
-                    is_timed=log.is_timed,
-                    workout_day_start_dt=start_dt,
+                    perf = {**perf, "key": "first_log"}
+
+                # Link "Vs best" to the exact workout the medal was scored against.
+                best_log = None
+                if prev_log:
+                    reference_log_id = perf.get('reference_log_id')
+                    best_log = Session.get(WorkoutLog, reference_log_id) if reference_log_id else None
+                    if best_log is None:
+                        best_log = get_best_log_for_exercise_before_date(
+                            Session,
+                            user.id,
+                            log.exercise,
+                            target_sets=target_sets,
+                            strict_target_sets=strict_target_sets,
+                            log_ex_index=log_ex_index,
+                            is_timed=is_timed,
+                            workout_day_start_dt=start_dt,
+                        )
+
+                def _sets_for(entry):
+                    # Label every session of a bodyweight exercise relative to bodyweight
+                    # (older logs stored the full load, e.g. 73, which should read "BW").
+                    effective = effective_sets_for_log(Session, entry)
+                    display = _display_sets(entry, effective, uses_bw)
+                    return effective, display, uses_bw
+
+                def _ranked(entry):
+                    effective, display, entry_uses_bw = _sets_for(entry)
+                    return insights.ranked_sets(display, effective, uses_bodyweight=entry_uses_bw, is_timed=is_timed)
+
+                def _score(entry):
+                    effective, _display, _uses = _sets_for(entry)
+                    return insights.session_score(effective, top_n=target_sets, is_timed=is_timed)
+
+                today_effective, today_display, _ = _sets_for(log)
+                today_ranked = insights.ranked_sets(
+                    today_display, today_effective, uses_bodyweight=uses_bw, is_timed=is_timed
                 )
-                log.best_date_label = (
-                    best_log.date.strftime('%d-%m-%y')
-                    if best_log and getattr(best_log, 'date', None)
-                    else None
-                )
-                log.best_date_iso = (
-                    best_log.date.strftime('%Y-%m-%d')
-                    if best_log and getattr(best_log, 'date', None)
-                    else None
-                )
-                log.best_workout_url = (
-                    url_for('view_workout', date_str=log.best_date_iso, return_to=current_workout_url)
-                    if log.best_date_iso else None
-                )
-                log.stats_url = url_for('stats_index', exercise=log.exercise)
-            
+                today_score = insights.session_score(today_effective, top_n=target_sets, is_timed=is_timed)
+
+                history = [
+                    {"id": entry.id, "date": entry.date, "score": _score(entry), "entry": entry}
+                    for entry in comparable[: insights.SPARKLINE_SESSIONS - 1]
+                ]
+                trend = insights.trend(today_score, history)
+                best_info = insights.best_summary(perf, has_history=bool(prev_candidates))
+
+                if perf.get("key") in insights.MEDAL_KEYS:
+                    summary_counts["new_best"] += 1
+                if trend:
+                    summary_counts[trend["direction"]] += 1
+
+                def _comparison(entry):
+                    if entry is None:
+                        return None
+                    entry_iso = entry.date.strftime('%Y-%m-%d')
+                    return {
+                        "date_text": insights.short_date(entry.date, ref_year=workout_date.year),
+                        "url": url_for('view_workout', date_str=entry_iso, return_to=current_workout_url),
+                        "ranked": _ranked(entry),
+                        "bodyweight": getattr(entry, "bodyweight", None),
+                    }
+
+                def _point_details(entry):
+                    title = _clean_workout_title(getattr(entry, "workout_name", "") or "")
+                    return {
+                        "date_text": insights.long_date(entry.date),
+                        "title": "" if title.lower() == "workout" else title,
+                        "sets": " · ".join(item["label"] for item in _ranked(entry)),
+                    }
+
+                best_id = getattr(best_log, "id", None)
+                spark_points = [
+                    {
+                        "score": row["score"],
+                        "date": row["date"],
+                        "is_best": row["id"] == best_id,
+                        "url": url_for(
+                            'view_workout',
+                            date_str=row["date"].strftime('%Y-%m-%d'),
+                            return_to=current_workout_url,
+                        ),
+                        **_point_details(row["entry"]),
+                    }
+                    for row in reversed(history)
+                ]
+                spark_points.append({
+                    "score": today_score,
+                    "date": log.date,
+                    "is_today": True,
+                    **_point_details(log),
+                })
+
+                last_cmp = _comparison(prev_log)
+                best_cmp = _comparison(best_log)
+                best_is_last = bool(best_log and prev_log and best_log.id == prev_log.id)
+                table = insights.compare_columns(
+                    today_ranked,
+                    (last_cmp or {}).get("ranked"),
+                    None if best_is_last else (best_cmp or {}).get("ranked"),
+                ) if last_cmp else []
+                # For bodyweight exercises a changed bodyweight moves the % even when the sets match.
+                bodyweight_note = None
+                if uses_bw and last_cmp and log.bodyweight and last_cmp.get("bodyweight") \
+                        and abs(float(log.bodyweight) - float(last_cmp["bodyweight"])) >= 0.1:
+                    bodyweight_note = (
+                        f"Bodyweight {float(log.bodyweight):g} kg today vs "
+                        f"{float(last_cmp['bodyweight']):g} kg last time, which is included in the comparison."
+                    )
+                rows.append({
+                    "name": log.exercise,
+                    "performance_key": perf.get("key"),
+                    "performance_label": perf.get("label"),
+                    "sets_line": insights.format_sets_line(
+                        today_display, uses_bodyweight=uses_bw, is_timed=is_timed
+                    ) or (log.sets_display or ""),
+                    # Strongest first, matching the 1st/2nd/3rd ranking in the expanded table.
+                    "sets_ranked": [entry["label"] for entry in today_ranked],
+                    "needs_bodyweight": log.exercise in missing_bw_exercises,
+                    "trend": trend,
+                    "trend_dates": ", ".join(
+                        insights.short_date(d, ref_year=workout_date.year) for d in (trend or {}).get("dates", [])
+                    ),
+                    "best": best_info,
+                    "last": last_cmp,
+                    "best_cmp": best_cmp,
+                    "prev_workout_url": (last_cmp or {}).get("url"),
+                    "best_workout_url": (best_cmp or {}).get("url"),
+                    "best_is_last": best_is_last,
+                    "table": table,
+                    "bodyweight_note": bodyweight_note,
+                    "spark": insights.sparkline(spark_points, average=(trend or {}).get("average")),
+                    "spark_first": insights.short_date(
+                        spark_points[0]["date"], ref_year=workout_date.year
+                    ),
+                    "stats_url": url_for('stats_index', exercise=log.exercise),
+                })
+
             share_token = _make_share_token(user.id, workout_date)
             share_url = url_for('shared_workout', token=share_token, _external=True)
 
             return render_template(
                 'workout_detail.html',
                 date=date_str,
+                date_label=f"{workout_date.strftime('%a')}, {workout_date.day} {workout_date.strftime('%b %Y')}",
                 workout_name=workout_name,
-                logs=logs,
-                workout_text=workout_text,
+                rows=rows,
+                summary_counts=summary_counts,
                 exercise_count=exercise_count,
                 set_count=set_count,
                 missing_bw_exercises=sorted(missing_bw_exercises),

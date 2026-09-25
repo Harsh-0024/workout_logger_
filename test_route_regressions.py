@@ -35,6 +35,7 @@ from services.logging import (
     classify_exercise_performance,
     compute_workout_summary_for_date,
     comparison_set_count,
+    get_best_log_for_exercise_before_date,
     handle_workout_log,
     resolve_target_sets_for_exercise,
 )
@@ -690,11 +691,11 @@ class TestRouteRegressions(unittest.TestCase):
                 return {
                     "rows": [
                         {
-                            "exercise": log.exercise,
-                            "best_workout_url": getattr(log, "best_workout_url", None),
-                            "performance_key": getattr(log, "performance_key", None),
+                            "exercise": row["name"],
+                            "best_workout_url": row.get("best_workout_url"),
+                            "performance_key": row.get("performance_key"),
                         }
-                        for log in kwargs.get("logs", [])
+                        for row in kwargs.get("rows", [])
                     ]
                 }
             return {"template": template_name}
@@ -750,10 +751,9 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Vs Previous (12-01-26)", page)
-        self.assertIn("Vs Best (12-01-26)", page)
-        self.assertNotIn("No prior", page)
-        self.assertNotIn("No baseline", page)
+        self.assertIn("Last · best</a><span class=\"date\">12 Jan</span>", page)
+        self.assertNotIn("First log", page)
+        self.assertNotIn("New baseline", page)
 
     def test_log_summary_uses_aliases_for_reordered_saved_exercises(self):
         user = self._create_logged_in_user(username="log_summary_alias_user")
@@ -983,11 +983,11 @@ class TestRouteRegressions(unittest.TestCase):
                 return {
                     "rows": [
                         {
-                            "exercise": log.exercise,
-                            "best_workout_url": getattr(log, "best_workout_url", None),
-                            "performance_key": getattr(log, "performance_key", None),
+                            "exercise": row["name"],
+                            "best_workout_url": row.get("best_workout_url"),
+                            "performance_key": row.get("performance_key"),
                         }
-                        for log in kwargs.get("logs", [])
+                        for row in kwargs.get("rows", [])
                     ]
                 }
             return {"template": template_name}
@@ -1126,6 +1126,63 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(perf["key"], "consistent")
 
+    def test_classifier_reference_prefers_full_set_logs_like_best_log_lookup(self):
+        user = self._create_logged_in_user(username="full_set_reference_user")
+        exercise = "Reference Lift"
+        short_day = WorkoutLog(
+            user_id=user.id,
+            date=datetime(2026, 1, 1, 9, 0, 0),
+            workout_name="Short",
+            exercise=exercise,
+            exercise_string="Reference Lift\n40 40 40 40, 10 10 10 10",
+            sets_json={"weights": [40, 40, 40, 40], "reps": [10, 10, 10, 10]},
+            bodyweight=user.bodyweight,
+        )
+        full_day = WorkoutLog(
+            user_id=user.id,
+            date=datetime(2026, 1, 5, 9, 0, 0),
+            workout_name="Full",
+            exercise=exercise,
+            exercise_string="Reference Lift\n30 30 30 30 30, 10 10 10 10 10",
+            sets_json={"weights": [30, 30, 30, 30, 30], "reps": [10, 10, 10, 10, 10]},
+            bodyweight=user.bodyweight,
+        )
+        current = WorkoutLog(
+            user_id=user.id,
+            date=datetime(2026, 1, 10, 9, 0, 0),
+            workout_name="Current",
+            exercise=exercise,
+            exercise_string="Reference Lift\n35 35 35 35 35, 10 10 10 10 10",
+            sets_json={"weights": [35, 35, 35, 35, 35], "reps": [10, 10, 10, 10, 10]},
+            bodyweight=user.bodyweight,
+        )
+        self.session.add_all([short_day, full_day, current])
+        self.session.commit()
+
+        day_start = datetime(2026, 1, 10)
+        perf = classify_exercise_performance(
+            self.session,
+            user.id,
+            exercise,
+            current.sets_json,
+            target_sets=5,
+            current_log_id=current.id,
+            current_exercise_string=current.exercise_string,
+            historical_before_dt=day_start,
+        )
+        best_log = get_best_log_for_exercise_before_date(
+            self.session,
+            user.id,
+            exercise,
+            target_sets=5,
+            workout_day_start_dt=day_start,
+        )
+
+        # The 4-set day must not become the medal baseline while "Vs Best" links the 5-set day.
+        self.assertEqual(best_log.id, full_day.id)
+        self.assertEqual(perf["reference_log_id"], full_day.id)
+        self.assertEqual(perf["key"], "gold_strength")
+
     def test_incomplete_strict_session_gets_compared_badge_not_consistent_short_circuit(self):
         user = self._create_logged_in_user(username="incomplete_badge_user")
         exercise = "Flat Dumbbell Press"
@@ -1161,10 +1218,10 @@ class TestRouteRegressions(unittest.TestCase):
                 return {
                     "rows": [
                         {
-                            "exercise": log.exercise,
-                            "performance_key": getattr(log, "performance_key", None),
+                            "exercise": row["name"],
+                            "performance_key": row.get("performance_key"),
                         }
-                        for log in kwargs.get("logs", [])
+                        for row in kwargs.get("rows", [])
                     ]
                 }
             return {"template": template_name}
@@ -1270,11 +1327,11 @@ class TestRouteRegressions(unittest.TestCase):
                 return {
                     "rows": [
                         {
-                            "exercise": log.exercise,
-                            "performance_key": getattr(log, "performance_key", None),
-                            "performance_label": getattr(log, "performance_label", None),
+                            "exercise": row["name"],
+                            "performance_key": row.get("performance_key"),
+                            "performance_label": row.get("performance_label"),
                         }
-                        for log in kwargs.get("logs", [])
+                        for row in kwargs.get("rows", [])
                     ]
                 }
             return {"template": template_name}
@@ -1287,7 +1344,7 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertTrue(data.get("rows"))
         row = data["rows"][0]
         self.assertEqual(row.get("performance_key"), "significantly_off")
-        self.assertEqual(row.get("performance_label"), "↓ Significantly Off")
+        self.assertEqual(row.get("performance_label"), "Below best")
 
 
 if __name__ == "__main__":

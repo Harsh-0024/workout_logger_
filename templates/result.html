@@ -119,22 +119,13 @@
                     border-color: rgba(113, 113, 122, 0.45);
                 }
 
-                .perf-slightly_off {
-                    color: #ffefcf;
-                    background: rgba(245, 158, 11, 0.22);
-                    border-color: rgba(245, 158, 11, 0.45);
-                }
-
-                .perf-moderately_off {
-                    color: #ffe3c2;
-                    background: rgba(239, 106, 0, 0.25);
-                    border-color: rgba(239, 106, 0, 0.5);
-                }
-
+                /* Below best is the normal state: calm grey, same as "Matches best". */
+                .perf-slightly_off,
+                .perf-moderately_off,
                 .perf-significantly_off {
-                    color: #ffe0e0;
-                    background: rgba(239, 68, 68, 0.25);
-                    border-color: rgba(239, 68, 68, 0.5);
+                    color: #d4d4d8;
+                    background: rgba(113, 113, 122, 0.18);
+                    border-color: rgba(113, 113, 122, 0.35);
                 }
 
                 [data-theme="light"] .perf-consistent {
@@ -142,19 +133,11 @@
                     background: rgba(113, 113, 122, 0.14);
                 }
 
-                [data-theme="light"] .perf-slightly_off {
-                    color: #8a4b02;
-                    background: rgba(245, 158, 11, 0.15);
-                }
-
-                [data-theme="light"] .perf-moderately_off {
-                    color: #8c3600;
-                    background: rgba(239, 106, 0, 0.16);
-                }
-
+                [data-theme="light"] .perf-slightly_off,
+                [data-theme="light"] .perf-moderately_off,
                 [data-theme="light"] .perf-significantly_off {
-                    color: #991b1b;
-                    background: rgba(239, 68, 68, 0.14);
+                    color: #57534e;
+                    background: rgba(113, 113, 122, 0.1);
                 }
             </style>
 

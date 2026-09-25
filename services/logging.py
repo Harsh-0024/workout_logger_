@@ -35,17 +35,20 @@ from utils.logger import logger
 
 
 _PERFORMANCE_LABELS: Dict[str, Dict[str, str]] = {
-    "gold_strength": {"label": "🥇 Gold Strength", "short": "Gold Strength"},
-    "silver_strength": {"label": "🥈 Silver Strength", "short": "Silver Strength"},
-    "bronze_strength": {"label": "🥉 Bronze Strength", "short": "Bronze Strength"},
-    "gold_load": {"label": "🥇 Gold Load", "short": "Gold Load"},
-    "silver_load": {"label": "🥈 Silver Load", "short": "Silver Load"},
-    "bronze_load": {"label": "🥉 Bronze Load", "short": "Bronze Load"},
-    "consistent": {"label": "→ Consistent", "short": "Consistent"},
-    "slightly_off": {"label": "↓ Slightly Off", "short": "Slightly Off"},
-    "moderately_off": {"label": "↓ Moderately Off", "short": "Moderately Off"},
-    "significantly_off": {"label": "↓ Significantly Off", "short": "Significantly Off"},
-    "first_log": {"label": "First Log", "short": "First Log"},
+    # Medal tier = which set (strongest / 2nd / 3rd) decided the new best.
+    # Load tiers = strength tied, won on weight; shown with the same medals.
+    "gold_strength": {"label": "🥇 New best", "short": "New best"},
+    "silver_strength": {"label": "🥈 New best", "short": "New best"},
+    "bronze_strength": {"label": "🥉 New best", "short": "New best"},
+    "gold_load": {"label": "🥇 New best", "short": "New best"},
+    "silver_load": {"label": "🥈 New best", "short": "New best"},
+    "bronze_load": {"label": "🥉 New best", "short": "New best"},
+    "consistent": {"label": "= Matches best", "short": "Matches best"},
+    # Below best is the normal state, so the three "off" tiers share one calm label.
+    "slightly_off": {"label": "Below best", "short": "Below best"},
+    "moderately_off": {"label": "Below best", "short": "Below best"},
+    "significantly_off": {"label": "Below best", "short": "Below best"},
+    "first_log": {"label": "✦ First log", "short": "First log"},
 }
 
 _KNOWN_TIMED_EXERCISES = {
@@ -588,7 +591,9 @@ def classify_exercise_performance(
         log_set_count = comparison_set_count(log_sets, getattr(log, "exercise_string", "") or "")
         if strict_target_sets and log_set_count < min_required_sets:
             continue
-        aligned_log_sets = _align_sets_to_count(log_sets, max(log_set_count, compare_n)) or log_sets
+        # Align to the log's own set count (as the best-log lookup does); padding up to
+        # compare_n would invent sets the user never did and skew the medal.
+        aligned_log_sets = _align_sets_to_count(log_sets, log_set_count) or log_sets
         vectors = _rank_vectors_for_sets(aligned_log_sets, top_n=compare_n, is_timed=is_timed)
         if not vectors.get("scores"):
             continue
@@ -597,6 +602,7 @@ def classify_exercise_performance(
                 "id": getattr(log, "id", None),
                 "scores": vectors["scores"],
                 "weights": vectors["weights"],
+                "set_count": log_set_count,
                 "date": getattr(log, "date", datetime.min),
                 "is_current": False,
             }
@@ -639,28 +645,38 @@ def classify_exercise_performance(
             }
         return _performance_payload("first_log", summary_mode=summary_mode)
 
-    best_row = max(
-        rows,
+    # Pick the reference workout with the same "best log" rule used everywhere else
+    # (_get_best_log / _get_best_log_before_date): outside strict mode, logs that
+    # reached the target set count win over shorter logs, so a padded short day
+    # never becomes the medal baseline while the "Vs Best" link points elsewhere.
+    if not strict_target_sets:
+        full_competitors = [row for row in competitors if (row.get("set_count") or 0) >= top_n]
+        if full_competitors:
+            competitors = full_competitors
+    reference_row = max(
+        competitors,
         key=lambda row: (
             tuple(row.get("scores") or []),
             tuple(row.get("weights") or []),
+            row.get("set_count") or 0,
             row.get("date") or datetime.min,
         ),
     )
 
-    # Compare against the strongest non-current reference workout.
-    # If current is already best overall, compare against the next-best competitor.
-    if best_row is current_row:
-        reference_row = max(
-            competitors,
-            key=lambda row: (
-                tuple(row.get("scores") or []),
-                tuple(row.get("weights") or []),
-                row.get("date") or datetime.min,
-            ),
-        )
-    else:
-        reference_row = best_row
+    def _result(key: str, diff_idx: Optional[int] = None, vector: str = "scores") -> Dict[str, Any]:
+        payload = _performance_payload(key, summary_mode=summary_mode)
+        payload["reference_log_id"] = reference_row.get("id")
+        # Size of the win/loss on the deciding set, so the UI can say "+4%" / "6% below".
+        payload["diff_index"] = diff_idx
+        payload["diff_pct"] = None
+        if diff_idx is not None:
+            cur_vals = current_row.get(vector) or []
+            ref_vals = reference_row.get(vector) or []
+            cur_val = float(cur_vals[diff_idx]) if diff_idx < len(cur_vals) else 0.0
+            ref_val = float(ref_vals[diff_idx]) if diff_idx < len(ref_vals) else 0.0
+            if ref_val > 0:
+                payload["diff_pct"] = (cur_val - ref_val) / ref_val * 100.0
+        return payload
 
     diff_idx, cmp_to_reference = _first_score_diff_index(
         current_row.get("scores") or [],
@@ -670,17 +686,17 @@ def classify_exercise_performance(
 
     if cmp_to_reference > 0:
         if diff_idx == 0:
-            return _performance_payload("gold_strength", summary_mode=summary_mode)
+            return _result("gold_strength", diff_idx)
         if diff_idx == 1:
-            return _performance_payload("silver_strength", summary_mode=summary_mode)
-        return _performance_payload("bronze_strength", summary_mode=summary_mode)
+            return _result("silver_strength", diff_idx)
+        return _result("bronze_strength", diff_idx)
 
     if cmp_to_reference < 0:
         if diff_idx == 0:
-            return _performance_payload("significantly_off", summary_mode=summary_mode)
+            return _result("significantly_off", diff_idx)
         if diff_idx == 1:
-            return _performance_payload("moderately_off", summary_mode=summary_mode)
-        return _performance_payload("slightly_off", summary_mode=summary_mode)
+            return _result("moderately_off", diff_idx)
+        return _result("slightly_off", diff_idx)
 
     current_weights = current_row.get("weights") or []
     reference_weights = reference_row.get("weights") or []
@@ -689,12 +705,12 @@ def classify_exercise_performance(
         reference_weight = float(reference_weights[idx]) if idx < len(reference_weights) else 0.0
         if current_weight > reference_weight:
             if idx == 0:
-                return _performance_payload("gold_load", summary_mode=summary_mode)
+                return _result("gold_load", idx, "weights")
             if idx == 1:
-                return _performance_payload("silver_load", summary_mode=summary_mode)
-            return _performance_payload("bronze_load", summary_mode=summary_mode)
+                return _result("silver_load", idx, "weights")
+            return _result("bronze_load", idx, "weights")
 
-    return _performance_payload("consistent", summary_mode=summary_mode)
+    return _result("consistent")
 
 
 def _format_sets_display(sets_json):

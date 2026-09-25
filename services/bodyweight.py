@@ -199,7 +199,20 @@ def effective_sets_for_current(
     return resolve_bodyweight_sets(sets_json, bodyweight, uses_bodyweight)
 
 
-def recalculate_log_metrics(db_session, log: WorkoutLog, *, is_timed: bool = False) -> None:
+def recalculate_log_metrics(db_session, log: WorkoutLog, *, is_timed: Optional[bool] = None) -> None:
+    if is_timed is None:
+        # Resolve per exercise so timed logs keep their weight*sqrt(seconds) score
+        # instead of being overwritten with an e1RM computed from seconds.
+        from services.logging import resolve_timed_exercise_status
+
+        is_timed = bool(
+            resolve_timed_exercise_status(
+                db_session,
+                getattr(log, "user_id", 0),
+                getattr(log, "exercise", "") or "",
+                getattr(log, "exercise_string", "") or "",
+            ).get("is_timed")
+        )
     effective_sets = effective_sets_for_log(db_session, log)
     if is_timed:
         peak, _score_sum, _volume = get_timed_set_stats(effective_sets)
