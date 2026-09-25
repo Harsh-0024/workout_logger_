@@ -2767,7 +2767,7 @@ def register_workout_routes(app):
             if not user_id or not date_str:
                 raise BadSignature("Missing data")
 
-            share_user = Session.query(User).get(user_id)
+            share_user = Session.get(User, user_id)
             share_username = share_user.username.title() if share_user else "Workout Logger User"
 
             workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
@@ -2786,17 +2786,40 @@ def register_workout_routes(app):
             if not logs:
                 return render_template('share_workout.html', missing=True)
 
-            workout_name = logs[0].workout_name or "Workout"
-            header_date = workout_date.strftime('%d/%m')
-            workout_text = build_exercise_text(logs)
-            workout_text = f"{header_date} {workout_name}\n\n{workout_text}".strip()
+            workout_name = _clean_workout_title(logs[0].workout_name or "Workout")
+            rows = _shared_exercise_rows(share_user, logs, start_dt) if share_user else []
+            set_count = sum(_count_sets(log.sets_json, log.sets_display) for log in logs)
+            new_bests = sum(1 for row in rows if row["medal"])
+            date_label = f"{workout_date.strftime('%a')}, {workout_date.day} {workout_date.strftime('%b %Y')}"
+            summary_bits = [
+                f"{len(logs)} exercise{'' if len(logs) == 1 else 's'}",
+                f"{set_count} set{'' if set_count == 1 else 's'}",
+            ]
+            if new_bests:
+                summary_bits.append(f"{new_bests} new personal best{'' if new_bests == 1 else 's'}")
+            # What "Copy" puts on the clipboard: every set written out, no app shorthand.
+            workout_text = insights.readable_workout_text(
+                workout_name,
+                date_label,
+                [
+                    {"name": row["name"], "target": row["target"], "sets": row["readable_sets"] or row["sets"]}
+                    for row in rows
+                ],
+                footer=f"Shared from Workout Logger: {request.url}",
+            )
 
             return render_template(
                 'share_workout.html',
                 date=date_str,
+                date_label=date_label,
                 share_username=share_username,
                 workout_name=workout_name,
-                logs=logs,
+                rows=rows,
+                exercise_count=len(logs),
+                set_count=set_count,
+                new_bests=new_bests,
+                share_description=f"{' · '.join(summary_bits)} · {date_label}",
+                share_url=request.url,
                 workout_text=workout_text,
                 missing=False,
             )
@@ -2805,6 +2828,71 @@ def register_workout_routes(app):
         except Exception as e:
             logger.error(f"Error loading shared workout: {e}", exc_info=True)
             return render_template('share_workout.html', missing=True)
+
+    def _shared_exercise_rows(owner, logs, start_dt):
+        """Sets (strongest first) and any new-best medal for each exercise on a shared workout."""
+        rep_row = Session.query(RepRange).filter_by(user_id=owner.id).first()
+        rep_target_sets = parse_rep_target_sets_text(rep_row.text_content if rep_row else "")
+        plan_target_sets = get_plan_target_sets_for_user(Session, owner)
+        log_ex_index = build_name_index([
+            row[0]
+            for row in Session.query(WorkoutLog.exercise).filter(WorkoutLog.user_id == owner.id).distinct().all()
+        ])
+
+        rows = []
+        for log in logs:
+            exercise_text = str(getattr(log, 'exercise_string', '') or '')
+            target_sets, strict_target_sets = resolve_target_sets_for_exercise(
+                exercise_name=log.exercise,
+                exercise_string=exercise_text,
+                rep_target_sets=rep_target_sets,
+                plan_target_sets=plan_target_sets,
+                inferred_set_count=comparison_set_count(getattr(log, "sets_json", None), exercise_text),
+                default_sets=3,
+            )
+            is_timed = bool(
+                resolve_timed_exercise_status(
+                    Session, owner.id, log.exercise, exercise_text, log_ex_index=log_ex_index
+                ).get("is_timed")
+            )
+            perf = classify_exercise_performance(
+                Session,
+                owner.id,
+                log.exercise,
+                getattr(log, 'sets_json', None),
+                target_sets=target_sets,
+                strict_target_sets=strict_target_sets,
+                is_timed=is_timed,
+                current_log_id=getattr(log, 'id', None),
+                current_exercise_string=exercise_text,
+                historical_before_dt=start_dt,
+                log_ex_index=log_ex_index,
+            )
+            uses_bw = _log_uses_bw(log)
+            effective = effective_sets_for_log(Session, log)
+            display = _display_sets(log, effective, uses_bw) or {}
+            # In the order they were done: a friend reads this as "what they did".
+            done = [
+                (float(w), int(r))
+                for w, r in zip(display.get('weights') or [], display.get('reps') or [])
+                if w is not None and r is not None and int(r) > 0
+            ]
+            medal = None
+            if perf.get("key") in insights.MEDAL_KEYS:
+                best = insights.best_summary(perf, has_history=True)
+                medal = {"emoji": best["emoji"], "kind": best["kind"].split(" ")[-1], "pct": best["chip"]}
+            rows.append({
+                "name": log.exercise,
+                "sets": [
+                    insights.format_set(w, r, uses_bodyweight=uses_bw, is_timed=is_timed) for w, r in done
+                ] or ([log.sets_display] if log.sets_display else []),
+                "readable_sets": [
+                    insights.readable_set(w, r, uses_bodyweight=uses_bw, is_timed=is_timed) for w, r in done
+                ],
+                "target": insights.target_range(exercise_text, is_timed=is_timed),
+                "medal": medal,
+            })
+        return rows
 
     @login_required
     def edit_workout(date_str):

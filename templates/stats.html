@@ -60,23 +60,17 @@
                 </div>
                 <div class="stats-chart">
                     <canvas id="progressChart"></canvas>
+                    <div id="chartTip" class="chart-tip" role="status" hidden>
+                        <div class="chart-tip-date"></div>
+                        <div class="chart-tip-title"></div>
+                        <div class="chart-tip-value"></div>
+                        <div class="chart-tip-set"></div>
+                    </div>
                     <div id="chartEmpty" class="stats-empty" hidden>
                         <i class="bi bi-graph-up"></i>
                         <span>Log a few workouts to see your progress here.</span>
                     </div>
                 </div>
-            </div>
-
-            <div id="chartPointDetails" class="chart-point-details" style="display: none;">
-                <div class="chart-point-header">
-                    <span id="chartPointDate">-</span>
-                    <button type="button" class="chart-point-close" id="chartPointClose" aria-label="Close">×</button>
-                </div>
-                <div class="chart-point-body">
-                    <span id="chartPointValue" class="chart-point-value">-</span>
-                    <span id="chartPointTopSet" class="chart-point-topset"></span>
-                </div>
-                <a id="chartPointLink" class="chart-point-link" href="#">Open workout <i class="bi bi-arrow-right"></i></a>
             </div>
 
             {% if bw_warning_enabled and bw_exercises %}
@@ -538,69 +532,27 @@
     }
 
     /* ---------- Tap details (touch) ---------- */
-    .chart-point-details {
-        margin-top: 0.75rem;
-        padding: 0.75rem 0.9rem;
-        border-radius: 16px;
-        border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.22));
-        background: var(--card-bg-solid, #141414);
-        cursor: pointer;
+    /* Hover / tap box over the chart. On touch it is tappable and opens that workout. */
+    .chart-tip {
+        position: absolute;
+        z-index: 5;
+        max-width: 240px;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid rgba(212, 175, 55, 0.6);
+        background: rgba(10, 10, 12, 0.94);
+        box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+        line-height: 1.45;
+        pointer-events: none;
     }
-
-    [data-theme="light"] .chart-point-details {
-        background: #ffffff;
-        border-color: rgba(148, 126, 86, 0.35);
-    }
-
-    .chart-point-header {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        color: var(--text-muted, #a8a8a8);
-        font-size: 0.75rem;
-        font-weight: 600;
-        margin-bottom: 0.25rem;
-    }
-
-    .chart-point-close {
-        background: transparent;
-        border: none;
-        color: inherit;
-        font-size: 1.1rem;
-        line-height: 1;
-        padding: 0 0.25rem;
-        cursor: pointer;
-        opacity: 0.7;
-    }
-
-    .chart-point-body {
-        display: flex;
-        align-items: baseline;
-        gap: 0.75rem;
-        flex-wrap: wrap;
-    }
-
-    .chart-point-value {
-        font-size: 1.15rem;
-        font-weight: 700;
-        color: var(--text-primary);
-    }
-
-    .chart-point-topset {
-        font-size: var(--fs-sm);
-        color: var(--text-muted);
-    }
-
-    .chart-point-link {
-        margin-top: 0.5rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-        color: var(--gold-primary);
-        text-decoration: none;
-        font-size: 0.8rem;
-        font-weight: 600;
-    }
+    .chart-tip[hidden] { display: none; }
+    .chart-tip.is-touch { pointer-events: auto; cursor: pointer; }
+    [data-theme="light"] .chart-tip { background: rgba(255, 251, 242, 0.98); border-color: rgba(166, 139, 91, 0.55); }
+    .chart-tip-date { font-size: 0.74rem; font-weight: 600; color: var(--gold-primary); }
+    .chart-tip-title { font-size: 0.74rem; color: var(--text-muted); }
+    .chart-tip-title:empty, .chart-tip-set:empty { display: none; }
+    .chart-tip-value { margin-top: 3px; font-size: 0.95rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .chart-tip-set { font-size: 0.78rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
     /* ---------- Tiles ---------- */
     .stats-tiles {
@@ -926,10 +878,6 @@
         height: phone ? 18 : 20,
     });
 
-    function isTouchUI() {
-        return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
-    }
-
     function isLightTheme() {
         return document.documentElement.getAttribute('data-theme') === 'light';
     }
@@ -1124,20 +1072,17 @@
         return null;
     }
 
-    function setChartPointDetailsVisible(visible) {
-        const details = document.getElementById('chartPointDetails');
-        if (details) details.style.display = visible ? 'block' : 'none';
-    }
+    // How the chart was last touched: 'mouse' opens a point on click; touch/pen show a tappable box.
+    let chartPointerType = 'mouse';
+    let openChartTipPoint = null;
 
-    function populateChartPointDetails(payload) {
-        const details = document.getElementById('chartPointDetails');
-        if (!details || !payload) return;
-        document.getElementById('chartPointDate').textContent = payload.date || '-';
-        document.getElementById('chartPointValue').textContent = payload.value || '-';
-        document.getElementById('chartPointTopSet').textContent = payload.topSet || '';
-        const linkHref = payload.link || '#';
-        details.dataset.link = linkHref;
-        document.getElementById('chartPointLink').href = linkHref;
+    function hideChartTip() {
+        const tip = document.getElementById('chartTip');
+        if (tip) tip.hidden = true;
+        if (myChart && myChart.tooltip) {
+            myChart.tooltip.setActiveElements([], { x: 0, y: 0 });
+            myChart.update('none');
+        }
     }
 
     function normalizeSearchValue(value) {
@@ -1724,7 +1669,8 @@
 
     function renderChart(data) {
         fullChartData = data;
-        setChartPointDetailsVisible(false);
+        const staleTip = document.getElementById('chartTip');
+        if (staleTip) staleTip.hidden = true;
 
         const isOverall = !currentExercise && data && data.unit === 'percent';
         const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
@@ -1825,52 +1771,51 @@
             return formatNumber(value);
         };
 
-        const tooltipStyles = light
-            ? { backgroundColor: 'rgba(255, 251, 242, 0.98)', titleColor: '#8A6D1D', bodyColor: '#2D2B27', borderColor: 'rgba(212, 175, 55, 0.7)' }
-            : { backgroundColor: 'rgba(0, 0, 0, 0.9)', titleColor: gold, bodyColor: '#FFFFFF', borderColor: 'rgba(212, 175, 55, 0.7)' };
-
         const workoutTitles = Array.isArray(data.workout_titles) ? data.workout_titles : [];
-        const tooltipCallbacks = {
-            title: (items) => (items && items.length ? longDate(labels[items[0].dataIndex]) : ''),
-            afterTitle: (items) => {
-                if (!items || !items.length) return '';
-                const title = String(workoutTitles[items[0].dataIndex] || '').trim();
-                return (!title || title.toLowerCase() === 'workout') ? '' : title;
-            },
-            label: (context) => (isFiniteNumber(context.parsed.y) ? valueText(context.parsed.y) : ''),
-            afterLabel: (context) => {
-                if (isOverall) return '';
-                const topSet = topSetText(data, context.dataIndex);
-                return topSet ? `Top set: ${topSet}` : '';
-            },
-        };
 
         const openPoint = (idx) => {
             if (!loggedIndexSet.has(idx)) return;
             const rawDate = labels[idx] || '';
             if (!rawDate) return;
             aiAssistantSelectedDate = rawDate;
-            const link = `/workout/${encodeURIComponent(rawDate)}`;
-            if (isTouchUI()) {
-                populateChartPointDetails({
-                    date: longDate(rawDate),
-                    value: valueText(values[idx]),
-                    topSet: isOverall ? '' : topSetText(data, idx),
-                    link,
-                });
-                setChartPointDetailsVisible(true);
-            } else {
-                window.location.href = link;
-            }
+            window.location.href = `/workout/${encodeURIComponent(rawDate)}`;
         };
 
-        const onClick = (evt, elements) => {
-            const hit = (elements || []).find(el => el.datasetIndex === 0);
-            if (!hit) {
-                if (isTouchUI()) setChartPointDetailsVisible(false);
+        // Our own HTML box instead of the canvas-drawn tooltip, so it can be tapped on phones.
+        const renderTip = ({ chart, tooltip }) => {
+            const tip = document.getElementById('chartTip');
+            if (!tip) return;
+            const point = (tooltip.dataPoints || []).find(p => p.datasetIndex === 0 && isFiniteNumber(p.parsed.y));
+            if (!tooltip.opacity || !point) {
+                tip.hidden = true;
                 return;
             }
-            openPoint(hit.index);
+            const idx = point.dataIndex;
+            const title = String(workoutTitles[idx] || '').trim();
+            tip.querySelector('.chart-tip-date').textContent = longDate(labels[idx]);
+            tip.querySelector('.chart-tip-title').textContent = (!title || title.toLowerCase() === 'workout') ? '' : title;
+            tip.querySelector('.chart-tip-value').textContent = valueText(point.parsed.y);
+            const topSet = isOverall ? '' : topSetText(data, idx);
+            tip.querySelector('.chart-tip-set').textContent = topSet ? `Top set: ${topSet}` : '';
+            tip.dataset.index = String(idx);
+            tip.classList.toggle('is-touch', chartPointerType !== 'mouse');
+            tip.hidden = false;
+
+            const box = chart.canvas.parentNode;
+            const w = tip.offsetWidth;
+            const h = tip.offsetHeight;
+            const left = Math.max(0, Math.min(tooltip.caretX - w / 2, box.clientWidth - w));
+            const top = tooltip.caretY - h - 14 >= 0 ? tooltip.caretY - h - 14 : tooltip.caretY + 16;
+            tip.style.left = `${left}px`;
+            tip.style.top = `${top}px`;
+        };
+        openChartTipPoint = openPoint;
+
+        const onClick = (evt, elements) => {
+            // Touch: a tap only moves the box to the nearest point; tapping the box opens it.
+            if (chartPointerType !== 'mouse') return;
+            const hit = (elements || []).find(el => el.datasetIndex === 0);
+            if (hit) openPoint(hit.index);
         };
 
         // Over long spans "Apr 18" is ambiguous, so show month + year instead.
@@ -1931,15 +1876,9 @@
                 plugins: {
                     legend: { display: false },
                     tooltip: {
-                        ...tooltipStyles,
-                        borderWidth: 1,
-                        padding: 12,
-                        displayColors: false,
-                        titleFont: { size: 13, weight: 'bold' },
-                        bodyFont: { size: 13 },
-                        cornerRadius: 12,
+                        enabled: false,
+                        external: renderTip,
                         filter: (c) => c.datasetIndex === 0 && isFiniteNumber(c.parsed.y),
-                        callbacks: tooltipCallbacks,
                     },
                 },
                 scales: {
@@ -2056,24 +1995,20 @@
         renderSuggestions();
         syncActivePills();
 
-        const detailsPanel = document.getElementById('chartPointDetails');
-        document.getElementById('chartPointClose').addEventListener('click', (event) => {
-            event.stopPropagation();
-            setChartPointDetailsVisible(false);
+        const chartCanvas = document.getElementById('progressChart');
+        const chartTip = document.getElementById('chartTip');
+        const notePointer = (event) => { chartPointerType = event.pointerType || 'mouse'; };
+        chartCanvas.addEventListener('pointerdown', notePointer, { capture: true });
+        chartCanvas.addEventListener('pointermove', notePointer, { capture: true });
+        chartTip.addEventListener('click', () => {
+            const idx = Number(chartTip.dataset.index);
+            if (Number.isFinite(idx) && openChartTipPoint) openChartTipPoint(idx);
         });
-        detailsPanel.addEventListener('click', (event) => {
-            if (event.target.closest('#chartPointClose')) return;
-            const link = detailsPanel.dataset.link;
-            if (link && link !== '#') window.location.href = link;
-        });
-
-        document.addEventListener('click', (event) => {
-            if (!isTouchUI()) return;
-            if (detailsPanel.style.display === 'none') return;
-            const chartCanvas = document.getElementById('progressChart');
-            if (detailsPanel.contains(event.target)) return;
-            if (chartCanvas && chartCanvas.contains(event.target)) return;
-            setChartPointDetailsVisible(false);
+        // Touch: tapping anywhere outside the chart and the box closes the box.
+        document.addEventListener('pointerdown', (event) => {
+            if (chartTip.hidden) return;
+            if (chartTip.contains(event.target) || chartCanvas.contains(event.target)) return;
+            hideChartTip();
         });
 
         if (initialExercise && initialExercise.value) {

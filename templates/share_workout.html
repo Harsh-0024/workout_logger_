@@ -1,87 +1,422 @@
 {% extends 'base.html' %}
+
+{% block title %}{% if missing %}Shared workout | Workout Logger{% else %}{{ workout_name }} · {{ share_username }} | Workout Logger{% endif %}{% endblock %}
+
+{% block head_meta %}
+{% if not missing %}
+    {# Link previews (WhatsApp, iMessage, Slack, X) show the workout instead of a bare URL. #}
+    <meta name="description" content="{{ share_description }}">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Workout Logger">
+    <meta property="og:title" content="{{ share_username }}'s workout: {{ workout_name }}">
+    <meta property="og:description" content="{{ share_description }}">
+    <meta property="og:url" content="{{ share_url }}">
+    <meta property="og:image" content="{{ url_for('static', filename='icons/app-icon-192.png', _external=True) }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ share_username }}'s workout: {{ workout_name }}">
+    <meta name="twitter:description" content="{{ share_description }}">
+{% endif %}
+{% endblock %}
+
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-10 col-lg-8">
-        <div class="card">
-            {% if missing %}
-                <div class="text-center py-5">
-                    <div class="mb-3">
-                        <i class="bi bi-link-45deg" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                    </div>
-                    <h2 class="fw-bold mb-3" style="font-size: clamp(1.4rem, 5vw, 2rem);">Workout link expired</h2>
-                    <p class="text-muted mb-4" style="font-size: var(--fs-sm);">
-                        This shared workout is no longer available. Ask the sender to share a fresh link.
-                    </p>
-                    <a href="/register" class="btn btn-gold-solid btn-sm">
-                        <i class="bi bi-stars me-2"></i>Start Tracking with Workout Logger
-                    </a>
-                </div>
+<style>
+    .sw {
+        --sw-surface: rgba(255, 255, 255, 0.03);
+        --sw-surface-2: rgba(255, 255, 255, 0.05);
+        --sw-line: rgba(255, 255, 255, 0.07);
+        --sw-gold: #e9c75a;
+        --sw-gold-bg: rgba(212, 175, 55, 0.12);
+        --sw-gold-line: rgba(212, 175, 55, 0.36);
+        --sw-glow: rgba(212, 175, 55, 0.16);
+        --sw-silver: #d4d4d8;
+        --sw-silver-bg: rgba(212, 212, 216, 0.10);
+        --sw-silver-line: rgba(212, 212, 216, 0.30);
+        --sw-bronze: #e0a46a;
+        --sw-bronze-bg: rgba(205, 127, 50, 0.13);
+        --sw-bronze-line: rgba(205, 127, 50, 0.38);
+        max-width: 640px;
+        margin: 0 auto 32px;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    [data-theme="light"] .sw {
+        --sw-surface: rgba(255, 255, 255, 0.7);
+        --sw-surface-2: #ffffff;
+        --sw-line: rgba(0, 0, 0, 0.07);
+        --sw-gold: #8a6512;
+        --sw-gold-bg: rgba(201, 169, 97, 0.14);
+        --sw-gold-line: rgba(166, 139, 91, 0.42);
+        --sw-glow: rgba(201, 169, 97, 0.18);
+        --sw-silver: #4b5563;
+        --sw-silver-bg: rgba(107, 114, 128, 0.10);
+        --sw-silver-line: rgba(107, 114, 128, 0.30);
+        --sw-bronze: #8a4b12;
+        --sw-bronze-bg: rgba(205, 127, 50, 0.12);
+        --sw-bronze-line: rgba(160, 90, 30, 0.36);
+    }
+
+    .sw-panel {
+        position: relative;
+        border: 1px solid var(--sw-line);
+        border-radius: 24px;
+        background: var(--card-bg-solid);
+        box-shadow: var(--shadow-lg);
+    }
+    .sw-panel + .sw-panel { margin-top: 16px; }
+
+    /* ---- Hero ---- */
+    .sw-hero {
+        padding: 40px 32px 32px;
+        text-align: center;
+        overflow: hidden;
+    }
+    .sw-hero::before {
+        content: '';
+        position: absolute;
+        inset: -40% -20% auto;
+        height: 320px;
+        background: radial-gradient(closest-side, var(--sw-glow), transparent);
+        pointer-events: none;
+    }
+    .sw-hero > * { position: relative; }
+    .sw-by {
+        display: inline-flex; align-items: center; gap: 10px;
+        padding: 5px 14px 5px 5px;
+        border-radius: 999px;
+        border: 1px solid var(--sw-line);
+        background: var(--sw-surface);
+        font-size: 0.82rem;
+        color: var(--text-muted);
+    }
+    .sw-by strong { color: var(--text-primary); font-weight: 600; }
+    .sw-avatar {
+        width: 28px; height: 28px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--gold-bright), var(--gold-dark));
+        color: #1a1405;
+        font-weight: 700; font-size: 0.8rem;
+    }
+    .sw-title {
+        font-size: clamp(2rem, 7vw, 2.8rem);
+        font-weight: 600;
+        line-height: 1.1;
+        margin: 22px 0 8px;
+        overflow-wrap: anywhere;
+        text-wrap: balance;
+    }
+    .sw-date { color: var(--text-muted); font-size: 0.9rem; margin: 0; }
+
+    .sw-stats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        margin: 30px 0 0;
+        padding-top: 24px;
+        border-top: 1px solid var(--sw-line);
+    }
+    .sw-stat + .sw-stat { border-left: 1px solid var(--sw-line); }
+    .sw-stat b { display: block; font-size: 1.7rem; font-weight: 700; line-height: 1.1; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .sw-stat span { display: block; margin-top: 5px; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-muted); }
+    .sw-stat.gold b { color: var(--sw-gold); }
+
+
+    /* ---- Exercises ---- */
+    .sw-list { padding: 8px 28px 12px; }
+    .sw-list-head {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 18px 0 14px;
+        border-bottom: 1px solid var(--sw-line);
+    }
+    .sw-kicker { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-subtle); }
+    .sw-copy {
+        display: inline-flex; align-items: center; gap: 6px;
+        height: 32px; padding: 0 12px;
+        border-radius: 999px;
+        border: 1px solid var(--sw-line);
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 0.8rem; font-weight: 600;
+        transition: color var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+    }
+    .sw-copy:hover { color: var(--gold-primary); border-color: var(--border-gold); background: var(--gold-subtle); }
+    .sw-copy.is-done { color: #4ade80; border-color: rgba(74, 222, 128, 0.35); }
+    [data-theme="light"] .sw-copy.is-done { color: #15803d; }
+
+    .sw-ex {
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr) auto;
+        column-gap: 10px;
+        row-gap: 10px;
+        align-items: center;
+        padding: 20px 0;
+        border-bottom: 1px solid var(--sw-line);
+    }
+    .sw-ex:last-child { border-bottom: 0; }
+    .sw-num { font-size: 0.78rem; font-weight: 600; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    .sw-name { margin: 0; font-family: 'Inter', sans-serif; font-size: 1rem; font-weight: 600; letter-spacing: 0; color: var(--text-primary); line-height: 1.3; }
+    .sw-medal {
+        display: inline-flex; align-items: center; gap: 5px;
+        height: 26px; padding: 0 10px;
+        border-radius: 999px; border: 1px solid;
+        font-size: 0.76rem; font-weight: 600; white-space: nowrap;
+    }
+    .sw-medal .emoji { font-size: 0.9rem; line-height: 1; }
+    .sw-medal.medal-gold { color: var(--sw-gold); background: var(--sw-gold-bg); border-color: var(--sw-gold-line); }
+    .sw-medal.medal-silver { color: var(--sw-silver); background: var(--sw-silver-bg); border-color: var(--sw-silver-line); }
+    .sw-medal.medal-bronze { color: var(--sw-bronze); background: var(--sw-bronze-bg); border-color: var(--sw-bronze-line); }
+    .sw-sets { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 6px; }
+    .sw-set {
+        padding: 4px 10px;
+        border-radius: 8px;
+        background: var(--sw-surface-2);
+        border: 1px solid var(--sw-line);
+        font-size: 0.82rem;
+        color: var(--text-secondary);
+        font-variant-numeric: tabular-nums;
+    }
+
+    /* ---- Invite ---- */
+    .sw-cta { padding: 36px 32px; overflow: hidden; }
+    .sw-cta::after {
+        content: '';
+        position: absolute;
+        inset: auto -30% -60% auto;
+        width: 380px; height: 380px;
+        background: radial-gradient(closest-side, var(--sw-glow), transparent);
+        pointer-events: none;
+    }
+    .sw-cta > * { position: relative; z-index: 1; }
+    .sw-brand { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); letter-spacing: 0.02em; }
+    .sw-logo {
+        width: 30px; height: 30px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 9px;
+        border: 1px solid var(--border-gold);
+        background: var(--gold-subtle);
+        color: var(--gold-primary);
+        font-size: 0.7rem; font-weight: 800;
+    }
+    .sw-cta h2 { font-size: clamp(1.6rem, 5.5vw, 2.1rem); line-height: 1.15; margin: 18px 0 10px; text-wrap: balance; }
+    .sw-cta p { color: var(--text-muted); font-size: 0.92rem; line-height: 1.6; margin: 0 0 22px; max-width: 460px; }
+    .sw-features { list-style: none; padding: 0; margin: 0 0 28px; display: grid; gap: 14px; }
+    .sw-features li { display: grid; grid-template-columns: 36px 1fr; gap: 12px; align-items: start; }
+    .sw-feat-icon {
+        width: 36px; height: 36px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border-radius: 10px;
+        background: var(--gold-subtle);
+        border: 1px solid var(--sw-line);
+        color: var(--gold-primary);
+        font-size: 1rem;
+    }
+    .sw-features b { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+    .sw-features span { display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 1px; }
+    .sw-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+    .sw-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        height: 46px; padding: 0 22px;
+        border-radius: 999px;
+        font-size: 0.9rem; font-weight: 700;
+        text-decoration: none;
+        transition: transform var(--transition-fast), box-shadow var(--transition-fast), background var(--transition-fast);
+    }
+    .sw-btn.primary {
+        color: #1a1405;
+        background: linear-gradient(135deg, var(--gold-bright), var(--gold-primary));
+        box-shadow: 0 8px 24px var(--sw-glow);
+    }
+    .sw-btn.primary:hover { transform: translateY(-1px); box-shadow: 0 12px 30px var(--gold-glow); color: #1a1405; }
+    .sw-btn.ghost { color: var(--text-secondary); border: 1px solid var(--sw-line); }
+    .sw-btn.ghost:hover { color: var(--gold-primary); border-color: var(--border-gold); }
+
+
+    /* ---- Expired link ---- */
+    .sw-missing { padding: 48px 32px; text-align: center; overflow: hidden; }
+    .sw-missing-icon {
+        width: 64px; height: 64px; margin: 0 auto 20px;
+        display: flex; align-items: center; justify-content: center;
+        border-radius: 20px;
+        border: 1px solid var(--border-gold);
+        background: var(--gold-subtle);
+        color: var(--gold-primary);
+        font-size: 1.6rem;
+    }
+    .sw-missing h1 { font-size: clamp(1.6rem, 6vw, 2rem); margin: 0 0 10px; }
+    .sw-missing p { color: var(--text-muted); font-size: 0.92rem; margin: 0 auto 26px; max-width: 360px; line-height: 1.6; }
+    .sw-missing .sw-actions { justify-content: center; }
+
+    /* ---- Phones: no boxes, quiet text, more air ---- */
+    @media (max-width: 575px) {
+        .sw { margin: 0 auto 28px; padding: 0 12px; overflow-x: clip; }
+        .sw-panel,
+        [data-theme="light"] .sw-panel {
+            border: 0;
+            border-radius: 0;
+            background: transparent;
+            box-shadow: none;
+        }
+        .sw-panel + .sw-panel { margin-top: 0; }
+
+        .sw-hero { padding: 20px 0 8px; overflow: visible; }
+        /* Keep the glow inside the content column: spilling past the screen edge made the page scroll sideways. */
+        .sw-hero::before { inset: -60px 0 auto; height: 260px; }
+        .sw-title { font-size: 2rem; margin: 20px 0 6px; }
+        .sw-date { font-size: 0.85rem; }
+        .sw-stats { margin-top: 28px; padding: 22px 0; border-bottom: 1px solid var(--sw-line); }
+        .sw-stat b { font-size: 1.4rem; }
+        .sw-stat span { font-size: 0.6rem; }
+
+        .sw-list { padding: 18px 0 8px; }
+        .sw-list-head { padding: 12px 0 12px; }
+        .sw-copy { height: 30px; padding: 0 10px; border-color: transparent; margin-right: -10px; }
+        .sw-ex { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; padding: 18px 0; }
+        .sw-num { display: none; }
+        .sw-name { font-size: 0.95rem; }
+        .sw-medal { height: 22px; padding: 0 8px; font-size: 0.74rem; }
+        /* Sets as one quiet line instead of chips: "45×3 · 40×4 · 35×6". */
+        .sw-sets { grid-column: 1 / -1; gap: 0; }
+        .sw-set {
+            padding: 0; border: 0; background: transparent; border-radius: 0;
+            font-size: 0.8rem; color: var(--text-muted);
+        }
+        .sw-set + .sw-set::before { content: "·"; margin: 0 7px; opacity: 0.6; }
+
+        .sw-cta { margin-top: 12px; padding: 30px 0 8px; border-top: 1px solid var(--sw-line) !important; overflow: visible; }
+        .sw-cta::after { display: none; }
+        .sw-cta h2 { font-size: 1.7rem; margin: 16px 0 10px; }
+        .sw-cta p { font-size: 0.88rem; margin-bottom: 24px; }
+        .sw-features { gap: 16px; margin-bottom: 28px; }
+        .sw-features li { grid-template-columns: 22px 1fr; gap: 10px; }
+        .sw-feat-icon { width: 22px; height: 22px; border: 0; background: transparent; font-size: 1rem; justify-content: flex-start; }
+        .sw-features b { font-size: 0.88rem; }
+        .sw-features span { font-size: 0.78rem; }
+        .sw-actions .sw-btn { flex: 1 1 auto; }
+
+        .sw-missing { padding: 40px 8px; }
+    }
+</style>
+
+<div class="sw">
+    {% if missing %}
+    <section class="sw-panel sw-missing">
+        <div class="sw-missing-icon"><i class="bi bi-link-45deg"></i></div>
+        <h1>This link has expired</h1>
+        <p>The workout you're looking for isn't available any more. Ask the person who sent it for a fresh link.</p>
+        <div class="sw-actions">
+            <a class="sw-btn primary" href="/register"><i class="bi bi-stars"></i>Start tracking free</a>
+            <a class="sw-btn ghost" href="/login">Log in</a>
+        </div>
+    </section>
+    {% else %}
+
+    <section class="sw-panel sw-hero">
+        <div class="sw-by">
+            <span class="sw-avatar">{{ (share_username or 'W')[:1] | upper }}</span>
+            <span><strong>{{ share_username }}</strong> shared a workout</span>
+        </div>
+        <h1 class="sw-title">{{ workout_name }}</h1>
+        <p class="sw-date">{{ date_label }}</p>
+
+        <div class="sw-stats">
+            <div class="sw-stat"><b>{{ exercise_count }}</b><span>Exercise{{ '' if exercise_count == 1 else 's' }}</span></div>
+            <div class="sw-stat"><b>{{ set_count }}</b><span>Set{{ '' if set_count == 1 else 's' }}</span></div>
+            <div class="sw-stat {{ 'gold' if new_bests }}"><b>{{ new_bests }}</b><span>New best{{ '' if new_bests == 1 else 's' }}</span></div>
+        </div>
+    </section>
+
+    <section class="sw-panel sw-list">
+        <div class="sw-list-head">
+            <span class="sw-kicker">The workout</span>
+            <button type="button" class="sw-copy" id="swCopy" title="Copy this workout as text"><i class="bi bi-clipboard"></i><span>Copy</span></button>
+        </div>
+        {% for row in rows %}
+        <div class="sw-ex">
+            <span class="sw-num">{{ '%02d' % loop.index }}</span>
+            <h3 class="sw-name">{{ row.name }}</h3>
+            {% if row.medal %}
+            <span class="sw-medal {{ row.medal.kind }}" title="New personal best"><span class="emoji">{{ row.medal.emoji }}</span>{{ row.medal.pct }}</span>
             {% else %}
-                <div class="text-center mb-4 mb-md-5">
-                    <div class="mb-3 mb-md-4">
-                        <i class="bi bi-calendar-check" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                    </div>
-                    <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">{{ workout_name }}</h2>
-                    <p class="text-muted mb-1" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">{{ date | format_date }}</p>
-                    <p class="text-muted mb-0" style="font-size: var(--fs-sm);">
-                        Shared by {{ share_username or 'Workout Logger User' }}
-                    </p>
-                </div>
+            <span></span>
+            {% endif %}
+            <div class="sw-sets">
+                {% for set_label in row.sets %}<span class="sw-set">{{ set_label }}</span>{% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    </section>
 
-                <div class="mb-4 mb-md-5">
-                    <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        <i class="bi bi-list-check me-2"></i>Exercises
-                    </label>
-
-                    <div class="list-group">
-                        {% for log in logs %}
-                        <div class="list-group-item bg-dark border-subtle mb-2" style="border-radius: 12px; border-color: var(--border-subtle);">
-                            <div class="d-flex justify-content-between align-items-start">
-                                <div class="flex-grow-1">
-                                    <h6 class="mb-2 text-white" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ log.exercise }}</h6>
-                                    <div class="text-muted" style="font-size: var(--fs-xs);">
-                                        {% if log.sets_display %}
-                                            <div class="mb-1">Sets: {{ log.sets_display }}</div>
-                                        {% elif log.top_weight and log.top_reps %}
-                                            <div class="mb-1">Top Set: {{ log.top_weight }}kg × {{ log.top_reps }} reps</div>
-                                        {% endif %}
-                                        <div class="d-flex gap-3 flex-wrap">
-                                            {% if log.estimated_1rm %}
-                                                <span>Est. 1RM: {{ "%.1f"|format(log.estimated_1rm) }}kg</span>
-                                            {% endif %}
-                                            {% if log.total_volume %}
-                                                <span>Volume: {{ "%.0f"|format(log.total_volume) }}kg</span>
-                                            {% endif %}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        {% endfor %}
-                    </div>
-
-                    <div class="mt-4 p-3 border rounded" style="border-color: var(--border-subtle) !important; background: var(--gold-subtle);">
-                        <details>
-                            <summary class="text-gold fw-semibold" style="cursor: pointer; font-size: var(--fs-sm);">
-                                <i class="bi bi-code-square me-2"></i>View Raw Log Data
-                            </summary>
-                            <textarea class="form-control mt-3" rows="10"
-                                      style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6; height: clamp(200px, 32vh, 360px);"
-                                      readonly>{{ workout_text }}</textarea>
-                        </details>
-                    </div>
-                </div>
-
-                <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
-                    <p class="text-muted mb-3" style="font-size: var(--fs-sm);">
-                        Like this workout? Start logging your own progress in seconds.
-                    </p>
-                    <a href="/register" class="btn btn-gold-solid btn-sm">
-                        <i class="bi bi-stars me-2"></i>Use Workout Logger
-                    </a>
-                </div>
+    <section class="sw-panel sw-cta">
+        <div class="sw-brand"><span class="sw-logo">WT</span>Workout Logger</div>
+        <h2>Train like {{ share_username }}.<br>Log it in one tap.</h2>
+        <p>Keep writing your workouts in Apple Notes. One tap on the Workout Logger shortcut logs them for you, and turns them into personal bests, medals and progress you can see.</p>
+        <ul class="sw-features">
+            <li>
+                <span class="sw-feat-icon"><i class="bi bi-lightning-charge"></i></span>
+                <div><b>One-tap logging</b><span>An Apple Shortcut sends your note straight in. No forms, no retyping.</span></div>
+            </li>
+            <li>
+                <span class="sw-feat-icon"><i class="bi bi-trophy"></i></span>
+                <div><b>Automatic personal bests</b><span>A medal every time you beat your best.</span></div>
+            </li>
+            <li>
+                <span class="sw-feat-icon"><i class="bi bi-graph-up-arrow"></i></span>
+                <div><b>Progress you can trust</b><span>Trends that see past one-off good or bad days.</span></div>
+            </li>
+        </ul>
+        <div class="sw-actions">
+            {% if current_user.is_authenticated %}
+            <a class="sw-btn primary" href="{{ url_for('user_dashboard', username=current_user.username) }}"><i class="bi bi-house"></i>Open your dashboard</a>
+            {% else %}
+            <a class="sw-btn primary" href="/register"><i class="bi bi-stars"></i>Start free</a>
+            <a class="sw-btn ghost" href="/login">Log in</a>
             {% endif %}
         </div>
-    </div>
+    </section>
+
+    <template id="swText">{{ workout_text }}</template>
+    {% endif %}
 </div>
+
+{% if not missing %}
+<script>
+    (function() {
+        const button = document.getElementById('swCopy');
+        const source = document.getElementById('swText');
+        if (!button || !source) return;
+        const text = source.content.textContent;
+        const label = button.querySelector('span');
+        const icon = button.querySelector('i');
+
+        const done = () => {
+            button.classList.add('is-done');
+            label.textContent = 'Copied';
+            icon.className = 'bi bi-check-lg';
+            window.setTimeout(() => {
+                button.classList.remove('is-done');
+                label.textContent = 'Copy';
+                icon.className = 'bi bi-clipboard';
+            }, 2000);
+        };
+
+        button.addEventListener('click', async () => {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    done();
+                    return;
+                }
+            } catch (err) { /* fall through to the legacy path */ }
+            const temp = document.createElement('textarea');
+            temp.value = text;
+            temp.setAttribute('readonly', 'true');
+            temp.style.position = 'absolute';
+            temp.style.left = '-9999px';
+            document.body.appendChild(temp);
+            temp.select();
+            document.execCommand('copy');
+            document.body.removeChild(temp);
+            done();
+        });
+    })();
+</script>
+{% endif %}
 {% endblock %}

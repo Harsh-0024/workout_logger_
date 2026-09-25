@@ -7,6 +7,7 @@ contradict the badges.
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -74,6 +75,59 @@ def format_sets_line(sets_json: Optional[Dict], *, uses_bodyweight: bool, is_tim
         for w, r in _pairs(sets_json)
         if r > 0
     )
+
+
+def readable_set(weight: float, reps: int, *, uses_bodyweight: bool, is_timed: bool) -> str:
+    """
+    Newcomer-friendly set text for sharing: '35 kg × 8', 'Bodyweight × 15',
+    'Bodyweight + 2.5 kg × 20', '30 kg × 45 s'. No app shorthand.
+    """
+    offset = float(weight)
+    if uses_bodyweight:
+        if offset == 0:
+            load = "Bodyweight"
+        elif offset > 0:
+            load = f"Bodyweight + {_num(offset)} kg"
+        else:
+            load = f"Bodyweight − {_num(-offset)} kg"
+    else:
+        load = f"{_num(offset)} kg"
+    return f"{load} × {int(reps)} s" if is_timed else f"{load} × {int(reps)}"
+
+
+_TARGET_RANGE_RE = re.compile(r"(\d+)\s*[–-]\s*(\d+)\s*(s)?", re.IGNORECASE)
+
+
+def target_range(exercise_string: str, *, is_timed: bool = False) -> str:
+    """The rep/time range from '[2, 8–12]' or '[30–60s]' as '8–12 reps' / '30–60 s'."""
+    first_line = str(exercise_string or "").strip().splitlines()[0] if str(exercise_string or "").strip() else ""
+    bracket = re.search(r"\[([^\]]*)\]", first_line)
+    if not bracket:
+        return ""
+    match = _TARGET_RANGE_RE.search(bracket.group(1))
+    if not match:
+        return ""
+    low, high, seconds = match.groups()
+    unit = "s" if (seconds or is_timed) else "reps"
+    return f"{low}–{high} {unit}"
+
+
+def readable_workout_text(title: str, date_label: str, exercises: Sequence[Dict[str, Any]], footer: str = "") -> str:
+    """
+    Plain text a friend can read (or copy into notes). `exercises`:
+    [{"name": str, "target": str, "sets": [str, ...]}] with sets in the order they were done.
+    """
+    lines = [title, date_label, ""]
+    for exercise in exercises:
+        header = exercise["name"]
+        if exercise.get("target"):
+            header += f" ({exercise['target']})"
+        lines.append(header)
+        lines.append(", ".join(exercise.get("sets") or []) or "—")
+        lines.append("")
+    if footer:
+        lines.append(footer)
+    return "\n".join(lines).strip()
 
 
 def _set_score(weight: float, reps: int, is_timed: bool) -> float:

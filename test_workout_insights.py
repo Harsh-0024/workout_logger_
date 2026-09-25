@@ -94,6 +94,27 @@ class TestBestSummary(unittest.TestCase):
         self.assertEqual(insights.best_summary({"key": "first_log"}, has_history=True)["chip"], "✦ New")
 
 
+class TestShareText(unittest.TestCase):
+    def test_readable_sets_have_no_shorthand(self):
+        self.assertEqual(insights.readable_set(35, 8, uses_bodyweight=False, is_timed=False), "35 kg × 8")
+        self.assertEqual(insights.readable_set(0, 15, uses_bodyweight=True, is_timed=False), "Bodyweight × 15")
+        self.assertEqual(insights.readable_set(2.5, 20, uses_bodyweight=True, is_timed=False), "Bodyweight + 2.5 kg × 20")
+        self.assertEqual(insights.readable_set(30, 45, uses_bodyweight=False, is_timed=True), "30 kg × 45 s")
+
+    def test_target_range_from_bracket(self):
+        self.assertEqual(insights.target_range("Dumbbell Lat Row - [2, 8–12]\n35 25, 8"), "8–12 reps")
+        self.assertEqual(insights.target_range("Farmer's Walk - [2, 20–60s]"), "20–60 s")
+        self.assertEqual(insights.target_range("Plank - [2]"), "")
+
+    def test_readable_workout_text(self):
+        text = insights.readable_workout_text(
+            "Back Day",
+            "Fri, 11 Sep 2026",
+            [{"name": "Lat Pulldown", "target": "8–12 reps", "sets": ["70 kg × 8", "65 kg × 8"]}],
+        )
+        self.assertEqual(text, "Back Day\nFri, 11 Sep 2026\n\nLat Pulldown (8–12 reps)\n70 kg × 8, 65 kg × 8")
+
+
 class TestFormatting(unittest.TestCase):
     def test_format_pct(self):
         self.assertEqual(insights.format_pct(4.83), "+4.8%")
