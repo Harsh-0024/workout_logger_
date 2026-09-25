@@ -93,6 +93,8 @@ class User(Base):
     bodyweight_preferences = relationship("BodyweightExercisePreference", back_populates="user", cascade="all, delete-orphan")
     custom_retrieval_events = relationship("CustomRetrievalEvent", back_populates="user", cascade="all, delete-orphan")
     custom_retrieval_preference = relationship("CustomRetrievalPreference", uselist=False, back_populates="user", cascade="all, delete-orphan")
+    stats_preference = relationship("StatsPreference", uselist=False, back_populates="user", cascade="all, delete-orphan")
+    stats_exercise_views = relationship("StatsExerciseView", back_populates="user", cascade="all, delete-orphan")
     
     def is_admin(self):
         """Check if user has admin role."""
@@ -355,6 +357,33 @@ class CustomRetrievalPreference(Base):
     user = relationship("User", back_populates="custom_retrieval_preference")
 
 
+class StatsPreference(Base):
+    __tablename__ = 'stats_preferences'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), unique=True, nullable=False, index=True)
+    sort_mode = Column(String(32), nullable=False, default='most_viewed')
+    time_range = Column(String(8), nullable=False, default='all')
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", back_populates="stats_preference")
+
+
+class StatsExerciseView(Base):
+    """How often a user opened an exercise's chart on the stats page (for "Viewed" sorting)."""
+    __tablename__ = 'stats_exercise_views'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    exercise_key = Column(String(160), nullable=False)
+    view_count = Column(Integer, nullable=False, default=0)
+    last_viewed_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    user = relationship("User", back_populates="stats_exercise_views")
+
+    __table_args__ = (
+        Index('idx_stats_exercise_view_user_exercise', 'user_id', 'exercise_key', unique=True),
+    )
+
+
 # --- MIGRATION HELPERS ---
 def migrate_schema():
     """Add missing columns to existing database tables."""
@@ -522,6 +551,17 @@ def migrate_schema():
 
             if 'custom_retrieval_preferences' not in inspector.get_table_names():
                 CustomRetrievalPreference.__table__.create(bind=conn, checkfirst=True)
+
+            if 'stats_preferences' not in inspector.get_table_names():
+                StatsPreference.__table__.create(bind=conn, checkfirst=True)
+            else:
+                stats_pref_columns = [col['name'] for col in inspector.get_columns('stats_preferences')]
+                if 'time_range' not in stats_pref_columns:
+                    logger.info("Adding time_range column to stats_preferences table")
+                    conn.execute(text("ALTER TABLE stats_preferences ADD COLUMN time_range VARCHAR(8) NOT NULL DEFAULT 'all'"))
+
+            if 'stats_exercise_views' not in inspector.get_table_names():
+                StatsExerciseView.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]

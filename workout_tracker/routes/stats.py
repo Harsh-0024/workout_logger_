@@ -19,8 +19,13 @@ from services.stats import (
     get_export_log_count,
     get_overall_progress_data,
     get_json_export,
+    get_stats_exercise_view_counts,
+    get_stats_preferences,
+    record_stats_exercise_view,
+    set_stats_preferences,
 )
 from services.bodyweight import backfill_bodyweight_log_flags
+from utils.dates import local_date
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -56,14 +61,26 @@ def register_stats_routes(app):
             updated += backfill_bodyweight_log_flags(Session, user.id)
             if updated:
                 Session.commit()
-            exercises = (
-                Session.query(WorkoutLog.exercise)
+            logs = (
+                Session.query(WorkoutLog)
                 .filter_by(user_id=user.id)
-                .distinct()
-                .order_by(WorkoutLog.exercise)
+                .order_by(desc(WorkoutLog.date))
                 .all()
             )
-            exercises = [e[0] for e in exercises]
+
+            # Sessions (distinct days) and last trained day per exercise, for sorting.
+            usage_by_key = {}
+            key_by_name = {}
+            for log in logs:
+                if log.exercise not in key_by_name:
+                    key_by_name[log.exercise] = _normalize_exercise_name(log.exercise)
+                key = key_by_name[log.exercise]
+                if not key or not log.date:
+                    continue
+                usage_by_key.setdefault(key, set()).add(local_date(log.date))
+
+            views_by_key = get_stats_exercise_view_counts(Session, user)
+            exercises = sorted({log.exercise for log in logs if log.exercise})
             exercise_options = []
             seen_keys = set()
             for ex in exercises:
@@ -73,9 +90,13 @@ def register_stats_routes(app):
                 if not key or key in seen_keys:
                     continue
                 seen_keys.add(key)
+                days = usage_by_key.get(key) or set()
                 exercise_options.append({
                     'value': label,
                     'label': label,
+                    'sessions': len(days),
+                    'views': views_by_key.get(key, 0),
+                    'last': max(days).isoformat() if days else '',
                 })
 
             initial_exercise = ""
@@ -95,13 +116,6 @@ def register_stats_routes(app):
                 if not initial_exercise:
                     initial_exercise = requested_exercise
                     initial_exercise_label = requested_exercise
-
-            logs = (
-                Session.query(WorkoutLog)
-                .filter_by(user_id=user.id)
-                .order_by(desc(WorkoutLog.date))
-                .all()
-            )
 
             bw_exercises = []
             if user.bodyweight is None and logs:
@@ -133,6 +147,7 @@ def register_stats_routes(app):
                 json_size_kb=json_size_kb,
                 bw_exercises=bw_exercises,
                 bw_warning_enabled=user.bodyweight is None,
+                stats_preferences=get_stats_preferences(Session, user),
             )
         except Exception as e:
             logger.error(f"Error in stats_index: {e}", exc_info=True)
@@ -150,6 +165,11 @@ def register_stats_routes(app):
             updated += backfill_bodyweight_log_flags(Session, user.id)
             if updated:
                 Session.commit()
+            try:
+                record_stats_exercise_view(Session, user, exercise)
+            except Exception as view_error:
+                Session.rollback()
+                logger.warning(f"Could not record stats exercise view: {view_error}")
             return jsonify(get_chart_data(Session, user, exercise))
         except Exception as e:
             logger.error(f"Error getting stats data: {e}", exc_info=True)
@@ -189,6 +209,26 @@ def register_stats_routes(app):
         except Exception as e:
             logger.error(f"Error getting average stats data: {e}", exc_info=True)
             return jsonify({'error': 'Failed to load data'}), 500
+
+    @login_required
+    def save_stats_preferences():
+        sort_mode = request.form.get('sort_mode')
+        time_range = request.form.get('range')
+        sort_mode = sort_mode.strip() if sort_mode is not None else None
+        time_range = time_range.strip() if time_range is not None else None
+        if sort_mode is None and time_range is None:
+            return jsonify({'ok': False, 'error': 'Nothing to save.'}), 400
+
+        try:
+            saved = set_stats_preferences(Session, current_user, sort_mode=sort_mode, time_range=time_range)
+            return jsonify({'ok': True, **saved})
+        except ValueError as e:
+            Session.rollback()
+            return jsonify({'ok': False, 'error': str(e)}), 400
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Error saving stats preferences: {e}", exc_info=True)
+            return jsonify({'ok': False, 'error': 'Unable to save preferences.'}), 500
 
     @login_required
     def export_csv():
@@ -260,6 +300,12 @@ def register_stats_routes(app):
         endpoint='stats_average_data',
         view_func=stats_average_data,
         methods=['GET'],
+    )
+    app.add_url_rule(
+        '/stats/preferences',
+        endpoint='save_stats_preferences',
+        view_func=save_stats_preferences,
+        methods=['POST'],
     )
     app.add_url_rule('/export_csv', endpoint='export_csv', view_func=export_csv, methods=['GET'])
     app.add_url_rule('/export_json', endpoint='export_json', view_func=export_json, methods=['GET'])

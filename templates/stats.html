@@ -2,70 +2,69 @@
 {% block content %}
 <div class="row">
     <div class="col-12">
-        <div class="card">
-            <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center mb-4 mb-md-5 flex-wrap gap-3 pb-3 pb-md-4 border-bottom" style="border-color: var(--border-subtle) !important;">
-                <div>
-                    <h2 class="fw-bold mb-2" style="font-size: clamp(1.5rem, 5vw, 2rem);">Progress Tracking</h2>
-                    <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Analyze your performance over time</p>
+        <div class="card stats-page">
+            <div class="stats-header">
+                <h1 class="stats-hero-label">
+                    <span id="heroLabel">Overall strength</span>
+                    <button type="button" id="heroInfoBtn" class="stats-info-btn" aria-expanded="false" aria-controls="heroInfo" aria-label="What is this?">
+                        <i class="bi bi-info-circle"></i>
+                    </button>
+                </h1>
+                <div class="stats-search">
+                    <i class="bi bi-search stats-search-icon" aria-hidden="true"></i>
+                    <input
+                        id="exerciseSearch"
+                        class="form-control"
+                        type="text"
+                        placeholder="Search an exercise"
+                        aria-label="Search an exercise"
+                        autocomplete="off"
+                        oninput="handleSearchInput()"
+                        onfocus="showSuggestions()"
+                        onkeydown="handleKeyDown(event)"
+                    >
+                    <button type="button" id="exerciseClear" class="stats-search-clear" aria-label="Back to overall strength" hidden>
+                        <i class="bi bi-x-lg"></i>
+                    </button>
+                    <div id="suggestionsList" class="position-absolute w-100 border mt-2" style="display: none;"></div>
                 </div>
+                <script type="application/json" id="exerciseOptionsData">{{ exercise_options | tojson }}</script>
+                <script type="application/json" id="initialExerciseData">{{ {"value": initial_exercise or "", "label": initial_exercise_label or ""} | tojson }}</script>
+                <script type="application/json" id="statsPreferencesData">{{ stats_preferences | tojson }}</script>
             </div>
+            <p id="heroInfo" class="stats-hero-info" hidden></p>
 
-            <div class="row mb-4">
-                <div class="col-12">
-                    <label class="text-muted mb-2 d-block" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 1.5px; font-weight: 600;">
-                        <i class="bi bi-search me-2"></i>Search Exercise
-                    </label>
-                    <div class="stats-search-bar d-flex flex-column flex-md-row gap-2">
-                        <div class="position-relative flex-grow-1 stats-search-input">
-                            <input 
-                                id="exerciseSearch" 
-                                class="form-control" 
-                                type="text" 
-                                placeholder="Type to search exercises..." 
-                                autocomplete="off"
-                                oninput="handleSearchInput()" 
-                                onfocus="showSuggestions()" 
-                                onkeydown="handleKeyDown(event)"
-                                style="font-size: var(--fs-sm);"
-                            >
-                            <div id="suggestionsList" class="position-absolute w-100 border rounded-2 mt-1" style="display: none; max-height: 300px; overflow-y: auto; z-index: 1000;">
-                            </div>
-                        </div>
-                        <button type="button" id="overallToggleBtnDesktop" class="overall-pill overall-toggle-btn d-none d-md-inline-flex align-items-center justify-content-center" data-overall="index">
-                            Strength Index
-                        </button>
+            <!-- Headline: one number that answers "am I getting stronger?" -->
+            <section id="statsHero" class="stats-hero" hidden>
+                <div class="stats-hero-value" id="heroValue">-</div>
+                <div class="stats-hero-text">
+                    <div class="stats-hero-caption" id="heroCaption"></div>
+                    <div class="stats-hero-change" id="heroChange"></div>
+                </div>
+                <div class="stats-segmented stats-range" role="group" aria-label="Time range">
+                    <button type="button" class="range-pill" data-range="30">1M</button>
+                    <button type="button" class="range-pill" data-range="90">3M</button>
+                    <button type="button" class="range-pill" data-range="180">6M</button>
+                    <button type="button" class="range-pill" data-range="365">1Y</button>
+                    <button type="button" class="range-pill active" data-range="all">All</button>
+                </div>
+            </section>
+
+            <div class="stats-chart-card">
+                <div class="stats-chart-toolbar" id="chartToolbar">
+                    <div class="stats-segmented" id="metricControls" role="group" aria-label="Metric" hidden>
+                        <button type="button" class="metric-pill active" data-metric="e1rm">Est. max</button>
+                        <button type="button" class="metric-pill" data-metric="top_weight">Heaviest</button>
+                        <button type="button" class="metric-pill" data-metric="tonnage">Volume</button>
                     </div>
-                    <script type="application/json" id="exerciseOptionsData">{{ exercise_options | tojson }}</script>
-                    <script type="application/json" id="initialExerciseData">{{ {"value": initial_exercise or "", "label": initial_exercise_label or ""} | tojson }}</script>
                 </div>
-            </div>
-
-            <div id="overallControlsMobile" class="d-md-none mb-2">
-                <button type="button" class="overall-pill overall-toggle-btn w-100" data-overall="index">
-                    Strength Index
-                </button>
-            </div>
-
-            <!-- Plain-language Strength Index summary -->
-            <div id="strengthHeadline" class="strength-headline mb-3" style="display: none;">
-                <div id="strengthHeadlineMain" class="strength-headline-main"></div>
-                <div id="strengthHeadlineSub" class="strength-headline-sub text-muted"></div>
-                <details class="strength-info">
-                    <summary><i class="bi bi-info-circle me-1"></i>What does this chart show?</summary>
-                    <p class="mb-0">
-                        We estimate your max lift (1-rep max) for every exercise you've done at least 3 times and compare it
-                        with your first few sessions of that exercise. <strong>0% / "Start"</strong> is where you started.
-                        <strong>+10%</strong> means you can lift about 10% more than when you started; a negative value means
-                        you're currently below your starting level. Bigger lifts (squat, bench) count more than small ones (curls),
-                        and exercises you haven't done for 2&ndash;3 months slowly drop out.
-                    </p>
-                </details>
-            </div>
-
-            <!-- Chart Container -->
-            <div class="chart-container mb-3" style="position: relative; height: clamp(220px, 35vh, 360px); width:100%; min-height: 220px;">
-                <canvas id="progressChart"></canvas>
-                <div id="chartPlaceholder" class="position-absolute top-0 start-0 w-100 h-100" style="pointer-events: none;"></div>
+                <div class="stats-chart">
+                    <canvas id="progressChart"></canvas>
+                    <div id="chartEmpty" class="stats-empty" hidden>
+                        <i class="bi bi-graph-up"></i>
+                        <span>Log a few workouts to see your progress here.</span>
+                    </div>
+                </div>
             </div>
 
             <div id="chartPointDetails" class="chart-point-details" style="display: none;">
@@ -74,94 +73,35 @@
                     <button type="button" class="chart-point-close" id="chartPointClose" aria-label="Close">×</button>
                 </div>
                 <div class="chart-point-body">
-                    <div class="chart-point-row">
-                        <span class="chart-point-label">Value</span>
-                        <span id="chartPointValue">-</span>
-                    </div>
-                    <div class="chart-point-row">
-                        <span class="chart-point-label">Change</span>
-                        <span id="chartPointChange">-</span>
-                    </div>
-                    <div class="chart-point-row" id="chartPointTopSetRow" style="display: none;">
-                        <span class="chart-point-label">Top set</span>
-                        <span id="chartPointTopSet">-</span>
-                    </div>
-                    <div class="chart-point-row" id="chartPointTonnageRow" style="display: none;">
-                        <span class="chart-point-label">Tonnage</span>
-                        <span id="chartPointTonnage">-</span>
-                    </div>
+                    <span id="chartPointValue" class="chart-point-value">-</span>
+                    <span id="chartPointTopSet" class="chart-point-topset"></span>
                 </div>
-                <a id="chartPointLink" class="chart-point-link" href="#">Open workout</a>
-            </div>
-
-            <!-- Filters below chart -->
-            <div class="stats-filters mb-3">
-                <div class="stats-filter-layout">
-                    <div class="stats-filter-block stats-filter-range">
-                        <label class="text-muted mb-1 d-block stats-filter-label">Time range</label>
-                        <div class="range-pill-group">
-                            <button class="range-pill" data-range="7">7 days</button>
-                            <button class="range-pill" data-range="30">30 days</button>
-                            <button class="range-pill" data-range="90">90 days</button>
-                            <button class="range-pill" data-range="180">180 days</button>
-                            <button class="range-pill" data-range="365">365 days</button>
-                            <button class="range-pill active" data-range="all">All</button>
-                        </div>
-                    </div>
-                    <div class="stats-filter-block stats-filter-ma">
-                        <label class="text-muted mb-1 d-block stats-filter-label">Moving average window</label>
-                        <div class="ma-pill-group">
-                            <button class="ma-pill" data-ma="7">7d</button>
-                            <button class="ma-pill active" data-ma="14">14d</button>
-                            <button class="ma-pill" data-ma="30">30d</button>
-                            <button class="ma-pill" data-ma="48">48d</button>
-                        </div>
-                    </div>
-                    <div class="stats-filter-block" id="metricControls" style="display: none;">
-                        <label class="text-muted mb-1 d-block stats-filter-label">Metric</label>
-                        <div class="metric-pill-group">
-                            <button class="metric-pill active" data-metric="e1rm">e1RM</button>
-                            <button class="metric-pill" data-metric="top_weight">Top Weight</button>
-                            <button class="metric-pill" data-metric="tonnage">Tonnage</button>
-                            <button class="metric-pill" data-metric="effective_tonnage">Eff. Ton.</button>
-                        </div>
-                    </div>
-                </div>
+                <a id="chartPointLink" class="chart-point-link" href="#">Open workout <i class="bi bi-arrow-right"></i></a>
             </div>
 
             {% if bw_warning_enabled and bw_exercises %}
-            <div id="bwStatsAlert" class="alert alert-warning mb-4" role="alert" style="display: none; background: rgba(212, 175, 55, 0.12); border-color: rgba(212, 175, 55, 0.35); color: var(--platinum);">
+            <div id="bwStatsAlert" class="alert alert-warning mt-3 mb-0" role="alert" style="display: none; background: rgba(212, 175, 55, 0.12); border-color: rgba(212, 175, 55, 0.35); color: var(--platinum);">
                 <i class="bi bi-info-circle me-2"></i>
-                Set your bodyweight in Settings to see accurate BW volume and 1RM for <span id="bwStatsExercise" class="fw-semibold"></span>.
+                Set your bodyweight in Settings to see accurate numbers for <span id="bwStatsExercise" class="fw-semibold"></span>.
             </div>
             <script type="application/json" id="bwExercisesData">{{ bw_exercises | tojson }}</script>
             {% endif %}
 
-            <!-- Stats Summary -->
-            <div id="statsSummary" class="row g-2 g-md-3 mb-3 stats-summary" style="display: none;">
-                <div class="col-6 col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value" id="current1RM">-</div>
-                        <div class="stat-label" id="current1RMLabel">Current 1RM</div>
-                    </div>
+            <div id="statsTiles" class="stats-tiles" hidden>
+                <div class="stats-tile">
+                    <div class="stats-tile-label" id="tile1Label">Best</div>
+                    <div class="stats-tile-value" id="tile1Value">-</div>
+                    <div class="stats-tile-sub" id="tile1Sub"></div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value" id="max1RM">-</div>
-                        <div class="stat-label" id="max1RMLabel">Max 1RM</div>
-                    </div>
+                <div class="stats-tile">
+                    <div class="stats-tile-label" id="tile2Label">Workouts</div>
+                    <div class="stats-tile-value" id="tile2Value">-</div>
+                    <div class="stats-tile-sub" id="tile2Sub"></div>
                 </div>
-                <div class="col-6 col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value" id="improvement">-</div>
-                        <div class="stat-label" id="improvementLabel">Improvement</div>
-                    </div>
-                </div>
-                <div class="col-6 col-md-3">
-                    <div class="stat-card">
-                        <div class="stat-value" id="improvementPct">-</div>
-                        <div class="stat-label" id="improvementPctLabel">% Change</div>
-                    </div>
+                <div class="stats-tile">
+                    <div class="stats-tile-label" id="tile3Label">Per week</div>
+                    <div class="stats-tile-value" id="tile3Value">-</div>
+                    <div class="stats-tile-sub" id="tile3Sub"></div>
                 </div>
             </div>
 
@@ -175,138 +115,441 @@
 </div>
 
 <style>
-    #suggestionsList {
-        background: var(--card-bg, #1a1a1a);
-        border-color: var(--border-subtle, #333) !important;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    .stats-page {
+        --stats-up: var(--gold-primary, #D4AF37);
+        --stats-down: #EF4444;
+        --stats-surface: rgba(255, 255, 255, 0.02);
+        --stats-seg-bg: rgba(255, 255, 255, 0.04);
     }
-    
+
+    [data-theme="light"] .stats-page {
+        --stats-up: #A8841F;
+        --stats-down: #DC2626;
+        --stats-surface: #fffaf1;
+        --stats-seg-bg: rgba(148, 126, 86, 0.08);
+    }
+
+    /* ---------- Header: label + search on one row ---------- */
+    .stats-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem 1.25rem;
+        flex-wrap: wrap;
+    }
+
+    .stats-search {
+        position: relative;
+        flex: 0 1 340px;
+        min-width: 0;
+        height: 44px;
+    }
+
+    .stats-search .form-control {
+        height: 44px;
+        min-height: 0;
+        margin: 0;
+        padding: 0 2.6rem 0 2.6rem;
+        font-size: var(--fs-sm);
+        line-height: 44px;
+        border-radius: 999px;
+    }
+
+    /* Icon and clear button are centered on the input's own box. */
+    .stats-search-icon,
+    .stats-search-clear {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 2;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+    }
+
+    .stats-search-icon {
+        left: 1rem;
+        color: var(--text-muted);
+        font-size: 0.85rem;
+        pointer-events: none;
+    }
+
+    .stats-search-icon::before,
+    .stats-search-clear i::before {
+        display: block;
+    }
+
+    .stats-search-clear {
+        right: 6px;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 0.8rem;
+        cursor: pointer;
+    }
+
+    .stats-search-clear:hover {
+        color: var(--gold-primary);
+        background: var(--gold-subtle);
+    }
+
+    .stats-search-clear[hidden] {
+        display: none;
+    }
+
+    /* ---------- Suggestions dropdown ---------- */
+    #suggestionsList {
+        top: 100%;
+        left: 0;
+        max-height: 340px;
+        overflow-y: auto;
+        z-index: 1000;
+        border-radius: 16px;
+        background: var(--card-bg-solid, #1a1a1a);
+        border-color: var(--border-subtle, #333) !important;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+        padding-bottom: 0.35rem;
+    }
+
     [data-theme="light"] #suggestionsList {
         background: #ffffff;
-        border-color: #d1d5db !important;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        border-color: #e5e1d8 !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
     }
-    
+
     #suggestionsList .suggestion-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 0.55rem 1rem;
+        cursor: pointer;
         color: var(--text-primary, #e5e5e5);
+        font-size: var(--fs-sm);
+        transition: background 0.15s;
     }
-    
+
     [data-theme="light"] #suggestionsList .suggestion-item {
         color: #1f2937;
     }
-    
-    #suggestionsList .border-top {
-        border-color: var(--border-subtle, #333) !important;
-    }
-    
-    [data-theme="light"] #suggestionsList .border-top {
-        border-color: #e5e7eb !important;
+
+    .suggestion-meta {
+        flex-shrink: 0;
+        font-size: 0.72rem;
+        color: var(--text-muted);
+        font-variant-numeric: tabular-nums;
     }
 
-    .stats-search-input {
-        width: 100%;
+    .suggestion-empty {
+        padding: 0.6rem 1rem;
+        color: var(--text-muted);
+        font-size: var(--fs-sm);
     }
 
-    @media (min-width: 768px) {
-        .stats-search-input {
-            flex: 1;
-            max-width: none;
-        }
-        
-        .stats-search-bar {
-            max-width: 100%;
-        }
+    #suggestionsList .suggestion-divider {
+        height: 1px;
+        margin: 0.25rem 0;
+        background: var(--border-subtle, #333);
     }
 
-    .strength-headline-main {
-        font-size: clamp(1.05rem, 3.4vw, 1.35rem);
+    .suggestion-sort {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.6rem 0.75rem;
+        background: inherit;
+        border-bottom: 1px solid var(--border-subtle);
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .suggestion-sort::-webkit-scrollbar {
+        display: none;
+    }
+
+    .suggestion-sort button {
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        height: 28px;
+        padding: 0 0.7rem;
+        border-radius: 999px;
+        border: 1px solid var(--border-subtle);
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 0.74rem;
         font-weight: 600;
-        line-height: 1.35;
-        color: var(--text-primary, inherit);
-    }
-    .strength-headline-main .trend-up { color: var(--gold-primary, #D4AF37); }
-    .strength-headline-main .trend-down { color: #EF4444; }
-    .strength-headline-sub {
-        font-size: var(--fs-sm);
-        margin-top: 4px;
-    }
-    .strength-info {
-        margin-top: 6px;
-        font-size: var(--fs-sm);
-    }
-    .strength-info summary {
+        line-height: 1;
+        white-space: nowrap;
         cursor: pointer;
-        color: var(--gold-primary, #D4AF37);
-        width: fit-content;
-    }
-    .strength-info p {
-        margin-top: 6px;
-        max-width: 70ch;
-        opacity: 0.85;
     }
 
-    .chart-container {
-        background: var(--card-bg, #141414);
-        border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.2));
-        border-radius: 22px;
-        padding: 12px;
+    .suggestion-sort button:hover {
+        color: var(--gold-primary);
     }
 
-    [data-theme="light"] .chart-container {
-        background: #fffaf1;
-        border-color: rgba(148, 126, 86, 0.35);
-        box-shadow: 0 10px 30px rgba(148, 126, 86, 0.08);
+    .suggestion-sort button.active {
+        background: #D4AF37;
+        border-color: #D4AF37;
+        color: #141414;
     }
 
-    .stats-filters {
-        background: var(--card-bg, #141414);
-        border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.2));
-        border-radius: 20px;
-        padding: 0.95rem 1rem;
-    }
-
-    .stats-filter-layout {
-        display: grid;
-        grid-template-columns: minmax(0, 1.8fr) minmax(0, 1fr);
-        gap: 0.9rem 1rem;
-    }
-
-    .stats-filter-block {
+    /* ---------- Hero ---------- */
+    /* Page title: same look the old "Progress" heading had. */
+    .stats-hero-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin: 0;
         min-width: 0;
+        font-family: 'Cormorant Garamond', serif;
+        font-size: clamp(1.6rem, 5vw, 2.1rem);
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: normal;
+        color: var(--text-primary);
     }
 
-    .stats-filter-range {
-        grid-column: 1;
+    .stats-info-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border: none;
+        border-radius: 50%;
+        background: transparent;
+        color: var(--text-muted);
+        font-family: inherit;
+        font-size: 1rem;
+        line-height: 1;
+        cursor: pointer;
     }
 
-    .stats-filter-ma {
-        grid-column: 2;
+    .stats-info-btn i::before {
+        display: block;
     }
 
-    #metricControls {
-        grid-column: 1 / -1;
+    .stats-info-btn:hover,
+    .stats-info-btn[aria-expanded="true"] {
+        color: var(--gold-primary);
     }
 
-    [data-theme="light"] .stats-filters {
-        background: #fffaf1;
-        border-color: rgba(148, 126, 86, 0.35);
-        box-shadow: 0 8px 24px rgba(148, 126, 86, 0.08);
+    .stats-hero-info {
+        margin: 0.75rem 0 0;
+        max-width: 60ch;
+        font-size: var(--fs-sm);
+        color: var(--text-muted);
+        line-height: 1.5;
     }
 
+    .stats-hero {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.4rem 1.25rem;
+        margin: 1.1rem 0 1.4rem;
+    }
+
+    .stats-hero[hidden] {
+        display: none;
+    }
+
+    .stats-hero-value {
+        font-family: 'Cormorant Garamond', serif;
+        font-weight: 700;
+        font-size: clamp(3rem, 10vw, 4.4rem);
+        line-height: 0.95;
+        color: var(--stats-up);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+    }
+
+    .stats-hero-value.is-down {
+        color: var(--stats-down);
+    }
+
+    .stats-hero-value.is-flat {
+        color: var(--text-primary);
+    }
+
+    .stats-hero-text {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.45rem;
+        min-width: 0;
+        flex: 1 1 180px;
+    }
+
+    .stats-hero-caption {
+        font-size: var(--fs-base);
+        line-height: 1.35;
+        color: var(--text-secondary);
+    }
+
+    .stats-hero-change {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: var(--fs-sm);
+        font-weight: 600;
+        line-height: 1.2;
+        color: var(--text-muted);
+    }
+
+    .stats-hero-change:empty {
+        display: none;
+    }
+
+    .stats-hero-change i::before {
+        display: block;
+    }
+
+    .stats-hero-change.is-up,
+    .stats-hero-change.is-down {
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+    }
+
+    .stats-hero-change.is-up {
+        color: var(--stats-up);
+        background: var(--gold-subtle);
+    }
+
+    .stats-hero-change.is-down {
+        color: var(--stats-down);
+        background: rgba(239, 68, 68, 0.1);
+    }
+
+    .stats-hero[hidden] + .stats-chart-card {
+        margin-top: 1.25rem;
+    }
+
+    /* ---------- Chart card ---------- */
+    .stats-chart-card {
+        background: var(--stats-surface);
+        border: 1px solid var(--border-subtle);
+        border-radius: 22px;
+        padding: 14px 14px 10px;
+    }
+
+    [data-theme="light"] .stats-chart-card {
+        border-color: rgba(148, 126, 86, 0.3);
+    }
+
+    .stats-chart-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.6rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.5rem;
+    }
+
+    .stats-range {
+        margin-left: auto;
+        align-self: center;
+    }
+
+    .stats-chart-toolbar[hidden] {
+        display: none;
+    }
+
+    .stats-segmented {
+        display: inline-flex;
+        gap: 2px;
+        padding: 3px;
+        border-radius: 999px;
+        background: var(--stats-seg-bg);
+    }
+
+    .stats-segmented[hidden] {
+        display: none;
+    }
+
+    .stats-segmented button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        border: none;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+        padding: 0.4rem 0.8rem;
+        min-height: 32px;
+        min-width: 44px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: background var(--transition-fast), color var(--transition-fast);
+        white-space: nowrap;
+    }
+
+    .stats-segmented button:hover {
+        color: var(--gold-primary);
+    }
+
+    .stats-segmented button.active {
+        background: #D4AF37;
+        color: #141414;
+    }
+
+    .stats-chart {
+        position: relative;
+        width: 100%;
+        /* Sized so the whole chart fits under the header on a laptop screen. */
+        height: clamp(240px, calc(100vh - 360px), 460px);
+    }
+
+    .stats-empty {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        color: var(--text-muted);
+        font-size: var(--fs-sm);
+        text-align: center;
+        padding: 1rem;
+    }
+
+    .stats-empty[hidden] {
+        display: none;
+    }
+
+    .stats-empty i {
+        font-size: 1.6rem;
+        color: var(--gold-primary);
+        opacity: 0.6;
+    }
+
+    /* ---------- Tap details (touch) ---------- */
     .chart-point-details {
-        margin-bottom: 0.8rem;
+        margin-top: 0.75rem;
         padding: 0.75rem 0.9rem;
         border-radius: 16px;
         border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.22));
-        background: var(--card-bg, #141414);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
+        background: var(--card-bg-solid, #141414);
         cursor: pointer;
     }
 
     [data-theme="light"] .chart-point-details {
         background: #ffffff;
         border-color: rgba(148, 126, 86, 0.35);
-        box-shadow: 0 10px 24px rgba(148, 126, 86, 0.08);
     }
 
     .chart-point-header {
@@ -314,264 +557,240 @@
         align-items: center;
         justify-content: space-between;
         color: var(--text-muted, #a8a8a8);
-        font-size: 0.72rem;
-        text-transform: uppercase;
-        letter-spacing: 0.8px;
+        font-size: 0.75rem;
         font-weight: 600;
-        margin-bottom: 0.45rem;
+        margin-bottom: 0.25rem;
     }
 
     .chart-point-close {
         background: transparent;
         border: none;
         color: inherit;
-        font-size: 1rem;
+        font-size: 1.1rem;
         line-height: 1;
-        padding: 0;
+        padding: 0 0.25rem;
         cursor: pointer;
         opacity: 0.7;
     }
 
-    .chart-point-close:hover {
-        opacity: 1;
-    }
-
     .chart-point-body {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 0.4rem 0.75rem;
-        font-size: 0.78rem;
-    }
-
-    .chart-point-row {
         display: flex;
-        justify-content: space-between;
-        gap: 0.6rem;
+        align-items: baseline;
+        gap: 0.75rem;
+        flex-wrap: wrap;
     }
 
-    .chart-point-label {
-        color: var(--text-muted, #a8a8a8);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-size: 0.64rem;
-        font-weight: 600;
+    .chart-point-value {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .chart-point-topset {
+        font-size: var(--fs-sm);
+        color: var(--text-muted);
     }
 
     .chart-point-link {
-        margin-top: 0.6rem;
+        margin-top: 0.5rem;
         display: inline-flex;
         align-items: center;
-        justify-content: center;
         gap: 0.35rem;
-        padding: 0.45rem 0.85rem;
-        border-radius: 999px;
-        background: #D4AF37;
-        color: #141414;
+        color: var(--gold-primary);
         text-decoration: none;
-        font-size: 0.72rem;
+        font-size: 0.8rem;
         font-weight: 600;
-        border: 1px solid rgba(212, 175, 55, 0.6);
-        box-shadow: 0 6px 16px rgba(212, 175, 55, 0.3);
     }
 
-    .chart-point-link:hover {
-        color: #141414;
-        filter: brightness(0.98);
+    /* ---------- Tiles ---------- */
+    .stats-tiles {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 0.75rem;
+        margin-top: 1rem;
     }
 
-    .range-pill-group,
-    .ma-pill-group,
-    .metric-pill-group {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 0.5rem;
+    .stats-tiles[hidden] {
+        display: none;
     }
 
-    .range-pill, .ma-pill, .overall-pill, .metric-pill {
-        background: rgba(22, 22, 22, 0.7);
-        color: var(--text-muted, #b5b5b5);
-        border-radius: 999px;
-        padding: 0.5rem 0.95rem;
-        font-size: 0.78rem;
+    .stats-tile {
+        border: 1px solid var(--border-subtle);
+        border-radius: 18px;
+        padding: 1rem 1.1rem;
+        background: var(--stats-surface);
+        min-width: 0;
+    }
+
+    [data-theme="light"] .stats-tile {
+        border-color: rgba(148, 126, 86, 0.3);
+    }
+
+    .stats-tile-label {
+        font-size: 0.68rem;
         font-weight: 600;
-        cursor: pointer;
-        transition: all 0.2s ease;
-        border: 1px solid rgba(212, 175, 55, 0.25);
-        white-space: nowrap;
-        text-align: center;
-        min-height: 38px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    .range-pill-group .range-pill {
-        width: 96px;
-    }
-
-    .ma-pill-group .ma-pill {
-        width: 72px;
-    }
-
-    .overall-toggle-btn {
-        min-width: 180px;
-    }
-
-    .overall-toggle-hidden {
-        display: none !important;
-    }
-
-    [data-theme="light"] .range-pill,
-    [data-theme="light"] .ma-pill,
-    [data-theme="light"] .overall-pill,
-    [data-theme="light"] .metric-pill {
-        background: #fffdf8;
-        color: #6b6b6b;
-        border-color: rgba(148, 126, 86, 0.35);
-    }
-
-    .range-pill:hover, .ma-pill:hover, .overall-pill:hover, .metric-pill:hover {
-        background: rgba(212, 175, 55, 0.15);
-        color: #D4AF37;
-    }
-
-    .range-pill.active, .ma-pill.active, .overall-pill.active, .metric-pill.active {
-        background: #D4AF37;
-        color: #171717;
-        font-weight: 600;
-        border-color: #D4AF37;
-        box-shadow: 0 6px 18px rgba(212, 175, 55, 0.35);
-    }
-
-    [data-theme="light"] .range-pill.active,
-    [data-theme="light"] .ma-pill.active,
-    [data-theme="light"] .overall-pill.active,
-    [data-theme="light"] .metric-pill.active {
-        background: #D4AF37;
-        color: #000;
-    }
-
-    .stats-filter-label {
-        font-size: 0.65rem;
+        letter-spacing: 1.2px;
         text-transform: uppercase;
-        letter-spacing: 0.4px;
-        font-weight: 600;
+        color: var(--text-muted);
+    }
+
+    .stats-tile-value {
+        margin-top: 0.3rem;
+        font-size: clamp(1.15rem, 3.6vw, 1.5rem);
+        font-weight: 700;
+        color: var(--text-primary);
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .stats-tile-sub {
+        margin-top: 0.1rem;
+        font-size: 0.78rem;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     @media (max-width: 576px) {
-        .stats-filters {
-            margin-top: 0.75rem;
+        /* Tiles become one compact list: label left, value right. */
+        .stats-tiles {
+            grid-template-columns: 1fr;
+            gap: 0;
+            border: 1px solid var(--border-subtle);
+            border-radius: 16px;
+            background: var(--stats-surface);
+            overflow: hidden;
         }
-        
-        #overallControlsMobile {
-            margin-bottom: 3rem;
+
+        [data-theme="light"] .stats-tiles {
+            border-color: rgba(148, 126, 86, 0.3);
         }
-    }
 
-    .stats-summary .stat-card {
-        border: 1px solid var(--border-subtle, rgba(212, 175, 55, 0.2));
-        background: var(--card-bg, #141414);
-        box-shadow: 0 10px 24px rgba(0, 0, 0, 0.18);
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-    }
+        .stats-tile,
+        [data-theme="light"] .stats-tile {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            align-items: center;
+            column-gap: 0.75rem;
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            padding: 0.7rem 0.9rem;
+        }
 
-    .stats-summary .col-6,
-    .stats-summary .col-md-3 {
-        display: flex;
-    }
+        .stats-tile + .stats-tile {
+            border-top: 1px solid var(--border-subtle);
+        }
 
-    [data-theme="light"] .stats-summary .stat-card {
-        background: #ffffff;
-        border-color: rgba(148, 126, 86, 0.35);
-        box-shadow: 0 10px 24px rgba(148, 126, 86, 0.08);
-    }
+        .stats-tile-label {
+            grid-row: 1 / span 2;
+        }
 
-    @media (max-width: 576px) {
-        .chart-container {
-            padding: 10px;
+        .stats-tile-value {
+            margin-top: 0;
+            font-size: 1.05rem;
+            text-align: right;
+        }
+
+        .stats-tile-sub {
+            text-align: right;
+        }
+
+        .suggestion-sort {
+            gap: 0.25rem;
+            padding: 0.55rem 0.5rem;
+        }
+
+        .suggestion-sort button {
+            flex: 1 1 auto;
+            padding: 0 0.4rem;
+            font-size: 0.7rem;
+        }
+
+        /* Phone: search first, full width; label sits under it. */
+        .stats-search {
+            flex: 1 1 100%;
+            order: -1;
+        }
+
+        .stats-hero {
+            margin: 0.75rem 0 1.1rem;
+            gap: 0.9rem 0.9rem;
+        }
+
+        .stats-hero-text {
+            flex-basis: 190px;
+        }
+
+        .stats-hero-caption {
+            font-size: var(--fs-sm);
+        }
+
+        .stats-chart {
+            height: clamp(240px, 42vh, 360px);
+        }
+
+        .stats-chart-card {
+            padding: 10px 8px 6px;
             border-radius: 18px;
         }
 
-        .stats-filters {
-            margin-bottom: var(--space-sm);
-            padding: 0.85rem;
+        .stats-chart-toolbar {
+            flex-direction: column;
+            align-items: stretch;
         }
 
-        .stats-filter-layout {
-            grid-template-columns: 1fr;
-            gap: 0.85rem;
-        }
-
-        .stats-filter-range,
-        .stats-filter-ma,
-        #metricControls {
-            grid-column: auto;
-        }
-
-        .range-pill-group {
-            display: grid !important;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.5rem;
-            width: 100%;
-        }
-
-        .ma-pill-group,
-        .metric-pill-group {
-            display: grid !important;
-            grid-template-columns: repeat(4, minmax(0, 1fr));
-            gap: 0.45rem;
-            width: 100%;
-        }
-
-        .range-pill {
-            width: 100%;
-            padding: 0.48rem 0.2rem;
-            font-size: 0.68rem;
-            min-height: 38px;
+        .stats-segmented {
             display: flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1.1;
         }
 
-        .ma-pill,
-        .metric-pill {
-            width: 100%;
-            padding: 0.45rem 0.15rem;
-            font-size: 0.64rem;
-            min-height: 36px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1.1;
+        .stats-segmented button {
+            flex: 1;
+            min-width: 0;
+            padding: 0.4rem 0.3rem;
         }
 
-        .chart-point-body {
-            grid-template-columns: 1fr;
+        .stats-range {
+            margin-left: 0;
+            flex: 1 1 100%;
         }
 
-        .stats-summary .stat-card {
-            padding: 12px;
-            border-radius: 14px;
-            min-height: 92px;
-        }
-
-        .stats-summary .stat-value {
-            font-size: 1.2rem;
-        }
-
-        .stats-summary .stat-label {
-            font-size: 0.6rem;
-            letter-spacing: 1.4px;
-        }
     }
 </style>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+    // Headline = average of the last N days. Fixed (not tied to the time range) so it stays
+    // the same whichever range you look at.
+    const OVERALL_TREND_DAYS = 14;
+    // Chart line smoothing (days) by how many days are on screen. Phones squeeze the same
+    // days into fewer pixels, so they get a wider window to keep the line smooth.
+    const SMOOTHING_WINDOWS = [
+        { maxSpan: 31, desktop: 5, phone: 7 },
+        { maxSpan: 92, desktop: 7, phone: 14 },
+        { maxSpan: 183, desktop: 14, phone: 21 },
+        { maxSpan: 366, desktop: 21, phone: 30 },
+        { maxSpan: Infinity, desktop: 30, phone: 45 },
+    ];
+    const PHONE_CHART_WIDTH = 500;
+    const BREAK_GAP_DAYS = 45;
+    const RANGE_PHRASES = {
+        '30': 'in the last month',
+        '90': 'in the last 3 months',
+        '180': 'in the last 6 months',
+        '365': 'in the last year',
+    };
+    const RANGE_SHORT = {
+        '30': 'last month',
+        '90': 'last 3 months',
+        '180': 'last 6 months',
+        '365': 'last year',
+        'all': 'all time',
+    };
+
     let myChart = null;
 
     const exerciseOptionsEl = document.getElementById('exerciseOptionsData');
@@ -580,235 +799,313 @@
     const initialExercise = initialExerciseEl ? JSON.parse(initialExerciseEl.textContent || '{}') : {};
     let currentExercise = '';
     let selectedSuggestionIndex = -1;
-    let currentDaysRange = 'all';
-    let currentMAWindow = 14;
+    // Saved on the account, so the last sort and range follow the user across devices.
+    const statsPreferencesEl = document.getElementById('statsPreferencesData');
+    const statsPreferences = statsPreferencesEl ? JSON.parse(statsPreferencesEl.textContent || '{}') : {};
+    let currentRange = (statsPreferences.range === 'all' || RANGE_PHRASES[statsPreferences.range]) ? statsPreferences.range : 'all';
     let currentMetric = 'e1rm';
+    let sortMode = statsPreferences.sort_mode || 'most_viewed';
     let fullChartData = null;
     let aiAssistantSelectedDate = '';
 
-    let _defaultsInitialized = false;
+    function saveStatsPreference(fields) {
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        fetch('/stats/preferences', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                'X-CSRFToken': csrfToken,
+            },
+            body: new URLSearchParams(fields).toString(),
+        }).catch(error => console.error('Error saving stats preference:', error));
+    }
 
-    let currentOverallMode = 'index';
-
-    const baseline100Plugin = {
-        id: 'baseline100',
+    // Draws the "Start" line (100 = where you started) for the overall view.
+    const baselinePlugin = {
+        id: 'startBaseline',
         beforeDatasetsDraw(chart) {
-            if (!chart || !chart.$showBaseline100) return;
+            if (!chart || !chart.$showBaseline) return;
             const yScale = chart.scales && chart.scales.y;
-            if (!yScale) return;
             const area = chart.chartArea;
-            if (!area) return;
-
+            if (!yScale || !area) return;
             const y = yScale.getPixelForValue(100);
-            if (!Number.isFinite(y)) return;
-
+            if (!Number.isFinite(y) || y < area.top || y > area.bottom) return;
             const ctx = chart.ctx;
             ctx.save();
-            ctx.strokeStyle = chart.$baselineStroke || 'rgba(148, 163, 184, 0.18)';
-            ctx.lineWidth = 2.5;
+            ctx.strokeStyle = chart.$baselineStroke || 'rgba(148, 163, 184, 0.35)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5, 4]);
             ctx.beginPath();
             ctx.moveTo(area.left, y);
             ctx.lineTo(area.right, y);
             ctx.stroke();
-
-            const label = chart.$baselineLabel || 'Baseline';
-            ctx.fillStyle = chart.$baselineText || 'rgba(148, 163, 184, 0.9)';
-            ctx.font = '600 10px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'bottom';
-            ctx.fillText(label, area.right - 2, Math.max(area.top + 10, y - 4));
             ctx.restore();
         }
     };
 
-    function getLastFinitePoint(values) {
-        if (!Array.isArray(values) || !values.length) return { index: null, value: null };
-        for (let i = values.length - 1; i >= 0; i--) {
-            if (values[i] === null || values[i] === undefined) continue;
-            const num = Number(values[i]);
-            if (Number.isFinite(num)) return { index: i, value: num };
-        }
-        return { index: null, value: null };
-    }
-
-    const drawRoundedRect = (ctx, x, y, width, height, radius) => {
-        if (typeof ctx.roundRect === 'function') {
-            ctx.beginPath();
-            ctx.roundRect(x, y, width, height, radius);
-            return;
-        }
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height - radius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        ctx.lineTo(x + radius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-    };
-
-    const currentProjectionPlugin = {
-        id: 'currentProjection',
+    // Marks where the line ends: a faint dashed guide to the y-axis and a gold value pill there.
+    const currentMarkerPlugin = {
+        id: 'currentMarker',
         afterDatasetsDraw(chart) {
-            const projection = chart && chart.$currentProjection;
-            if (!projection || !Number.isFinite(Number(projection.value))) return;
+            const marker = chart && chart.$marker;
             const yScale = chart.scales && chart.scales.y;
             const area = chart.chartArea;
-            if (!yScale || !area) return;
-
-            const y = yScale.getPixelForValue(Number(projection.value));
-            if (!Number.isFinite(y) || y < area.top - 2 || y > area.bottom + 2) return;
-
-            const datasetIndex = Number.isInteger(projection.datasetIndex) ? projection.datasetIndex : 0;
-            const pointIndex = Number.isInteger(projection.pointIndex) ? projection.pointIndex : null;
-            let xTo = area.right;
-            const meta = typeof chart.getDatasetMeta === 'function' ? chart.getDatasetMeta(datasetIndex) : null;
-            const point = (meta && Array.isArray(meta.data) && pointIndex !== null) ? meta.data[pointIndex] : null;
-            if (point && Number.isFinite(point.x)) {
-                xTo = point.x;
-            }
-            xTo = Math.max(area.left + 2, Math.min(area.right, xTo));
+            if (!marker || !yScale || !area) return;
+            const y = yScale.getPixelForValue(marker.value);
+            if (!Number.isFinite(y) || y < area.top - 1 || y > area.bottom + 1) return;
+            const point = chart.getDatasetMeta(marker.datasetIndex).data[marker.index];
+            const xEnd = point && Number.isFinite(point.x) ? point.x : area.right;
 
             const ctx = chart.ctx;
             ctx.save();
-            ctx.strokeStyle = projection.lineColor || 'rgba(212, 175, 55, 0.5)';
-            ctx.lineWidth = Number(projection.lineWidth) || 1.4;
-            ctx.setLineDash(Array.isArray(projection.dash) ? projection.dash : [4, 4]);
+            ctx.strokeStyle = marker.lineColor;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([3, 4]);
             ctx.beginPath();
             ctx.moveTo(area.left, y);
-            ctx.lineTo(xTo, y);
+            ctx.lineTo(xEnd, y);
             ctx.stroke();
             ctx.setLineDash([]);
 
-            const labelText = String(projection.label || '').trim();
-            if (labelText) {
-                const tickPadding = Number(yScale.options && yScale.options.ticks && yScale.options.ticks.padding) || 12;
-                ctx.font = projection.font || '600 11px Inter, sans-serif';
-                const boxPaddingX = 7;
-                const boxHeight = 18;
-                const boxWidth = ctx.measureText(labelText).width + (boxPaddingX * 2);
-                const boxRight = area.left - tickPadding - 8;
-                const boxX = Math.max(4, boxRight - boxWidth);
-                const boxY = Math.min(area.bottom - boxHeight, Math.max(area.top, y - (boxHeight / 2)));
-
-                drawRoundedRect(ctx, boxX, boxY, boxWidth, boxHeight, 9);
-                ctx.fillStyle = projection.labelBackground || 'rgba(255, 251, 242, 0.95)';
-                ctx.fill();
-                if (projection.labelBorder) {
-                    ctx.strokeStyle = projection.labelBorder;
-                    ctx.lineWidth = 1;
-                    ctx.stroke();
-                }
-
-                ctx.fillStyle = projection.labelColor || '#8A6D1D';
-                ctx.textAlign = 'left';
-                ctx.textBaseline = 'middle';
-                ctx.fillText(labelText, boxX + boxPaddingX, boxY + (boxHeight / 2));
-            }
+            ctx.font = MARKER_FONT;
+            const padX = 7;
+            const h = 20;
+            const w = ctx.measureText(marker.text).width + padX * 2;
+            const x = Math.max(2, area.left - 8 - w);
+            const top = Math.min(area.bottom - h / 2, Math.max(area.top - h / 2, y - h / 2));
+            ctx.beginPath();
+            if (typeof ctx.roundRect === 'function') ctx.roundRect(x, top, w, h, h / 2);
+            else ctx.rect(x, top, w, h);
+            ctx.shadowColor = marker.glow;
+            ctx.shadowBlur = 10;
+            ctx.fillStyle = marker.background;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.strokeStyle = marker.border;
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.fillStyle = marker.color;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(marker.text, x + w / 2, top + h / 2 + 0.5);
             ctx.restore();
         }
     };
-
-    function updateOverallToggleLabels() {
-        const label = currentOverallMode === 'rate' ? 'Improvement Rate' : 'Strength Index';
-        document.querySelectorAll('.overall-toggle-btn').forEach(btn => {
-            btn.textContent = label;
-            btn.dataset.overall = currentOverallMode;
-            btn.classList.add('active');
-        });
-    }
+    const MARKER_FONT = '700 11px Inter, system-ui, -apple-system, sans-serif';
 
     function isTouchUI() {
         return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
     }
 
+    function isLightTheme() {
+        return document.documentElement.getAttribute('data-theme') === 'light';
+    }
+
     function formatDateLabel(rawLabel, options) {
         if (!rawLabel) return '';
-        const parts = String(rawLabel).split('-');
-        if (parts.length === 3) {
-            const year = Number(parts[0]);
-            const month = Number(parts[1]);
-            const day = Number(parts[2]);
-            if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
-                return new Date(year, month - 1, day).toLocaleDateString('en-US', options);
+        const dt = parseISODate(rawLabel);
+        return dt ? dt.toLocaleDateString('en-US', options) : rawLabel;
+    }
+
+    const longDate = (raw) => formatDateLabel(raw, { month: 'short', day: 'numeric', year: 'numeric' });
+    // "Aug 22" this year, "Aug 22, 2025" otherwise.
+    const shortDate = (raw) => {
+        const dt = parseISODate(raw);
+        if (!dt || dt.getFullYear() !== new Date().getFullYear()) return longDate(raw);
+        return formatDateLabel(raw, { month: 'short', day: 'numeric' });
+    };
+
+    function parseISODate(label) {
+        const parts = String(label || '').split('-');
+        if (parts.length !== 3) return null;
+        const [year, month, day] = parts.map(Number);
+        if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+        const dt = new Date(year, month - 1, day);
+        return Number.isNaN(dt.getTime()) ? null : dt;
+    }
+
+    // Whole days since epoch; used for date math without timezone surprises.
+    function dayNumber(label) {
+        const parts = String(label || '').split('-').map(Number);
+        if (parts.length !== 3 || parts.some(n => !Number.isFinite(n))) return null;
+        return Math.round(Date.UTC(parts[0], parts[1] - 1, parts[2]) / 86400000);
+    }
+
+    function isFiniteNumber(v) {
+        return v !== null && v !== undefined && Number.isFinite(Number(v));
+    }
+
+    function formatNumber(raw) {
+        const num = Number(raw);
+        if (!Number.isFinite(num)) return '-';
+        const abs = Math.abs(num);
+        if (abs >= 1000) return Math.round(num).toLocaleString('en-US');
+        if (abs >= 100) return String(Math.round(num));
+        return String(Number(num.toFixed(1)));
+    }
+
+    // Overall index is stored as 100 = starting strength; users see it as change vs. start.
+    function formatVsStart(raw, decimals = 1) {
+        const num = Number(raw);
+        if (!Number.isFinite(num)) return '-';
+        const diff = Number((num - 100).toFixed(decimals));
+        if (diff === 0) return '0%';
+        const text = Math.abs(diff).toFixed(decimals).replace(/\.0+$/, '');
+        return `${diff > 0 ? '+' : '−'}${text}%`;
+    }
+
+    function formatPercentChange(pct) {
+        const abs = Math.abs(pct);
+        return `${abs >= 10 ? Math.round(abs) : Number(abs.toFixed(1))}%`;
+    }
+
+    function getMetricInfo(metricKey, data) {
+        const isTimed = !!(data && data.is_timed);
+        const infos = {
+            e1rm: {
+                key: 'e1rm',
+                name: isTimed ? 'Score' : 'Est. max',
+                caption: isTimed ? 'timed score, latest session' : 'estimated 1-rep max, latest session',
+                unit: isTimed ? '' : 'kg',
+                info: isTimed
+                    ? 'A score combining weight and time from your best set each session.'
+                    : 'The heaviest single rep you could likely lift, estimated from your best set each session.',
+            },
+            top_weight: {
+                key: 'top_weight',
+                name: 'Heaviest',
+                caption: 'heaviest weight, latest session',
+                unit: 'kg',
+                info: 'The heaviest weight you used each session.',
+            },
+            tonnage: {
+                key: 'tonnage',
+                name: isTimed ? 'Total work' : 'Volume',
+                caption: isTimed ? 'total work, latest session' : 'total volume, latest session',
+                unit: isTimed ? 'kg·s' : 'kg',
+                info: isTimed
+                    ? 'Weight × seconds across all sets each session.'
+                    : 'Weight × reps across all sets each session.',
+            },
+        };
+        return infos[metricKey] || infos.e1rm;
+    }
+
+    function withUnit(value, unit) {
+        const text = formatNumber(value);
+        return unit ? `${text} ${unit}` : text;
+    }
+
+    // For each point, average the values from the last `windowDays` days (gaps skipped).
+    function trailingAverageByDate(labels, values, windowDays) {
+        const days = labels.map(dayNumber);
+        const out = new Array(values.length).fill(null);
+        let lo = 0;
+        let sum = 0;
+        let count = 0;
+        for (let i = 0; i < values.length; i++) {
+            if (isFiniteNumber(values[i])) { sum += Number(values[i]); count += 1; }
+            while (lo < i && days[lo] !== null && days[i] !== null && days[lo] <= days[i] - windowDays) {
+                if (isFiniteNumber(values[lo])) { sum -= Number(values[lo]); count -= 1; }
+                lo += 1;
             }
+            if (isFiniteNumber(values[i]) && count > 0) out[i] = sum / count;
         }
-        return rawLabel;
+        return out;
     }
 
-    function getLoggedIndexSet(rawLabels, data) {
-        const labels = Array.isArray(rawLabels) ? rawLabels : [];
-        const workoutDays = (data && Array.isArray(data.workout_days)) ? data.workout_days : [];
-        const loggedDaySet = new Set(workoutDays);
-        const loggedIndexSet = new Set();
-        labels.forEach((label, idx) => {
-            if (loggedDaySet.has(label)) {
-                loggedIndexSet.add(idx);
+    function isPhoneChart() {
+        const box = document.getElementById('progressChart').parentElement;
+        return (box ? box.clientWidth : window.innerWidth) < PHONE_CHART_WIDTH;
+    }
+
+    function smoothingWindowFor(spanDays) {
+        const row = SMOOTHING_WINDOWS.find(r => spanDays <= r.maxSpan) || SMOOTHING_WINDOWS[SMOOTHING_WINDOWS.length - 1];
+        return isPhoneChart() ? row.phone : row.desktop;
+    }
+
+    // Centered moving average: each point averages `windowDays` around it, so the line runs
+    // through the middle of the dots instead of trailing behind them. Near the right edge there
+    // are no future days, so the window blends into the headline's trailing N-day average;
+    // the line therefore ends exactly on the headline number.
+    function centeredAverageByDate(labels, values, windowDays, endTrailingDays) {
+        const days = labels.map(dayNumber);
+        const n = values.length;
+        const sums = new Array(n + 1).fill(0);
+        const counts = new Array(n + 1).fill(0);
+        for (let i = 0; i < n; i++) {
+            const ok = isFiniteNumber(values[i]);
+            sums[i + 1] = sums[i] + (ok ? Number(values[i]) : 0);
+            counts[i + 1] = counts[i] + (ok ? 1 : 0);
+        }
+        // First index whose day is greater than `target` (days are ascending).
+        const firstAfter = (target) => {
+            let lo = 0;
+            let hi = n;
+            while (lo < hi) {
+                const mid = (lo + hi) >> 1;
+                if (days[mid] > target) hi = mid; else lo = mid + 1;
             }
+            return lo;
+        };
+        const lastDay = days[n - 1];
+        const half = windowDays / 2;
+        const blendSpan = Math.max(half, endTrailingDays);
+        return values.map((v, i) => {
+            if (!isFiniteNumber(v) || days[i] === null) return null;
+            const toEnd = lastDay - days[i];
+            const blend = Math.min(1, toEnd / blendSpan);  // 1 = interior, 0 = last day
+            const after = Math.min(half, toEnd);
+            const before = half * blend + endTrailingDays * (1 - blend);
+            const lo = firstAfter(days[i] - before);
+            const hi = firstAfter(days[i] + after);
+            const count = counts[hi] - counts[lo];
+            return count > 0 ? (sums[hi] - sums[lo]) / count : Number(v);
         });
-        return loggedIndexSet;
     }
 
-    function getLoggedIndicesFromSet(loggedIndexSet) {
-        return Array.from(loggedIndexSet || []).sort((a, b) => a - b);
+    function getRangeStartIndex(labels, range) {
+        if (!labels.length || range === 'all') return 0;
+        const days = Number(range);
+        const lastDay = dayNumber(labels[labels.length - 1]);
+        if (!Number.isFinite(days) || lastDay === null) return 0;
+        const cutoff = lastDay - days + 1;
+        const idx = labels.findIndex(label => {
+            const d = dayNumber(label);
+            return d !== null && d >= cutoff;
+        });
+        return idx < 0 ? 0 : idx;
     }
 
-    function getPreviousLoggedIndex(currentIndex, loggedIndices) {
-        if (!Array.isArray(loggedIndices) || loggedIndices.length === 0) return null;
-        for (let i = loggedIndices.length - 1; i >= 0; i -= 1) {
-            if (loggedIndices[i] < currentIndex) return loggedIndices[i];
+    function lastFiniteIndex(values, from = values.length - 1) {
+        for (let i = from; i >= 0; i--) {
+            if (isFiniteNumber(values[i])) return i;
+        }
+        return null;
+    }
+
+    function firstFiniteIndex(values, from = 0) {
+        for (let i = from; i < values.length; i++) {
+            if (isFiniteNumber(values[i])) return i;
         }
         return null;
     }
 
     function setChartPointDetailsVisible(visible) {
         const details = document.getElementById('chartPointDetails');
-        if (!details) return;
-        details.style.display = visible ? 'block' : 'none';
+        if (details) details.style.display = visible ? 'block' : 'none';
     }
 
     function populateChartPointDetails(payload) {
         const details = document.getElementById('chartPointDetails');
         if (!details || !payload) return;
-
-        const dateEl = document.getElementById('chartPointDate');
-        const valueEl = document.getElementById('chartPointValue');
-        const changeEl = document.getElementById('chartPointChange');
-        const topSetRow = document.getElementById('chartPointTopSetRow');
-        const topSetEl = document.getElementById('chartPointTopSet');
-        const tonnageRow = document.getElementById('chartPointTonnageRow');
-        const tonnageEl = document.getElementById('chartPointTonnage');
-        const linkEl = document.getElementById('chartPointLink');
-
-        if (dateEl) dateEl.textContent = payload.date || '-';
-        if (valueEl) valueEl.textContent = payload.value || '-';
-        if (changeEl) changeEl.textContent = payload.change || '-';
-
-        if (topSetRow && topSetEl) {
-            if (payload.topSet) {
-                topSetEl.textContent = payload.topSet;
-                topSetRow.style.display = 'flex';
-            } else {
-                topSetRow.style.display = 'none';
-            }
-        }
-
-        if (tonnageRow && tonnageEl) {
-            if (payload.tonnage) {
-                tonnageEl.textContent = payload.tonnage;
-                tonnageRow.style.display = 'flex';
-            } else {
-                tonnageRow.style.display = 'none';
-            }
-        }
-
+        document.getElementById('chartPointDate').textContent = payload.date || '-';
+        document.getElementById('chartPointValue').textContent = payload.value || '-';
+        document.getElementById('chartPointTopSet').textContent = payload.topSet || '';
         const linkHref = payload.link || '#';
         details.dataset.link = linkHref;
-        if (linkEl) {
-            linkEl.href = linkHref;
-        }
+        document.getElementById('chartPointLink').href = linkHref;
     }
 
     function normalizeSearchValue(value) {
@@ -830,89 +1127,6 @@
             seenOptionKeys.add(key);
             return true;
         });
-    }
-
-    function getMetricConfig(metricKey, data) {
-        const unit = (data && data.unit) ? data.unit : '';
-        if (unit === 'percent') {
-            return { key: 'data', label: 'Average Change (%)', unit: 'percent', suffix: '%' };
-        }
-
-        const isTimed = !!(data && data.is_timed);
-        const configs = {
-            e1rm: { key: 'e1rm', label: isTimed ? 'Timed Score (kg·√s)' : 'Estimated 1RM (kg)', suffix: '' },
-            top_weight: { key: 'top_weight', label: 'Top Weight (kg)', suffix: '' },
-            tonnage: { key: 'tonnage', label: isTimed ? 'Total Work (kg·s)' : 'Tonnage (kg)', suffix: '' },
-            effective_tonnage: { key: 'effective_tonnage', label: isTimed ? 'Effective Work (kg·s)' : 'Effective Tonnage (kg)', suffix: '' },
-        };
-        return configs[metricKey] || configs.e1rm;
-    }
-
-    function getSeriesValues(data, metricKey) {
-        if (!data) return [];
-        if (data.unit === 'percent') return data.data || [];
-        const series = data.series || {};
-        const config = getMetricConfig(metricKey, data);
-        return series[config.key] || data.data || [];
-    }
-
-    // Strength Index is stored as 100 = starting strength. Users see it as change vs. start.
-    function formatVsStart(raw, decimals = 1) {
-        const num = Number(raw);
-        if (!Number.isFinite(num)) return '-';
-        const diff = Number((num - 100).toFixed(decimals));
-        if (diff === 0) return '0%';
-        const text = Math.abs(diff).toFixed(decimals).replace(/\.0+$/, '');
-        return `${diff > 0 ? '+' : '\u2212'}${text}%`;
-    }
-
-    function updateStrengthHeadline(show, opts) {
-        const wrap = document.getElementById('strengthHeadline');
-        if (!wrap) return;
-        if (!show || !opts || !Number.isFinite(Number(opts.current))) {
-            wrap.style.display = 'none';
-            return;
-        }
-        const main = document.getElementById('strengthHeadlineMain');
-        const sub = document.getElementById('strengthHeadlineSub');
-        const diff = Number(opts.current) - 100;
-        const pct = Math.abs(diff).toFixed(1).replace(/\.0$/, '');
-        if (diff >= 0.5) {
-            main.innerHTML = `You're <span class="trend-up">${pct}% stronger</span> than when you started`;
-        } else if (diff <= -0.5) {
-            main.innerHTML = `You're <span class="trend-down">${pct}% below</span> your starting strength`;
-        } else {
-            main.textContent = "You're right at your starting strength";
-        }
-        const parts = [];
-        if (opts.window) parts.push(`${opts.window}-day average`);
-        if (Number.isFinite(Number(opts.latest))) parts.push(`Last workout: ${formatVsStart(opts.latest)}`);
-        if (opts.startLabel) parts.push(`Tracking since ${opts.startLabel}`);
-        if (Number.isFinite(Number(opts.peak)) && opts.peakLabel) {
-            parts.push(`Best: ${formatVsStart(opts.peak)} on ${opts.peakLabel}`);
-        }
-        sub.textContent = parts.join(' \u00b7 ');
-        wrap.style.display = 'block';
-    }
-
-    function computeStats(values) {
-        const cleaned = (values || []).filter(v => v !== null && v !== undefined).map(v => Number(v)).filter(v => Number.isFinite(v));
-        if (!cleaned.length) return {};
-        const first = cleaned[0];
-        const last = cleaned[cleaned.length - 1];
-        const max = Math.max(...cleaned);
-        const min = Math.min(...cleaned);
-        const avg = cleaned.reduce((sum, v) => sum + v, 0) / cleaned.length;
-        const improvement = last - first;
-        const improvementPct = (first !== 0) ? (improvement / first) * 100 : 0;
-        return {
-            current: last,
-            max,
-            min,
-            avg,
-            improvement,
-            improvement_pct: improvementPct,
-        };
     }
 
     function hasBooleanOperators(query) {
@@ -1093,61 +1307,134 @@
         });
     }
 
+    const SORT_OPTIONS = [
+        { mode: 'most_viewed', label: 'Viewed' },
+        { mode: 'most_trained', label: 'Frequent' },
+        { mode: 'recently_trained', label: 'Recent' },
+        { mode: 'alpha_asc', label: 'A–Z' },
+        { mode: 'alpha_desc', label: 'Z–A' },
+    ];
+
+    function sortOptionsList(options) {
+        const byName = (a, b) => String(a.label || a.value).localeCompare(String(b.label || b.value), undefined, { sensitivity: 'base' });
+        const sorted = [...options];
+        if (sortMode === 'alpha_desc') return sorted.sort((a, b) => byName(b, a));
+        if (sortMode === 'alpha_asc') return sorted.sort(byName);
+        if (sortMode === 'most_viewed') {
+            // Never-viewed exercises fall back to "Frequent" order.
+            return sorted.sort((a, b) => (b.views || 0) - (a.views || 0) || (b.sessions || 0) - (a.sessions || 0) || byName(a, b));
+        }
+        if (sortMode === 'recently_trained') {
+            return sorted.sort((a, b) => String(b.last || '').localeCompare(String(a.last || '')) || (b.sessions || 0) - (a.sessions || 0) || byName(a, b));
+        }
+        return sorted.sort((a, b) => (b.sessions || 0) - (a.sessions || 0) || String(b.last || '').localeCompare(String(a.last || '')) || byName(a, b));
+    }
+
+    function suggestionMeta(option) {
+        if (sortMode === 'recently_trained') return option.last ? shortDate(option.last) : '';
+        if (sortMode === 'most_viewed') {
+            const views = Number(option.views) || 0;
+            return views ? `${views} view${views === 1 ? '' : 's'}` : '';
+        }
+        if (sortMode === 'most_trained') {
+            const n = Number(option.sessions) || 0;
+            return `${n} session${n === 1 ? '' : 's'}`;
+        }
+        return '';
+    }
+
+    function buildSortBar() {
+        const bar = document.createElement('div');
+        bar.className = 'suggestion-sort';
+        bar.setAttribute('role', 'group');
+        bar.setAttribute('aria-label', 'Sort exercises');
+        SORT_OPTIONS.forEach(({ mode, label: text }) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = text;
+            btn.classList.toggle('active', mode === sortMode);
+            btn.setAttribute('aria-pressed', String(mode === sortMode));
+            // Keep focus in the search box so the list stays open.
+            btn.addEventListener('mousedown', (event) => event.preventDefault());
+            btn.addEventListener('click', (event) => {
+                event.stopPropagation();
+                if (mode === sortMode) return;
+                sortMode = mode;
+                saveStatsPreference({ sort_mode: mode });
+                const input = document.getElementById('exerciseSearch');
+                renderSuggestions(input ? input.value : '');
+            });
+            bar.appendChild(btn);
+        });
+        return bar;
+    }
+
     function renderSuggestions(filterText = '') {
         const suggestionsList = document.getElementById('suggestionsList');
         if (!suggestionsList) return;
 
-        const filtered = getFilteredOptions(filterText);
-        suggestionsList.innerHTML = '';
+        // When an exercise is picked, the box shows its name; list everything again.
+        const selectedOption = exerciseOptions.find(opt => opt.value === currentExercise);
+        const query = (selectedOption && filterText === (selectedOption.label || selectedOption.value)) ? '' : filterText;
+        const filtered = sortOptionsList(getFilteredOptions(query));
+        suggestionsList.replaceChildren(buildSortBar());
 
-        // Add "Overall Progress" option only if no filter or filter is empty
-        const showOverall = !filterText.trim();
+        const addItem = (index, onSelect, build) => {
+            const item = document.createElement('div');
+            item.className = 'suggestion-item';
+            item.dataset.index = String(index);
+            build(item);
+            item.onmouseover = () => { item.style.background = 'rgba(212, 175, 55, 0.18)'; };
+            item.onmouseout = () => { if (selectedSuggestionIndex !== index) item.style.background = 'transparent'; };
+            item.onclick = onSelect;
+            suggestionsList.appendChild(item);
+        };
+
+        const showOverall = !query.trim();
         if (showOverall) {
-            const overallItem = document.createElement('div');
-            overallItem.className = 'suggestion-item px-3 py-2';
-            overallItem.style.cssText = 'cursor: pointer; transition: background 0.15s;';
-            overallItem.innerHTML = '<i class="bi bi-graph-up me-2 text-gold"></i><span class="fw-semibold">Overall Progress</span>';
-            overallItem.onmouseover = () => { overallItem.style.background = 'rgba(212, 175, 55, 0.25)'; };
-            overallItem.onmouseout = () => { if (selectedSuggestionIndex !== 0) overallItem.style.background = 'transparent'; };
-            overallItem.onclick = () => selectExercise('');
-            overallItem.dataset.index = '0';
-            suggestionsList.appendChild(overallItem);
+            addItem(0, () => selectExercise(''), (item) => {
+                item.innerHTML = '<span><i class="bi bi-graph-up me-2 text-gold"></i><span class="fw-semibold">Overall strength</span></span>';
+            });
+            if (filtered.length) {
+                const divider = document.createElement('div');
+                divider.className = 'suggestion-divider';
+                suggestionsList.appendChild(divider);
+            }
         }
 
-        // Add separator if there are exercises and overall is shown
-        if (showOverall && filtered.length > 0) {
-            const separator = document.createElement('div');
-            separator.className = 'border-top my-1';
-            suggestionsList.appendChild(separator);
-        }
-
-        // Add filtered exercises
         const startIdx = showOverall ? 1 : 0;
         filtered.forEach((option, idx) => {
-            const item = document.createElement('div');
-            item.className = 'suggestion-item px-3 py-2';
-            item.style.cssText = 'cursor: pointer; transition: background 0.15s;';
-            item.textContent = option.label || option.value;
-            item.onmouseover = () => { item.style.background = 'rgba(212, 175, 55, 0.25)'; };
-            item.onmouseout = () => { if (selectedSuggestionIndex !== idx + startIdx) item.style.background = 'transparent'; };
-            item.onclick = () => selectExercise(option.value);
-            item.dataset.index = String(idx + startIdx);
-            suggestionsList.appendChild(item);
+            addItem(idx + startIdx, () => selectExercise(option.value), (item) => {
+                const name = document.createElement('span');
+                name.textContent = option.label || option.value;
+                item.appendChild(name);
+                const metaText = suggestionMeta(option);
+                if (metaText) {
+                    const meta = document.createElement('span');
+                    meta.className = 'suggestion-meta';
+                    meta.textContent = metaText;
+                    item.appendChild(meta);
+                }
+            });
         });
 
-        if (filtered.length === 0 && filterText.trim()) {
+        if (filtered.length === 0 && query.trim()) {
             const noResults = document.createElement('div');
-            noResults.className = 'px-3 py-2 text-muted';
+            noResults.className = 'suggestion-empty';
             noResults.textContent = 'No exercises found';
             suggestionsList.appendChild(noResults);
         }
-        
+
         selectedSuggestionIndex = -1;
     }
 
     function showSuggestions() {
         const suggestionsList = document.getElementById('suggestionsList');
         if (suggestionsList) {
+            if (suggestionsList.style.display === 'none') {
+                const input = document.getElementById('exerciseSearch');
+                renderSuggestions(input ? input.value : '');
+            }
             suggestionsList.style.display = 'block';
             selectedSuggestionIndex = -1;
         }
@@ -1186,6 +1473,7 @@
         const filterText = searchInput ? searchInput.value : '';
         renderSuggestions(filterText);
         showSuggestions();
+        syncClearButton();
         
         // Auto-select if exact match or single result
         const filtered = getFilteredOptions(filterText);
@@ -1244,729 +1532,415 @@
         }
     });
 
-    function movingAverage(values, window) {
-        if (!values || values.length === 0) return [];
-        const result = [];
-        for (let i = 0; i < values.length; i++) {
-            const start = Math.max(0, i - window + 1);
-            const slice = values.slice(start, i + 1);
-            const avg = slice.reduce((sum, v) => sum + (v || 0), 0) / slice.length;
-            result.push(avg);
-        }
-        return result;
+    function syncClearButton() {
+        const btn = document.getElementById('exerciseClear');
+        const input = document.getElementById('exerciseSearch');
+        if (!btn) return;
+        btn.hidden = !(currentExercise || (input && input.value.trim()));
     }
 
-    // Like movingAverage, but gaps (null) are skipped instead of being treated as 0.
-    function movingAverageSkipGaps(values, window) {
-        if (!values || values.length === 0) return [];
-        return values.map((_, i) => {
-            const slice = values.slice(Math.max(0, i - window + 1), i + 1)
-                .filter(v => v !== null && v !== undefined && Number.isFinite(Number(v)));
-            if (!slice.length || values[i] === null || values[i] === undefined) return null;
-            return slice.reduce((sum, v) => sum + Number(v), 0) / slice.length;
-        });
-    }
-
-    function filterDataByRange(data, days) {
-        if (!data || !Array.isArray(data.labels) || !Array.isArray(data.data)) return data;
-        if (days <= 0 || data.labels.length === 0) return data;
-
-        const cutoffIndex = Math.max(0, data.labels.length - days);
-        const filteredLabels = data.labels.slice(cutoffIndex);
-        const rangeStartLabel = filteredLabels[0] || null;
-        const rangeEndLabel = filteredLabels[filteredLabels.length - 1] || null;
-        const filteredWorkoutDays = Array.isArray(data.workout_days)
-            ? data.workout_days.filter((d) => {
-                if (!d) return false;
-                if (rangeStartLabel && d < rangeStartLabel) return false;
-                if (rangeEndLabel && d > rangeEndLabel) return false;
-                return true;
-            })
-            : data.workout_days;
-        const filteredSeries = (data.series && typeof data.series === 'object')
-            ? Object.fromEntries(Object.entries(data.series).map(([k, v]) => [k, (Array.isArray(v) ? v.slice(cutoffIndex) : [])]))
-            : {};
-
-        return {
-            ...data,
-            labels: filteredLabels,
-            data: data.data.slice(cutoffIndex),
-            workout_days: filteredWorkoutDays,
-            workout_titles: Array.isArray(data.workout_titles) ? data.workout_titles.slice(cutoffIndex) : data.workout_titles,
-            log_data: Array.isArray(data.log_data) ? data.log_data.slice(cutoffIndex) : data.log_data,
-            quality_adjusted_1rm: Array.isArray(data.quality_adjusted_1rm) ? data.quality_adjusted_1rm.slice(cutoffIndex) : data.quality_adjusted_1rm,
-            series: filteredSeries,
-        };
-    }
-
-    function _parseISODate(label) {
-        if (!label) return null;
-        const parts = String(label).split('-');
-        if (parts.length !== 3) return null;
-        const year = Number(parts[0]);
-        const month = Number(parts[1]);
-        const day = Number(parts[2]);
-        if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
-        const dt = new Date(year, month - 1, day);
-        return Number.isNaN(dt.getTime()) ? null : dt;
-    }
-
-    function _daysBetweenInclusive(firstLabel, lastLabel) {
-        const start = _parseISODate(firstLabel);
-        const end = _parseISODate(lastLabel);
-        if (!start || !end) return 0;
-        const ms = end.getTime() - start.getTime();
-        const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-        return Math.max(0, days) + 1;
-    }
-
-    function _normalizeRangeValue(value) {
-        const raw = String(value ?? '').trim().toLowerCase();
-        if (raw === 'all') return 'all';
-        const parsed = Number(raw);
-        return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '30';
-    }
-
-    function _pickDefaultMAWindowForDays(days) {
-        const span = Number(days) || 0;
-        if (span <= 30) return 7;
-        if (span <= 90) return 14;
-        if (span <= 365) return 30;
-        return 48;
-    }
-
-    function _getRangeDaysForData(data) {
-        const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
-        const rangeValue = _normalizeRangeValue(currentDaysRange);
-        if (rangeValue === 'all') {
-            return labels.length || 0;
-        }
-        const numeric = Number(rangeValue);
-        return Number.isFinite(numeric) && numeric > 0 ? numeric : 30;
-    }
-
-    function _getDisplayedSpanDays(data) {
-        const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
-        if (labels.length < 2) return labels.length;
-        const spanDays = _daysBetweenInclusive(labels[0], labels[labels.length - 1]);
-        return spanDays || labels.length;
-    }
-
-    function _syncActivePills() {
+    function syncActivePills() {
         document.querySelectorAll('.range-pill').forEach(b => {
-            const val = _normalizeRangeValue(b.dataset.range);
-            b.classList.toggle('active', val === _normalizeRangeValue(currentDaysRange));
+            b.classList.toggle('active', b.dataset.range === currentRange);
         });
-        document.querySelectorAll('.ma-pill').forEach(b => {
-            const val = parseInt(b.dataset.ma);
-            b.classList.toggle('active', Number.isFinite(val) && val === currentMAWindow);
+        document.querySelectorAll('.metric-pill').forEach(b => {
+            b.classList.toggle('active', b.dataset.metric === currentMetric);
         });
     }
 
-    function getRangeBounds(labels, days) {
-        if (!labels || labels.length === 0) {
-            return { startIndex: 0, endIndex: 0 };
-        }
-        const total = labels.length;
-        const startIndex = Math.max(0, total - days);
-        return { startIndex, endIndex: total - 1 };
+    function setText(id, text) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
     }
 
-    function renderChart(data, label) {
-        if (data && data.unit === 'percent' && data.overall_mode !== 'rate' && Array.isArray(data.data)) {
-            data.data = data.data.map(v => (Number.isFinite(Number(v)) && Number(v) > 0) ? Number(v) : null);
+    function setTile(n, label, value, sub) {
+        setText(`tile${n}Label`, label);
+        setText(`tile${n}Value`, value);
+        setText(`tile${n}Sub`, sub || '');
+    }
+
+    function showEmptyState(show) {
+        document.getElementById('chartEmpty').hidden = !show;
+        document.getElementById('progressChart').style.visibility = show ? 'hidden' : 'visible';
+        if (show) {
+            document.getElementById('statsHero').hidden = true;
+            document.getElementById('statsTiles').hidden = true;
         }
+    }
+
+    function topSetText(data, idx) {
+        const weight = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : NaN;
+        const reps = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : NaN;
+        if (!(weight > 0) || !(reps > 0)) return '';
+        return `${formatNumber(weight)} kg × ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
+    }
+
+    function updateHero(view) {
+        const hero = document.getElementById('statsHero');
+        const valueEl = document.getElementById('heroValue');
+        const changeEl = document.getElementById('heroChange');
+        const infoEl = document.getElementById('heroInfo');
+        const { isOverall, labels, values, trend, startIdx, metricInfo } = view;
+
+        const endIdx = lastFiniteIndex(trend);
+        if (endIdx === null) { hero.hidden = true; return; }
+
+        valueEl.classList.remove('is-up', 'is-down', 'is-flat');
+        changeEl.classList.remove('is-up', 'is-down');
+
+        const startLabel = formatDateLabel(labels[firstFiniteIndex(values)], { month: 'short', year: 'numeric' });
+        const sinceStart = currentRange === 'all' ? ` in ${startLabel}` : '';
+
+        if (isOverall) {
+            setText('heroLabel', 'Overall strength');
+            infoEl.textContent = 'Your estimated max on every exercise, compared with your first few sessions of it. 0% is where you started. Bigger lifts count more, and exercises you stop doing fade out after 2–3 months.';
+            const diff = trend[endIdx] - 100;
+            const pctText = formatPercentChange(diff);
+            if (diff >= 0.5) {
+                valueEl.textContent = `+${pctText}`;
+                setText('heroCaption', `stronger than when you started${sinceStart}`);
+            } else if (diff <= -0.5) {
+                valueEl.textContent = `−${pctText}`;
+                valueEl.classList.add('is-down');
+                setText('heroCaption', `below where you started${sinceStart}`);
+            } else {
+                valueEl.textContent = '0%';
+                valueEl.classList.add('is-flat');
+                setText('heroCaption', `right where you started${sinceStart}`);
+            }
+        } else {
+            const option = exerciseOptions.find(opt => opt.value === currentExercise);
+            setText('heroLabel', (option && option.label) || currentExercise);
+            infoEl.textContent = metricInfo.info;
+            const lastIdx = lastFiniteIndex(values);
+            valueEl.textContent = withUnit(values[lastIdx], metricInfo.unit);
+            valueEl.classList.add('is-flat');
+            setText('heroCaption', metricInfo.caption);
+        }
+
+        // Change chip: how the line moved over the selected range.
+        let fromIdx;
+        if (currentRange === 'all') {
+            fromIdx = firstFiniteIndex(trend);
+        } else if (isOverall) {
+            fromIdx = lastFiniteIndex(trend, startIdx) ?? firstFiniteIndex(trend, startIdx);
+        } else {
+            // First session in the range, or the one before it if the range only has the latest.
+            fromIdx = firstFiniteIndex(trend, startIdx);
+            if (fromIdx === null || fromIdx >= endIdx) fromIdx = startIdx > 0 ? lastFiniteIndex(trend, startIdx - 1) : null;
+        }
+        const period = currentRange === 'all'
+            ? `since ${formatDateLabel(labels[fromIdx], { month: 'short', year: 'numeric' })}`
+            : RANGE_PHRASES[currentRange];
+
+        if (isOverall && currentRange === 'all') {
+            // The headline is already "vs. when you started"; the caption says since when.
+            changeEl.textContent = '';
+        } else if (fromIdx === null || fromIdx >= endIdx) {
+            changeEl.textContent = '';
+        } else {
+            const from = Number(trend[fromIdx]);
+            const to = Number(trend[endIdx]);
+            const pct = from > 0 ? ((to / from) - 1) * 100 : 0;
+            if (Math.abs(pct) < 0.5) {
+                changeEl.textContent = `Steady ${period}`;
+            } else {
+                const up = pct > 0;
+                const amount = isOverall
+                    ? formatPercentChange(pct)
+                    : withUnit(Math.abs(to - from), metricInfo.unit);
+                changeEl.classList.add(up ? 'is-up' : 'is-down');
+                changeEl.innerHTML = `<i class="bi bi-arrow-${up ? 'up' : 'down'}-right"></i>`;
+                changeEl.append(`${up ? 'Up' : 'Down'} ${amount} ${period}`);
+            }
+        }
+        hero.hidden = false;
+    }
+
+    function updateTiles(view) {
+        const { isOverall, data, labels, values, loggedIndices, startIdx, metricInfo } = view;
+        const inRange = loggedIndices.filter(i => i >= startIdx && isFiniteNumber(values[i]));
+        const tiles = document.getElementById('statsTiles');
+        if (!inRange.length) { tiles.hidden = true; return; }
+
+        const bestIdx = inRange.reduce((best, i) => (Number(values[i]) > Number(values[best]) ? i : best), inRange[0]);
+        const rangeText = RANGE_SHORT[currentRange];
+
+        if (isOverall) {
+            setTile(1, 'Best', formatVsStart(values[bestIdx]), shortDate(labels[bestIdx]));
+            setTile(2, 'Workouts', String(inRange.length), rangeText);
+            const firstDay = dayNumber(labels[currentRange === 'all' ? inRange[0] : startIdx]);
+            const lastDay = dayNumber(labels[labels.length - 1]);
+            const weeks = Math.max(1, ((lastDay - firstDay) + 1) / 7);
+            setTile(3, 'Per week', String(Number((inRange.length / weeks).toFixed(1))), 'workouts on average');
+        } else {
+            setTile(1, 'Best', withUnit(values[bestIdx], metricInfo.unit), shortDate(labels[bestIdx]));
+            const lastIdx = inRange[inRange.length - 1];
+            setTile(2, 'Last session', topSetText(data, lastIdx) || '-', shortDate(labels[lastIdx]));
+            setTile(3, 'Sessions', String(inRange.length), rangeText);
+        }
+        tiles.hidden = false;
+    }
+
+    function renderChart(data) {
         fullChartData = data;
         setChartPointDetailsVisible(false);
 
-        if (!_defaultsInitialized && data && Array.isArray(data.labels) && data.labels.length) {
-            const initialDays = _getRangeDaysForData(data);
-            const initialView = filterDataByRange(data, initialDays);
-            currentMAWindow = _pickDefaultMAWindowForDays(_getDisplayedSpanDays(initialView));
-            _defaultsInitialized = true;
-            _syncActivePills();
-        }
+        const isOverall = !currentExercise && data && data.unit === 'percent';
+        const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
+        const metricInfo = getMetricInfo(currentMetric, data);
 
-        const rangeDays = _getRangeDaysForData(data);
-        const filteredData = filterDataByRange(data, rangeDays);
-        const chartData = data;
-        const ctx = document.getElementById('progressChart').getContext('2d');
-
-        const metricControls = document.getElementById('metricControls');
-        if (metricControls) {
-            metricControls.style.display = (currentExercise && filteredData.unit !== 'percent') ? 'block' : 'none';
-        }
-
-        document.querySelectorAll('.overall-toggle-btn').forEach(btn => {
-            if (currentExercise) {
-                btn.classList.add('overall-toggle-hidden');
-            } else {
-                btn.classList.remove('overall-toggle-hidden');
-            }
+        document.getElementById('metricControls').hidden = isOverall;
+        document.getElementById('chartToolbar').hidden = isOverall;
+        document.querySelectorAll('.metric-pill').forEach(btn => {
+            btn.textContent = getMetricInfo(btn.dataset.metric, data).name;
         });
 
-        const formatShortLabel = (rawLabel) => formatDateLabel(rawLabel, { month: 'short', day: 'numeric' });
+        const rawValues = isOverall
+            ? (data.data || [])
+            : ((data.series && data.series[metricInfo.key]) || data.data || []);
+        const values = rawValues.map(v => (isFiniteNumber(v) && Number(v) > 0) ? Number(v) : null);
 
-        const rawLabels = (chartData && Array.isArray(chartData.labels)) ? chartData.labels : [];
-        const loggedIndexSet = getLoggedIndexSet(rawLabels, chartData);
-        const loggedIndices = getLoggedIndicesFromSet(loggedIndexSet);
-        const rangeBounds = getRangeBounds(rawLabels, rangeDays);
-        const shortLabels = rawLabels.map(formatShortLabel);
+        const workoutDays = new Set(Array.isArray(data.workout_days) ? data.workout_days : labels);
+        const loggedIndices = [];
+        labels.forEach((label, idx) => { if (workoutDays.has(label)) loggedIndices.push(idx); });
+        const loggedIndexSet = new Set(loggedIndices);
 
-        const metricConfig = getMetricConfig(currentMetric, data);
-        const primaryValues = getSeriesValues(chartData, currentMetric);
-
-        const overallMode = (data && data.overall_mode) ? String(data.overall_mode) : '';
-        const isOverallRate = !currentExercise && data && data.unit === 'percent' && overallMode === 'rate';
-        const maValues = (() => {
-            if (!isOverallRate) {
-                if (!currentExercise && data && data.unit === 'percent') {
-                    return movingAverageSkipGaps(primaryValues || [], currentMAWindow);
-                }
-                return movingAverage(primaryValues || [], currentMAWindow);
-            }
-            const logSeries = (chartData && Array.isArray(chartData.log_data)) ? chartData.log_data : [];
-            const maLog = movingAverage(logSeries, currentMAWindow);
-            return maLog.map(v => (Math.exp(Number(v) || 0) - 1) * 100);
-        })();
-        const xMinIndex = Math.max(0, rangeBounds.startIndex);
-        const xMaxIndex = Math.max(xMinIndex, rangeBounds.endIndex);
-
-        if (document.getElementById('chartPlaceholder')) {
-            document.getElementById('chartPlaceholder').style.display = 'none';
+        // During a long break the overall value only drifts as exercises fade out, which
+        // isn't a real change in strength, so show the break as a gap instead.
+        if (isOverall) {
+            let lastWorkoutDay = null;
+            labels.forEach((label, idx) => {
+                const day = dayNumber(label);
+                if (loggedIndexSet.has(idx)) lastWorkoutDay = day;
+                else if (lastWorkoutDay !== null && day - lastWorkoutDay > BREAK_GAP_DAYS) values[idx] = null;
+            });
         }
 
-        const summary = computeStats(getSeriesValues(filteredData, currentMetric));
-        if (summary && Object.keys(summary).length) {
-            const isPercent = filteredData.unit === 'percent';
-            const isOverallPercentRate = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
-            const percentTextSuffix = '%';
-            document.getElementById('statsSummary').style.display = 'flex';
-            const currentValue = summary.current || 0;
-            const maxValue = summary.max || 0;
-            const improvementValue = summary.improvement || 0;
-            const improvementPctValue = isPercent ? (summary.avg || 0) : (summary.improvement_pct || 0);
-
-            document.getElementById('current1RM').textContent = isPercent ? `${currentValue.toFixed(1)}${percentTextSuffix}` : currentValue.toFixed(1);
-            document.getElementById('max1RM').textContent = isPercent ? `${maxValue.toFixed(1)}${percentTextSuffix}` : maxValue.toFixed(1);
-            document.getElementById('improvement').textContent = isPercent
-                ? (improvementValue >= 0 ? '+' : '') + improvementValue.toFixed(1) + percentTextSuffix
-                : (improvementValue >= 0 ? '+' : '') + improvementValue.toFixed(1);
-            document.getElementById('improvementPct').textContent = isPercent
-                ? (improvementPctValue >= 0 ? '+' : '') + improvementPctValue.toFixed(1) + percentTextSuffix
-                : (improvementPctValue >= 0 ? '+' : '') + improvementPctValue.toFixed(1) + '%';
-
-            if (isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'index') {
-                document.getElementById('current1RM').textContent = formatVsStart(currentValue);
-                document.getElementById('max1RM').textContent = formatVsStart(maxValue);
-                document.getElementById('improvementPct').textContent = formatVsStart(summary.avg);
-                document.getElementById('current1RMLabel').textContent = 'Now vs. start';
-                document.getElementById('max1RMLabel').textContent = 'Best vs. start';
-                document.getElementById('improvementLabel').textContent = 'Change in this period';
-                document.getElementById('improvementPctLabel').textContent = 'Average vs. start';
-            } else if (isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate') {
-                document.getElementById('current1RMLabel').textContent = 'Current Rate';
-                document.getElementById('max1RMLabel').textContent = 'Best Rate';
-                document.getElementById('improvementLabel').textContent = 'Net Rate';
-                document.getElementById('improvementPctLabel').textContent = 'Avg Rate';
-            } else {
-                document.getElementById('current1RMLabel').textContent = isPercent ? 'Current Change' : `Current ${metricConfig.label}`;
-                document.getElementById('max1RMLabel').textContent = isPercent ? 'Best Change' : `Max ${metricConfig.label}`;
-                document.getElementById('improvementLabel').textContent = isPercent ? 'Net Change' : 'Improvement';
-                document.getElementById('improvementPctLabel').textContent = isPercent ? 'Avg Change' : '% Change';
-            }
-        } else {
-            document.getElementById('statsSummary').style.display = 'none';
+        if (!labels.length || firstFiniteIndex(values) === null) {
+            showEmptyState(true);
+            if (myChart) { myChart.destroy(); myChart = null; }
+            return;
         }
+        showEmptyState(false);
 
-        const isLightMode = document.documentElement.getAttribute('data-theme') === 'light';
-        const pointBorderColor = isLightMode ? '#FFFFFF' : '#000000';
-        const pointHoverBorderColor = isLightMode ? '#F5F3F0' : '#FFFFFF';
-        const primaryPointRadius = 4;
-        const primaryPointHoverRadius = 7;
-        const pointRadiusFn = (ctx) => {
-            const set = ctx.chart && ctx.chart.$loggedIndexSet;
-            return set && set.has(ctx.dataIndex) ? primaryPointRadius : 0;
-        };
-        const pointHoverRadiusFn = (ctx) => {
-            const set = ctx.chart && ctx.chart.$loggedIndexSet;
-            return set && set.has(ctx.dataIndex) ? primaryPointHoverRadius : 0;
-        };
-        const segmentFn = {
-            borderDash: () => [4, 4],
-        };
-        const isPercent = filteredData.unit === 'percent';
-        const isRateMode = isPercent && !currentExercise && filteredData && filteredData.overall_mode === 'rate';
-        const percentSuffix = '%';
-        const isIndexMode = isPercent && !isRateMode;
-        const tooltipPrimaryLabel = isIndexMode ? 'Vs. your start' : (isPercent ? 'Strength' : metricConfig.label);
-        const formatTickNumber = (raw) => {
-            const num = Number(raw);
-            if (!Number.isFinite(num)) return raw;
-            const abs = Math.abs(num);
-            let decimals;
-            if (abs >= 100) decimals = 0;
-            else if (abs >= 10) decimals = 1;
-            else decimals = 2;
-            const rounded = Number(num.toFixed(decimals));
-            return String(rounded);
-        };
-        const tooltipValueSuffix = isPercent ? percentSuffix : '';
-        const valueSuffix = metricConfig.suffix || tooltipValueSuffix;
-        const formatValueText = (value) => {
-            const num = Number(value);
-            if (!Number.isFinite(num)) return '-';
-            if (isIndexMode) return formatVsStart(num);
-            return `${formatTickNumber(num)}${valueSuffix}`;
-        };
-        const formatDeltaText = (delta, prev) => {
-            if (delta === null || delta === undefined) return '-';
-            const num = Number(delta);
-            if (!Number.isFinite(num)) return '-';
-            const sign = num >= 0 ? '+' : '';
-            return `${sign}${formatTickNumber(num)}${valueSuffix}`;
-        };
-        const tickColor = isLightMode ? '#6B7280' : '#9CA3AF';
-        const gridColor = isLightMode ? 'rgba(148, 163, 184, 0.25)' : 'rgba(148, 163, 184, 0.18)';
-        const tooltipStyles = isLightMode
-            ? {
-                backgroundColor: 'rgba(255, 251, 242, 0.98)',
-                titleColor: '#8A6D1D',
-                bodyColor: '#2D2B27',
-                borderColor: 'rgba(212, 175, 55, 0.7)',
+        const startIdx = getRangeStartIndex(labels, currentRange);
+        const endIdx = labels.length - 1;
+        const spanDays = dayNumber(labels[endIdx]) - dayNumber(labels[startIdx]) + 1;
+
+        // The headline uses a fixed number (overall: 14-day average; exercise: latest session).
+        // The chart line is smoothed more or less depending on the range and screen, and always
+        // ends on that headline number.
+        const trend = isOverall ? trailingAverageByDate(labels, values, OVERALL_TREND_DAYS) : values;
+        const line = centeredAverageByDate(labels, values, smoothingWindowFor(spanDays), isOverall ? OVERALL_TREND_DAYS : 0);
+        const view = { isOverall, data, labels, values, trend, startIdx, loggedIndices, metricInfo };
+
+        updateHero(view);
+        updateTiles(view);
+
+        // Dots = individual workouts, line = trend.
+        const dots = values.map((v, i) => (loggedIndexSet.has(i) ? v : null));
+        const lastTrendIdx = lastFiniteIndex(line);
+
+        const light = isLightTheme();
+        const gold = '#D4AF37';
+        // Few workouts on screen: bigger, outlined dots so they stand out from the line.
+        const visibleWorkouts = loggedIndices.filter(i => i >= startIdx).length;
+        const sparse = visibleWorkouts < 40;
+        const dotRadius = sparse ? 4.5 : (visibleWorkouts > 120 ? 2 : 3);
+        const dotColor = sparse ? gold : (light ? 'rgba(168, 132, 31, 0.45)' : 'rgba(212, 175, 55, 0.4)');
+        const cardColor = light ? '#FFFAF1' : '#0F0F11';
+        const tickColor = light ? '#6B7280' : '#9CA3AF';
+        const gridColor = light ? 'rgba(148, 163, 184, 0.22)' : 'rgba(148, 163, 184, 0.12)';
+        const ctx = document.getElementById('progressChart').getContext('2d');
+        const gradient = ctx.createLinearGradient(0, 0, 0, 340);
+        gradient.addColorStop(0, light ? 'rgba(212, 175, 55, 0.28)' : 'rgba(212, 175, 55, 0.3)');
+        gradient.addColorStop(1, 'rgba(212, 175, 55, 0.02)');
+        const belowStartFill = light ? 'rgba(220, 38, 38, 0.1)' : 'rgba(239, 68, 68, 0.14)';
+        const trendFill = isOverall
+            ? { target: { value: 100 }, above: gradient, below: belowStartFill }
+            : { target: 'start', above: gradient, below: gradient };
+
+        // The y-axis auto-fits the visible range; on "All" keep the Start line in view.
+        const includeStart = isOverall && currentRange === 'all';
+
+        const valueText = (v) => (isOverall ? `${formatVsStart(v)} vs. start` : withUnit(v, metricInfo.unit));
+
+        const markerValue = lastTrendIdx !== null ? Number(line[lastTrendIdx]) : null;
+        const markerText = markerValue === null ? '' : (isOverall ? formatVsStart(markerValue) : formatNumber(markerValue));
+        ctx.font = MARKER_FONT;
+        const markerWidth = markerText ? ctx.measureText(markerText).width + 14 : 0;
+
+        const yTick = function (value) {
+            // Leave room for the marker pill: drop tick labels that would sit under it.
+            if (markerValue !== null && Number.isFinite(this.height) && this.height > 0) {
+                const pxPerUnit = this.height / Math.abs((this.max - this.min) || 1);
+                if (Math.abs(Number(value) - markerValue) * pxPerUnit < 16) return '';
             }
-            : {
-                backgroundColor: 'rgba(0, 0, 0, 0.9)',
-                titleColor: '#D4AF37',
-                bodyColor: '#FFFFFF',
-                borderColor: '#D4AF37',
-            };
-        const gradient = ctx.createLinearGradient(0, 0, 0, 320);
-        gradient.addColorStop(0, 'rgba(212, 175, 55, 0.35)');
-        gradient.addColorStop(1, 'rgba(212, 175, 55, 0.05)');
-        const belowStartFill = isLightMode ? 'rgba(220, 38, 38, 0.12)' : 'rgba(239, 68, 68, 0.18)';
-        const maFill = isIndexMode ? { target: { value: 100 }, above: gradient, below: belowStartFill } : true;
-
-        const avgColor = isLightMode ? 'rgba(212, 175, 55, 0.6)' : 'rgba(212, 175, 55, 0.5)';
-        const projectionLineColor = isLightMode ? 'rgba(212, 175, 55, 0.58)' : 'rgba(212, 175, 55, 0.5)';
-        const projectionLabelColor = isLightMode ? '#7A5B0C' : '#D4AF37';
-        const projectionLabelBackground = isLightMode ? 'rgba(255, 251, 242, 0.96)' : 'rgba(9, 9, 9, 0.9)';
-        const projectionLabelBorder = isLightMode ? 'rgba(148, 126, 86, 0.45)' : 'rgba(212, 175, 55, 0.52)';
-        const maProjectionPoint = getLastFinitePoint(maValues);
-        const projectionValue = Number.isFinite(Number(maProjectionPoint.value)) ? Number(maProjectionPoint.value) : null;
-        const projectionLabel = Number.isFinite(projectionValue) ? formatValueText(projectionValue) : '';
-        (() => {
-            if (!isIndexMode) { updateStrengthHeadline(false); return; }
-            const series = getSeriesValues(chartData, currentMetric) || [];
-            let peakIdx = null;
-            series.forEach((v, i) => {
-                const n = Number(v);
-                if (Number.isFinite(n) && n > 0 && loggedIndexSet.has(i) && (peakIdx === null || n > Number(series[peakIdx]))) peakIdx = i;
-            });
-            const longDate = (raw) => formatDateLabel(raw, { month: 'short', day: 'numeric', year: 'numeric' });
-            updateStrengthHeadline(true, {
-                current: projectionValue,
-                window: currentMAWindow,
-                latest: (() => { for (let i = series.length - 1; i >= 0; i--) { if (loggedIndexSet.has(i) && Number.isFinite(Number(series[i])) && Number(series[i]) > 0) return Number(series[i]); } return null; })(),
-                startLabel: rawLabels.length ? longDate(rawLabels[0]) : '',
-                peak: peakIdx !== null ? Number(series[peakIdx]) : null,
-                peakLabel: peakIdx !== null ? longDate(rawLabels[peakIdx]) : '',
-            });
-        })();
-        const shouldHideTickForProjection = function(value) {
-            const tickValue = Number(value);
-            if (!Number.isFinite(tickValue) || !Number.isFinite(projectionValue)) return false;
-            const scale = this;
-            const min = Number(scale && scale.min);
-            const max = Number(scale && scale.max);
-            const height = Number(scale && scale.height);
-            if (!Number.isFinite(min) || !Number.isFinite(max) || !Number.isFinite(height) || height <= 0) return false;
-            const unitsPerPixel = Math.abs(max - min) / height;
-            const hideThreshold = Math.max(unitsPerPixel * 14, unitsPerPixel || 0.0001);
-            return Math.abs(tickValue - projectionValue) <= hideThreshold;
-        };
-        const yTickCallback = function(value) {
-            if (shouldHideTickForProjection.call(this, value)) return '';
-            if (isIndexMode) return Math.abs(Number(value) - 100) < 1e-9 ? 'Start' : formatVsStart(value);
-            if (isPercent) return `${formatTickNumber(value)}${percentSuffix}`;
-            return formatTickNumber(value);
-        };
-        const projectionConfig = Number.isFinite(projectionValue)
-            ? {
-                value: projectionValue,
-                label: projectionLabel,
-                datasetIndex: 1,
-                pointIndex: maProjectionPoint.index,
-                lineColor: projectionLineColor,
-                lineWidth: 1.4,
-                dash: [4, 5],
-                labelColor: projectionLabelColor,
-                labelBackground: projectionLabelBackground,
-                labelBorder: projectionLabelBorder,
-            }
-            : null;
-
-        const primarySeries = getSeriesValues(chartData, currentMetric);
-        const workoutTitles = (chartData && Array.isArray(chartData.workout_titles)) ? chartData.workout_titles : [];
-        const qualitySeries = (chartData && chartData.quality) ? chartData.quality : [];
-        const showQuality = !!(qualitySeries && qualitySeries.length) && chartData.unit !== 'percent';
-
-        const showBaseline100 = isPercent && !isRateMode;
-        const filteredPrimary = getSeriesValues(filteredData, currentMetric) || [];
-        const filteredMa = maValues || [];
-        const combined = [...filteredPrimary, ...filteredMa].filter(v => v !== null && v !== undefined && Number.isFinite(Number(v))).map(v => Number(v));
-        const dataMin = combined.length ? Math.min(...combined) : null;
-        const dataMax = combined.length ? Math.max(...combined) : null;
-        const suggestedMin = (showBaseline100 && dataMin !== null && dataMin > 100) ? 100 : undefined;
-        const suggestedMax = (showBaseline100 && dataMax !== null && dataMax < 100) ? 100 : undefined;
-
-        const buildDetailPayload = (idx) => {
-            const rawDate = rawLabels[idx] || '';
-            if (!rawDate) return null;
-            const value = primarySeries[idx];
-            const prevIdx = getPreviousLoggedIndex(idx, loggedIndices);
-            const prevValue = prevIdx !== null ? primarySeries[prevIdx] : null;
-            const delta = (prevIdx !== null && Number.isFinite(Number(value)) && Number.isFinite(Number(prevValue)))
-                ? Number(value) - Number(prevValue)
-                : null;
-
-            let topSet = '';
-            const weightVal = (chartData && Array.isArray(chartData.weight)) ? Number(chartData.weight[idx]) : null;
-            const repsVal = (chartData && Array.isArray(chartData.reps)) ? Number(chartData.reps[idx]) : null;
-            const _isTimedExercise = !!(chartData && chartData.is_timed);
-            if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
-                topSet = _isTimedExercise
-                    ? `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
-                    : `${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`;
-            }
-
-            let tonnage = '';
-            const tonnageVal = (chartData && Array.isArray(chartData.volume)) ? Number(chartData.volume[idx]) : null;
-            if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
-                tonnage = `${formatTickNumber(tonnageVal)}kg`;
-            }
-
-            return {
-                date: formatDateLabel(rawDate, { month: 'short', day: 'numeric', year: 'numeric' }),
-                value: formatValueText(value),
-                change: prevIdx !== null ? formatDeltaText(delta, prevValue) : '-',
-                topSet,
-                tonnage,
-                link: `/workout/${encodeURIComponent(rawDate)}`
-            };
+            if (isOverall) return Math.abs(Number(value) - 100) < 1e-9 ? 'Start' : formatVsStart(value, 0);
+            return formatNumber(value);
         };
 
-        const tooltipFilter = (context) => {
-            if (context.datasetIndex !== 0) return false;
-            return loggedIndexSet.has(context.dataIndex);
-        };
+        const tooltipStyles = light
+            ? { backgroundColor: 'rgba(255, 251, 242, 0.98)', titleColor: '#8A6D1D', bodyColor: '#2D2B27', borderColor: 'rgba(212, 175, 55, 0.7)' }
+            : { backgroundColor: 'rgba(0, 0, 0, 0.9)', titleColor: gold, bodyColor: '#FFFFFF', borderColor: 'rgba(212, 175, 55, 0.7)' };
 
+        const workoutTitles = Array.isArray(data.workout_titles) ? data.workout_titles : [];
         const tooltipCallbacks = {
-            title: (items) => {
-                if (!items || !items.length) return '';
-                const idx = items[0].dataIndex;
-                return formatDateLabel(rawLabels[idx], { month: 'short', day: 'numeric', year: 'numeric' });
-            },
+            title: (items) => (items && items.length ? longDate(labels[items[0].dataIndex]) : ''),
             afterTitle: (items) => {
                 if (!items || !items.length) return '';
-                const idx = items[0].dataIndex;
-                const title = String(workoutTitles[idx] || '').trim();
-                if (!title || title.toLowerCase() === 'workout') return '';
-                return title;
+                const title = String(workoutTitles[items[0].dataIndex] || '').trim();
+                return (!title || title.toLowerCase() === 'workout') ? '' : title;
             },
-            label: (context) => {
-                const value = context.parsed.y;
-                if (value === null || value === undefined) return '';
-                return `${tooltipPrimaryLabel}: ${formatValueText(value)}`;
-            },
+            label: (context) => (isFiniteNumber(context.parsed.y) ? valueText(context.parsed.y) : ''),
             afterLabel: (context) => {
-                const idx = context.dataIndex;
-                const prevIdx = getPreviousLoggedIndex(idx, loggedIndices);
-                const prevValue = prevIdx !== null ? primarySeries[prevIdx] : null;
-                const value = context.parsed.y;
-                const delta = (prevIdx !== null && Number.isFinite(Number(value)) && Number.isFinite(Number(prevValue)))
-                    ? Number(value) - Number(prevValue)
-                    : null;
-                const lines = [];
-                if (prevIdx !== null) {
-                    lines.push(`Change: ${formatDeltaText(delta, prevValue)}`);
-                }
-
-                const weightVal = (chartData && Array.isArray(chartData.weight)) ? Number(chartData.weight[idx]) : null;
-                const repsVal = (chartData && Array.isArray(chartData.reps)) ? Number(chartData.reps[idx]) : null;
-                const _isTEx = !!(chartData && chartData.is_timed);
-                if (Number.isFinite(weightVal) && weightVal > 0 && Number.isFinite(repsVal) && repsVal > 0) {
-                    lines.push(_isTEx
-                        ? `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}s`
-                        : `Top set: ${formatTickNumber(weightVal)}kg × ${Math.round(repsVal)}`);
-                }
-
-                const tonnageVal = (chartData && Array.isArray(chartData.volume)) ? Number(chartData.volume[idx]) : null;
-                if (Number.isFinite(tonnageVal) && tonnageVal > 0) {
-                    lines.push(`Tonnage: ${formatTickNumber(tonnageVal)}kg`);
-                }
-                return lines;
-            }
+                if (isOverall) return '';
+                const topSet = topSetText(data, context.dataIndex);
+                return topSet ? `Top set: ${topSet}` : '';
+            },
         };
 
-        const handlePointClick = (idx) => {
+        const openPoint = (idx) => {
             if (!loggedIndexSet.has(idx)) return;
-            const rawDate = rawLabels[idx] || '';
+            const rawDate = labels[idx] || '';
             if (!rawDate) return;
             aiAssistantSelectedDate = rawDate;
+            const link = `/workout/${encodeURIComponent(rawDate)}`;
             if (isTouchUI()) {
-                const payload = buildDetailPayload(idx);
-                if (!payload) return;
-                populateChartPointDetails(payload);
+                populateChartPointDetails({
+                    date: longDate(rawDate),
+                    value: valueText(values[idx]),
+                    topSet: isOverall ? '' : topSetText(data, idx),
+                    link,
+                });
                 setChartPointDetailsVisible(true);
             } else {
-                window.location.href = `/workout/${encodeURIComponent(rawDate)}`;
+                window.location.href = link;
             }
         };
 
-        if (myChart) {
-            myChart.$showBaseline100 = showBaseline100;
-            myChart.$baselineLabel = 'Where you started';
-            myChart.$baselineStroke = gridColor;
-            myChart.$baselineText = tickColor;
-            myChart.$rawData = data;
-            myChart.$rawLabels = rawLabels;
-            myChart.$loggedIndexSet = loggedIndexSet;
-            myChart.$loggedIndices = loggedIndices;
-            myChart.$metricConfig = metricConfig;
-            myChart.$primarySeries = primarySeries;
-            myChart.$currentProjection = projectionConfig;
+        const onClick = (evt, elements) => {
+            const hit = (elements || []).find(el => el.datasetIndex === 0);
+            if (!hit) {
+                if (isTouchUI()) setChartPointDetailsVisible(false);
+                return;
+            }
+            openPoint(hit.index);
+        };
 
-            myChart.data.labels = shortLabels;
-            myChart.data.datasets[0].data = primarySeries || [];
-            myChart.data.datasets[0].label = metricConfig.label;
-            myChart.data.datasets[0].borderColor = avgColor;
-            myChart.data.datasets[0].backgroundColor = 'transparent';
-            myChart.data.datasets[0].borderWidth = 2;
-            myChart.data.datasets[0].borderDash = undefined;
-            myChart.data.datasets[0].segment = segmentFn;
-            myChart.data.datasets[0].fill = false;
-            myChart.data.datasets[0].pointRadius = pointRadiusFn;
-            myChart.data.datasets[0].pointHoverRadius = pointHoverRadiusFn;
-            myChart.data.datasets[0].pointHitRadius = 12;
-            myChart.data.datasets[0].pointBackgroundColor = avgColor;
-            myChart.data.datasets[0].pointBorderColor = pointBorderColor;
-            myChart.data.datasets[0].pointHoverBorderColor = pointHoverBorderColor;
-            myChart.data.datasets[0].pointHoverBackgroundColor = avgColor;
-            myChart.data.datasets[0].pointBorderWidth = 0;
-            myChart.data.datasets[0].pointHoverBorderWidth = 0;
-            if (myChart.data.datasets[1]) {
-                myChart.data.datasets[1].data = maValues;
-                myChart.data.datasets[1].borderColor = '#D4AF37';
-                myChart.data.datasets[1].backgroundColor = gradient;
-                myChart.data.datasets[1].borderWidth = 3;
-                myChart.data.datasets[1].borderDash = [];
-                myChart.data.datasets[1].fill = maFill;
-                myChart.data.datasets[1].pointRadius = 0;
-                myChart.data.datasets[1].pointHoverRadius = 0;
-                myChart.data.datasets[1].pointHitRadius = 0;
-            }
-            if (myChart.data.datasets[2]) {
-                myChart.data.datasets[2].data = showQuality ? qualitySeries : [];
-                myChart.data.datasets[2].borderColor = '#2FA772';
-                myChart.data.datasets[2].borderDash = [];
-                myChart.data.datasets[2].borderWidth = 2.5;
-                myChart.data.datasets[2].hidden = !showQuality;
-            }
-            if (myChart.options.scales.y1) {
-                myChart.options.scales.y1.display = showQuality;
-            }
-            if (!myChart.options.interaction) {
-                myChart.options.interaction = {};
-            }
-            myChart.options.interaction.mode = 'nearest';
-            myChart.options.interaction.intersect = true;
-            if (myChart.options.plugins && myChart.options.plugins.tooltip) {
-                myChart.options.plugins.tooltip.backgroundColor = tooltipStyles.backgroundColor;
-                myChart.options.plugins.tooltip.titleColor = tooltipStyles.titleColor;
-                myChart.options.plugins.tooltip.bodyColor = tooltipStyles.bodyColor;
-                myChart.options.plugins.tooltip.borderColor = tooltipStyles.borderColor;
-                myChart.options.plugins.tooltip.filter = tooltipFilter;
-                myChart.options.plugins.tooltip.callbacks = tooltipCallbacks;
-            }
-            myChart.options.scales.y.ticks.callback = yTickCallback;
-            if (showBaseline100) {
-                myChart.options.scales.y.suggestedMin = suggestedMin;
-                myChart.options.scales.y.suggestedMax = suggestedMax;
-            } else {
-                delete myChart.options.scales.y.suggestedMin;
-                delete myChart.options.scales.y.suggestedMax;
-            }
-            myChart.options.scales.x.min = xMinIndex;
-            myChart.options.scales.x.max = xMaxIndex;
-            myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
-            myChart.options.onClick = (evt, elements) => {
-                if (!elements || !elements.length) {
-                    if (isTouchUI()) {
-                        setChartPointDetailsVisible(false);
-                    }
-                    return;
-                }
-                const hit = elements.find(el => el.datasetIndex === 0) || elements[0];
-                if (!hit) return;
-                handlePointClick(hit.index);
-            };
-            myChart.update();
-        } else {
-            myChart = new Chart(ctx, {
-                plugins: [baseline100Plugin, currentProjectionPlugin],
-                type: 'line',
-                data: {
-                    labels: shortLabels,
-                    datasets: [
-                        {
-                            label: metricConfig.label,
-                            data: primarySeries || [],
-                            borderColor: avgColor,
-                            backgroundColor: 'transparent',
-                            borderWidth: 2,
-                            segment: segmentFn,
-                            tension: 0.35,
-                            fill: false,
-                            pointRadius: pointRadiusFn,
-                            pointHoverRadius: pointHoverRadiusFn,
-                            pointHitRadius: 12,
-                            pointBackgroundColor: avgColor,
-                            pointBorderColor: pointBorderColor,
-                            pointHoverBorderColor: pointHoverBorderColor,
-                            pointHoverBackgroundColor: avgColor,
-                            pointBorderWidth: 0,
-                            pointHoverBorderWidth: 0
-                        },
-                        {
-                            label: `Moving avg (${currentMAWindow}d)`,
-                            data: maValues,
-                            borderColor: '#D4AF37',
-                            borderWidth: 3,
-                            borderDash: [],
-                            fill: maFill,
-                            backgroundColor: gradient,
-                            tension: 0.35,
-                            pointRadius: 0,
-                            pointHoverRadius: 0,
-                            pointHitRadius: 0
-                        },
-                        {
-                            label: 'Performance (%)',
-                            data: showQuality ? qualitySeries : [],
-                            borderColor: '#2FA772',
-                            borderWidth: 2.5,
-                            borderDash: [],
-                            fill: false,
-                            tension: 0.35,
-                            pointRadius: 0,
-                            pointHoverRadius: 0,
-                            yAxisID: 'y1',
-                            hidden: !showQuality,
-                        }
-                    ]
+        // Over long spans "Apr 18" is ambiguous, so show month + year instead.
+        const longSpan = dayNumber(labels[endIdx]) - dayNumber(labels[startIdx]) > 300;
+        const xLabel = (l) => {
+            if (!longSpan) return formatDateLabel(l, { month: 'short', day: 'numeric' });
+            const dt = parseISODate(l);
+            return dt ? `${dt.toLocaleDateString('en-US', { month: 'short' })} '${String(dt.getFullYear()).slice(-2)}` : l;
+        };
+
+        const maxTicks = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 110), 10) : 4;
+
+        const config = {
+            type: 'line',
+            plugins: [baselinePlugin, currentMarkerPlugin],
+            data: {
+                labels: labels.map(xLabel),
+                datasets: [
+                    {
+                        label: 'Workouts',
+                        data: dots,
+                        order: 0,
+                        showLine: false,
+                        pointRadius: dotRadius,
+                        pointHoverRadius: sparse ? 7 : 6,
+                        pointHitRadius: 10,
+                        pointBackgroundColor: dotColor,
+                        pointBorderColor: cardColor,
+                        pointBorderWidth: sparse ? 2 : 0,
+                        pointHoverBackgroundColor: gold,
+                        pointHoverBorderColor: cardColor,
+                        pointHoverBorderWidth: sparse ? 2 : 0,
+                    },
+                    {
+                        label: 'Trend',
+                        data: line,
+                        order: 1,
+                        borderColor: gold,
+                        borderWidth: 2.5,
+                        cubicInterpolationMode: 'monotone',
+                        fill: trendFill,
+                        backgroundColor: gradient,
+                        pointRadius: (c) => (c.dataIndex === lastTrendIdx ? 4.5 : 0),
+                        pointBackgroundColor: gold,
+                        pointBorderColor: cardColor,
+                        pointBorderWidth: 2,
+                        pointHoverRadius: 0,
+                        pointHitRadius: 0,
+                    },
+                ],
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 350 },
+                interaction: { mode: 'nearest', axis: 'x', intersect: false },
+                onClick,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        ...tooltipStyles,
+                        borderWidth: 1,
+                        padding: 12,
+                        displayColors: false,
+                        titleFont: { size: 13, weight: 'bold' },
+                        bodyFont: { size: 13 },
+                        cornerRadius: 12,
+                        filter: (c) => c.datasetIndex === 0 && isFiniteNumber(c.parsed.y),
+                        callbacks: tooltipCallbacks,
+                    },
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    interaction: {
-                        mode: 'nearest',
-                        intersect: true
+                scales: {
+                    y: {
+                        suggestedMin: includeStart ? 100 : undefined,
+                        suggestedMax: includeStart ? 100 : undefined,
+                        grace: '5%',
+                        grid: { color: gridColor, drawTicks: false },
+                        border: { display: false },
+                        ticks: { color: tickColor, font: { size: 11 }, padding: 8, maxTicksLimit: 6, callback: yTick },
+                        afterFit: (scale) => { scale.width = Math.max(scale.width, markerWidth + 12); },
                     },
-                    onClick: (evt, elements) => {
-                        if (!elements || !elements.length) {
-                            if (isTouchUI()) {
-                                setChartPointDetailsVisible(false);
-                            }
-                            return;
-                        }
-                        const hit = elements.find(el => el.datasetIndex === 0) || elements[0];
-                        if (!hit) return;
-                        handlePointClick(hit.index);
+                    x: {
+                        min: startIdx,
+                        max: endIdx,
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: { color: tickColor, font: { size: 11 }, padding: 6, autoSkip: true, maxTicksLimit: maxTicks, maxRotation: 0 },
                     },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            backgroundColor: tooltipStyles.backgroundColor,
-                            titleColor: tooltipStyles.titleColor,
-                            bodyColor: tooltipStyles.bodyColor,
-                            borderColor: tooltipStyles.borderColor,
-                            borderWidth: 2,
-                            padding: 16,
-                            displayColors: false,
-                            titleFont: { size: 14, weight: 'bold' },
-                            bodyFont: { size: 13 },
-                            cornerRadius: 12,
-                            titleSpacing: 8,
-                            bodySpacing: 6,
-                            filter: tooltipFilter,
-                            callbacks: tooltipCallbacks
-                        }
-                    },
-                    scales: {
-                        y: {
-                            grid: { 
-                                color: gridColor,
-                                lineWidth: 1
-                            },
-                            ticks: { 
-                                color: tickColor,
-                                font: { size: 10, weight: '500' },
-                                padding: 12,
-                                callback: yTickCallback
-                            },
-                            beginAtZero: false,
-                            suggestedMin: suggestedMin,
-                            suggestedMax: suggestedMax
-                        },
-                        y1: {
-                            display: showQuality,
-                            position: 'right',
-                            grid: { display: false },
-                            ticks: {
-                                color: tickColor,
-                                font: { size: 10, weight: '500' },
-                                padding: 12,
-                                callback: (value) => `${value}%`,
-                            },
-                            min: 0,
-                            max: 100,
-                        },
-                        x: {
-                            grid: { display: false },
-                            ticks: { 
-                                color: tickColor,
-                                font: { size: 10, weight: '500' },
-                                padding: 10,
-                                autoSkip: true,
-                                maxTicksLimit: window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4,
-                                maxRotation: 0
-                            },
-                            min: xMinIndex,
-                            max: xMaxIndex
-                        }
-                    }
-                }
-            });
+                },
+            },
+        };
 
-            myChart.$showBaseline100 = showBaseline100;
-            myChart.$baselineLabel = 'Where you started';
-            myChart.$baselineStroke = gridColor;
-            myChart.$baselineText = tickColor;
-            myChart.$rawData = data;
-            myChart.$rawLabels = rawLabels;
-            myChart.$loggedIndexSet = loggedIndexSet;
-            myChart.$loggedIndices = loggedIndices;
-            myChart.$metricConfig = metricConfig;
-            myChart.$primarySeries = primarySeries;
-            myChart.$currentProjection = projectionConfig;
-            myChart.update();
-        }
+        if (myChart) myChart.destroy();
+        lastPhoneLayout = isPhoneChart();
+        myChart = new Chart(ctx, config);
+        myChart.$showBaseline = isOverall;
+        myChart.$baselineStroke = light ? 'rgba(107, 114, 128, 0.45)' : 'rgba(156, 163, 175, 0.4)';
+        myChart.$marker = markerText ? {
+            value: markerValue,
+            index: lastTrendIdx,
+            datasetIndex: 1,
+            text: markerText,
+            color: light ? '#7A5B0C' : '#F4D03F',
+            background: light ? '#FFF6DC' : '#1A160A',
+            border: light ? 'rgba(168, 132, 31, 0.55)' : 'rgba(212, 175, 55, 0.7)',
+            glow: light ? 'rgba(212, 175, 55, 0.35)' : 'rgba(212, 175, 55, 0.55)',
+            lineColor: light ? 'rgba(168, 132, 31, 0.45)' : 'rgba(212, 175, 55, 0.4)',
+        } : null;
+        myChart.draw();
     }
 
     function loadAverageChart() {
         const params = new URLSearchParams({
-            mode: currentOverallMode,
+            mode: 'index',
             baseline_sessions: '5',
             min_sessions: '3',
             fade_start_days: '60',
@@ -1974,152 +1948,111 @@
         });
         fetch(`/stats/data/average?${params.toString()}`)
             .then(response => response.json())
-            .then(data => {
-                renderChart(data, data && data.exercise ? data.exercise : 'Overall');
-            })
-            .catch(error => {
-                console.error('Error loading average chart:', error);
-            });
+            .then(data => renderChart(data))
+            .catch(error => console.error('Error loading average chart:', error));
     }
 
     function loadChart() {
         const exercise = currentExercise;
-        const placeholder = document.getElementById('chartPlaceholder');
         const bwAlert = document.getElementById('bwStatsAlert');
         const bwLabel = document.getElementById('bwStatsExercise');
         const bwData = document.getElementById('bwExercisesData');
         const bwExercises = bwData ? JSON.parse(bwData.textContent || '[]') : [];
 
-        const updateBwAlert = (target) => {
-            if (!bwAlert) return;
-            if (target && bwExercises.includes(target)) {
-                if (bwLabel) {
-                    bwLabel.textContent = target;
-                }
-                bwAlert.style.display = 'block';
-                return;
-            }
-            bwAlert.style.display = 'none';
-        };
+        syncClearButton();
+        if (bwAlert) {
+            const showBw = !!exercise && bwExercises.includes(exercise);
+            if (showBw && bwLabel) bwLabel.textContent = exercise;
+            bwAlert.style.display = showBw ? 'block' : 'none';
+        }
 
         if (!exercise) {
-            updateBwAlert('');
             loadAverageChart();
             return;
         }
 
-        updateBwAlert(exercise);
-
         fetch(`/stats/data/${encodeURIComponent(exercise)}`)
             .then(response => response.json())
-            .then(data => {
-                if (placeholder) placeholder.style.display = 'none';
-                renderChart(data, '');
-            })
-            .catch(error => {
-                console.error('Error loading chart:', error);
-            });
+            .then(data => renderChart(data))
+            .catch(error => console.error('Error loading chart:', error));
     }
 
-    // Handle time range filter buttons
     document.querySelectorAll('.range-pill').forEach(btn => {
         btn.addEventListener('click', () => {
-            currentDaysRange = _normalizeRangeValue(btn.dataset.range);
-            if (fullChartData) {
-                const selectedDays = _getRangeDaysForData(fullChartData);
-                const selectedView = filterDataByRange(fullChartData, selectedDays);
-                currentMAWindow = _pickDefaultMAWindowForDays(_getDisplayedSpanDays(selectedView));
-                _syncActivePills();
-                renderChart(fullChartData, fullChartData.exercise || 'Progress');
-            }
-        });
-    });
-
-    // Handle moving average filter buttons
-    document.querySelectorAll('.ma-pill').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.ma-pill').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentMAWindow = parseInt(btn.dataset.ma);
-            if (fullChartData) {
-                renderChart(fullChartData, fullChartData.exercise || 'Progress');
-            }
+            currentRange = btn.dataset.range;
+            saveStatsPreference({ range: currentRange });
+            syncActivePills();
+            if (fullChartData) renderChart(fullChartData);
         });
     });
 
     document.querySelectorAll('.metric-pill').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.metric-pill').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
             currentMetric = btn.dataset.metric;
-            if (fullChartData) {
-                renderChart(fullChartData, fullChartData.exercise || 'Progress');
-            }
+            syncActivePills();
+            if (fullChartData) renderChart(fullChartData);
         });
     });
 
-    updateOverallToggleLabels();
-    document.querySelectorAll('.overall-toggle-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            currentOverallMode = currentOverallMode === 'rate' ? 'index' : 'rate';
-            updateOverallToggleLabels();
-            if (!currentExercise) {
-                loadAverageChart();
-            }
-        });
+    document.getElementById('heroInfoBtn').addEventListener('click', (event) => {
+        const btn = event.currentTarget;
+        const info = document.getElementById('heroInfo');
+        const open = info.hidden;
+        info.hidden = !open;
+        btn.setAttribute('aria-expanded', String(open));
     });
 
-    // Auto-select exercise from URL parameter
+    document.getElementById('exerciseClear').addEventListener('click', () => {
+        selectExercise('');
+        document.getElementById('exerciseSearch').focus();
+    });
+
     window.addEventListener('DOMContentLoaded', () => {
         renderSuggestions();
+        syncActivePills();
 
         const detailsPanel = document.getElementById('chartPointDetails');
-        const detailsCloseBtn = document.getElementById('chartPointClose');
-        if (detailsCloseBtn) {
-            detailsCloseBtn.addEventListener('click', (event) => {
-                event.stopPropagation();
-                setChartPointDetailsVisible(false);
-            });
-        }
-        if (detailsPanel) {
-            detailsPanel.addEventListener('click', (event) => {
-                if (event.target.closest('#chartPointClose')) return;
-                const link = detailsPanel.dataset.link;
-                if (link && link !== '#') {
-                    window.location.href = link;
-                }
-            });
-        }
+        document.getElementById('chartPointClose').addEventListener('click', (event) => {
+            event.stopPropagation();
+            setChartPointDetailsVisible(false);
+        });
+        detailsPanel.addEventListener('click', (event) => {
+            if (event.target.closest('#chartPointClose')) return;
+            const link = detailsPanel.dataset.link;
+            if (link && link !== '#') window.location.href = link;
+        });
 
         document.addEventListener('click', (event) => {
             if (!isTouchUI()) return;
-            const panel = document.getElementById('chartPointDetails');
-            if (!panel || panel.style.display === 'none') return;
+            if (detailsPanel.style.display === 'none') return;
             const chartCanvas = document.getElementById('progressChart');
-            if (panel.contains(event.target)) return;
+            if (detailsPanel.contains(event.target)) return;
             if (chartCanvas && chartCanvas.contains(event.target)) return;
             setChartPointDetailsVisible(false);
         });
-        
+
         if (initialExercise && initialExercise.value) {
             currentExercise = initialExercise.value;
-            const searchInput = document.getElementById('exerciseSearch');
-            if (searchInput) {
-                searchInput.value = initialExercise.label || initialExercise.value;
-            }
-            loadChart();
-            return;
+            document.getElementById('exerciseSearch').value = initialExercise.label || initialExercise.value;
         }
-        loadAverageChart();
+        loadChart();
     });
 
-    // Handle window resize to update chart tick limits
-    window.addEventListener('resize', function() {
-        if (myChart) {
-            const newTickLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 80), 15) : 4;
-            myChart.options.scales.x.ticks.maxTicksLimit = newTickLimit;
-            myChart.update('none'); // Update without animation for better performance
-        }
+    let resizeTimer = null;
+    let lastPhoneLayout = null;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(() => {
+            if (!myChart || !fullChartData) return;
+            const phone = isPhoneChart();
+            if (lastPhoneLayout !== null && phone !== lastPhoneLayout) {
+                renderChart(fullChartData);
+            } else {
+                myChart.options.scales.x.ticks.maxTicksLimit = window.innerWidth > 768 ? Math.min(Math.floor(window.innerWidth / 110), 10) : 4;
+                myChart.update('none');
+            }
+            lastPhoneLayout = phone;
+        }, 150);
     });
 
     window.getAiAssistantContext = () => ({

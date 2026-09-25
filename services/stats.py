@@ -10,13 +10,98 @@ from statistics import median
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime, timedelta, date, time
 from sqlalchemy import func, desc
-from models import WorkoutLog, RepRange
+from models import WorkoutLog, RepRange, StatsExerciseView, StatsPreference
 from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweight
 from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
 from services.logging import resolve_timed_exercise_status
 from services.exercise_matching import token_signature
 from utils.dates import local_date
+
+
+STATS_SORT_MODES = {
+    "most_viewed",
+    "most_trained",
+    "recently_trained",
+    "alpha_asc",
+    "alpha_desc",
+}
+DEFAULT_STATS_SORT_MODE = "most_viewed"
+STATS_RANGES = {"30", "90", "180", "365", "all"}
+DEFAULT_STATS_RANGE = "all"
+# Re-opening the same exercise within this window counts as one view.
+STATS_VIEW_DEDUPE_MINUTES = 30
+
+
+def get_stats_preferences(db_session, user) -> Dict[str, str]:
+    preference = (
+        db_session.query(StatsPreference)
+        .filter(StatsPreference.user_id == user.id)
+        .first()
+    )
+    mode = str(getattr(preference, "sort_mode", "") or "")
+    time_range = str(getattr(preference, "time_range", "") or "")
+    return {
+        "sort_mode": mode if mode in STATS_SORT_MODES else DEFAULT_STATS_SORT_MODE,
+        "range": time_range if time_range in STATS_RANGES else DEFAULT_STATS_RANGE,
+    }
+
+
+def set_stats_preferences(db_session, user, sort_mode: Optional[str] = None, time_range: Optional[str] = None) -> Dict[str, str]:
+    """Save whichever of sort mode / time range is given; the other keeps its value."""
+    if sort_mode is not None and sort_mode not in STATS_SORT_MODES:
+        raise ValueError("Invalid stats sort mode.")
+    if time_range is not None and time_range not in STATS_RANGES:
+        raise ValueError("Invalid stats time range.")
+
+    preference = (
+        db_session.query(StatsPreference)
+        .filter(StatsPreference.user_id == user.id)
+        .first()
+    )
+    if preference is None:
+        preference = StatsPreference(
+            user_id=user.id,
+            sort_mode=sort_mode or DEFAULT_STATS_SORT_MODE,
+            time_range=time_range or DEFAULT_STATS_RANGE,
+        )
+        db_session.add(preference)
+    else:
+        if sort_mode is not None:
+            preference.sort_mode = sort_mode
+        if time_range is not None:
+            preference.time_range = time_range
+        preference.updated_at = datetime.now()
+    db_session.commit()
+    return get_stats_preferences(db_session, user)
+
+
+def record_stats_exercise_view(db_session, user, exercise_name: str, now: Optional[datetime] = None) -> None:
+    key = _normalize_exercise_name(exercise_name)
+    if not key:
+        return
+    now = now or datetime.now()
+    view = (
+        db_session.query(StatsExerciseView)
+        .filter(StatsExerciseView.user_id == user.id, StatsExerciseView.exercise_key == key)
+        .first()
+    )
+    if view is None:
+        db_session.add(StatsExerciseView(user_id=user.id, exercise_key=key, view_count=1, last_viewed_at=now))
+    else:
+        if not view.last_viewed_at or now - view.last_viewed_at >= timedelta(minutes=STATS_VIEW_DEDUPE_MINUTES):
+            view.view_count = int(view.view_count or 0) + 1
+        view.last_viewed_at = now
+    db_session.commit()
+
+
+def get_stats_exercise_view_counts(db_session, user) -> Dict[str, int]:
+    rows = (
+        db_session.query(StatsExerciseView.exercise_key, StatsExerciseView.view_count)
+        .filter(StatsExerciseView.user_id == user.id)
+        .all()
+    )
+    return {str(key): int(count or 0) for key, count in rows}
 
 
 def _serialize_sets_json(sets_json) -> str:

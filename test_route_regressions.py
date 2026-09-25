@@ -21,6 +21,8 @@ from models import (
     CustomRetrievalPreference,
     Lift,
     Plan,
+    StatsExerciseView,
+    StatsPreference,
     User,
     UserRole,
     WorkoutLog,
@@ -855,6 +857,83 @@ class TestRouteRegressions(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn('"value": "Neutral-Grip Seated Row"', page)
         self.assertIn('"label": "Neutral-Grip Seated Row"', page)
+
+    def test_stats_sort_and_range_preferences_are_saved_and_rendered(self):
+        user = self._create_logged_in_user(username="stats_sort_user")
+        prefs_tag = '<script type="application/json" id="statsPreferencesData">'
+
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn(prefs_tag + '{"range": "all", "sort_mode": "most_viewed"}</script>', page)
+
+        response = self.client.post("/stats/preferences", data={"sort_mode": "alpha_desc"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json(), {"ok": True, "sort_mode": "alpha_desc", "range": "all"})
+
+        # Saving the range keeps the sort mode.
+        response = self.client.post("/stats/preferences", data={"range": "365"})
+        self.assertEqual(response.get_json(), {"ok": True, "sort_mode": "alpha_desc", "range": "365"})
+        preference = self.session.query(StatsPreference).filter_by(user_id=user.id).one()
+        self.assertEqual((preference.sort_mode, preference.time_range), ("alpha_desc", "365"))
+
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn(prefs_tag + '{"range": "365", "sort_mode": "alpha_desc"}</script>', page)
+
+        self.assertEqual(self.client.post("/stats/preferences", data={"sort_mode": "unknown"}).status_code, 400)
+        self.assertEqual(self.client.post("/stats/preferences", data={"range": "7"}).status_code, 400)
+        self.assertEqual(self.client.post("/stats/preferences", data={}).status_code, 400)
+
+    def test_stats_exercise_views_are_counted_once_per_visit(self):
+        user = self._create_logged_in_user(username="stats_views_user")
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 2, 3, 9, 0, 0),
+                workout_name="Legs",
+                exercise="Deadlift",
+                exercise_string="Deadlift - [5]\n100, 5",
+                sets_json={"weights": [100], "reps": [5]},
+                bodyweight=user.bodyweight,
+                estimated_1rm=116.67,
+            )
+        )
+        self.session.commit()
+
+        self.client.get("/stats/data/Deadlift")
+        self.client.get("/stats/data/Deadlift")  # same visit: not counted again
+        view = self.session.query(StatsExerciseView).filter_by(user_id=user.id).one()
+        self.assertEqual(view.view_count, 1)
+
+        view.last_viewed_at = datetime.now() - timedelta(hours=1)
+        self.session.commit()
+        self.client.get("/stats/data/Deadlift")
+        view = self.session.query(StatsExerciseView).filter_by(user_id=user.id).one()
+        self.assertEqual(view.view_count, 2)
+
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn('"views": 2', page)
+
+    def test_stats_exercise_options_include_session_counts(self):
+        user = self._create_logged_in_user(username="stats_sessions_user")
+        for day in (3, 3, 10):
+            self.session.add(
+                WorkoutLog(
+                    user_id=user.id,
+                    date=datetime(2026, 2, day, 9, 0, 0),
+                    workout_name="Back",
+                    exercise="Barbell Row",
+                    exercise_string="Barbell Row - [8-12]\n50, 8",
+                    sets_json={"weights": [50], "reps": [8]},
+                    bodyweight=user.bodyweight,
+                    estimated_1rm=63.33,
+                )
+            )
+        self.session.commit()
+
+        page = self.client.get("/stats").get_data(as_text=True)
+
+        # Two logs on the same day count as one session.
+        self.assertIn('"last": "2026-02-10"', page)
+        self.assertIn('"sessions": 2', page)
 
     def test_workout_detail_vs_best_ignores_future_logs(self):
         user = self._create_logged_in_user(username="workout_user_future_best")
