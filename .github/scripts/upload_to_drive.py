@@ -13,7 +13,7 @@ from googleapiclient.http import MediaFileUpload
 
 # This script authenticates as the repository owner's own Google account using
 # a pre-generated OAuth refresh token, not as a service account. See
-# get_refresh_token.py for how that refresh token was originally generated.
+# scripts/get_refresh_token.py for how that refresh token was originally generated.
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 TOKEN_URI = "https://oauth2.googleapis.com/token"
 

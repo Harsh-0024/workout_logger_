@@ -6,7 +6,7 @@ __pycache__/
 .Python
 workout_logger_ _ Railway_files
 DB_Update
-Extra files
+local/
 build/
 develop-eggs/
 dist/
@@ -22,8 +22,6 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-merge_files.py
-merged_code.txt
 
 # Virtual Environment
 venv/

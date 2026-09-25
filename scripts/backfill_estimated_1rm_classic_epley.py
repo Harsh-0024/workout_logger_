@@ -17,6 +17,12 @@ import argparse
 import re
 from typing import Iterable, Optional
 
+import os
+import sys
+
+# Let this script import project modules when run as `python scripts/<name>.py`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from models import Session, WorkoutLog
 
 

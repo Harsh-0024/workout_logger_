@@ -5,6 +5,11 @@ This script upgrades the database schema for the new authentication system.
 import sys
 from datetime import datetime
 from sqlalchemy import inspect, text
+import os
+
+# Let this script import project modules when run as `python scripts/<name>.py`.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from models import engine, Session, User, UserRole
 from services.auth import AuthService
 from utils.logger import logger

@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import MagicMock
 
 # Ensure project root is on path
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # ---------------------------------------------------------------------------
 # Imports — all packages are installed, import directly

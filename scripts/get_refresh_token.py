@@ -22,7 +22,7 @@ CLIENT_SECRET_PATH = Path.home() / "oauth_client_secret.json"
 
 
 def main() -> None:
-    repo_root = Path(__file__).resolve().parent
+    repo_root = Path(__file__).resolve().parents[1]
     client_secret_path = CLIENT_SECRET_PATH.resolve()
 
     if repo_root == client_secret_path or repo_root in client_secret_path.parents:
