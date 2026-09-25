@@ -105,7 +105,7 @@
                 </div>
             </div>
 
-            <div class="text-center mt-5 pt-4 border-top" style="border-color: var(--border-subtle) !important;">
+            <div class="stats-back-home text-center mt-5 pt-4 border-top" style="border-color: var(--border-subtle) !important;">
                 <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
                     <i class="bi bi-arrow-left me-1"></i>Back Home
                 </a>
@@ -655,10 +655,19 @@
     }
 
     @media (max-width: 576px) {
-        /* Tiles become one compact list: label left, value right. */
+        .stats-page {
+            padding: 22px 20px;
+        }
+
+        .stats-header {
+            gap: 1.1rem;
+        }
+
+        /* Tiles: slim stacked rows, label left, value + detail on one line right. */
         .stats-tiles {
             grid-template-columns: 1fr;
             gap: 0;
+            margin-top: 1.1rem;
             border: 1px solid var(--border-subtle);
             border-radius: 16px;
             background: var(--stats-surface);
@@ -671,14 +680,13 @@
 
         .stats-tile,
         [data-theme="light"] .stats-tile {
-            display: grid;
-            grid-template-columns: 1fr auto;
-            align-items: center;
-            column-gap: 0.75rem;
+            display: flex;
+            align-items: baseline;
+            gap: 0.5rem;
             border: none;
             border-radius: 0;
             background: transparent;
-            padding: 0.7rem 0.9rem;
+            padding: 0.8rem 1rem;
         }
 
         .stats-tile + .stats-tile {
@@ -686,17 +694,22 @@
         }
 
         .stats-tile-label {
-            grid-row: 1 / span 2;
+            flex: 1;
+            font-size: 0.65rem;
         }
 
         .stats-tile-value {
             margin-top: 0;
             font-size: 1.05rem;
-            text-align: right;
         }
 
         .stats-tile-sub {
-            text-align: right;
+            margin-top: 0;
+            font-size: 0.75rem;
+        }
+
+        .stats-back-home {
+            display: none;
         }
 
         .suggestion-sort {
@@ -717,25 +730,37 @@
         }
 
         .stats-hero {
-            margin: 0.75rem 0 1.1rem;
-            gap: 0.9rem 0.9rem;
+            margin: 0.9rem 0 1.25rem;
+            gap: 1.1rem 0.9rem;
         }
 
+        .stats-hero-value {
+            font-size: 3rem;
+        }
+
+        /* Caption stays beside the number unless the number is very wide. */
         .stats-hero-text {
-            flex-basis: 190px;
+            flex: 1 1 190px;
+            gap: 0.35rem;
         }
 
         .stats-hero-caption {
             font-size: var(--fs-sm);
+            line-height: 1.3;
         }
 
+        .stats-hero-change {
+            font-size: 0.8rem;
+        }
+
+        /* Landscape-shaped chart: wider than tall. */
         .stats-chart {
-            height: clamp(240px, 42vh, 360px);
+            height: clamp(200px, 60vw, 270px);
         }
 
         .stats-chart-card {
-            padding: 10px 8px 6px;
-            border-radius: 18px;
+            padding: 16px 12px 8px;
+            border-radius: 20px;
         }
 
         .stats-chart-toolbar {
@@ -750,7 +775,9 @@
         .stats-segmented button {
             flex: 1;
             min-width: 0;
-            padding: 0.4rem 0.3rem;
+            min-height: 30px;
+            padding: 0.3rem 0.3rem;
+            font-size: 0.76rem;
         }
 
         .stats-range {
@@ -868,9 +895,9 @@
             ctx.stroke();
             ctx.setLineDash([]);
 
-            ctx.font = MARKER_FONT;
-            const padX = 7;
-            const h = 20;
+            ctx.font = marker.font;
+            const padX = marker.padX;
+            const h = marker.height;
             const w = ctx.measureText(marker.text).width + padX * 2;
             const x = Math.max(2, area.left - 8 - w);
             const top = Math.min(area.bottom - h / 2, Math.max(area.top - h / 2, y - h / 2));
@@ -892,7 +919,12 @@
             ctx.restore();
         }
     };
-    const MARKER_FONT = '700 11px Inter, system-ui, -apple-system, sans-serif';
+    // Smaller pill on phones so the y-axis doesn't eat into a narrow chart.
+    const markerStyle = (phone) => ({
+        font: `700 ${phone ? 10 : 11}px Inter, system-ui, -apple-system, sans-serif`,
+        padX: phone ? 5 : 7,
+        height: phone ? 18 : 20,
+    });
 
     function isTouchUI() {
         return window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
@@ -966,7 +998,7 @@
             e1rm: {
                 key: 'e1rm',
                 name: isTimed ? 'Score' : 'Est. max',
-                caption: isTimed ? 'timed score, latest session' : 'estimated 1-rep max, latest session',
+                caption: isTimed ? 'timed score, latest session' : 'estimated max, latest session',
                 unit: isTimed ? '' : 'kg',
                 info: isTimed
                     ? 'A score combining weight and time from your best set each session.'
@@ -1589,7 +1621,7 @@
         changeEl.classList.remove('is-up', 'is-down');
 
         const startLabel = formatDateLabel(labels[firstFiniteIndex(values)], { month: 'short', year: 'numeric' });
-        const sinceStart = currentRange === 'all' ? ` in ${startLabel}` : '';
+        const onAll = currentRange === 'all';
 
         if (isOverall) {
             setText('heroLabel', 'Overall strength');
@@ -1598,15 +1630,15 @@
             const pctText = formatPercentChange(diff);
             if (diff >= 0.5) {
                 valueEl.textContent = `+${pctText}`;
-                setText('heroCaption', `stronger than when you started${sinceStart}`);
+                setText('heroCaption', onAll ? `stronger since ${startLabel}` : 'stronger than when you started');
             } else if (diff <= -0.5) {
                 valueEl.textContent = `−${pctText}`;
                 valueEl.classList.add('is-down');
-                setText('heroCaption', `below where you started${sinceStart}`);
+                setText('heroCaption', onAll ? `below your ${startLabel} start` : 'below where you started');
             } else {
                 valueEl.textContent = '0%';
                 valueEl.classList.add('is-flat');
-                setText('heroCaption', `right where you started${sinceStart}`);
+                setText('heroCaption', onAll ? `level with your ${startLabel} start` : 'right where you started');
             }
         } else {
             const option = exerciseOptions.find(opt => opt.value === currentExercise);
@@ -1672,11 +1704,19 @@
             const firstDay = dayNumber(labels[currentRange === 'all' ? inRange[0] : startIdx]);
             const lastDay = dayNumber(labels[labels.length - 1]);
             const weeks = Math.max(1, ((lastDay - firstDay) + 1) / 7);
-            setTile(3, 'Per week', String(Number((inRange.length / weeks).toFixed(1))), 'workouts on average');
+            setTile(3, 'Per week', String(Number((inRange.length / weeks).toFixed(1))), 'on average');
         } else {
             setTile(1, 'Best', withUnit(values[bestIdx], metricInfo.unit), shortDate(labels[bestIdx]));
             const lastIdx = inRange[inRange.length - 1];
-            setTile(2, 'Last session', topSetText(data, lastIdx) || '-', shortDate(labels[lastIdx]));
+            // Weight as the value, reps under it, so it never wraps mid-set.
+            const weight = Array.isArray(data.weight) ? Number(data.weight[lastIdx]) : NaN;
+            const reps = Array.isArray(data.reps) ? Number(data.reps[lastIdx]) : NaN;
+            if (weight > 0 && reps > 0) {
+                const repsText = `× ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
+                setTile(2, 'Last session', withUnit(weight, 'kg'), `${repsText} · ${shortDate(labels[lastIdx])}`);
+            } else {
+                setTile(2, 'Last session', '-', shortDate(labels[lastIdx]));
+            }
             setTile(3, 'Sessions', String(inRange.length), rangeText);
         }
         tiles.hidden = false;
@@ -1747,8 +1787,10 @@
         // Few workouts on screen: bigger, outlined dots so they stand out from the line.
         const visibleWorkouts = loggedIndices.filter(i => i >= startIdx).length;
         const sparse = visibleWorkouts < 40;
-        const dotRadius = sparse ? 4.5 : (visibleWorkouts > 120 ? 2 : 3);
-        const dotColor = sparse ? gold : (light ? 'rgba(168, 132, 31, 0.45)' : 'rgba(212, 175, 55, 0.4)');
+        const dense = visibleWorkouts > 120;
+        const dotRadius = sparse ? 4.5 : (dense ? (isPhoneChart() ? 1.6 : 2) : 3);
+        const dotAlpha = dense && isPhoneChart() ? 0.28 : (light ? 0.45 : 0.4);
+        const dotColor = sparse ? gold : (light ? `rgba(168, 132, 31, ${dotAlpha})` : `rgba(212, 175, 55, ${dotAlpha})`);
         const cardColor = light ? '#FFFAF1' : '#0F0F11';
         const tickColor = light ? '#6B7280' : '#9CA3AF';
         const gridColor = light ? 'rgba(148, 163, 184, 0.22)' : 'rgba(148, 163, 184, 0.12)';
@@ -1768,8 +1810,10 @@
 
         const markerValue = lastTrendIdx !== null ? Number(line[lastTrendIdx]) : null;
         const markerText = markerValue === null ? '' : (isOverall ? formatVsStart(markerValue) : formatNumber(markerValue));
-        ctx.font = MARKER_FONT;
-        const markerWidth = markerText ? ctx.measureText(markerText).width + 14 : 0;
+        const phone = isPhoneChart();
+        const pill = markerStyle(phone);
+        ctx.font = pill.font;
+        const markerWidth = markerText ? ctx.measureText(markerText).width + pill.padX * 2 : 0;
 
         const yTick = function (value) {
             // Leave room for the marker pill: drop tick labels that would sit under it.
@@ -1865,7 +1909,7 @@
                         data: line,
                         order: 1,
                         borderColor: gold,
-                        borderWidth: 2.5,
+                        borderWidth: phone ? 2 : 2.5,
                         cubicInterpolationMode: 'monotone',
                         fill: trendFill,
                         backgroundColor: gradient,
@@ -1905,8 +1949,8 @@
                         grace: '5%',
                         grid: { color: gridColor, drawTicks: false },
                         border: { display: false },
-                        ticks: { color: tickColor, font: { size: 11 }, padding: 8, maxTicksLimit: 6, callback: yTick },
-                        afterFit: (scale) => { scale.width = Math.max(scale.width, markerWidth + 12); },
+                        ticks: { color: tickColor, font: { size: phone ? 10 : 11 }, padding: phone ? 6 : 8, maxTicksLimit: phone ? 5 : 6, callback: yTick },
+                        afterFit: (scale) => { scale.width = Math.max(scale.width, markerWidth + (phone ? 8 : 12)); },
                     },
                     x: {
                         min: startIdx,
@@ -1929,6 +1973,7 @@
             index: lastTrendIdx,
             datasetIndex: 1,
             text: markerText,
+            ...pill,
             color: light ? '#7A5B0C' : '#F4D03F',
             background: light ? '#FFF6DC' : '#1A160A',
             border: light ? 'rgba(168, 132, 31, 0.55)' : 'rgba(212, 175, 55, 0.7)',
