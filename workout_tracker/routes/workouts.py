@@ -2624,6 +2624,13 @@ def register_workout_routes(app):
             logger.error(f"Shortcut token error: {e}", exc_info=True)
             return reply("Invalid shortcut token.", 401)
 
+        if request.args.get("list"):
+            # The user's own sessions, so a shared Get Workout shortcut needs no hard-coded list.
+            sessions = [row["label"] for row in _build_shortcut_plan_day_rows(user)]
+            if not sessions:
+                return _shortcut_json({"ok": False, "error": "No workout plan yet. Add one in Settings first."})
+            return _shortcut_json({"ok": True, "sessions": sessions})
+
         raw_key = str(request.args.get("key") or request.args.get("session") or request.args.get("word") or "").strip()
         if len(raw_key) > 140:
             raw_key = raw_key[:140]

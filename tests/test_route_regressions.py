@@ -218,6 +218,22 @@ class TestRouteRegressions(unittest.TestCase):
         bad_token = self.client.post("/shortcut/log/not-a-token").get_json()
         self.assertEqual(bad_token["server"], "Local")
 
+    def test_shortcut_pick_lists_the_users_own_sessions(self):
+        user = self._create_logged_in_user(username="shortcut_list_user")
+        self.session.add(Plan(user_id=user.id, text_content="Session 1 - Push\nBench Press - [3, 6-8]\n\nSession 2 - Pull\nPull Ups - [3, 6-8]"))
+        self.session.commit()
+        pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
+
+        data = self.client.get(f"{pick_path}?list=1").get_json()
+        self.assertTrue(data["ok"], data)
+        self.assertEqual(data["server"], "Local")
+        self.assertEqual(data["sessions"], ["Session 1 - Push", "Session 2 - Pull"])
+
+        # Each listed name works as the key for fetching that session.
+        picked = self.client.get(pick_path, query_string={"format": "json", "key": data["sessions"][1]}).get_json()
+        self.assertTrue(picked["ok"], picked)
+        self.assertIn("Pull Ups", picked["text"])
+
     def test_shortcut_log_accepts_rich_text_notes(self):
         self._create_logged_in_user(username="shortcut_rich_text_user")
         log_path = urlsplit(self.client.get("/shortcut/log").get_json()["url"]).path
