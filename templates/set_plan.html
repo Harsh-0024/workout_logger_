@@ -5,7 +5,7 @@
 <div class="st">
     {{ st.head('Workout plan', 'Your cycles, sessions and exercises, written as plain text.', url_for('user_settings'), 'Back to settings') }}
 
-    {% if not is_admin %}
+    {% if can_follow %}
     <section class="st-section">
         <form action="/set_plan" method="POST" class="st-group" data-no-loading="true">
             <input type="hidden" name="form_type" value="toggle_follow_admin">

@@ -110,7 +110,173 @@ BW_EXERCISES = {
 }
 
 # --- DEFAULT PLANS ---
-HARSH_DEFAULT_PLAN = """
+# The built-in plan: what anyone gets who does not follow the admin and has not written their own.
+DEFAULT_PLAN = """
+Cycle 1
+
+Session 1 – Chest & Biceps
+Hanging Leg Raises
+Flat Barbell Press
+Barbell Curl
+Incline Dumbbell Press – [2]
+Standing Dumbbell Hammer Curl
+Low Cable Fly
+Low-to-High Cable Fly – [2]
+
+Session 2 – Shoulders & Forearms
+Standing Barbell Overhead Press
+Crunches A
+Cable Lateral Raise
+Machine Rear Delt Fly
+Wrist Roller – [2]
+Reverse Barbell Curl – [2]
+Dumbbell Wrist Flexion – [2]
+
+Session 3 – Back & Triceps
+Pull-Ups
+Incline EZ-Bar Skull Crushers
+Seated Neutral-Grip Row – [2]
+Chest-Supported Machine High Row – [2]
+Seated Barbell OH Extension
+T-bar Wide-Grip Row – [2]
+Rod Triceps Pushdown – [2]
+Hyper Extension – [2]
+
+Session 4 – Legs
+Hanging Oblique Knee Raise
+Leg Press
+Hip Thrust
+Dumbbell Bulgarian Split Squat – [2]
+Lying Leg Curl – [2]
+Leg Extension – [2]
+Hip Abduction – [2]
+Seated Calf Raises
+
+Cycle 2
+
+Session 5 – Chest & Triceps
+Back Assisted Leg Raises
+Incline Barbell Press
+Flat Dumbbell Press – [2]
+Dips
+Pec Deck Fly – [2]
+Low-to-High Cable Fly – [2]
+Rod Triceps Pushdown
+Single-Arm Cable OH Extension – [2]
+
+Session 6 – Back & Biceps
+Deadlift
+Neutral-Grip Pull-Ups
+Dumbbell Lat Row
+Lat Pulldown – [2]
+Seated Wide-Grip Row – [2]
+Rope Hammer Curl – [2]
+Incline Dumbbell Curl – [2]
+Preacher Curl – [2]
+
+Session 7 – Shoulders & Forearms
+Rope Crunches
+Standing Dumbbell Lateral Raise
+Seated Dumbbell Overhead Press
+Bent-Over Dumbbell Rear Delt Fly
+Rope Face Pull – [2]
+Dumbbell Farmer's Walk – [2]
+Cable Reverse Curl – [2]
+Dumbbell Wrist Extension – [2]
+
+Session 8 – Legs
+Barbell Squat
+Romanian Deadlift
+Hanging Oblique Knee Raise
+Dumbbell Walking Lunges
+Leg Extension – [2]
+Hip Adduction – [2]
+Standing Calf Raises
+
+Cycle 3
+
+Session 9 – Chest & Biceps
+Hanging Leg Raises
+Flat Barbell Press
+Barbell Curl
+Incline Dumbbell Press – [2]
+Standing Dumbbell Hammer Curl
+Low-to-High Cable Fly – [2]
+Low Cable Fly
+
+Session 10 – Shoulders & Forearms
+Standing Barbell Overhead Press
+Crunches A
+Cable Lateral Raise
+Machine Rear Delt Fly
+Wrist Roller – [2]
+Reverse Barbell Curl – [2]
+Dumbbell Wrist Flexion – [2]
+
+Session 11 – Back & Triceps
+Pull-Ups
+Incline EZ-Bar Skull Crushers
+Seated Wide-Grip Row – [2]
+Chest-Supported Machine High Row – [2]
+Rope Triceps Pushdown
+Dumbbell Lat Row – [2]
+Seated Barbell OH Extension – [2]
+Hyper Extension – [2]
+
+Session 12 – Legs
+Hanging Oblique Knee Raise
+Leg Press
+Hip Thrust
+Dumbbell Bulgarian Split Squat
+Lying Leg Curl – [2]
+Hip Abduction – [2]
+Seated Calf Raises
+
+Cycle 4
+
+Session 13 – Chest & Triceps
+Back Assisted Leg Raises
+Incline Barbell Press
+Flat Dumbbell Press – [2]
+Dips
+Low-to-High Cable Fly – [2]
+Pec Deck Fly – [2]
+Single-Arm Cable OH Extension
+Rope Triceps Pushdown – [2]
+
+Session 14 – Back & Biceps
+Deadlift
+Neutral-Grip Pull-Ups
+T-bar Wide-Grip Row
+Lat Pulldown – [2]
+Seated Neutral-Grip Row – [2]
+Incline Dumbbell Curl – [2]
+Preacher Curl – [2]
+Rope Hammer Curl – [2]
+
+Session 15 – Shoulders & Forearms
+Rope Crunches
+Standing Dumbbell Lateral Raise
+Seated Dumbbell Overhead Press
+Bent-Over Dumbbell Rear Delt Fly
+Rope Face Pull – [2]
+Dumbbell Farmer's Walk – [2]
+Cable Reverse Curl – [2]
+Dumbbell Wrist Extension – [2]
+
+Session 16 – Legs
+Barbell Squat
+Romanian Deadlift
+Hanging Oblique Knee Raise
+Dumbbell Walking Lunges – [2]
+Lying Leg Curl – [2]
+Leg Extension – [2]
+Hip Adduction – [2]
+Standing Calf Raises
+"""
+
+# Earlier built-in plans. An account still holding an unedited copy of one gets DEFAULT_PLAN instead.
+PREVIOUS_DEFAULT_PLAN = """
 Chest & Triceps 1
 Flat Barbell Press
 Triceps Rod Pushdown
@@ -248,77 +414,8 @@ Wrist Extension - Machine
 Crunches B
 """
 
-APURVA_DEFAULT_PLAN = """
-Chest & Triceps 1
-Incline Barbell Press
-Flat Dumbbell Press
-Low Cable Fly
-Dumbbell Overhead Extension
-Triceps Rod Pushdown
-Lower Abs
+PREVIOUS_DEFAULT_PLANS = (PREVIOUS_DEFAULT_PLAN,)
 
-Chest & Triceps 2
-Flat Barbell Press
-Incline Dumbbell Press
-Pec Deck Fly
-Dips
-Triceps Rope Pushdown
-Lower Abs
-
-Back & Biceps 1
-Neutral-Grip Pull-Ups
-Lat Dumbbell Row
-Wide-Grip Seated Row
-Hyperextension
-Barbell Curl
-Hammer Rope Curl
-V Tucks
-
-Back & Biceps 2
-Pull-Ups
-Neutral-Grip Seated Row
-Wide-Grip Seated Row
-Deadlift
-Dumbbell Curl
-Machine Preacher Curl
-V Tucks
-
-Arms 1
-Dumbbell Shoulder Press
-Cable Lateral Raise
-Rear Delt Machine Fly
-Wrist Extension
-Farmer’s Walk
-Reverse Dumbbell Curl
-Crunches A
-
-Arms 2
-Barbell Shoulder Press
-Cable Lateral Raise
-Rear Delt Machine Fly
-Rope Face Pull
-Wrist Flexion
-Reverse Barbell Curl
-Crunches B
-
-Legs 1
-Leg Press
-Leg Curl
-Walking Dumbbell Lunges
-Hip Thrust
-Standing Calf Raises
-V Tucks
-
-Legs 2
-Barbell Squat
-Leg Extension
-Stationary Dumbbell Lunges
-Romanian Deadlift
-Seated Calf Raises
-V Tucks
-"""
-
-DEFAULT_PLAN = HARSH_DEFAULT_PLAN
 
 def get_workout_days(raw_text):
     """

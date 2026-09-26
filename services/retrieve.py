@@ -18,6 +18,7 @@ from list_of_exercise import (
     BW_EXERCISES,
     DEFAULT_PLAN,
     DEFAULT_REP_RANGES,
+    PREVIOUS_DEFAULT_PLANS,
     get_workout_days,
     list_of_exercises,
 )
@@ -102,80 +103,60 @@ def get_admin_display_name(db_session) -> str:
     return "Admin"
 
 
-def _get_admin_plan_text(db_session) -> str:
-    admins = _get_ordered_admins(db_session)
-    if not admins:
+def _own_plan_text(db_session, user) -> str:
+    """The plan this account wrote, or "" if it has none. An untouched copy of an
+    earlier built-in plan (copied into new accounts) counts as none, so it gets
+    today's DEFAULT_PLAN instead."""
+    plan_row = db_session.query(Plan).filter_by(user_id=user.id).first()
+    text = (plan_row.text_content if plan_row else "") or ""
+    if not text.strip():
         return ""
+    if _normalize_text(text) in {_normalize_text(p) for p in PREVIOUS_DEFAULT_PLANS}:
+        return ""
+    return text
 
-    admin_ids = [admin.id for admin in admins]
-    plan_rows = db_session.query(Plan).filter(Plan.user_id.in_(admin_ids)).all()
-    plan_by_admin_id = {row.user_id: row for row in plan_rows}
 
-    for admin in admins:
-        plan_row = plan_by_admin_id.get(admin.id)
-        text = (plan_row.text_content if plan_row else "") or ""
-        if text.strip():
+def _own_rep_ranges_text(db_session, user) -> str:
+    rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
+    text = (rep_row.text_content if rep_row else "") or ""
+    return text if text.strip() else ""
+
+
+def is_plan_owner(db_session, user) -> bool:
+    """The account whose plan and rep ranges others can follow. It can't follow itself."""
+    owner = _get_admin_user(db_session)
+    return bool(owner and user and owner.id == user.id)
+
+
+def _get_admin_plan_text(db_session) -> str:
+    """The main admin's own plan; if they have none, the next admin's."""
+    for admin in _get_ordered_admins(db_session):
+        text = _own_plan_text(db_session, admin)
+        if text:
             return text
-
-    first_plan = plan_by_admin_id.get(admins[0].id)
-    return (first_plan.text_content if first_plan else "") or ""
+    return ""
 
 
 def _get_admin_rep_ranges_text(db_session) -> str:
-    admins = _get_ordered_admins(db_session)
-    if not admins:
-        return ""
-
-    admin_ids = [admin.id for admin in admins]
-    rep_rows = db_session.query(RepRange).filter(RepRange.user_id.in_(admin_ids)).all()
-    rep_by_admin_id = {row.user_id: row for row in rep_rows}
-
-    for admin in admins:
-        rep_row = rep_by_admin_id.get(admin.id)
-        text = (rep_row.text_content if rep_row else "") or ""
-        if text.strip():
+    for admin in _get_ordered_admins(db_session):
+        text = _own_rep_ranges_text(db_session, admin)
+        if text:
             return text
-
-    first_rep = rep_by_admin_id.get(admins[0].id)
-    return (first_rep.text_content if first_rep else "") or ""
+    return ""
 
 
 def get_effective_plan_text(db_session, user) -> str:
-    plan_row = db_session.query(Plan).filter_by(user_id=user.id).first()
-    user_text = plan_row.text_content if plan_row else ""
-    default_text = DEFAULT_PLAN or ""
-
-    if user.is_admin():
-        return user_text or default_text
-
-    admin_text = _get_admin_plan_text(db_session)
-
-    if getattr(user, 'follow_admin_plan', False):
-        return admin_text or default_text
-
-    if user_text and user_text.strip():
-        return user_text
-
-    return default_text
+    """Following (any account but the owner, admins included): the owner's plan.
+    Otherwise the account's own plan. Either way DEFAULT_PLAN if there is none."""
+    if getattr(user, 'follow_admin_plan', False) and not is_plan_owner(db_session, user):
+        return _get_admin_plan_text(db_session) or DEFAULT_PLAN or ""
+    return _own_plan_text(db_session, user) or DEFAULT_PLAN or ""
 
 
 def get_effective_rep_ranges_text(db_session, user) -> str:
-    rep_row = db_session.query(RepRange).filter_by(user_id=user.id).first()
-    user_text = rep_row.text_content if rep_row else ""
-    default_text = _build_default_rep_text()
-
-    if user.is_admin():
-        return user_text or default_text
-
-    admin_text = _get_admin_rep_ranges_text(db_session)
-
-    if getattr(user, 'follow_admin_exercises', False):
-        return admin_text or default_text
-
-    if user_text and user_text.strip():
-        return user_text
-
-    return default_text
+    if getattr(user, 'follow_admin_exercises', False) and not is_plan_owner(db_session, user):
+        return _get_admin_rep_ranges_text(db_session) or _build_default_rep_text()
+    return _own_rep_ranges_text(db_session, user) or _build_default_rep_text()
 
 
 def generate_retrieve_output(db_session, user, category, day_id):

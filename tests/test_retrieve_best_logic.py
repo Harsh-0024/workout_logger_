@@ -297,11 +297,14 @@ class TestRetrieveIntegration(unittest.TestCase):
         SessionLocal = sessionmaker(bind=self.engine)
         self.db = SessionLocal()
 
+        # These tests give the user their own plan, so they don't follow the admin's.
         self.user = User(
             username="u1",
             role=UserRole.USER,
             is_verified=True,
             bodyweight=80,
+            follow_admin_plan=False,
+            follow_admin_exercises=False,
         )
         self.db.add(self.user)
         self.db.flush()

@@ -15,8 +15,8 @@ from services.retrieve import (
     get_custom_retrieval_sort_preference,
     get_admin_display_name,
     get_effective_plan_text,
-    _get_admin_plan_text,
-    _get_admin_rep_ranges_text,
+    _own_plan_text,
+    is_plan_owner,
     record_custom_retrieval,
     set_custom_retrieval_sort_preference,
 )
@@ -404,24 +404,14 @@ def register_plan_routes(app):
                 flash("Workout plan updated successfully!", "success")
                 return redirect(url_for('user_dashboard', username=user.username))
 
-            admin_display_name = get_admin_display_name(Session)
-            has_admin_plan = False
-            if not user.is_admin():
-                admin_plan_text = _get_admin_plan_text(Session)
-                has_admin_plan = bool(
-                    (admin_plan_text and admin_plan_text.strip())
-                    or (DEFAULT_PLAN and str(DEFAULT_PLAN).strip())
-                )
-
-            display_plan = plan.text_content or ""
-
+            can_follow = not is_plan_owner(Session, user)
             return render_template(
                 'set_plan.html',
-                current_plan=display_plan,
-                follow_admin_plan=getattr(user, 'follow_admin_plan', False),
-                has_admin_plan=has_admin_plan,
-                admin_display_name=admin_display_name,
-                is_admin=user.is_admin(),
+                # Not following: the editor starts from the built-in plan if they haven't written one.
+                current_plan=_own_plan_text(Session, user) or DEFAULT_PLAN.strip(),
+                follow_admin_plan=can_follow and getattr(user, 'follow_admin_plan', False),
+                admin_display_name=get_admin_display_name(Session),
+                can_follow=can_follow,
             )
         except Exception as e:
             Session.rollback()
@@ -463,22 +453,13 @@ def register_plan_routes(app):
                 flash("Rep ranges updated successfully!", "success")
                 return redirect(url_for('user_dashboard', username=user.username))
 
-            admin_display_name = get_admin_display_name(Session)
-            has_admin_exercises = False
-            if not user.is_admin():
-                admin_rep_text = _get_admin_rep_ranges_text(Session)
-                has_admin_exercises = bool(
-                    (admin_rep_text and admin_rep_text.strip())
-                    or (DEFAULT_REP_RANGES and len(DEFAULT_REP_RANGES) > 0)
-                )
-
+            can_follow = not is_plan_owner(Session, user)
             return render_template(
                 'set_exercises.html',
                 current_reps=reps.text_content or "",
-                follow_admin_exercises=getattr(user, 'follow_admin_exercises', False),
-                has_admin_exercises=has_admin_exercises,
-                admin_display_name=admin_display_name,
-                is_admin=user.is_admin(),
+                follow_admin_exercises=can_follow and getattr(user, 'follow_admin_exercises', False),
+                admin_display_name=get_admin_display_name(Session),
+                can_follow=can_follow,
             )
         except Exception as e:
             Session.rollback()

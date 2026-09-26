@@ -84,12 +84,15 @@ class TestRouteRegressions(unittest.TestCase):
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
 
-    def _create_logged_in_user(self, *, username="route_tester"):
+    def _create_logged_in_user(self, *, username="route_tester", follow_admin=False):
+        # Tests usually give the user their own plan; new accounts in the app follow the admin.
         user = User(
             username=username,
             role=UserRole.USER,
             is_verified=True,
             bodyweight=80.0,
+            follow_admin_plan=follow_admin,
+            follow_admin_exercises=follow_admin,
         )
         self.session.add(user)
         self.session.commit()
@@ -238,6 +241,78 @@ class TestRouteRegressions(unittest.TestCase):
             self.assertEqual(download.status_code, 200)
             self.assertEqual(download.data[:4], b"AEA1")  # signed Shortcuts file
             download.close()
+
+    def _plan_owner_with_plan(self):
+        owner = User(username="plan_owner", email="owner@example.com", role=UserRole.ADMIN, is_verified=True)
+        self.session.add(owner)
+        self.session.flush()
+        owner_id = int(owner.id)
+        self.session.add(Plan(user_id=owner_id, text_content="Session 1 - Owner Push\nBench Press - [3, 6-8]"))
+        self.session.commit()
+        return owner_id
+
+    def test_new_accounts_follow_the_admin_plan_and_rep_ranges(self):
+        user = User(username="brand_new", role=UserRole.USER, is_verified=True)
+        self.session.add(user)
+        self.session.commit()
+        self.assertTrue(user.follow_admin_plan)
+        self.assertTrue(user.follow_admin_exercises)
+
+    def test_another_admin_can_follow_the_owner_plan_everywhere(self):
+        self._plan_owner_with_plan()
+        friend = self._create_logged_in_user(username="friend_admin", follow_admin=True)
+        friend.role = UserRole.ADMIN
+        self.session.commit()
+
+        # The switch is there for them, and it's on.
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertIn('name="follow_admin_plan" value="0"', page)
+        self.assertIn('st-switch is-on', page)
+        self.assertIn('name="follow_admin_exercises"', self.client.get("/set_exercises").get_data(as_text=True))
+
+        # And the shortcut gets the owner's sessions, not the built-in plan.
+        pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
+        self.assertEqual(self.client.get(f"{pick_path}?list=1").get_json()["sessions"], ["Session 1 - Owner Push"])
+
+    def test_plan_owner_has_no_follow_switch(self):
+        owner_id = self._plan_owner_with_plan()
+        with self.client.session_transaction() as sess:
+            sess["_user_id"] = str(owner_id)
+            sess["_fresh"] = True
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertNotIn('name="follow_admin_plan"', page)
+        self.assertIn("Owner Push", page)
+
+    def test_owner_plan_equal_to_the_built_in_plan_is_still_followed(self):
+        from list_of_exercise import DEFAULT_PLAN
+        owner = User(username="plan_owner", role=UserRole.ADMIN, is_verified=True)
+        other_admin = User(username="other_admin", role=UserRole.ADMIN, is_verified=True)
+        self.session.add_all([owner, other_admin])
+        self.session.flush()
+        self.session.add(Plan(user_id=owner.id, text_content=DEFAULT_PLAN))
+        self.session.add(Plan(user_id=other_admin.id, text_content="Session 1 - Not This One\nSquat"))
+        self.session.commit()
+        self._create_logged_in_user(username="follower", follow_admin=True)
+
+        pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
+        sessions = self.client.get(f"{pick_path}?list=1").get_json()["sessions"]
+        self.assertEqual(sessions[0], "Session 1 - Chest & Biceps")
+
+    def test_not_following_without_own_plan_gets_the_built_in_plan(self):
+        from list_of_exercise import DEFAULT_PLAN, PREVIOUS_DEFAULT_PLAN
+        self._plan_owner_with_plan()
+        user = self._create_logged_in_user(username="own_way")
+        # An untouched copy of the old built-in plan counts as no plan of their own.
+        self.session.add(Plan(user_id=user.id, text_content=PREVIOUS_DEFAULT_PLAN))
+        self.session.commit()
+
+        pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
+        sessions = self.client.get(f"{pick_path}?list=1").get_json()["sessions"]
+        self.assertEqual(len(sessions), 16)
+        self.assertEqual(sessions[0], "Session 1 - Chest & Biceps")
+        # The editor starts from the built-in plan, ready to change.
+        self.assertIn("Hanging Leg Raises", self.client.get("/set_plan").get_data(as_text=True))
+        self.assertIn("Session 16", DEFAULT_PLAN)
 
     def test_shortcut_pick_lists_the_users_own_sessions(self):
         user = self._create_logged_in_user(username="shortcut_list_user")

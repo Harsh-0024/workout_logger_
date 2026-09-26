@@ -8,7 +8,7 @@ from sqlalchemy_utils import JSONType
 from datetime import datetime
 import os
 from config import Config
-from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES, DEFAULT_PLAN
+from list_of_exercise import list_of_exercises, DEFAULT_REP_RANGES
 import enum
 
 # --- DATABASE CONNECTION ---
@@ -79,8 +79,9 @@ class User(Base):
     otp_expires = Column(DateTime, nullable=True)
     bodyweight = Column(Float, nullable=True)
     profile_image = Column(String(255), nullable=True)
-    follow_admin_plan = Column(Boolean, default=False, nullable=False)
-    follow_admin_exercises = Column(Boolean, default=False, nullable=False)
+    # New accounts follow the main admin's plan and rep ranges until they switch it off.
+    follow_admin_plan = Column(Boolean, default=True, nullable=False)
+    follow_admin_exercises = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.now, nullable=True)
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=True)
 
@@ -730,9 +731,7 @@ def _seed_user_data(session, user):
         if ex not in existing_by_exercise:
             session.add(Lift(user_id=user.id, exercise=ex))
 
-    existing_plan = session.query(Plan).filter(Plan.user_id == user.id).first()
-    if not existing_plan:
-        session.add(Plan(user_id=user.id, text_content=DEFAULT_PLAN))
+    # No plan is copied in: an account without its own plan always gets the current DEFAULT_PLAN.
 
     existing_rep_ranges = session.query(RepRange).filter(RepRange.user_id == user.id).first()
     if not existing_rep_ranges:
