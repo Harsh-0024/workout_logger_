@@ -1,0 +1,36 @@
+{#- Shared bits for the plain-text editors (plan, rep ranges, bulk import). -#}
+<style>
+    .st-fmt { position: relative; }
+    .st-fmt > summary { font-size: 0.8rem; }
+    .st-fmt-pop {
+        position: absolute; right: 0; top: calc(100% + 8px); z-index: 20;
+        width: min(340px, calc(100vw - 32px));
+        text-transform: none; letter-spacing: 0; font-weight: 400;
+        border-color: var(--border-primary);
+        box-shadow: var(--shadow-lg);
+    }
+    .st-editor-meta.is-dirty { color: var(--st-accent); }
+</style>
+<script>
+    (() => {
+        document.querySelectorAll('[data-editor]').forEach((form) => {
+            const area = form.querySelector('textarea');
+            const state = form.querySelector('[data-editor-state]');
+            if (!area || !state) return;
+            const original = area.value;
+            const cleanLabel = state.textContent;
+            let dirty = false;
+            area.addEventListener('input', () => {
+                dirty = area.value !== original;
+                state.textContent = dirty ? 'Unsaved changes' : cleanLabel;
+                state.classList.toggle('is-dirty', dirty);
+            });
+            form.addEventListener('submit', () => { dirty = false; });
+            window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
+        });
+        // Close the format note when tapping elsewhere.
+        document.addEventListener('click', (e) => {
+            document.querySelectorAll('.st-fmt[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+        });
+    })();
+</script>

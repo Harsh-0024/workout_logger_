@@ -494,7 +494,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("BW Exercises", page)
+        self.assertIn("Bodyweight exercises", page)
         self.assertIn("Crunches A", page)
 
     def test_bodyweight_log_uses_offsets_for_saved_strength(self):
@@ -591,7 +591,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("This exercise has bodyweight history", page)
+        self.assertIn("It already has bodyweight logs", page)
         self.assertTrue(
             self.session.query(WorkoutLog).filter_by(exercise="Crunches A").one().uses_bodyweight
         )
@@ -723,7 +723,7 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("Retrieve URL", page)
         self.assertIn("/shortcut/log/", page)
         self.assertIn("/shortcut/pick/", page)
-        self.assertIn("Shortcut Session Mapping", page)
+        self.assertIn("Session names", page)
 
     def test_shortcut_urls_page_lists_every_deployment_over_https(self):
         self._create_logged_in_user(username="shortcut_hosts_user")
@@ -752,7 +752,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Shortcut Session Mapping", page)
+        self.assertIn("Session names", page)
         self.assertNotIn("Access denied", page)
 
     def test_bulk_import_invalid_header_date_is_handled_as_failed_block(self):
@@ -780,7 +780,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Failed days", page)
+        self.assertIn("Days that failed", page)
         self.assertIn("32/13", page)
 
     def test_bulk_import_missing_year_rolls_forward_chronologically(self):
@@ -829,7 +829,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Detected date range: 30-12-2023 to 01-01-2024", page)
+        self.assertIn("30-12-2023 – 01-01-2024", page)
 
     def test_workout_detail_best_link_uses_same_selection_as_topn_best_logic(self):
         user = self._create_logged_in_user(username="workout_user")

@@ -1,69 +1,55 @@
 {% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-10 col-lg-9">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3 mb-md-4">
-                    <i class="bi bi-list-check" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                </div>
-                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 5vw, 2rem);">Manage Exercises</h2>
-                <p class="text-muted mb-2" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Add new exercises or modify rep ranges</p>
-                <p class="text-muted mb-0" style="font-size: var(--fs-sm); opacity: 0.8;">
-                    <i class="bi bi-info-circle me-1"></i>Format: <strong class="text-gold">Exercise Name: Range</strong>
-                </p>
-            </div>
+{{ st.styles() }}
+<div class="st">
+    {{ st.head('Rep ranges', 'The rep target for each exercise, one per line.', url_for('user_settings'), 'Back to settings') }}
 
-            {% if not is_admin %}
-            <div class="mb-4 p-3 rounded" style="background: var(--gold-subtle); border: 1px solid var(--border-gold);">
-                <div class="d-flex align-items-center justify-content-between gap-3">
-                    <div>
-                        <div class="fw-semibold" style="font-size: var(--fs-sm);"><i class="bi bi-person-check-fill text-gold me-2"></i>Follow Default Rep Ranges{% if admin_display_name %} ({{ admin_display_name }}){% endif %}</div>
-                        <div class="text-muted mt-1" style="font-size: var(--fs-xs);">Automatically use the admin{% if admin_display_name %}'s ({{ admin_display_name }}){% endif %} exercise list and rep ranges.</div>
-                    </div>
-                    <form action="/set_exercises" method="POST" class="flex-shrink-0">
-                        <input type="hidden" name="form_type" value="toggle_follow_admin">
-                        <input type="hidden" name="follow_admin_exercises" value="{{ '0' if follow_admin_exercises else '1' }}">
-                        <button type="submit" class="btn btn-sm {{ 'btn-gold-solid' if follow_admin_exercises else 'btn-gold-outline' }}">
-                            {% if follow_admin_exercises %}
-                            <i class="bi bi-toggle-on me-1"></i>Following
-                            {% else %}
-                            <i class="bi bi-toggle-off me-1"></i>Follow
-                            {% endif %}
-                        </button>
-                    </form>
-                </div>
+    {% if not is_admin %}
+    <section class="st-section">
+        <form action="/set_exercises" method="POST" class="st-group" data-no-loading="true">
+            <input type="hidden" name="form_type" value="toggle_follow_admin">
+            <input type="hidden" name="follow_admin_exercises" value="{{ '0' if follow_admin_exercises else '1' }}">
+            <div class="st-row">
+                <i class="bi bi-people st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">Follow {{ admin_display_name ~ "'s" if admin_display_name else "the default" }} rep ranges</span>
+                    <span class="st-row-desc">Use their exercise list and targets.</span>
+                </span>
+                <button type="submit" class="st-switch{{ ' is-on' if follow_admin_exercises }}" role="switch" aria-checked="{{ 'true' if follow_admin_exercises else 'false' }}" aria-label="Follow the default rep ranges"></button>
             </div>
-            {% endif %}
+        </form>
+    </section>
+    {% endif %}
 
-            {% if not follow_admin_exercises %}
-            <form action="/set_exercises" method="POST">
-                <input type="hidden" name="form_type" value="save_exercises">
-                <div class="mb-3 mb-md-4">
-                    <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        <i class="bi bi-code-square me-2"></i>Exercise Configuration
-                    </label>
-                    <textarea name="rep_text" class="form-control" rows="18"
-                        style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6;"
-                        spellcheck="false">{{ current_reps }}</textarea>
+    {% if not follow_admin_exercises %}
+    <section class="st-section">
+        <div class="st-label">
+            <span>Exercises</span>
+            <details class="st-fmt">
+                <summary class="st-label-aside st-link">Format</summary>
+                <div class="st-fmt-pop st-group st-pad">
+                    <pre class="st-mono">Flat Barbell Press: 6-10
+Low Cable Fly: 12-15</pre>
+                    <div class="st-hint mt-2">Exercise name, a colon, then the rep range.</div>
                 </div>
-                <button type="submit" class="btn btn-gold-solid w-100 mb-3">
-                    <i class="bi bi-check-circle-fill me-2"></i>Save Changes
-                </button>
-            </form>
-            {% else %}
-            <div class="text-center py-4 text-muted" style="font-size: var(--fs-sm);">
-                <i class="bi bi-link-45deg text-gold me-2" style="font-size: 1.5rem;"></i>
-                <p class="mb-0">You are following the admin's rep ranges. Disable the toggle above to set your own.</p>
-            </div>
-            {% endif %}
-
-            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
-                    <i class="bi bi-arrow-left me-1"></i>Cancel
-                </a>
-            </div>
+            </details>
         </div>
+        <form action="/set_exercises" method="POST" class="st-group" data-editor>
+            <input type="hidden" name="form_type" value="save_exercises">
+            <textarea name="rep_text" class="st-editor" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Rep ranges">{{ current_reps }}</textarea>
+            <div class="st-editor-bar">
+                <span class="st-editor-meta" data-editor-state>Saved</span>
+                <button type="submit" class="st-btn st-btn-primary st-btn-sm" data-loading-text="Saving">Save ranges</button>
+            </div>
+        </form>
+    </section>
+    {% else %}
+    <div class="st-empty">
+        <i class="bi bi-link-45deg"></i>
+        You're using {{ admin_display_name ~ "'s" if admin_display_name else "the default" }} rep ranges.<br>Turn the switch off to set your own.
     </div>
+    {% endif %}
 </div>
+{% include '_settings_editor.html' %}
 {% endblock %}

@@ -1,0 +1,290 @@
+{#- Shared look for Settings and every page it leads to.
+    Usage: {% import '_settings_ui.html' as st %} then {{ st.styles() }} and {{ st.head(...) }}. -#}
+
+{% macro head(title, sub='', back=None, back_label='Back') -%}
+<header class="st-head">
+    {% if back %}<a class="st-back" href="{{ back }}" aria-label="{{ back_label }}" title="{{ back_label }}"><i class="bi bi-arrow-left"></i></a>{% endif %}
+    <h1 class="st-title">{{ title }}</h1>
+    {% if sub %}<p class="st-sub">{{ sub }}</p>{% endif %}
+</header>
+{%- endmacro %}
+
+{% macro styles() -%}
+<style>
+    /* ================= Settings pages ================= */
+    .st {
+        --st-hair: rgba(255, 255, 255, 0.07);
+        --st-row-hover: rgba(255, 255, 255, 0.03);
+        --st-input-bg: rgba(255, 255, 255, 0.03);
+        --st-track: rgba(255, 255, 255, 0.14);
+        --st-accent: var(--gold-primary);
+        --st-accent-fill: linear-gradient(135deg, #d4af37, #e9c75a);
+        --st-on-accent: #0b0b0c;
+        --st-up: #4ade80;
+        --st-down: #f87171;
+        --st-down-bg: rgba(248, 113, 113, 0.10);
+        --st-down-line: rgba(248, 113, 113, 0.30);
+        --st-warn: #fbbf24;
+        --st-warn-bg: rgba(251, 191, 36, 0.07);
+        --st-warn-line: rgba(251, 191, 36, 0.30);
+        max-width: 640px;
+        margin: 0 auto;
+        padding-bottom: 40px;
+        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    .st.st-wide { max-width: 860px; }
+    [data-theme="light"] .st {
+        --st-hair: rgba(0, 0, 0, 0.07);
+        --st-row-hover: rgba(0, 0, 0, 0.025);
+        --st-input-bg: #ffffff;
+        --st-track: rgba(0, 0, 0, 0.14);
+        --st-accent: #8a6512;
+        --st-accent-fill: linear-gradient(135deg, #b08a3e, #c9a961);
+        --st-on-accent: #ffffff;
+        --st-up: #15803d;
+        --st-down: #b91c1c;
+        --st-down-bg: rgba(220, 38, 38, 0.07);
+        --st-down-line: rgba(220, 38, 38, 0.26);
+        --st-warn: #92400e;
+        --st-warn-bg: rgba(245, 158, 11, 0.07);
+        --st-warn-line: rgba(180, 83, 9, 0.28);
+    }
+
+    /* ---- Header: back arrow, title, one quiet line ---- */
+    .st-head { padding: 20px 2px 4px; }
+    .st-back {
+        width: 38px; height: 38px;
+        display: inline-flex; align-items: center; justify-content: center;
+        margin: 0 0 14px -8px;
+        border-radius: 50%;
+        color: var(--text-muted);
+        font-size: 1.1rem;
+        text-decoration: none;
+        transition: color var(--transition-fast), background var(--transition-fast);
+    }
+    .st-back:hover { color: var(--st-accent); background: var(--gold-subtle); }
+    .st .st-title {
+        font-size: clamp(1.8rem, 7vw, 2.3rem);
+        font-weight: 600;
+        line-height: 1.1;
+        margin: 0 0 8px;
+        letter-spacing: 0;
+    }
+    .st-sub { color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; margin: 0; max-width: 34rem; }
+
+    /* ---- Sections and grouped lists ---- */
+    .st-section { margin-top: 32px; }
+    .st-label {
+        display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+        margin: 0 4px 10px;
+        font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--text-subtle);
+    }
+    .st-label .st-label-aside { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 0.78rem; }
+    .st-group {
+        background: var(--card-bg-solid);
+        border: 1px solid var(--border-subtle);
+        border-radius: 18px;
+        overflow: hidden;
+        overflow: clip; /* clip, not hidden, so sticky bars inside still stick to the screen */
+    }
+    .st-pad { padding: 20px; }
+    .st-foot { font-size: 0.8rem; color: var(--text-subtle); line-height: 1.5; margin: 10px 4px 0; }
+    .st-foot a { color: var(--st-accent); }
+
+    .st-row {
+        display: flex; align-items: center; gap: 14px;
+        min-height: 62px;
+        padding: 14px 18px;
+        color: var(--text-primary);
+        text-decoration: none;
+        background: transparent;
+        transition: background var(--transition-fast);
+    }
+    .st-row + .st-row, .st-row + .st-block, .st-block + .st-row, .st-block + .st-block { border-top: 1px solid var(--st-hair); }
+    .st a.st-row, .st a.st-row:hover, .st summary.st-row { color: var(--text-primary); }
+    a.st-row:hover, button.st-row:hover { background: var(--st-row-hover); color: var(--text-primary); }
+    button.st-row { width: 100%; border: 0; text-align: left; font: inherit; }
+    .st-row-ico { flex: none; width: 22px; text-align: center; color: var(--st-accent); font-size: 1.15rem; }
+    .st-row-main { flex: 1; min-width: 0; }
+    .st-row-title { display: block; font-size: 0.95rem; font-weight: 600; line-height: 1.3; }
+    .st-row-desc { display: block; font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; margin-top: 2px; }
+    .st-row-value { flex: none; font-size: 0.85rem; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .st-chev { flex: none; color: var(--text-subtle); font-size: 0.8rem; opacity: 0.7; }
+    .st-block { padding: 16px 18px 18px; }
+    .st-block-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+
+    /* ---- Buttons: sentence case, no bounce ---- */
+    .st-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        height: 46px; padding: 0 20px;
+        border-radius: 12px;
+        border: 1px solid transparent;
+        font: 600 0.92rem/1 'Inter', system-ui, sans-serif;
+        text-decoration: none; white-space: nowrap;
+        cursor: pointer;
+        transition: filter var(--transition-fast), background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+    }
+    .st-btn:disabled { opacity: 0.55; cursor: default; }
+    .st-btn-primary { background: var(--st-accent-fill); color: var(--st-on-accent); }
+    .st-btn-primary:hover { filter: brightness(1.07); color: var(--st-on-accent); }
+    .st-btn-quiet { background: transparent; border-color: var(--border-subtle); color: var(--text-primary); }
+    .st-btn-quiet:hover, .st a.st-btn-quiet:hover { border-color: var(--border-gold); color: var(--st-accent); }
+    .st a.st-btn-quiet { color: var(--text-primary); }
+    .st a.st-btn-primary, .st a.st-btn-primary:hover { color: var(--st-on-accent); }
+    .st-btn-danger { background: transparent; border-color: var(--st-down-line); color: var(--st-down); }
+    .st-btn-danger:hover { background: var(--st-down-bg); color: var(--st-down); }
+    .st-btn-block { width: 100%; }
+    .st-btn-sm { height: 36px; padding: 0 14px; font-size: 0.84rem; border-radius: 10px; }
+    .st-link {
+        background: none; border: 0; padding: 0;
+        color: var(--st-accent); font: 600 0.85rem 'Inter', system-ui, sans-serif;
+        text-decoration: none; cursor: pointer;
+    }
+    .st-link:hover { color: var(--st-accent); text-decoration: underline; text-underline-offset: 3px; }
+    .st-link-danger { color: var(--st-down); }
+    .st-link-danger:hover { color: var(--st-down); }
+    .st-icon-btn {
+        flex: none;
+        width: 36px; height: 36px;
+        display: inline-flex; align-items: center; justify-content: center;
+        border: 0; border-radius: 50%;
+        background: transparent; color: var(--text-subtle);
+        font-size: 1rem; cursor: pointer;
+        transition: color var(--transition-fast), background var(--transition-fast);
+    }
+    .st-icon-btn:hover { color: var(--text-primary); background: var(--st-row-hover); }
+    .st-icon-btn.is-danger:hover { color: var(--st-down); background: var(--st-down-bg); }
+    .st-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; margin-top: 20px; }
+
+    /* ---- Switch (a submit button or a real checkbox) ---- */
+    .st-switch {
+        flex: none; position: relative;
+        width: 48px; height: 28px; padding: 0;
+        border: 0; border-radius: 999px;
+        background: var(--st-track);
+        cursor: pointer;
+        transition: background var(--transition-fast);
+    }
+    .st-switch::after {
+        content: ""; position: absolute; top: 3px; left: 3px;
+        width: 22px; height: 22px; border-radius: 50%;
+        background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        transition: transform var(--transition-fast);
+    }
+    .st-switch.is-on { background: var(--gold-primary); }
+    .st-switch.is-on::after { transform: translateX(20px); }
+    .st-switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--gold-glow); }
+
+    /* ---- Segmented control (radios or buttons) ---- */
+    .st-seg {
+        display: flex; gap: 2px;
+        padding: 3px;
+        border-radius: 12px;
+        background: var(--st-row-hover);
+        border: 1px solid var(--st-hair);
+    }
+    .st-seg-opt { flex: 1; min-width: 0; margin: 0; position: relative; }
+    .st-seg-opt > input { position: absolute; opacity: 0; pointer-events: none; }
+    .st-seg-opt > span, .st-seg > button {
+        display: flex; align-items: center; justify-content: center; gap: 6px;
+        width: 100%; height: 36px; padding: 0 10px;
+        border: 0; border-radius: 9px;
+        background: transparent; color: var(--text-muted);
+        font: 600 0.84rem 'Inter', system-ui, sans-serif;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        cursor: pointer;
+        transition: background var(--transition-fast), color var(--transition-fast);
+    }
+    .st-seg > button { flex: 1; min-width: 0; }
+    .st-seg-opt > span small { font-weight: 500; opacity: 0.75; font-size: 0.76rem; }
+    .st-seg-opt > input:checked + span, .st-seg > button.is-active, .st-seg > button.active {
+        background: var(--card-bg-solid);
+        color: var(--st-accent);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 1px var(--st-hair);
+    }
+    [data-theme="light"] .st-seg-opt > input:checked + span, [data-theme="light"] .st-seg > button.is-active, [data-theme="light"] .st-seg > button.active { background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); }
+    .st-seg-opt > input:focus-visible + span { box-shadow: 0 0 0 2px var(--gold-glow); }
+
+    /* ---- Fields ---- */
+    .st-field + .st-field { margin-top: 18px; }
+    .st-field > label, .st-field-label { display: block; margin-bottom: 7px; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+    .st .form-control {
+        padding: 11px 14px;
+        font-size: 1rem;
+        border-radius: 12px;
+        border: 1px solid var(--border-subtle);
+        background: var(--st-input-bg);
+        box-shadow: none;
+    }
+    .st .form-control:focus { border-color: var(--gold-primary); box-shadow: 0 0 0 3px var(--gold-subtle); background: var(--st-input-bg); }
+    .st-hint { font-size: 0.8rem; color: var(--text-subtle); line-height: 1.45; margin-top: 7px; }
+    .st-inline { display: flex; gap: 10px; align-items: stretch; }
+    .st-inline > .form-control { flex: 1; min-width: 0; }
+
+    /* ---- Plain-text editor that fills its group ---- */
+    .st .st-editor {
+        display: block; width: 100%;
+        min-height: 56vh;
+        padding: 18px 20px;
+        border: 0; border-radius: 0;
+        background: transparent;
+        color: var(--text-primary);
+        font: 0.86rem/1.75 'SF Mono', 'Menlo', 'Monaco', monospace;
+        resize: vertical;
+        box-shadow: none;
+    }
+    .st .st-editor:focus { outline: none; box-shadow: none; background: var(--st-row-hover); }
+    .st-editor-bar {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 12px 14px 12px 20px;
+        border-top: 1px solid var(--st-hair);
+        position: sticky; bottom: 0; z-index: 2;
+        background: var(--card-bg-solid);
+    }
+    .st-editor-meta { font-size: 0.8rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+
+    /* ---- Quiet numbers (no boxes) ---- */
+    .st-nums { display: grid; grid-template-columns: repeat(var(--st-cols, 4), minmax(0, 1fr)); padding: 18px 6px; }
+    .st-num { text-align: center; padding: 0 4px; min-width: 0; }
+    .st-num + .st-num { border-left: 1px solid var(--st-hair); }
+    .st-num b { display: block; font-size: 1.4rem; font-weight: 700; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .st-num span { display: block; margin-top: 5px; font-size: 0.64rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .st-num.is-good b { color: var(--st-up); }
+    .st-num.is-bad b { color: var(--st-down); }
+    .st-num.is-zero b { color: var(--text-subtle); opacity: 0.55; }
+
+    /* ---- Small bits ---- */
+    .st-empty { padding: 30px 20px; text-align: center; color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
+    .st-empty i { display: block; font-size: 1.5rem; color: var(--text-subtle); margin-bottom: 8px; }
+    .st-dot::before { content: "·"; margin: 0 6px; opacity: 0.6; }
+    .st-search { position: relative; }
+    .st-search > i { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-subtle); font-size: 0.9rem; pointer-events: none; }
+    .st .st-search > .form-control { padding-left: 40px; }
+    .st details > summary { list-style: none; cursor: pointer; }
+    .st details > summary::-webkit-details-marker { display: none; }
+    .st-disclose > summary .st-chev { transition: transform var(--transition-fast); }
+    .st-disclose[open] > summary .st-chev { transform: rotate(90deg); }
+    .st code, .st pre { font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; }
+    .st-mono { font: 0.8rem/1.75 'SF Mono', 'Menlo', 'Monaco', monospace; color: var(--text-muted); white-space: pre-wrap; margin: 0; }
+
+    @media (max-width: 576px) {
+        .st-head { padding-top: 14px; }
+        .st-section { margin-top: 28px; }
+        .st-row { padding: 14px 16px; }
+        .st-block { padding: 16px 16px 18px; }
+        .st-pad { padding: 18px 16px; }
+        .st .st-editor { padding: 16px; font-size: 0.8rem; min-height: 52vh; }
+        .st-editor-bar { padding-left: 16px; bottom: calc(86px + env(safe-area-inset-bottom)); }
+    }
+</style>
+<script>
+    // Switches submit their form right away: flip them at once so the tap feels instant.
+    document.addEventListener('submit', (e) => {
+        const sw = e.submitter;
+        if (!sw || !sw.classList || !sw.classList.contains('st-switch') || e.defaultPrevented) return;
+        sw.classList.toggle('is-on');
+        sw.setAttribute('aria-checked', sw.classList.contains('is-on') ? 'true' : 'false');
+    });
+</script>
+{%- endmacro %}

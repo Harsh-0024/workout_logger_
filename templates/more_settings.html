@@ -1,347 +1,114 @@
 {% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
 {% block content %}
-<div class="row justify-content-center mt-3 mt-md-4">
-    <div class="col-12 col-md-10 col-lg-8">
-        <div class="d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2 mb-4">
-            <div>
-                <h2 class="fw-bold mb-1" style="font-size: clamp(1.3rem, 5vw, 1.7rem);">BW Exercises</h2>
-                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Choose which exercises use bodyweight tracking</p>
-            </div>
-            <a href="{{ url_for('user_settings') }}" class="btn btn-gold-outline btn-sm" style="border-radius: 10px;">
-                <i class="bi bi-arrow-left me-1"></i>Settings
-            </a>
-        </div>
+{{ st.styles() }}
+<div class="st">
+    {{ st.head('Bodyweight exercises', 'Switch on the lifts where your bodyweight is part of the load. Those logs read as BW + the extra weight.', url_for('user_settings'), 'Back to settings') }}
 
-        {% if pending_bodyweight %}
-        <div class="bw-clarify-card mb-3">
-            <div class="d-flex align-items-start gap-2 mb-2">
-                <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size: 1.1rem; margin-top: 2px;"></i>
-                <div>
-                    <div class="fw-bold" style="font-size: 0.9rem;">{{ pending_bodyweight.exercise }}</div>
-                    <div class="text-muted" style="font-size: 0.75rem;">This exercise has bodyweight history. Choose how old logs should be read.</div>
-                </div>
-            </div>
-            <form method="POST" action="{{ url_for('more_settings') }}#bodyweight-exercises">
-                <input type="hidden" name="form_type" value="bodyweight_exercise">
-                <input type="hidden" name="exercise_name" value="{{ pending_bodyweight.exercise }}">
-                <input type="hidden" name="is_bodyweight" value="0">
-                <div class="bw-clarify-options">
-                    <label class="bw-clarify-opt">
-                        <input type="radio" name="history_resolution" value="future_only" checked>
-                        <span>
-                            <strong>Future only</strong>
-                            <small>Old logs keep their saved meaning.</small>
-                        </span>
-                    </label>
-                    <label class="bw-clarify-opt">
-                        <input type="radio" name="history_resolution" value="keep_offsets">
-                        <span>
-                            <strong>Keep as BW offsets</strong>
-                            <small>Past numbers mean BW + that number.</small>
-                        </span>
-                    </label>
-                    <label class="bw-clarify-opt">
-                        <input type="radio" name="history_resolution" value="literal">
-                        <span>
-                            <strong>Treat as literal weights</strong>
-                            <small>Past numbers mean the written kg value.</small>
-                        </span>
-                    </label>
-                </div>
-                <div class="d-flex gap-2 mt-2">
-                    <button type="submit" class="btn btn-gold-solid btn-sm flex-fill" style="border-radius: 10px; font-size: 0.78rem;">
-                        <i class="bi bi-check2 me-1"></i>Apply
-                    </button>
-                    <a href="{{ url_for('more_settings') }}#bodyweight-exercises" class="btn btn-gold-outline btn-sm flex-fill" style="border-radius: 10px; font-size: 0.78rem;">
-                        Cancel
-                    </a>
-                </div>
-            </form>
-        </div>
-        {% endif %}
-
-        <!-- Search + Counter -->
-        <div class="d-flex align-items-center gap-2 mb-3">
-            <div class="bw-search-wrap flex-grow-1">
-                <i class="bi bi-search"></i>
-                <input type="text" id="bwSearch" class="bw-search-input" placeholder="Search exercises..." autocomplete="off">
-            </div>
-            <span class="bw-counter" id="bwCounter">
-                <span id="bwSelectedCount">0</span> selected
-            </span>
-        </div>
-
-        <!-- Selected Section -->
-        <div id="bwSelectedSection" style="display: none;">
-            <div class="bw-section-label">
-                <i class="bi bi-check-circle-fill" style="color: #22c55e;"></i>
-                <span>Selected</span>
-            </div>
-            <div class="bw-list" id="bwSelectedList"></div>
-            <div class="bw-divider"></div>
-        </div>
-
-        <!-- Available Section -->
-        <div id="bwAvailableSection">
-            <div class="bw-section-label">
-                <i class="bi bi-circle" style="color: var(--text-muted);"></i>
-                <span>Available</span>
-            </div>
-            <div class="bw-list" id="bwAvailableList"></div>
-        </div>
-
-        <!-- No results -->
-        <div class="bw-no-results" id="bwNoResults" style="display: none;">
-            <i class="bi bi-search d-block" style="font-size: 1.5rem; opacity: 0.4;"></i>
-            <div>No exercises match your search</div>
-        </div>
-
-        <!-- All exercise rows (hidden source, JS moves into sections) -->
-        <div id="bwAllRows" style="display: none;">
-            {% for row in bodyweight_rows %}
-            <div class="bw-row" data-name="{{ row.name|lower }}" data-enabled="{{ 'true' if row.enabled else 'false' }}">
-                <div class="bw-row-info">
-                    <div class="bw-row-name">{{ row.name }}</div>
-                    <div class="bw-row-tags">
-                        {% if row.source == 'auto' %}
-                        <span class="bw-tag tag-auto">Auto</span>
-                        {% elif row.source == 'default' %}
-                        <span class="bw-tag tag-default">Default</span>
-                        {% endif %}
-                        {% if row.conflict.total %}
-                        <span class="bw-tag tag-logs">{{ row.conflict.total }} log{{ '' if row.conflict.total == 1 else 's' }}</span>
-                        {% endif %}
+    {% if pending_bodyweight %}
+    <section class="st-section">
+        <form method="POST" action="{{ url_for('more_settings') }}#bodyweight-exercises" class="st-group bw-clarify">
+            <input type="hidden" name="form_type" value="bodyweight_exercise">
+            <input type="hidden" name="exercise_name" value="{{ pending_bodyweight.exercise }}">
+            <input type="hidden" name="is_bodyweight" value="0">
+            <div class="st-block">
+                <div class="bw-clarify-head">
+                    <i class="bi bi-exclamation-circle"></i>
+                    <div>
+                        <div class="st-row-title">Turning off {{ pending_bodyweight.exercise }}</div>
+                        <div class="st-row-desc">It already has bodyweight logs. How should the old numbers be read?</div>
                     </div>
                 </div>
-                <form method="POST" action="{{ url_for('more_settings') }}#bodyweight-exercises" class="m-0">
-                    <input type="hidden" name="form_type" value="bodyweight_exercise">
-                    <input type="hidden" name="exercise_name" value="{{ row.name }}">
-                    <input type="hidden" name="is_bodyweight" value="{{ 0 if row.enabled else 1 }}">
-                    {% if row.enabled %}
-                    <button type="submit" class="bw-toggle-btn bw-toggle-on" title="Deselect">
-                        <i class="bi bi-check-circle-fill"></i>
-                    </button>
-                    {% else %}
-                    <button type="submit" class="bw-toggle-btn bw-toggle-off" title="Select">
-                        <i class="bi bi-plus-circle"></i>
-                    </button>
-                    {% endif %}
-                </form>
+                <div class="bw-clarify-options">
+                    <label class="bw-opt">
+                        <input type="radio" name="history_resolution" value="future_only" checked>
+                        <span><b>Only from now on</b><small>Old logs keep the meaning they were saved with.</small></span>
+                    </label>
+                    <label class="bw-opt">
+                        <input type="radio" name="history_resolution" value="keep_offsets">
+                        <span><b>Keep old logs as BW + number</b><small>A past "10" still means bodyweight + 10 kg.</small></span>
+                    </label>
+                    <label class="bw-opt">
+                        <input type="radio" name="history_resolution" value="literal">
+                        <span><b>Read old logs as plain weights</b><small>A past "10" becomes 10 kg.</small></span>
+                    </label>
+                </div>
+                <div class="d-flex gap-2 mt-3">
+                    <a href="{{ url_for('more_settings') }}#bodyweight-exercises" class="st-btn st-btn-quiet flex-fill">Cancel</a>
+                    <button type="submit" class="st-btn st-btn-primary flex-fill">Apply</button>
+                </div>
             </div>
-            {% endfor %}
+        </form>
+    </section>
+    {% endif %}
+
+    <div class="st-section">
+        <div class="st-search">
+            <i class="bi bi-search"></i>
+            <input type="search" id="bwSearch" class="form-control" placeholder="Search exercises" autocomplete="off" aria-label="Search exercises">
         </div>
+    </div>
+
+    <section class="st-section" id="bwSelectedSection" style="display: none;">
+        <div class="st-label"><span>On <span class="bw-count" id="bwSelectedCount">0</span></span></div>
+        <div class="st-group bw-list" id="bwSelectedList"></div>
+    </section>
+
+    <section class="st-section" id="bwAvailableSection">
+        <div class="st-label"><span>Off</span></div>
+        <div class="st-group bw-list" id="bwAvailableList"></div>
+    </section>
+
+    <div class="st-empty" id="bwNoResults" style="display: none;">
+        <i class="bi bi-search"></i>
+        No exercises match that.
+    </div>
+
+    {# All rows start here; the script sorts them into On / Off. #}
+    <div id="bwAllRows" style="display: none;">
+        {% for row in bodyweight_rows %}
+        <form method="POST" action="{{ url_for('more_settings') }}#bodyweight-exercises" class="st-row bw-row" data-no-loading="true" data-name="{{ row.name|lower }}" data-enabled="{{ 'true' if row.enabled else 'false' }}">
+            <input type="hidden" name="form_type" value="bodyweight_exercise">
+            <input type="hidden" name="exercise_name" value="{{ row.name }}">
+            <input type="hidden" name="is_bodyweight" value="{{ 0 if row.enabled else 1 }}">
+            <span class="st-row-main">
+                <span class="bw-name">{{ row.name }}</span>
+                {% if row.source in ('auto', 'default') or row.conflict.total %}
+                <span class="st-row-desc">
+                    {%- if row.source == 'auto' %}Found automatically{% elif row.source == 'default' %}On by default{% endif -%}
+                    {%- if row.source in ('auto', 'default') and row.conflict.total %}<span class="st-dot"></span>{% endif -%}
+                    {%- if row.conflict.total %}{{ row.conflict.total }} log{{ '' if row.conflict.total == 1 else 's' }}{% endif -%}
+                </span>
+                {% endif %}
+            </span>
+            <button type="submit" class="st-switch{{ ' is-on' if row.enabled }}" role="switch" aria-checked="{{ 'true' if row.enabled else 'false' }}" aria-label="{{ row.name }} uses bodyweight"></button>
+        </form>
+        {% endfor %}
     </div>
 </div>
 
 <style>
-    /* ── Search ── */
-    .bw-search-wrap {
-        position: relative;
-    }
-    .bw-search-wrap i {
-        position: absolute;
-        left: 0.65rem;
-        top: 50%;
-        transform: translateY(-50%);
-        color: var(--text-muted);
-        font-size: 0.8rem;
-        pointer-events: none;
-    }
-    .bw-search-input {
-        width: 100%;
-        background: var(--card-bg-solid);
-        border: 1px solid var(--border-subtle);
-        border-radius: 10px;
-        color: var(--text-primary);
-        padding: 0.4rem 0.75rem 0.4rem 2rem;
-        font-size: 0.8rem;
-        transition: border-color 0.2s;
-    }
-    .bw-search-input:focus {
-        outline: none;
-        border-color: var(--gold-primary);
-        box-shadow: 0 0 0 2px var(--gold-glow);
-    }
-    .bw-search-input::placeholder {
-        color: var(--text-muted);
-    }
+        .bw-list > .bw-row.is-first { border-top: 0; }
+    .bw-row { min-height: 56px; padding-top: 12px; padding-bottom: 12px; margin: 0; }
+    .bw-name { display: block; font-size: 0.93rem; font-weight: 600; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .bw-count { margin-left: 6px; color: var(--st-accent); }
 
-    /* Counter badge */
-    .bw-counter {
-        font-size: 0.7rem;
-        padding: 4px 10px;
-        border-radius: 20px;
-        background: var(--gold-subtle);
-        color: var(--gold-primary);
-        font-weight: 600;
-        white-space: nowrap;
-    }
-
-    /* ── Section Labels ── */
-    .bw-section-label {
-        display: flex;
-        align-items: center;
-        gap: 0.4rem;
-        font-size: 0.68rem;
-        text-transform: uppercase;
-        letter-spacing: 1.5px;
-        color: var(--text-muted);
-        font-weight: 600;
-        margin-bottom: 0.5rem;
-        padding-left: 2px;
-    }
-    .bw-section-label i {
-        font-size: 0.75rem;
-    }
-
-    .bw-divider {
-        height: 1px;
-        background: var(--border-subtle);
-        margin: 0.75rem 0;
-    }
-
-    /* ── Exercise Rows ── */
-    .bw-list {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }
-    .bw-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        padding: 0.5rem 0.65rem;
-        border: 1px solid var(--border-subtle);
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.02);
-        transition: border-color 0.15s, background 0.15s;
-    }
-    .bw-row:hover {
-        border-color: rgba(212, 175, 55, 0.2);
-        background: rgba(255, 255, 255, 0.04);
-    }
-    .bw-row[data-enabled="true"] {
-        border-color: rgba(34, 197, 94, 0.2);
-        background: rgba(34, 197, 94, 0.04);
-    }
-    .bw-row[data-enabled="true"]:hover {
-        border-color: rgba(34, 197, 94, 0.35);
-    }
-
-    .bw-row-info {
-        min-width: 0;
-        flex: 1;
-    }
-    .bw-row-name {
-        font-weight: 600;
-        font-size: 0.82rem;
-        color: var(--text-primary);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .bw-row-tags {
-        display: flex;
-        align-items: center;
-        gap: 0.3rem;
-        margin-top: 1px;
-    }
-
-    /* ── Tags ── */
-    .bw-tag {
-        font-size: 0.6rem;
-        padding: 1px 6px;
-        border-radius: 4px;
-        font-weight: 500;
-        letter-spacing: 0.3px;
-    }
-    .bw-tag.tag-auto,
-    .bw-tag.tag-default {
-        color: var(--gold-primary);
-        background: var(--gold-subtle);
-    }
-    .bw-tag.tag-logs {
-        color: var(--text-muted);
-        background: rgba(255, 255, 255, 0.05);
-    }
-
-    /* ── Toggle Buttons ── */
-    .bw-toggle-btn {
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
-        border: none;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.15rem;
-        cursor: pointer;
-        transition: all 0.2s;
-        flex-shrink: 0;
-    }
-    .bw-toggle-on {
-        background: rgba(34, 197, 94, 0.15);
-        color: #22c55e;
-    }
-    .bw-toggle-on:hover {
-        background: rgba(239, 68, 68, 0.15);
-        color: #ef4444;
-    }
-    .bw-toggle-on:hover i::before {
-        content: "\F62A"; /* bi-x-circle-fill */
-    }
-    .bw-toggle-off {
-        background: var(--gold-subtle);
-        color: var(--gold-primary);
-    }
-    .bw-toggle-off:hover {
-        background: rgba(34, 197, 94, 0.15);
-        color: #22c55e;
-    }
-
-    /* ── No Results ── */
-    .bw-no-results {
-        text-align: center;
-        padding: 2rem 1rem;
-        color: var(--text-muted);
-        font-size: 0.85rem;
-    }
-
-    /* ── Conflict Card ── */
-    .bw-clarify-card {
-        border: 1px solid rgba(245, 158, 11, 0.35);
+    .bw-clarify { border-color: var(--st-warn-line); background: linear-gradient(var(--st-warn-bg), var(--st-warn-bg)), var(--card-bg-solid); }
+    .bw-clarify-head { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 16px; }
+    .bw-clarify-head > i { color: var(--st-warn); font-size: 1.15rem; margin-top: 1px; }
+    .bw-clarify-options { display: grid; gap: 8px; }
+    .bw-opt {
+        display: flex; gap: 12px; align-items: flex-start;
+        padding: 12px 14px;
+        border: 1px solid var(--st-hair);
         border-radius: 12px;
-        background: rgba(245, 158, 11, 0.06);
-        padding: 0.85rem;
-    }
-    .bw-clarify-options {
-        display: grid;
-        gap: 0.4rem;
-    }
-    .bw-clarify-opt {
-        display: flex;
-        gap: 0.5rem;
-        padding: 0.55rem 0.65rem;
-        border: 1px solid var(--border-subtle);
-        border-radius: 8px;
-        background: rgba(0, 0, 0, 0.12);
         cursor: pointer;
-        font-size: 0.8rem;
+        transition: border-color var(--transition-fast), background var(--transition-fast);
     }
-    .bw-clarify-opt input {
-        margin-top: 2px;
-    }
-    .bw-clarify-opt strong {
-        display: block;
-        font-size: 0.78rem;
-    }
-    .bw-clarify-opt small {
-        display: block;
-        color: var(--text-muted);
-        font-size: 0.7rem;
-        margin-top: 1px;
-    }
+    .bw-opt:has(input:checked) { border-color: var(--border-gold); background: var(--gold-subtle); }
+    .bw-opt input { accent-color: var(--gold-primary); margin-top: 3px; flex: none; }
+    .bw-opt b { display: block; font-size: 0.88rem; font-weight: 600; }
+    .bw-opt small { display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; line-height: 1.4; }
 </style>
 
 <script>
@@ -380,6 +147,34 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     selectedCountEl.textContent = selected.length;
 
+    /* Come back to the same spot after a switch reloads the page */
+    const SCROLL_KEY = 'bwScrollY';
+    try {
+        const saved = sessionStorage.getItem(SCROLL_KEY);
+        if (saved !== null) {
+            sessionStorage.removeItem(SCROLL_KEY);
+            if (!document.querySelector('.bw-clarify')) {
+                window.scrollTo({ top: parseInt(saved, 10) || 0, behavior: 'instant' });
+            }
+        }
+    } catch (e) {}
+    allRows.forEach(row => row.addEventListener('submit', () => {
+        try { sessionStorage.setItem(SCROLL_KEY, String(window.scrollY)); } catch (e) {}
+    }));
+
+    /* Hairlines sit between visible rows only */
+    const markFirst = () => {
+        [selectedList, availableList].forEach(list => {
+            let first = true;
+            list.querySelectorAll('.bw-row').forEach(r => {
+                const shown = r.style.display !== 'none';
+                r.classList.toggle('is-first', shown && first);
+                if (shown) first = false;
+            });
+        });
+    };
+    markFirst();
+
     /* Search */
     if (searchInput) {
         searchInput.addEventListener('input', () => {
@@ -397,6 +192,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
 
+            markFirst();
             selectedSection.style.display = visibleSelected > 0 ? '' : 'none';
             availableSection.style.display = visibleAvailable > 0 ? '' : 'none';
             noResults.style.display = (visibleSelected + visibleAvailable === 0) ? 'block' : 'none';

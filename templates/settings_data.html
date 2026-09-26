@@ -1,103 +1,75 @@
 {% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
 {% block content %}
-<div class="row justify-content-center mt-3 mt-md-4">
-    <div class="col-12 col-md-10 col-lg-8">
-        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
-            <div>
-                <h2 class="fw-bold mb-2" style="font-size: clamp(1.5rem, 6vw, 2rem);">Data</h2>
-                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Export, import &amp; manage your workouts</p>
-            </div>
-            <a href="{{ url_for('user_settings') }}" class="btn btn-gold-outline">
-                <i class="bi bi-arrow-left me-2"></i>Back to Settings
-            </a>
-        </div>
+{{ st.styles() }}
+<div class="st">
+    {{ st.head('Your data', 'Take a copy of your workouts, add many at once, or clear some out.', url_for('user_settings'), 'Back to settings') }}
 
-        <div class="card mb-4">
-            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
-                <i class="bi bi-download text-gold"></i>
-                <h5 class="mb-0 fw-bold">Export</h5>
-            </div>
-
-            <div class="export-choice-grid mb-3">
-                <label class="export-choice-card">
-                    <input type="radio" name="export_scope" value="all" checked class="export-choice-input">
-                    <span class="export-choice-text">All workouts</span>
-                </label>
-                <label class="export-choice-card">
-                    <input type="radio" name="export_scope" value="range" class="export-choice-input">
-                    <span class="export-choice-text">Date range</span>
-                </label>
-            </div>
-
-            <div class="export-choice-grid mb-3">
-                <label class="export-choice-card">
-                    <input type="radio" name="export_format" value="csv" checked class="export-choice-input">
-                    <span class="export-choice-text">CSV (~{{ csv_size_kb }}KB)</span>
-                </label>
-                <label class="export-choice-card">
-                    <input type="radio" name="export_format" value="json" class="export-choice-input">
-                    <span class="export-choice-text">JSON (~{{ json_size_kb }}KB)</span>
-                </label>
-            </div>
-
-            <div id="exportDateRange" class="row g-2 mb-3" style="display: none;">
-                <div class="col-12 col-md-6">
-                    <label class="form-label text-muted mb-1" style="font-size: var(--fs-xs);">Start date</label>
-                    <input type="date" id="exportStartDate" class="form-control form-control-sm export-date-input">
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label text-muted mb-1" style="font-size: var(--fs-xs);">End date</label>
-                    <input type="date" id="exportEndDate" class="form-control form-control-sm export-date-input">
+    <section class="st-section">
+        <div class="st-label">Export</div>
+        <div class="st-group st-pad">
+            <div class="st-field">
+                <span class="st-field-label">Workouts</span>
+                <div class="st-seg" role="radiogroup" aria-label="Which workouts">
+                    <label class="st-seg-opt"><input type="radio" name="export_scope" value="all" checked><span>All</span></label>
+                    <label class="st-seg-opt"><input type="radio" name="export_scope" value="range"><span>Date range</span></label>
                 </div>
             </div>
 
-            <button type="button" id="downloadExportBtn" class="btn btn-gold-solid w-100">
-                <i class="bi bi-box-arrow-down me-2"></i>Download Export
+            <div id="exportDateRange" class="dt-range" style="display: none;">
+                <div class="st-field">
+                    <label for="exportStartDate">From</label>
+                    <input type="date" id="exportStartDate" class="form-control">
+                </div>
+                <div class="st-field">
+                    <label for="exportEndDate">To</label>
+                    <input type="date" id="exportEndDate" class="form-control">
+                </div>
+            </div>
+
+            <div class="st-field">
+                <span class="st-field-label">File type</span>
+                <div class="st-seg" role="radiogroup" aria-label="File type">
+                    <label class="st-seg-opt"><input type="radio" name="export_format" value="csv" checked><span>CSV <small>~{{ csv_size_kb }} KB</small></span></label>
+                    <label class="st-seg-opt"><input type="radio" name="export_format" value="json"><span>JSON <small>~{{ json_size_kb }} KB</small></span></label>
+                </div>
+                <div class="st-hint">CSV opens in Excel or Numbers. JSON keeps every detail.</div>
+            </div>
+
+            <button type="button" id="downloadExportBtn" class="st-btn st-btn-primary st-btn-block mt-4">
+                <i class="bi bi-download"></i>Download
             </button>
         </div>
+    </section>
 
-        <div class="card mb-4">
-            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
-                <i class="bi bi-journal-plus text-gold"></i>
-                <h5 class="mb-0 fw-bold">Import</h5>
-            </div>
-            <a href="{{ url_for('bulk_import') }}" class="btn btn-gold-outline w-100">
-                <i class="bi bi-box-arrow-in-down me-2"></i>Import Workouts in Bulk
+    <section class="st-section">
+        <div class="st-label">Import &amp; clean up</div>
+        <div class="st-group">
+            <a href="{{ url_for('bulk_import') }}" class="st-row">
+                <i class="bi bi-box-arrow-in-down st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">Bulk import</span>
+                    <span class="st-row-desc">Paste many workout days at once</span>
+                </span>
+                <i class="bi bi-chevron-right st-chev"></i>
             </a>
-            <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                <i class="bi bi-info-circle me-1"></i>Paste multiple workout days at once on the next page.
-            </small>
-        </div>
-
-        <div class="card mb-4">
-            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
-                <i class="bi bi-trash3 text-gold"></i>
-                <h5 class="mb-0 fw-bold">Bulk Delete</h5>
-            </div>
-            <a href="{{ url_for('user_dashboard', username=user.username, bulk_delete=1, _anchor='recent-workouts') }}" class="btn btn-gold-outline w-100">
-                <i class="bi bi-check2-square me-2"></i>Select Multiple to Delete
-            </a>
-            <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                <i class="bi bi-info-circle me-1"></i>Opens your recent workouts in selection mode.
-            </small>
-        </div>
-
-        <div class="text-center mt-3">
-            <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
-                <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+            <a href="{{ url_for('user_dashboard', username=user.username, bulk_delete=1, _anchor='recent-workouts') }}" class="st-row">
+                <i class="bi bi-trash3 st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">Delete several workouts</span>
+                    <span class="st-row-desc">Opens your history so you can pick them</span>
+                </span>
+                <i class="bi bi-chevron-right st-chev"></i>
             </a>
         </div>
-    </div>
+    </section>
 </div>
 <style>
-    .export-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-    .export-choice-card { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--border-subtle); border-radius: 10px; background: var(--card-bg-solid); color: var(--text-primary); cursor: pointer; transition: border-color var(--transition-base), box-shadow var(--transition-base); }
-    .export-choice-card:hover { border-color: var(--gold-primary); }
-    .export-choice-input { accent-color: var(--gold-primary); margin-top: 0; }
-    .export-choice-text { font-size: 0.78rem; font-weight: 600; }
-    .export-date-input { background-color: var(--bg-secondary); border-color: var(--border-subtle); color: var(--text-primary); box-shadow: none; }
-    .export-date-input:focus { border-color: var(--gold-primary); box-shadow: 0 0 0 0.2rem rgba(212, 175, 55, 0.18); }
-    @media (max-width: 576px) { .export-choice-grid { grid-template-columns: 1fr; } }
+    .dt-range { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
+    .dt-range > .st-field + .st-field { margin-top: 0; }
+    .dt-range + .st-field { margin-top: 18px; }
+    .dt-range .form-control { min-width: 0; color-scheme: dark; }
+    [data-theme="light"] .dt-range .form-control { color-scheme: light; }
 </style>
 <script>
     document.addEventListener('DOMContentLoaded', () => {

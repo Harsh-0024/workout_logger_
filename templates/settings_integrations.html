@@ -1,84 +1,82 @@
 {% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
 {% block content %}
-<div class="row justify-content-center mt-3 mt-md-4">
-    <div class="col-12 col-md-10 col-lg-8">
-        <div class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3 mb-4">
-            <div>
-                <h2 class="fw-bold mb-2" style="font-size: clamp(1.5rem, 6vw, 2rem);">Integrations &amp; Tools</h2>
-                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">API keys, shortcuts &amp; automation</p>
-            </div>
-            <a href="{{ url_for('user_settings') }}" class="btn btn-gold-outline">
-                <i class="bi bi-arrow-left me-2"></i>Back to Settings
-            </a>
+{{ st.styles() }}
+<div class="st">
+    {{ st.head('Integrations', 'Connect AI suggestions and Apple Shortcuts.', url_for('user_settings'), 'Back to settings') }}
+
+    <section class="st-section">
+        <div class="st-label">
+            <span>Gemini API keys</span>
+            {% if user_api_keys %}<span class="st-label-aside">{{ user_api_keys|length }} saved</span>{% endif %}
         </div>
-
-        <div class="card mb-4">
-            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
-                <i class="bi bi-stars text-gold"></i>
-                <h5 class="mb-0 fw-bold">AI API Keys</h5>
+        <div class="st-group">
+            {% for key in user_api_keys %}
+            <div class="st-row">
+                <i class="bi bi-key st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">{{ key.account_label or 'API key' }}</span>
+                    <span class="st-row-desc in-mask">•••• {{ key.api_key[-4:] if key.api_key else '' }}</span>
+                </span>
+                <form method="POST" action="{{ url_for('user_settings') }}" class="m-0"
+                      data-no-loading="true"
+                      data-confirm="true"
+                      data-confirm-title="Remove key"
+                      data-confirm-message="Remove “{{ key.account_label or 'API key' }}”? AI suggestions will use your other keys."
+                      data-confirm-cta="Remove"
+                      data-confirm-destructive="true">
+                    <input type="hidden" name="form_type" value="delete_api_key">
+                    <input type="hidden" name="key_id" value="{{ key.id }}">
+                    <button type="submit" class="st-icon-btn is-danger" aria-label="Remove {{ key.account_label or 'API key' }}" title="Remove"><i class="bi bi-trash3"></i></button>
+                </form>
             </div>
-            <p class="text-muted" style="font-size: var(--fs-sm);">
-                Add multiple Gemini API keys. The app will automatically rotate if one hits rate limits.
-            </p>
+            {% endfor %}
 
-            <form method="POST" action="{{ url_for('user_settings') }}" class="mb-3">
-                <input type="hidden" name="form_type" value="add_api_key">
-                <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">New API Key</label>
-                <div class="input-group mb-2">
-                    <input type="text" name="account_label" class="form-control" placeholder="Account name (e.g. Personal, Backup)" maxlength="100" autocomplete="off">
-                </div>
-                <div class="input-group">
-                    <input type="password" name="api_key" class="form-control" placeholder="Paste your Gemini API key" autocomplete="off" required>
-                    <button type="submit" class="btn btn-gold-solid">Add</button>
-                </div>
-                <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                    <i class="bi bi-shield-lock me-1"></i>Keys are stored securely and only used for AI recommendations.
-                </small>
-            </form>
-
-            {% if user_api_keys %}
-            <div class="d-grid gap-2">
-                {% for key in user_api_keys %}
-                <div class="d-flex align-items-center justify-content-between gap-3 p-2" style="border: 1px solid var(--border-subtle); border-radius: 12px;">
-                    <div>
-                        <div class="text-white fw-semibold" style="font-size: var(--fs-sm);">{{ key.account_label or 'API Key' }}</div>
-                        <div class="text-muted" style="font-size: var(--fs-xs);">****{{ key.api_key[-4:] if key.api_key else '' }}</div>
+            <details class="st-disclose in-add" {{ 'open' if not user_api_keys }}>
+                <summary class="st-row">
+                    <i class="bi bi-plus-lg st-row-ico"></i>
+                    <span class="st-row-main"><span class="st-row-title in-add-title">Add a key</span></span>
+                    <i class="bi bi-chevron-right st-chev"></i>
+                </summary>
+                <form method="POST" action="{{ url_for('user_settings') }}" class="in-add-form">
+                    <input type="hidden" name="form_type" value="add_api_key">
+                    <div class="st-field">
+                        <label for="apiKeyLabel">Name <span class="in-optional">optional</span></label>
+                        <input type="text" id="apiKeyLabel" name="account_label" class="form-control" placeholder="e.g. Personal, Backup" maxlength="100" autocomplete="off">
                     </div>
-                    <form method="POST" action="{{ url_for('user_settings') }}" class="m-0">
-                        <input type="hidden" name="form_type" value="delete_api_key">
-                        <input type="hidden" name="key_id" value="{{ key.id }}">
-                        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
-                    </form>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="text-muted" style="font-size: var(--fs-sm);">No API keys saved yet.</div>
-            {% endif %}
+                    <div class="st-field">
+                        <label for="apiKeyValue">Key</label>
+                        <input type="password" id="apiKeyValue" name="api_key" class="form-control" placeholder="Paste your Gemini API key" autocomplete="off" required>
+                    </div>
+                    <button type="submit" class="st-btn st-btn-primary st-btn-block mt-4" data-loading-text="Saving">Save key</button>
+                </form>
+            </details>
         </div>
+        <p class="st-foot">Used only for AI suggestions. With more than one key, the app moves to the next when one hits its limit. Keys are stored securely.</p>
+    </section>
 
-        <div class="card mb-4">
-            <div class="d-flex align-items-center gap-2 mb-3 mb-md-4">
-                <i class="bi bi-link-45deg text-gold"></i>
-                <h5 class="mb-0 fw-bold">Shortcuts &amp; Automation</h5>
-            </div>
-            <div class="d-grid gap-2 gap-md-3">
-                <a href="{{ url_for('shortcut_urls') }}" class="btn btn-gold-outline">
-                    <i class="bi bi-apple me-2"></i>Apple Shortcuts
-                </a>
-                {% if current_user.is_admin() %}
-                <a href="{{ url_for('admin_dashboard') }}" class="btn btn-gold-outline">
-                    <i class="bi bi-shield-lock me-2"></i>Admin Dashboard
-                </a>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="text-center mt-3">
-            <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
-                <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+    <section class="st-section">
+        <div class="st-label">Shortcuts &amp; automation</div>
+        <div class="st-group">
+            <a href="{{ url_for('shortcut_urls') }}" class="st-row">
+                <i class="bi bi-apple st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">Apple Shortcuts</span>
+                    <span class="st-row-desc">Log and get workouts from your iPhone or Mac</span>
+                </span>
+                <i class="bi bi-chevron-right st-chev"></i>
             </a>
         </div>
-    </div>
+    </section>
 </div>
+<style>
+    .in-mask { font-variant-numeric: tabular-nums; letter-spacing: 0.04em; }
+    .in-add > summary .in-add-title { color: var(--st-accent); }
+    .in-add[open] > summary { padding-bottom: 6px; }
+    .in-add-form { padding: 0 18px 20px 54px; }
+    .in-optional { font-weight: 400; color: var(--text-subtle); margin-left: 4px; }
+    @media (max-width: 576px) {
+        .in-add-form { padding: 0 16px 18px; }
+    }
+</style>
 {% endblock %}
