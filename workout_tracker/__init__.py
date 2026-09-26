@@ -17,6 +17,7 @@ from services.email_service import EmailService
 from services.email_queue import email_queue
 from utils.logger import logger
 
+from .app_icons import IPHONE_SCREENS, splash_filename
 from .routes.admin import register_admin_routes
 from .routes.auth import register_auth_routes
 from .routes.plans import register_plan_routes
@@ -53,6 +54,11 @@ def create_app(config_object=Config, init_db: bool = True):
         return {
             'ENABLE_CSRF': bool(app.config.get('WTF_CSRF_ENABLED')),
         }
+
+    app.jinja_env.globals['iphone_launch_screens'] = [
+        (css_w, css_h, ratio, splash_filename(css_w, css_h, ratio))
+        for css_w, css_h, ratio in IPHONE_SCREENS
+    ]
 
     if init_db:
         try:

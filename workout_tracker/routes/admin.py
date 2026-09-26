@@ -1,5 +1,4 @@
 import time
-from pathlib import Path
 
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import current_user
@@ -9,6 +8,7 @@ from services.admin import AdminError, AdminService
 from services.email_queue import email_queue
 from utils.logger import logger
 
+from ..app_icons import write_icon_set
 from .decorators import require_admin
 
 
@@ -59,25 +59,11 @@ def register_admin_routes(app):
             return False
 
     def _save_app_icon(file_storage):
-        icon_dir = Path(app.static_folder) / 'icons'
-        icon_dir.mkdir(parents=True, exist_ok=True)
-
         # Validate the image file first
         if not _validate_image_file(file_storage):
             raise ValueError("Invalid image file")
 
-        image = Image.open(file_storage.stream)
-        image = image.convert('RGBA')
-
-        sizes = [
-            (512, 'app-icon-512.png'),
-            (192, 'app-icon-192.png'),
-            (180, 'apple-touch-icon.png'),
-        ]
-
-        for size, filename in sizes:
-            resized = image.resize((size, size), Image.LANCZOS)
-            resized.save(icon_dir / filename, format='PNG', optimize=True)
+        write_icon_set(Image.open(file_storage.stream), app.static_folder)
 
     def send_deletion_email_async(user_info):
         """Queue deletion email for reliable delivery."""
