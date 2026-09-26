@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'workout-tracker-v1';
+const CACHE_VERSION = 'workout-tracker-v2';
 const OFFLINE_URL = '/static/offline.html';
 
 const CORE_ASSETS = [
@@ -7,9 +7,7 @@ const CORE_ASSETS = [
   '/stats',
   '/retrieve/categories',
   OFFLINE_URL,
-  '/static/manifest.json',
-  '/static/icons/app-icon-192.png',
-  '/static/icons/app-icon-512.png'
+  '/static/manifest.json'
 ];
 
 self.addEventListener('install', (event) => {

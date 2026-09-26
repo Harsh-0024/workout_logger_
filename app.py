@@ -66,7 +66,7 @@ def health_check():
 def require_db_ready_for_requests():
     if request.path == '/health':
         return None
-    if request.path.startswith('/static/'):
+    if request.path.startswith(('/static/', '/app-icon/')) or request.path == '/favicon.ico':
         return None
     if app.config.get("DB_READY", False):
         return None

@@ -8,7 +8,6 @@ from services.admin import AdminError, AdminService
 from services.email_queue import email_queue
 from utils.logger import logger
 
-from ..app_icons import write_icon_set
 from .decorators import require_admin
 
 
@@ -63,7 +62,7 @@ def register_admin_routes(app):
         if not _validate_image_file(file_storage):
             raise ValueError("Invalid image file")
 
-        write_icon_set(Image.open(file_storage.stream), app.static_folder)
+        app.extensions['app_icon_store'].save(Image.open(file_storage.stream))
 
     def send_deletion_email_async(user_info):
         """Queue deletion email for reliable delivery."""
@@ -175,7 +174,7 @@ def register_admin_routes(app):
         try:
             _save_app_icon(icon_file)
             flash(
-                "App icon updated. Remove and re-add the app to your Home Screen to refresh the icon.",
+                "App icon updated everywhere. Phones keep the old one until the app is removed and added to the Home Screen again.",
                 "success",
             )
         except ValueError as e:

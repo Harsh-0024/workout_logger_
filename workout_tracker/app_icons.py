@@ -1,31 +1,32 @@
 """Every icon and launch screen the app ships, built from one square source image.
 
-The admin "app icon" upload and a one-off local run both go through
-write_icon_set(), so the browser tab, home screen and launch screens never
-drift apart.
+An admin upload goes through prepare_source() once (sized, centered, stored in
+the database); render() then builds each file on demand, so the browser tab,
+home screen and launch screens always match whatever icon is current.
 """
-from pathlib import Path
+import io
 
+import numpy as np
 from PIL import Image, ImageChops
 
-# Launch screens and the manifest's background_color are pure black; the
-# figure is cut out onto it so no square edge shows around it.
-BACKGROUND = (0, 0, 0, 255)
-DARK_CUTOFF = (30, 60)  # brightness range over which the background fades out
+SOURCE_SIZE = 1024
+FIGURE_SHARE = 0.78   # the figure's width (or height) as a share of the icon
+OPTICAL_LIFT = 0.03   # visual weight sits this far above the true center
+FIGURE_CUTOFF = (30, 60)  # difference from the background that counts as figure
 
-PLAIN_SIZES = [
-    (512, 'app-icon-512.png'),
-    (192, 'app-icon-192.png'),
-    (180, 'apple-touch-icon.png'),
-    (32, 'favicon-32.png'),
-]
+PLAIN_SIZES = {
+    'app-icon-512.png': 512,
+    'app-icon-192.png': 192,
+    'apple-touch-icon.png': 180,
+    'favicon-32.png': 32,
+}
 
 # Android crops "maskable" icons to a circle or squircle; the figure has to sit
 # inside the middle 80% to survive that.
-MASKABLE_SIZES = [
-    (512, 'maskable-512.png'),
-    (192, 'maskable-192.png'),
-]
+MASKABLE_SIZES = {
+    'maskable-512.png': 512,
+    'maskable-192.png': 192,
+}
 MASKABLE_SCALE = 0.88
 
 # iPhone launch screens (portrait): CSS width, CSS height, pixel ratio.
@@ -49,53 +50,105 @@ SPLASH_ICON_FRACTION = 0.5  # icon width as a share of the screen width
 
 
 def splash_filename(css_w, css_h, ratio):
-    return f'splash-{css_w * ratio}x{css_h * ratio}.png'
+    return f'splash/splash-{css_w * ratio}x{css_h * ratio}.png'
 
 
-def _knocked_out(image, size):
-    """The icon resized to `size` with its dark background made transparent.
+SPLASH_SIZES = {
+    splash_filename(css_w, css_h, ratio): (css_w * ratio, css_h * ratio)
+    for css_w, css_h, ratio in IPHONE_SCREENS
+}
 
-    The icon's own background has a faint warm glow; on a pure-black launch
-    screen that glow shows as a square. Anything darker than DARK_CUTOFF fades
-    out, while the bright figure is kept exactly as drawn.
+FILENAMES = frozenset({*PLAIN_SIZES, *MASKABLE_SIZES, *SPLASH_SIZES, 'favicon.ico'})
+
+
+def background_color(image):
+    """The icon's background: the median colour of its outer edge."""
+    rgb = np.asarray(image.convert('RGB'))
+    edge = np.concatenate([rgb[0], rgb[-1], rgb[:, 0], rgb[:, -1]])
+    return tuple(int(c) for c in np.median(edge, axis=0))
+
+
+def _figure_mask(image, bg):
+    """255 where the pixel is part of the figure, fading to 0 on the background."""
+    diff = ImageChops.difference(image.convert('RGB'), Image.new('RGB', image.size, bg))
+    r, g, b = diff.split()
+    low, high = FIGURE_CUTOFF
+    return ImageChops.lighter(r, ImageChops.lighter(g, b)).point(
+        lambda v: 0 if v <= low else 255 if v >= high else round(255 * (v - low) / (high - low))
+    )
+
+
+def prepare_source(image):
+    """Square, sized and optically centered icon on a flat background.
+
+    The figure is cut out of whatever background it came with, scaled so it
+    fills FIGURE_SHARE of the icon, centered left to right, and placed so its
+    visual weight sits OPTICAL_LIFT above the middle. Full-bleed artwork (no
+    background around it) is only squared and resized.
     """
-    icon = image.resize((size, size), Image.LANCZOS)
-    r, g, b, a = icon.split()
-    brightest = ImageChops.lighter(r, ImageChops.lighter(g, b))
-    low, high = DARK_CUTOFF
-    keep = brightest.point(lambda v: 0 if v <= low else 255 if v >= high else round(255 * (v - low) / (high - low)))
-    icon.putalpha(ImageChops.multiply(a, keep))
-    return icon
+    rgba = image.convert('RGBA')
+    flat = Image.alpha_composite(Image.new('RGBA', rgba.size, (0, 0, 0, 255)), rgba).convert('RGB')
+    bg = background_color(flat)
+
+    side = max(flat.size)
+    square = Image.new('RGB', (side, side), bg)
+    square.paste(flat, ((side - flat.width) // 2, (side - flat.height) // 2))
+
+    mask = _figure_mask(square, bg)
+    box = mask.point(lambda v: 255 if v > 127 else 0).getbbox()
+    if box is None or (box[2] - box[0] >= side * 0.97 and box[3] - box[1] >= side * 0.97):
+        return square.resize((SOURCE_SIZE, SOURCE_SIZE), Image.LANCZOS)
+
+    figure = square.crop(box)
+    figure_mask = mask.crop(box)
+    weights = np.asarray(figure_mask, dtype=np.float64)
+    centroid_y = (weights.sum(axis=1) * np.arange(weights.shape[0])).sum() / weights.sum()
+
+    scale = FIGURE_SHARE * SOURCE_SIZE / max(figure.width, figure.height)
+    size = (max(1, round(figure.width * scale)), max(1, round(figure.height * scale)))
+    figure = figure.resize(size, Image.LANCZOS)
+    figure_mask = figure_mask.resize(size, Image.LANCZOS)
+
+    x = (SOURCE_SIZE - size[0]) // 2
+    y = round(SOURCE_SIZE * (0.5 - OPTICAL_LIFT) - centroid_y * scale)
+    y = min(max(y, 0), SOURCE_SIZE - size[1])
+
+    out = Image.new('RGB', (SOURCE_SIZE, SOURCE_SIZE), bg)
+    out.paste(figure, (x, y), figure_mask)
+    return out
 
 
-def _on_black(canvas_size, icon):
-    canvas = Image.new('RGBA', canvas_size, BACKGROUND)
-    x = (canvas_size[0] - icon.width) // 2
-    y = (canvas_size[1] - icon.height) // 2
-    canvas.alpha_composite(icon, (x, y))
-    return canvas.convert('RGB')
+def _png(image):
+    buf = io.BytesIO()
+    image.save(buf, format='PNG', optimize=True)
+    return buf.getvalue()
 
 
-def write_icon_set(image, static_folder):
-    image = image.convert('RGBA')
-    static = Path(static_folder)
-    icon_dir = static / 'icons'
-    splash_dir = icon_dir / 'splash'
-    splash_dir.mkdir(parents=True, exist_ok=True)
+def _on_background(source, bg, canvas_size, icon_width):
+    canvas = Image.new('RGB', canvas_size, bg)
+    icon = source.resize((icon_width, icon_width), Image.LANCZOS)
+    canvas.paste(icon, ((canvas_size[0] - icon_width) // 2, (canvas_size[1] - icon_width) // 2))
+    return canvas
 
-    for size, filename in PLAIN_SIZES:
-        resized = image.resize((size, size), Image.LANCZOS)
-        resized.save(icon_dir / filename, format='PNG', optimize=True)
 
-    image.save(static / 'favicon.ico', format='ICO', sizes=[(16, 16), (32, 32), (48, 48)])
+def render(source, filename):
+    """The bytes of one icon file, built from a prepare_source() image."""
+    source = source.convert('RGB')
+    if filename in PLAIN_SIZES:
+        size = PLAIN_SIZES[filename]
+        return _png(source.resize((size, size), Image.LANCZOS))
+    if filename == 'favicon.ico':
+        buf = io.BytesIO()
+        source.save(buf, format='ICO', sizes=[(16, 16), (32, 32), (48, 48)])
+        return buf.getvalue()
 
-    for size, filename in MASKABLE_SIZES:
-        icon = _knocked_out(image, round(size * MASKABLE_SCALE))
-        _on_black((size, size), icon).save(icon_dir / filename, format='PNG', optimize=True)
-
-    for css_w, css_h, ratio in IPHONE_SCREENS:
-        width, height = css_w * ratio, css_h * ratio
-        icon = _knocked_out(image, round(width * SPLASH_ICON_FRACTION))
-        _on_black((width, height), icon).save(
-            splash_dir / splash_filename(css_w, css_h, ratio), format='PNG', optimize=True
-        )
+    # The source's background is flat, so pasting it onto a canvas of the same
+    # colour leaves no visible square around the figure.
+    bg = background_color(source)
+    if filename in MASKABLE_SIZES:
+        size = MASKABLE_SIZES[filename]
+        return _png(_on_background(source, bg, (size, size), round(size * MASKABLE_SCALE)))
+    if filename in SPLASH_SIZES:
+        width, height = SPLASH_SIZES[filename]
+        return _png(_on_background(source, bg, (width, height), round(width * SPLASH_ICON_FRACTION)))
+    raise KeyError(filename)

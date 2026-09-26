@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import date, datetime
 
-from flask import Flask, render_template, send_from_directory, jsonify, request
+from flask import Flask, render_template, jsonify, request
 from flask_login import LoginManager
 from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect, CSRFError
@@ -19,6 +19,7 @@ from utils.logger import logger
 
 from .app_icons import IPHONE_SCREENS, splash_filename
 from .routes.admin import register_admin_routes
+from .routes.app_icon import register_app_icon_routes
 from .routes.auth import register_auth_routes
 from .routes.plans import register_plan_routes
 from .routes.stats import register_stats_routes
@@ -97,6 +98,7 @@ def create_app(config_object=Config, init_db: bool = True):
         threading.Thread(target=process_email_queue, daemon=True).start()
 
     register_auth_routes(app, email_service)
+    register_app_icon_routes(app)
     register_admin_routes(app)
     register_workout_routes(app)
     register_stats_routes(app)
@@ -132,13 +134,6 @@ def create_app(config_object=Config, init_db: bool = True):
         if d is not None:
             return d.strftime('%d-%m-%Y')
         return str(date_obj)
-
-    @app.route('/favicon.ico')
-    def favicon():
-        favicon_path = os.path.join(app.static_folder, 'favicon.ico')
-        if os.path.exists(favicon_path):
-            return send_from_directory(app.static_folder, 'favicon.ico')
-        return '', 204
 
     @app.teardown_appcontext
     def shutdown_session(exception=None):

@@ -4,7 +4,7 @@
 
 {% macro brand() -%}
 <div class="au-brand">
-    <img src="{{ url_for('static', filename='icons/app-icon-192.png') }}" alt="" width="52" height="52">
+    <img src="{{ app_icon_url('app-icon-192.png') }}" alt="" width="52" height="52">
     <span>Workout Tracker</span>
 </div>
 {%- endmacro %}

@@ -1,7 +1,7 @@
 """
 Database models for the Workout Tracker application.
 """
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index, Boolean, Enum, event
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, Float, ForeignKey, Index, Boolean, Enum, LargeBinary, event
 from sqlalchemy.orm import declarative_base, sessionmaker, scoped_session, relationship
 from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy_utils import JSONType
@@ -384,6 +384,19 @@ class StatsExerciseView(Base):
     )
 
 
+class AppIcon(Base):
+    """The app icon an admin uploaded, stored here so every host serves the same one.
+
+    A single row (id 1). `image` is the already sized-and-centered square PNG;
+    `version` is its hash, used in icon URLs so browsers and phones refetch it.
+    """
+    __tablename__ = 'app_icon'
+    id = Column(Integer, primary_key=True)
+    image = Column(LargeBinary, nullable=False)
+    version = Column(String(16), nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+
 # --- MIGRATION HELPERS ---
 def migrate_schema():
     """Add missing columns to existing database tables."""
@@ -562,6 +575,9 @@ def migrate_schema():
 
             if 'stats_exercise_views' not in inspector.get_table_names():
                 StatsExerciseView.__table__.create(bind=conn, checkfirst=True)
+
+            if 'app_icon' not in inspector.get_table_names():
+                AppIcon.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
