@@ -251,6 +251,28 @@ class TestRouteRegressions(unittest.TestCase):
         self.session.commit()
         return owner_id
 
+    def test_new_accounts_start_with_a_copy_of_the_admin_rep_ranges(self):
+        from models import RepRange, _seed_user_data
+        owner = User(username="range_owner", role=UserRole.ADMIN, is_verified=True)
+        self.session.add(owner)
+        self.session.flush()
+        self.session.add(RepRange(user_id=owner.id, text_content="Bench Press: 5-8\nPull-Ups: 6-10"))
+        self.session.commit()
+
+        user = User(username="range_newcomer", role=UserRole.USER, is_verified=True)
+        self.session.add(user)
+        self.session.flush()
+        _seed_user_data(self.session, user)
+        self.session.commit()
+        copy = self.session.query(RepRange).filter_by(user_id=user.id).one()
+        self.assertEqual(copy.text_content, "Bench Press: 5-8\nPull-Ups: 6-10")
+
+        # A copy, not a link: the admin's later changes don't rewrite it.
+        self.session.query(RepRange).filter_by(user_id=owner.id).one().text_content = "Bench Press: 3-5"
+        self.session.commit()
+        self.assertEqual(self.session.query(RepRange).filter_by(user_id=user.id).one().text_content,
+                         "Bench Press: 5-8\nPull-Ups: 6-10")
+
     def test_new_accounts_follow_the_admin_plan_and_rep_ranges(self):
         user = User(username="brand_new", role=UserRole.USER, is_verified=True)
         self.session.add(user)

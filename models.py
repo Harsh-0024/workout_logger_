@@ -735,10 +735,14 @@ def _seed_user_data(session, user):
 
     existing_rep_ranges = session.query(RepRange).filter(RepRange.user_id == user.id).first()
     if not existing_rep_ranges:
-        default_rep_text = ""
-        for ex, rng in DEFAULT_REP_RANGES.items():
-            default_rep_text += f"{ex}: {rng}\n"
-        session.add(RepRange(user_id=user.id, text_content=default_rep_text))
+        # Their own rep ranges start as a copy of the main admin's, as they are today
+        # (what they get if they stop following); the built-in list if there are none.
+        from services.retrieve import _get_admin_rep_ranges_text
+
+        rep_text = _get_admin_rep_ranges_text(session)
+        if not rep_text:
+            rep_text = "".join(f"{ex}: {rng}\n" for ex, rng in DEFAULT_REP_RANGES.items())
+        session.add(RepRange(user_id=user.id, text_content=rep_text))
 
     existing_shortcut_map = session.query(ShortcutKeyMap).filter(ShortcutKeyMap.user_id == user.id).first()
     if not existing_shortcut_map:
