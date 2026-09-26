@@ -218,6 +218,26 @@ class TestRouteRegressions(unittest.TestCase):
         bad_token = self.client.post("/shortcut/log/not-a-token").get_json()
         self.assertEqual(bad_token["server"], "Local")
 
+    def test_apple_shortcuts_page_gives_one_key_that_works_for_both_shortcuts(self):
+        self._create_logged_in_user(username="shortcut_key_user")
+
+        page = self.client.get("/shortcut/urls").get_data(as_text=True)
+        self.assertIn("Apple Shortcuts", page)
+        self.assertIn("shortcuts/Log%20Workout.shortcut", page)
+        self.assertIn("shortcuts/Get%20Workout.shortcut", page)
+        key = re.search(r'value="([^"]+)"[^>]*aria-label="Shortcut key"', page).group(1)
+
+        log = self.client.post(f"/shortcut/log/{key}", data={"workout_text": ""}).get_json()
+        self.assertEqual(log["error"], "Please enter workout data.")  # key accepted, note was empty
+        pick = self.client.get(f"/shortcut/pick/{key}?format=json").get_json()
+        self.assertIn("Missing key", pick["error"])  # key accepted, no session named
+
+        for name in ("Log Workout", "Get Workout"):
+            download = self.client.get(f"/static/shortcuts/{name}.shortcut")
+            self.assertEqual(download.status_code, 200)
+            self.assertEqual(download.data[:4], b"AEA1")  # signed Shortcuts file
+            download.close()
+
     def test_shortcut_pick_lists_the_users_own_sessions(self):
         user = self._create_logged_in_user(username="shortcut_list_user")
         self.session.add(Plan(user_id=user.id, text_content="Session 1 - Push\nBench Press - [3, 6-8]\n\nSession 2 - Pull\nPull Ups - [3, 6-8]"))
@@ -464,7 +484,7 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         page = response.get_data(as_text=True)
-        self.assertIn("Shortcut URLs", page)
+        self.assertIn("Apple Shortcuts", page)
         self.assertNotIn("Shortcut Retrieve URL", page)
 
     def test_more_settings_shows_bodyweight_exercise_controls(self):

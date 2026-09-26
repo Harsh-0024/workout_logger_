@@ -1,56 +1,51 @@
 {% extends 'base.html' %}
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-12 col-lg-10">
+    <div class="col-12 col-lg-8">
         <div class="card">
             <div class="text-center mb-4">
                 <div class="mb-3">
-                    <i class="bi bi-link-45deg" style="font-size: clamp(2.75rem, 8vw, 3.5rem); color: var(--gold-primary); opacity: 0.65;"></i>
+                    <i class="bi bi-apple" style="font-size: clamp(2.5rem, 8vw, 3.25rem); color: var(--gold-primary); opacity: 0.65;"></i>
                 </div>
-                <h2 class="fw-bold mb-2" style="font-size: clamp(1.4rem, 5vw, 2rem);">Shortcut URLs</h2>
-                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Use these private URLs in Apple Shortcuts.</p>
+                <h2 class="fw-bold mb-2" style="font-size: clamp(1.4rem, 5vw, 2rem);">Apple Shortcuts</h2>
+                <p class="text-muted mb-0 mx-auto" style="font-size: var(--fs-sm); max-width: 32rem;">
+                    Log and get workouts from your iPhone or Mac. The shortcuts use Railway and switch to Render by themselves if Railway is down.
+                </p>
             </div>
 
-            {% if deployments|length > 1 %}
-            <div class="shortcut-host-switch" role="tablist" aria-label="Deployment">
-                {% for d in deployments %}
-                <button type="button" class="shortcut-host-btn{% if loop.first %} active{% endif %}" role="tab"
-                        aria-selected="{{ 'true' if loop.first else 'false' }}" data-host-target="{{ loop.index }}">{{ d.name }}</button>
-                {% endfor %}
-            </div>
-            {% endif %}
-
-            {% for d in deployments %}
-            <div class="shortcut-url-list" data-host-panel="{{ loop.index }}"{% if not loop.first %} hidden{% endif %}>
-                <section class="shortcut-url-item">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <i class="bi bi-phone-vibrate text-gold"></i>
-                        <h6 class="fw-semibold mb-0">Log URL</h6>
-                    </div>
-                    <div class="input-group">
-                        <input type="text" class="form-control shortcut-url-input" value="{{ d.log_url }}" readonly aria-label="{{ d.name }} shortcut log URL">
-                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ d.log_url }}">
+            <section class="as-step">
+                <div class="as-step-num">1</div>
+                <div class="as-step-body">
+                    <h6 class="fw-semibold mb-1">Copy your shortcut key</h6>
+                    <p class="text-muted mb-3" style="font-size: var(--fs-sm);">Each shortcut asks for it once, when you add it. Keep it private.</p>
+                    <div class="input-group as-copy">
+                        <input type="text" class="form-control as-copy-input" value="{{ shortcut_key }}" readonly aria-label="Shortcut key">
+                        <button type="button" class="btn btn-gold-outline as-copy-btn" data-copy-value="{{ shortcut_key }}">
                             <i class="bi bi-copy me-2"></i>Copy
                         </button>
                     </div>
-                    <div class="text-muted mt-2" style="font-size: var(--fs-xs);">POST body field: <code>workout_text</code></div>
-                </section>
+                </div>
+            </section>
 
-                <section class="shortcut-url-item">
-                    <div class="d-flex align-items-center gap-2 mb-2">
-                        <i class="bi bi-clipboard2-check text-gold"></i>
-                        <h6 class="fw-semibold mb-0">Retrieve URL</h6>
+            <section class="as-step">
+                <div class="as-step-num">2</div>
+                <div class="as-step-body">
+                    <h6 class="fw-semibold mb-1">Add the shortcuts</h6>
+                    <p class="text-muted mb-3" style="font-size: var(--fs-sm);">Open this page on your iPhone to add them there. Paste your key when asked.</p>
+                    <div class="as-downloads">
+                        <a class="as-download" href="{{ url_for('static', filename='shortcuts/Log Workout.shortcut') }}" download="Log Workout.shortcut">
+                            <i class="bi bi-journal-plus"></i>
+                            <span><b>Log Workout</b><small>Pick today's note and log it</small></span>
+                            <i class="bi bi-download as-download-icon"></i>
+                        </a>
+                        <a class="as-download" href="{{ url_for('static', filename='shortcuts/Get Workout.shortcut') }}" download="Get Workout.shortcut">
+                            <i class="bi bi-journal-arrow-down"></i>
+                            <span><b>Get Workout</b><small>Pick a session and save it as a note</small></span>
+                            <i class="bi bi-download as-download-icon"></i>
+                        </a>
                     </div>
-                    <div class="input-group">
-                        <input type="text" class="form-control shortcut-url-input" value="{{ d.retrieve_url }}" readonly aria-label="{{ d.name }} shortcut retrieve URL">
-                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ d.retrieve_url }}">
-                            <i class="bi bi-copy me-2"></i>Copy
-                        </button>
-                    </div>
-                    <div class="text-muted mt-2" style="font-size: var(--fs-xs);">Add <code>?key=URL%20Encoded%20Text</code> to pick a session.</div>
-                </section>
-            </div>
-            {% endfor %}
+                </div>
+            </section>
 
             <div class="d-grid gap-2 gap-md-3 mt-4">
                 <a href="{{ url_for('shortcut_key_map_settings') }}" class="btn btn-gold-outline">
@@ -60,109 +55,180 @@
                     <i class="bi bi-arrow-left me-2"></i>Back to Settings
                 </a>
             </div>
+
+            <details class="as-advanced mt-4">
+                <summary>Links for building your own shortcut</summary>
+                <p class="text-muted mt-3 mb-3" style="font-size: var(--fs-xs);">
+                    The key is the same in every link; only the website differs. The shortcuts above already try both.
+                    Log: POST the note as <code>workout_text</code>. Retrieve: add <code>?key=</code> and a session name.
+                </p>
+                {% for d in deployments %}
+                <div class="as-host">
+                    <span class="as-host-name">{{ d.name }}</span>
+                    <div class="as-link">
+                        <span class="text-muted">Log URL</span>
+                        <div class="input-group as-copy">
+                            <input type="text" class="form-control as-copy-input" value="{{ d.log_url }}" readonly aria-label="{{ d.name }} shortcut log URL">
+                            <button type="button" class="btn btn-gold-outline as-copy-btn" data-copy-value="{{ d.log_url }}"><i class="bi bi-copy"></i></button>
+                        </div>
+                    </div>
+                    <div class="as-link">
+                        <span class="text-muted">Retrieve URL</span>
+                        <div class="input-group as-copy">
+                            <input type="text" class="form-control as-copy-input" value="{{ d.retrieve_url }}" readonly aria-label="{{ d.name }} shortcut retrieve URL">
+                            <button type="button" class="btn btn-gold-outline as-copy-btn" data-copy-value="{{ d.retrieve_url }}"><i class="bi bi-copy"></i></button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </details>
         </div>
     </div>
 </div>
 
 <style>
-    .shortcut-url-list {
-        display: grid;
-        gap: 1rem;
-    }
-
-    .shortcut-host-switch {
+    .as-step {
         display: flex;
-        justify-content: center;
-        gap: 0.25rem;
-        margin: 0 auto 1.25rem;
-        padding: 0.25rem;
-        width: fit-content;
-        max-width: 100%;
-        border: 1px solid var(--border-subtle);
-        border-radius: 999px;
+        gap: 1rem;
+        padding: 1.25rem 0;
     }
 
-    .shortcut-host-btn {
-        border: 0;
-        background: transparent;
-        color: var(--text-muted, inherit);
+    .as-step + .as-step {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .as-step-num {
+        flex: none;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
         font-size: var(--fs-sm);
-        padding: 0.35rem 1.1rem;
-        border-radius: 999px;
+        font-weight: 600;
+        color: var(--gold-primary);
+        border: 1px solid rgba(212, 175, 55, 0.4);
+    }
+
+    .as-step-body {
+        flex: 1;
         min-width: 0;
-        overflow: hidden;
+    }
+
+    .as-copy-input {
+        font-size: var(--fs-sm);
+        min-width: 0;
         text-overflow: ellipsis;
+    }
+
+    .as-copy .as-copy-btn {
+        flex: none;
+        width: auto;
+        min-width: 0;
+        padding-inline: 1rem;
         white-space: nowrap;
     }
 
-    .shortcut-host-btn.active {
-        background: rgba(201, 169, 97, 0.16);
+    .as-downloads {
+        display: grid;
+        gap: 0.75rem;
+    }
+
+    .as-download {
+        display: flex;
+        align-items: center;
+        gap: 0.9rem;
+        padding: 0.9rem 1rem;
+        border: 1px solid var(--border-subtle);
+        border-radius: 12px;
+        color: inherit;
+        text-decoration: none;
+        transition: border-color 0.15s ease;
+    }
+
+    .as-download:hover,
+    .as-download:focus-visible {
+        border-color: rgba(212, 175, 55, 0.5);
+        color: inherit;
+    }
+
+    .as-download > .bi:first-child {
+        font-size: 1.35rem;
         color: var(--gold-primary);
     }
 
-    .shortcut-url-item {
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        padding: 1rem;
-        background: rgba(255, 255, 255, 0.025);
-    }
-
-    .shortcut-url-input {
-        font-size: var(--fs-sm);
+    .as-download span {
+        flex: 1;
         min-width: 0;
+        display: grid;
+        line-height: 1.3;
     }
 
-    .shortcut-copy-btn {
-        white-space: nowrap;
+    .as-download small {
+        color: var(--text-muted, inherit);
+        opacity: 0.75;
+        font-size: var(--fs-xs);
     }
 
-    [data-theme="light"] .shortcut-url-item {
-        background: rgba(201, 169, 97, 0.06);
+    .as-download-icon {
+        opacity: 0.6;
     }
 
-    @media (max-width: 575.98px) {
-        .shortcut-url-item .input-group {
-            display: grid;
-            gap: 0.5rem;
-        }
+    .as-advanced summary {
+        cursor: pointer;
+        text-align: center;
+        font-size: var(--fs-sm);
+        color: var(--text-muted, inherit);
+        opacity: 0.8;
+        list-style: none;
+    }
 
-        .shortcut-url-item .input-group > .form-control,
-        .shortcut-url-item .input-group > .btn {
-            width: 100%;
-            border-radius: 0.5rem !important;
-        }
+    .as-advanced summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .as-advanced summary::after {
+        content: " ▾";
+    }
+
+    .as-advanced[open] summary::after {
+        content: " ▴";
+    }
+
+    .as-host {
+        display: grid;
+        gap: 0.5rem;
+        padding: 0.75rem 0;
+    }
+
+    .as-host + .as-host {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .as-host-name {
+        font-size: var(--fs-sm);
+        font-weight: 600;
+    }
+
+    .as-link {
+        display: grid;
+        gap: 0.25rem;
+        font-size: var(--fs-xs);
     }
 </style>
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
-        document.querySelectorAll('.shortcut-host-btn').forEach((tab) => {
-            tab.addEventListener('click', () => {
-                const target = tab.getAttribute('data-host-target');
-                document.querySelectorAll('.shortcut-host-btn').forEach((other) => {
-                    const on = other === tab;
-                    other.classList.toggle('active', on);
-                    other.setAttribute('aria-selected', on ? 'true' : 'false');
-                });
-                document.querySelectorAll('[data-host-panel]').forEach((panel) => {
-                    panel.hidden = panel.getAttribute('data-host-panel') !== target;
-                });
-            });
-        });
-
-        document.querySelectorAll('.shortcut-copy-btn').forEach((button) => {
+        document.querySelectorAll('.as-copy-btn').forEach((button) => {
             button.addEventListener('click', async () => {
                 const value = button.getAttribute('data-copy-value') || '';
-                if (!value || !navigator.clipboard) return;
+                const input = button.closest('.as-copy')?.querySelector('.as-copy-input');
                 try {
                     await navigator.clipboard.writeText(value);
                     const original = button.innerHTML;
-                    button.innerHTML = '<i class="bi bi-check2 me-2"></i>Copied';
-                    window.setTimeout(() => {
-                        button.innerHTML = original;
-                    }, 1200);
+                    button.innerHTML = '<i class="bi bi-check2"></i>' + (original.includes('Copy') ? ' Copied' : '');
+                    window.setTimeout(() => { button.innerHTML = original; }, 1200);
                 } catch (err) {
-                    const input = button.closest('.shortcut-url-item')?.querySelector('.shortcut-url-input');
                     if (input) {
                         input.focus();
                         input.select();

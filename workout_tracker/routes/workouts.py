@@ -79,9 +79,13 @@ def register_workout_routes(app):
         }
         return serializer.dumps(payload)
 
+    def _make_shortcut_key(user_id: int):
+        # One key for both downloadable shortcuts (logging and retrieving).
+        return serializer.dumps({"user_id": user_id, "scope": "shortcut"})
+
     def _load_shortcut_pick_token(token: str) -> dict:
         payload = serializer.loads(token)
-        if not isinstance(payload, dict) or payload.get("scope") != "shortcut_pick":
+        if not isinstance(payload, dict) or payload.get("scope") not in ("shortcut_pick", "shortcut"):
             raise BadSignature("Invalid shortcut pick token")
         return payload
 
@@ -94,7 +98,7 @@ def register_workout_routes(app):
 
     def _load_shortcut_log_token(token: str) -> dict:
         payload = serializer.loads(token)
-        if not isinstance(payload, dict) or payload.get("scope") != "shortcut_log":
+        if not isinstance(payload, dict) or payload.get("scope") not in ("shortcut_log", "shortcut"):
             raise BadSignature("Invalid shortcut log token")
         return payload
 
@@ -2544,7 +2548,11 @@ def register_workout_routes(app):
             {'name': name, 'log_url': base + log_path, 'retrieve_url': base + pick_path}
             for name, base in _deployment_base_urls()
         ]
-        return render_template('shortcut_urls.html', deployments=deployments)
+        return render_template(
+            'shortcut_urls.html',
+            deployments=deployments,
+            shortcut_key=_make_shortcut_key(current_user.id),
+        )
 
     @login_required
     def shortcut_recommend_url():
