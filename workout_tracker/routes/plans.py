@@ -8,6 +8,7 @@ from models import Plan, RepRange, Session
 from services.retrieve import (
     CUSTOM_RETRIEVAL_SORT_MODES,
     generate_custom_retrieve_output,
+    describe_retrieve_output,
     generate_retrieve_output,
     DEFAULT_CUSTOM_WORKOUT_TITLE,
     get_custom_retrieval_exercise_catalog,
@@ -54,26 +55,62 @@ def _resolve_custom_retrieval_selection(catalog, selected_keys, two_set_keys):
 
 
 def register_plan_routes(app):
+    def _retrieve_groups(data):
+        """Every session in the plan, grouped the way the plan groups them (cycles, or categories)."""
+        workout = data.get('workout') if isinstance(data, dict) else None
+        workout = workout if isinstance(workout, dict) else {}
+        titles = data.get('session_titles') if isinstance(data, dict) else None
+        titles = titles if isinstance(titles, dict) else {}
+        headings = data.get('headings') if isinstance(data, dict) else None
+        heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
+
+        def session_item(sid):
+            return {
+                'number': f"Session {sid}",
+                'name': titles.get(str(sid)) or f"Session {sid}",
+                'url': url_for('retrieve_final', category='Session', day_id=sid),
+            }
+
+        groups = []
+        if isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions:
+            for heading in headings:
+                ids = sorted(int(x) for x in (heading_sessions.get(heading) or []) if str(x).isdigit())
+                if ids:
+                    groups.append({'title': heading, 'items': [session_item(sid) for sid in ids]})
+            return groups
+
+        for category, days in workout.items():
+            day_names = list((days or {}).keys())
+            items = []
+            for index, day_name in enumerate(day_names, start=1):
+                if str(category).strip().lower() == 'session':
+                    items.append(session_item(index))
+                    continue
+                exercises = [
+                    str(line).split(' - [', 1)[0].strip()
+                    for line in ((days or {}).get(day_name) or [])[:2]
+                ]
+                items.append({
+                    'number': f"Day {index}",
+                    'name': ', '.join(e for e in exercises if e) or day_name,
+                    'url': url_for('retrieve_final', category=category, day_id=index),
+                })
+            if items:
+                title = 'Sessions' if str(category).strip().lower() == 'session' else category
+                groups.append({'title': title, 'items': items})
+        return groups
+
     @login_required
     def retrieve_categories():
         user = current_user
 
         try:
             raw_text = get_effective_plan_text(Session, user)
-            data = get_workout_days(raw_text or "")
-
-            headings = data.get('headings') if isinstance(data, dict) else None
-            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
-            if isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions:
-                return render_template('retrieve_step1.html', headings=headings)
-
-            categories = list(data.get('workout', {}).keys())
-
-            if not categories:
+            groups = _retrieve_groups(get_workout_days(raw_text or ""))
+            if not groups:
                 flash("No workout plan found. Please set up your plan first.", "info")
                 return redirect(url_for('set_plan'))
-
-            return render_template('retrieve_step1.html', categories=categories)
+            return render_template('retrieve.html', groups=groups)
         except Exception as e:
             logger.error(f"Error in retrieve_categories: {e}", exc_info=True)
             flash("Error loading workout categories.", "error")
@@ -81,88 +118,26 @@ def register_plan_routes(app):
 
     @login_required
     def retrieve_heading_days(heading_id: int):
-        user = current_user
-
-        try:
-            raw_text = get_effective_plan_text(Session, user)
-            if not raw_text:
-                flash("No workout plan found.", "error")
-                return redirect(url_for('set_plan'))
-
-            data = get_workout_days(raw_text)
-            headings = data.get('headings') if isinstance(data, dict) else None
-            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
-            if not (isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions):
-                flash("Headings not found in plan.", "error")
-                return redirect(url_for('retrieve_categories'))
-
-            if not isinstance(heading_id, int) or heading_id < 1 or heading_id > len(headings):
-                flash("Invalid heading.", "error")
-                return redirect(url_for('retrieve_categories'))
-
-            heading_name = headings[heading_id - 1]
-            session_ids = heading_sessions.get(heading_name) or []
-            session_ids = [int(x) for x in session_ids if isinstance(x, int) or str(x).isdigit()]
-            session_ids.sort()
-
-            session_titles = None
-            maybe_titles = data.get("session_titles") if isinstance(data, dict) else None
-            if isinstance(maybe_titles, dict):
-                session_titles = maybe_titles
-
-            return render_template(
-                'retrieve_step2.html',
-                category_name='Session',
-                num_days=0,
-                session_titles=session_titles,
-                session_ids=session_ids,
-                heading_id=heading_id,
-                heading_name=heading_name,
-                back_url=url_for('retrieve_categories'),
-            )
-        except Exception as e:
-            logger.error(f"Error in retrieve_heading_days: {e}", exc_info=True)
-            flash("Error loading heading days.", "error")
-            return redirect(url_for('retrieve_categories'))
+        # Old two-step links: every session is on one page now.
+        return redirect(url_for('retrieve_categories'))
 
     @login_required
     def retrieve_days(category):
-        user = current_user
+        return redirect(url_for('retrieve_categories'))
 
-        try:
-            # Decode HTML entities first, then sanitize
-            import html
-            category = html.unescape(category)
-            category = sanitize_text_input(category, max_length=100)
-            category = html.unescape(category)
-            
-            raw_text = get_effective_plan_text(Session, user)
-            if not raw_text:
-                flash("No workout plan found.", "error")
-                return redirect(url_for('set_plan'))
-
-            data = get_workout_days(raw_text)
-
-            if category not in data.get('workout', {}):
-                flash("Invalid category.", "error")
-                return redirect(url_for('retrieve_categories'))
-
-            num_days = len(data['workout'][category])
-            session_titles = None
-            if str(category).strip().lower() == "session":
-                maybe_titles = data.get("session_titles")
-                if isinstance(maybe_titles, dict):
-                    session_titles = maybe_titles
-            return render_template(
-                'retrieve_step2.html',
-                category_name=category,
-                num_days=num_days,
-                session_titles=session_titles,
-            )
-        except Exception as e:
-            logger.error(f"Error in retrieve_days: {e}", exc_info=True)
-            flash("Error loading workout days.", "error")
-            return redirect(url_for('retrieve_categories'))
+    def _session_place(data, category, day_id):
+        """("Session 9 · Cycle 3", "Chest & Biceps") for the plan page header."""
+        titles = data.get('session_titles') if isinstance(data, dict) else None
+        if str(category).strip().lower() == 'session':
+            name = (titles or {}).get(str(day_id)) if isinstance(titles, dict) else None
+            kicker = f"Session {day_id}"
+            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
+            for heading, ids in (heading_sessions or {}).items():
+                if day_id in [int(x) for x in ids if str(x).isdigit()]:
+                    kicker += f" · {heading}"
+                    break
+            return kicker, name or f"Session {day_id}"
+        return f"Day {day_id}", category
 
     @login_required
     def retrieve_final(category, day_id):
@@ -176,20 +151,16 @@ def register_plan_routes(app):
             category = html.unescape(category)
             
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
-
-            back_to_days_url = None
-            if str(category).strip().lower() == 'session':
-                heading_id = request.args.get('heading_id')
-                if heading_id and str(heading_id).isdigit():
-                    back_to_days_url = url_for('retrieve_heading_days', heading_id=int(heading_id))
+            kicker, title = _session_place(get_workout_days(get_effective_plan_text(Session, user) or ""), category, day_id)
             return render_template(
-                'retrieve_step3.html',
+                'retrieve_plan.html',
                 output=output,
+                plan=describe_retrieve_output(output),
                 exercise_count=exercise_count,
                 set_count=set_count,
-                category_name=category,
-                day_id=day_id,
-                back_to_days_url=back_to_days_url,
+                kicker=kicker,
+                title=title,
+                back_url=url_for('retrieve_categories'),
             )
         except Exception as e:
             logger.error(f"Error in retrieve_final: {e}", exc_info=True)
@@ -279,13 +250,14 @@ def register_plan_routes(app):
             session.pop(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, None)
 
             return render_template(
-                'retrieve_step3.html',
+                'retrieve_plan.html',
                 output=output,
+                plan=describe_retrieve_output(output),
                 exercise_count=exercise_count,
                 set_count=set_count,
-                category_name=None,
-                day_id=None,
-                back_to_days_url=url_for('retrieve_custom'),
+                kicker='Custom workout',
+                title=workout_title,
+                back_url=url_for('retrieve_custom'),
                 custom_retrieval=True,
                 custom_workout_title=workout_title,
                 default_custom_workout_title=DEFAULT_CUSTOM_WORKOUT_TITLE,

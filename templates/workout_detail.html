@@ -297,6 +297,35 @@
     .wd-link { font-size: 0.85rem; font-weight: 600; color: var(--gold-primary); text-decoration: none; white-space: nowrap; }
     .wd-link:hover { color: var(--gold-bright); }
 
+    /* ---- Notes under the title: just saved, needs a fix ---- */
+    .wd-callout {
+        display: flex; gap: 12px; align-items: flex-start;
+        margin: -4px 0 20px;
+        padding: 13px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--wd-hairline);
+        background: var(--wd-surface);
+        font-size: 0.86rem; line-height: 1.5; color: var(--text-secondary);
+    }
+    .wd-callout > i { flex: none; font-size: 1rem; line-height: 1.35; }
+    .wd-callout-main { flex: 1; min-width: 0; }
+    .wd-callout strong { color: var(--text-primary); font-weight: 600; }
+    .wd-callout p { margin: 4px 0 0; }
+    .wd-callout a { color: var(--gold-primary); font-weight: 600; text-decoration: none; }
+    .wd-callout.saved > i { color: var(--wd-up); }
+    .wd-callout.warn { border-color: var(--wd-down-line); background: var(--wd-down-bg); }
+    .wd-callout.warn > i { color: var(--wd-down); }
+    .wd-ask { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 14px; padding-top: 10px; margin-top: 10px; border-top: 1px solid var(--wd-hairline); }
+    .wd-ask-btns { display: flex; gap: 8px; }
+    .wd-ask-btn {
+        display: inline-flex; align-items: center; height: 32px; padding: 0 12px;
+        border-radius: 9px; border: 1px solid var(--border-subtle);
+        font-size: 0.8rem; font-weight: 600; color: var(--text-primary) !important;
+    }
+    .wd-ask-btn:hover { border-color: var(--border-gold); color: var(--gold-primary) !important; }
+    .wd-ex.is-missing .wd-name { color: var(--wd-down); }
+    .wd-ex.is-missing .wd-name i { margin-right: 6px; }
+
     /* ---- Phones: drop the outer card, narrower columns, no chevron ---- */
     @media (max-width: 575px) {
         .wd { --wd-col: 76px; --wd-row-x: 2px; }
@@ -387,6 +416,36 @@
         <h1 class="wd-title">{{ workout_name }}</h1>
         <p class="wd-meta">{{ date_label }}<span class="sep">·</span>{{ exercise_count or 0 }} exercise{{ '' if exercise_count == 1 else 's' }}<span class="sep">·</span>{{ set_count or 0 }} set{{ '' if set_count == 1 else 's' }}</p>
 
+        {% if saved %}
+        <div class="wd-callout saved" role="status">
+            <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
+            <div class="wd-callout-main">
+                <strong>{{ 'Added to this day' if saved.appended else 'Saved' }}</strong>{% if summary_counts.new_best and not saved.appended %} · {{ summary_counts.new_best }} new best{{ '' if summary_counts.new_best == 1 else 's' }}{% endif %}
+                {% for line in saved.skipped %}<p>{{ line | replace("won't be saved", "wasn't saved") }}</p>{% endfor %}
+                {% if saved.needs_bodyweight %}<p>Set your bodyweight in <a href="{{ url_for('user_settings') }}">Settings</a> so BW sets are counted correctly.</p>{% endif %}
+                {% for exercise in saved.timed_prompts %}
+                <div class="wd-ask">
+                    <span>Is <strong>{{ exercise }}</strong> timed, in seconds?</span>
+                    <span class="wd-ask-btns">
+                        <a class="wd-ask-btn" href="{{ url_for('set_timed_preference', exercise=exercise, is_timed='yes', next=request.full_path) }}">Yes, seconds</a>
+                        <a class="wd-ask-btn" href="{{ url_for('set_timed_preference', exercise=exercise, is_timed='no', next=request.full_path) }}">No, reps</a>
+                    </span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if missing_name_count %}
+        <div class="wd-callout warn">
+            <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+            <div class="wd-callout-main">
+                <strong>{{ missing_name_count }} entr{{ 'y has' if missing_name_count == 1 else 'ies have' }} no exercise name.</strong>
+                <p>Those numbers aren't linked to any exercise, so they're missing from its history and stats. <a href="{{ url_for('edit_workout', date_str=date) }}">Add the name</a></p>
+            </div>
+        </div>
+        {% endif %}
+
         {% set c = summary_counts %}
         {% if c.new_best or c.up or c.down or c.steady %}
         <div class="wd-stats" aria-label="Session summary">
@@ -410,9 +469,9 @@
 
         <div class="wd-list">
             {% for row in rows %}
-            <details class="wd-ex">
+            <details class="wd-ex{{ ' is-missing' if row.missing_name }}">
                 <summary>
-                    <span class="wd-name">{{ row.name }}</span>
+                    <span class="wd-name">{% if row.missing_name %}<i class="bi bi-exclamation-triangle" aria-hidden="true"></i>No exercise name{% else %}{{ row.name }}{% endif %}</span>
                     <span class="wd-sets">
                         {% for set_label in row.sets_ranked %}<span>{{ set_label }}</span>{% else %}<span>{{ row.sets_line }}</span>{% endfor %}
                     </span>

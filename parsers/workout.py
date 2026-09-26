@@ -361,6 +361,12 @@ def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_r
     return weights, reps
 
 
+def clean_exercise_name(name: str) -> str:
+    """Drop stray separators and tabs around a typed name ("Forearm Roller -" -> "Forearm Roller")."""
+    name = re.sub(r'\s+', ' ', name or '').strip()
+    return name.strip('-–—:,.; ').strip()
+
+
 def workout_parser(
     workout_day_received: str,
     bodyweight: Optional[float] = None,
@@ -379,9 +385,11 @@ def workout_parser(
         return None
     
     raw_lines: List[str] = []
+    # 1-based line number in the given text for each kept line, so problems can point at it.
+    line_numbers: List[int] = []
     parsed_bodyweight: Optional[float] = None
     parsed_bodyweight_unit: Optional[str] = None
-    for line in workout_day_received.strip().split("\n"):
+    for line_no, line in enumerate(workout_day_received.split("\n"), start=1):
         stripped = (line or "").strip()
         if not stripped:
             continue
@@ -394,6 +402,7 @@ def workout_parser(
             parsed_bodyweight_unit = bw_unit
             continue
         raw_lines.append(stripped)
+        line_numbers.append(line_no)
     if not raw_lines:
         return None
 
@@ -407,10 +416,13 @@ def workout_parser(
         year = current_year - 1 if parsed_month > datetime.now().month + 1 else current_year
         try:
             date_obj = datetime.strptime(f"{date_nums[0]}-{date_nums[1]}-{year}", "%d-%m-%Y")
+            date_found = True
         except ValueError:
             date_obj = datetime.now()
+            date_found = False
     else:
         date_obj = datetime.now()
+        date_found = False
 
     workout_name = title_line
     if len(date_nums) >= 2:
@@ -425,6 +437,7 @@ def workout_parser(
     )
     workout_day = {
         "date": date_obj,
+        "date_found": date_found,
         "workout_name": workout_name,
         "bodyweight": parsed_bodyweight,
         "bodyweight_unit": parsed_bodyweight_unit,
@@ -540,7 +553,10 @@ def workout_parser(
                         weights = extract_weights(data_part, effective_bodyweight)
                         reps = [1] * len(weights)
 
-        if not name:
+        source_name = name
+        name = clean_exercise_name(name)
+        missing_name = not name
+        if missing_name:
             name = "Unknown Exercise"
 
         inferred_sets = max(len(weights), len(reps)) if (weights or reps) else 0
@@ -557,7 +573,10 @@ def workout_parser(
             "exercise_string": "\n".join(exercise_lines).strip(),
             "weights": weights,
             "reps": reps,
-            "valid": is_valid
+            "valid": is_valid,
+            "line": line_numbers[i],
+            "source_name": source_name,
+            "missing_name": missing_name,
         })
 
         i += consumed

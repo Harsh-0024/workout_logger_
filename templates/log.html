@@ -1,423 +1,164 @@
 {% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-10 col-lg-8">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3 mb-md-4">
-                    <i class="bi bi-journal-plus" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                </div>
-                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">Log Session</h2>
-                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Record your workout performance</p>
-            </div>
+{{ st.styles() }}
+{% include '_log_editor.html' %}
 
-            <form action="/log" method="POST">
-                <div class="mb-3 mb-md-4 position-relative">
-                    <label class="form-label text-muted mb-2 mb-md-3 tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Workout Data
-                    </label>
-                    <textarea name="workout_text" id="workoutTextarea" class="form-control" rows="10" autofocus
-                        placeholder="Chest & Triceps 1&#10;Bench Press: 100kg x 5, 100kg x 5, 100kg x 5&#10;Incline DB Press: 35kg x 8, 35kg x 8, 35kg x 8&#10;...">{{ workout_text or '' }}</textarea>
-                    <div id="exerciseSuggestions" class="exercise-suggestions" style="display: none;"></div>
-                    <div class="log-meta text-muted mt-2">
-                        <span id="lineCount" class="log-stats">0 exercises • 0 sets</span>
-                    </div>
-                </div>
-                <button type="submit" class="btn btn-gold-solid w-100 mb-3">
-                    <i class="bi bi-check-circle-fill me-2"></i>Analyze & Save
-                </button>
-            </form>
+<div class="st lg" id="logPage" data-preview-url="{{ url_for('log_preview') }}">
+    {{ st.head('Log workout', 'Paste your workout from Notes. It’s checked before anything is saved.') }}
 
-            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <a href="/" class="text-muted text-decoration-none small hover-gold tracking-wide">
-                    <i class="bi bi-arrow-left me-1"></i>Cancel
-                </a>
+    {% if error %}
+    <div class="lg-callout is-error" role="alert">
+        <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+        <div>
+            <strong>Nothing was saved.</strong>
+            {% for message in (errors or [error]) %}<p>{{ message }}</p>{% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% if existing %}
+    <div class="lg-callout" role="alert">
+        <i class="bi bi-calendar-check" aria-hidden="true"></i>
+        <div>
+            <strong>That day already has a workout.</strong>
+            <p>{{ existing.title }} is logged on {{ existing.date_str | format_date }}. Add these exercises to it, or open it.</p>
+            <div class="lg-callout-actions">
+                <button type="submit" form="logForm" name="mode" value="append" class="st-btn st-btn-primary st-btn-sm">Add to that day</button>
+                <a href="{{ existing.url }}" class="st-btn st-btn-quiet st-btn-sm">Open it</a>
             </div>
         </div>
     </div>
+    {% endif %}
+
+    <form action="{{ url_for('log_workout') }}" method="POST" id="logForm" class="st-section lg-flow" data-no-loading="true">
+        <input type="hidden" name="mode" id="logMode" value="">
+        <div class="st-group lg-editor-group">
+            <label for="workoutTextarea" class="visually-hidden">Workout</label>
+            <textarea name="workout_text" id="workoutTextarea" class="st-editor lg-editor" spellcheck="false" autocapitalize="sentences" autocomplete="off"
+                placeholder="28/9/26 - Session 1 - Chest &amp; Biceps&#10;&#10;Flat Barbell Press - [5-8]&#10;32.5 27.5 25, 6 7 8&#10;&#10;Barbell Curl - [6-10]&#10;20 17.5, 8 10">{{ workout_text or '' }}</textarea>
+            <div id="exerciseSuggestions" class="lg-suggest" role="listbox" hidden></div>
+        </div>
+
+        <section class="lg-check" id="logCheck" hidden aria-label="Check before saving">
+            <div class="st-label"><span>Check</span><span class="st-label-aside" id="checkHead"></span></div>
+            <div id="checkNotes"></div>
+            <div class="st-group" id="checkList"></div>
+            <p class="st-foot">Tap an exercise to jump to its line.<span class="lg-kbd-hint"> <kbd>⌘</kbd> <kbd>Enter</kbd> saves.</span></p>
+        </section>
+
+        <div class="lg-bar">
+            <button type="button" class="lg-meta" id="logMeta" aria-live="polite">Paste a workout to check it</button>
+            <div class="lg-bar-actions">
+                <button type="button" class="st-btn st-btn-quiet st-btn-sm" id="pasteBtn"><i class="bi bi-clipboard"></i>Paste</button>
+                <button type="submit" class="st-btn st-btn-primary st-btn-sm" id="saveBtn">Save</button>
+            </div>
+        </div>
+    </form>
 </div>
+
 <script type="application/json" id="exerciseData">{{ exercise_list | tojson if exercise_list is defined else '[]' }}</script>
-<style>
-    .exercise-suggestions {
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: calc(100% - 12px);
-        background: var(--card-bg-solid);
-        border: 1px solid var(--border-subtle);
-        border-radius: 12px;
-        box-shadow: var(--shadow-md);
-        z-index: 5;
-        max-height: 200px;
-        overflow-y: auto;
-        padding: 6px;
-    }
-
-    .exercise-suggestion {
-        padding: 8px 12px;
-        border-radius: 8px;
-        cursor: pointer;
-        font-size: var(--fs-sm);
-        color: var(--text-secondary);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-    }
-
-    .exercise-suggestion strong {
-        color: var(--text-primary);
-        font-weight: 600;
-    }
-
-    .exercise-suggestion.active,
-    .exercise-suggestion:hover {
-        background: var(--gold-subtle);
-        color: var(--text-primary);
-    }
-
-    .log-meta {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-        font-size: var(--fs-xs);
-        flex-wrap: wrap;
-    }
-
-    .log-stats {
-        padding: 6px 12px;
-        border-radius: 999px;
-        background: var(--gold-subtle);
-        color: var(--gold-bright);
-        font-weight: 600;
-        letter-spacing: 0.5px;
-    }
-
-    @media (max-width: 576px) {
-        .log-meta {
-            flex-direction: row;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        #workoutTextarea {
-            height: 220px !important;
-            min-height: 220px !important;
-            max-height: 220px !important;
-        }
-
-    }
-</style>
 <script>
-    (function() {
-        const textarea = document.querySelector('textarea[name="workout_text"]');
-        const saveBtn = document.querySelector('button[type="submit"].btn.btn-gold-solid');
-        const counter = document.getElementById('lineCount');
-        const suggestionBox = document.getElementById('exerciseSuggestions');
-        const exerciseData = document.getElementById('exerciseData');
-        const rawExerciseList = exerciseData ? JSON.parse(exerciseData.textContent || '[]') : [];
-        const normalizeExerciseKey = (name) => {
-            return String(name || '')
-                .toLowerCase()
-                .replace(/[‐‑‒–—−-]+/g, ' ')
-                .replace(/[^a-z0-9\s]+/g, ' ')
-                .replace(/\s+/g, ' ')
-                .trim()
-                .split(' ')
-                .filter(Boolean)
-                .sort()
-                .join(' ');
-        };
-        const seenExerciseKeys = new Set();
-        const exerciseList = Array.isArray(rawExerciseList)
-            ? rawExerciseList.filter((name) => {
-                const key = normalizeExerciseKey(name);
-                if (!key || seenExerciseKeys.has(key)) return false;
-                seenExerciseKeys.add(key);
-                return true;
-            })
-            : [];
-        if (!textarea || !counter) return;
+    (function () {
+        const page = document.getElementById('logPage');
+        const form = document.getElementById('logForm');
+        const textarea = document.getElementById('workoutTextarea');
+        const saveBtn = document.getElementById('saveBtn');
+        const modeInput = document.getElementById('logMode');
+        const meta = document.getElementById('logMeta');
+        const check = document.getElementById('logCheck');
+        const checkHead = document.getElementById('checkHead');
+        const checkNotes = document.getElementById('checkNotes');
+        const checkList = document.getElementById('checkList');
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const DRAFT_KEY = 'wt-log-draft';
 
-        document.addEventListener('keydown', function(e) {
-            if (!e || !e.metaKey) return;
-            const key = (e.key || '').toLowerCase();
-            if (key !== 'enter') return;
-            if (!saveBtn) return;
-            e.preventDefault();
+        const LogEditor = window.LogEditor;
+        LogEditor.autoGrow(textarea);
+        LogEditor.attachSuggestions(textarea, document.getElementById('exerciseSuggestions'),
+            JSON.parse(document.getElementById('exerciseData').textContent || '[]'));
+
+        // Today's date in the example, in the same d/m/yy form Retrieve uses.
+        const now = new Date();
+        textarea.placeholder = textarea.placeholder.replace('28/9/26', `${now.getDate()}/${now.getMonth() + 1}/${String(now.getFullYear()).slice(2)}`);
+
+        // Keep an unsaved draft on this device (the server keeps the text after a failed save anyway).
+        if (!textarea.value) {
+            try { textarea.value = localStorage.getItem(DRAFT_KEY) || ''; } catch (e) { /* storage off */ }
+            textarea._fit();
+        }
+        const saveDraft = () => {
             try {
-                saveBtn.click();
-            } catch (err) {
-                // no-op
+                if (textarea.value.trim()) localStorage.setItem(DRAFT_KEY, textarea.value);
+                else localStorage.removeItem(DRAFT_KEY);
+            } catch (e) { /* storage off */ }
+        };
+
+        let latest = null;
+        const render = (data) => {
+            latest = data;
+            const hasText = !!textarea.value.trim();
+            check.hidden = !hasText;
+            modeInput.value = '';
+            if (!hasText) {
+                meta.textContent = 'Paste a workout to check it';
+                meta.className = 'lg-meta';
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save';
+                return;
+            }
+            const view = LogEditor.renderCheck(data, { head: checkHead, notes: checkNotes, list: checkList, textarea, allowAppend: true });
+            LogEditor.paintMeta(meta, view);
+            saveBtn.disabled = view.blocked;
+            saveBtn.textContent = view.append ? 'Add to day' : 'Save';
+            if (view.append) modeInput.value = 'append';
+        };
+
+        const preview = LogEditor.previewer(page.dataset.previewUrl, csrf, () => {
+            const body = new FormData();
+            body.append('workout_text', textarea.value);
+            body.append('mode', 'append');
+            return body;
+        }, render);
+
+        textarea.addEventListener('input', () => {
+            saveDraft();
+            if (!textarea.value.trim()) { render(null); return; }
+            preview.soon();
+        });
+        if (textarea.value.trim()) preview.now();
+
+        meta.addEventListener('click', () => {
+            if (!check.hidden) check.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+
+        document.getElementById('pasteBtn').addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (!text) return;
+                LogEditor.insertAtCursor(textarea, text);
+            } catch (e) {
+                textarea.focus();
             }
         });
 
-        const stripListNumbering = (line) => {
-            const trimmed = (line || '').trim();
-            if (/^\d+(?:[.)\-:])\s*[A-Za-z]/.test(trimmed)) {
-                return trimmed.replace(/^\s*\d+\s*(?:[.)\-:]?)\s*/, '');
-            }
-            return line;
-        };
-
-        const isDataLine = (line) => {
-            const trimmed = (line || '').trim();
-            if (!trimmed) return false;
-            if (/^\d+(?:[.)\-:])\s*[A-Za-z]/.test(trimmed)) return false;
-            const tokens = trimmed.split(/\s+/);
-            if (tokens.length > 1 && /^\d+(?:[.)\-:]?)?$/.test(tokens[0]) && /^[A-Za-z]/.test(tokens[1])) {
-                return false;
-            }
-            return /^(?:,|-?\d|bw)/.test(trimmed.toLowerCase());
-        };
-
-        const tokenizeSegment = (segment) => {
-            return (segment || '')
-                .replace(/(kg|lbs|lb)/gi, ' ')
-                .replace(/,/g, ' ')
-                .trim()
-                .split(/\s+/)
-                .filter(Boolean);
-        };
-
-        const extractDeclaredSets = (line) => {
-            const trimmed = (line || '').trim();
-            if (!trimmed) return null;
-            const m = trimmed.match(/(?:\s*[-–—:]\s*)?(\d+)\s*sets?\s*$/i);
-            if (!m) return null;
-            const n = Number(m[1]);
-            if (!Number.isFinite(n) || n <= 0) return null;
-            return Math.floor(n);
-        };
-
-        const extractBracketSets = (line) => {
-            const trimmed = (line || '').trim();
-            if (!trimmed || !trimmed.includes('[') || !trimmed.includes(']')) return null;
-            const start = trimmed.indexOf('[');
-            const end = trimmed.indexOf(']', start + 1);
-            if (start === -1 || end === -1 || end <= start + 1) return null;
-            const inside = trimmed.slice(start + 1, end).trim();
-            if (!inside) return null;
-            const first = inside.split(',', 1)[0].trim();
-            if (!/^\d+$/.test(first)) return null;
-            const n = Number(first);
-            if (!Number.isFinite(n) || n <= 0) return null;
-            return Math.floor(n);
-        };
-
-        const countSetsFromDataPart = (dataPart) => {
-            const normalized = (dataPart || '').replace(/×/g, 'x');
-            const xMatches = normalized.match(/(?:bw(?:\/\d+)?[+-]?\d*|-?\d+(?:\.\d+)?)?\s*x\s*\d+/gi);
-            if (xMatches && xMatches.length) return xMatches.length;
-
-            if (normalized.includes(',')) {
-                const parts = normalized.split(',');
-                const weightsTokens = tokenizeSegment(parts[0] || '').filter((t) => t.toLowerCase() !== 'x');
-                const repsTokens = tokenizeSegment(parts.slice(1).join(' '));
-                const repsNumbers = repsTokens.map((val) => Number(val)).filter((val) => !Number.isNaN(val));
-                const count = Math.max(weightsTokens.length, repsNumbers.length);
-                return count;
-            }
-
-            const tokens = tokenizeSegment(normalized).filter((t) => t.toLowerCase() !== 'x');
-            return tokens.length;
-        };
-
-        const updateCount = () => {
-            const value = textarea.value || '';
-            const rawLines = value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-            if (rawLines.length <= 1) {
-                counter.textContent = '0 exercises • 0 sets';
+        form.addEventListener('submit', (e) => {
+            if (saveBtn.disabled && !(e.submitter && e.submitter.name === 'mode')) {
+                e.preventDefault();
+                check.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 return;
             }
+            try { localStorage.removeItem(DRAFT_KEY); } catch (err) { /* storage off */ }
+            saveBtn.disabled = true;
+            saveBtn.textContent = 'Saving…';
+        });
 
-            const lines = rawLines.slice(1);
-            let exerciseCount = 0;
-            let repCount = 0;
-            let i = 0;
-
-            while (i < lines.length) {
-                const line = stripListNumbering(lines[i]);
-                if (!line) {
-                    i += 1;
-                    continue;
-                }
-
-                const declaredSets = extractDeclaredSets(line) ?? extractBracketSets(line);
-
-                let dataPart = '';
-                let consumed = 1;
-
-                if (line.includes(' - [')) {
-                    const parts = line.split(' - [');
-                    let tail = '';
-                    if (parts[1]) {
-                        const bracketIndex = parts[1].indexOf(']');
-                        if (bracketIndex !== -1) {
-                            tail = parts[1].slice(bracketIndex + 1).trim();
-                        }
-                    }
-                    dataPart = tail ? tail.replace(/^[-:]+\s*/, '') : '';
-
-                    if (!dataPart && i + 1 < lines.length && isDataLine(lines[i + 1])) {
-                        const dataLine = lines[i + 1];
-                        dataPart = dataLine.trim();
-                        consumed += 1;
-
-                        if (!dataPart.includes(',') && i + 2 < lines.length && isDataLine(lines[i + 2])) {
-                            const repsLine = lines[i + 2].trim();
-                            dataPart = `${dataPart}, ${repsLine}`;
-                            consumed += 1;
-                        }
-                    }
-                } else {
-                    const tokens = line.split(/\s+/);
-                    let firstNumIdx = -1;
-                    for (let idx = 0; idx < tokens.length; idx += 1) {
-                        const token = tokens[idx].toLowerCase();
-                        if (/^-?\d/.test(token) || token.startsWith(',') || token.startsWith('bw')) {
-                            firstNumIdx = idx;
-                            break;
-                        }
-                    }
-                    if (firstNumIdx !== -1) {
-                        dataPart = tokens.slice(firstNumIdx).join(' ').trim();
-                    }
-                }
-
-                if (dataPart) {
-                    exerciseCount += 1;
-                    const inferredSets = countSetsFromDataPart(dataPart);
-                    const targetSets = declaredSets !== null
-                        ? Math.max(declaredSets, inferredSets || 0)
-                        : (inferredSets > 3 ? inferredSets : 3);
-                    repCount += targetSets;
-                }
-
-                i += consumed;
+        document.addEventListener('keydown', (e) => {
+            if (e.metaKey && (e.key || '').toLowerCase() === 'enter') {
+                e.preventDefault();
+                form.requestSubmit(saveBtn);
             }
-
-            counter.textContent = `${exerciseCount} exercise${exerciseCount === 1 ? '' : 's'} • ${repCount} set${repCount === 1 ? '' : 's'}`;
-        };
-
-        if (suggestionBox && Array.isArray(exerciseList) && exerciseList.length) {
-            let activeIndex = -1;
-            let activeSuggestions = [];
-
-            const getLineContext = () => {
-                const value = textarea.value || '';
-                const cursor = textarea.selectionStart || 0;
-                const lineStart = value.lastIndexOf('\n', cursor - 1) + 1;
-                const lineEnd = value.indexOf('\n', cursor);
-                const end = lineEnd === -1 ? value.length : lineEnd;
-                const line = value.slice(lineStart, end);
-                return { value, cursor, lineStart, lineEnd: end, line };
-            };
-
-            const getPrefixData = (line) => {
-                const trimmed = line.trim();
-                if (!trimmed) return null;
-                const lower = trimmed.toLowerCase();
-                if (/^[\d,.-]/.test(lower) || lower.startsWith('bw')) return null;
-
-                const separatorPatterns = [' - [', ' - ', ' – ', ' — ', ':'];
-                let separatorIndex = line.length;
-                separatorPatterns.forEach((pattern) => {
-                    const idx = line.indexOf(pattern);
-                    if (idx !== -1 && idx < separatorIndex) {
-                        separatorIndex = idx;
-                    }
-                });
-
-                const leading = line.match(/^\s*/)[0] || '';
-                const prefix = line.slice(leading.length, separatorIndex).trim();
-                const suffix = line.slice(separatorIndex);
-                if (!prefix || prefix.length < 2) return null;
-                return { leading, prefix, suffix };
-            };
-
-            const renderSuggestions = () => {
-                if (!activeSuggestions.length) {
-                    suggestionBox.style.display = 'none';
-                    suggestionBox.innerHTML = '';
-                    activeIndex = -1;
-                    return;
-                }
-                suggestionBox.style.display = 'block';
-                suggestionBox.innerHTML = activeSuggestions
-                    .map((name, idx) => {
-                        const active = idx === activeIndex ? 'active' : '';
-                        return `<div class="exercise-suggestion ${active}" data-index="${idx}">${name}</div>`;
-                    })
-                    .join('');
-            };
-
-            const applySuggestion = (index) => {
-                const suggestion = activeSuggestions[index];
-                if (!suggestion) return;
-                const ctx = getLineContext();
-                const prefixData = getPrefixData(ctx.line);
-                if (!prefixData) return;
-
-                const replacement = `${prefixData.leading}${suggestion}${prefixData.suffix}`;
-                const newValue = `${ctx.value.slice(0, ctx.lineStart)}${replacement}${ctx.value.slice(ctx.lineEnd)}`;
-                textarea.value = newValue;
-                const newCursor = ctx.lineStart + replacement.length;
-                textarea.setSelectionRange(newCursor, newCursor);
-                updateCount();
-                updateSuggestions();
-            };
-
-            const updateSuggestions = () => {
-                const ctx = getLineContext();
-                const prefixData = getPrefixData(ctx.line);
-                if (!prefixData) {
-                    activeSuggestions = [];
-                    renderSuggestions();
-                    return;
-                }
-
-                const query = prefixData.prefix.toLowerCase();
-                activeSuggestions = exerciseList
-                    .filter((name) => name.toLowerCase().startsWith(query))
-                    .slice(0, 6);
-                activeIndex = activeSuggestions.length ? 0 : -1;
-                renderSuggestions();
-            };
-
-            suggestionBox.addEventListener('click', (event) => {
-                const item = event.target.closest('.exercise-suggestion');
-                if (!item) return;
-                const index = Number(item.dataset.index);
-                if (Number.isInteger(index)) {
-                    applySuggestion(index);
-                }
-            });
-
-            textarea.addEventListener('keydown', (event) => {
-                if (!activeSuggestions.length) return;
-                if (event.key === 'ArrowDown') {
-                    event.preventDefault();
-                    activeIndex = (activeIndex + 1) % activeSuggestions.length;
-                    renderSuggestions();
-                } else if (event.key === 'ArrowUp') {
-                    event.preventDefault();
-                    activeIndex = (activeIndex - 1 + activeSuggestions.length) % activeSuggestions.length;
-                    renderSuggestions();
-                } else if (event.key === 'Tab') {
-                    event.preventDefault();
-                    applySuggestion(activeIndex === -1 ? 0 : activeIndex);
-                }
-            });
-
-            textarea.addEventListener('blur', () => {
-                setTimeout(() => hideSuggestions(), 200);
-            });
-        }
-
-        textarea.addEventListener('input', updateCount);
-        updateCount();
+        });
     })();
-
 </script>
 {% endblock %}

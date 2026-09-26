@@ -436,7 +436,7 @@ class TestRouteRegressions(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("Custom Workout", page)
         self.assertIn("Custom Lift - [3, 6-8]", page)
-        self.assertIn("2 Exercises", page)
+        self.assertIn("2 exercises", page)
         self.assertLess(page.index("Barbell Curl"), page.index("Custom Lift - [3, 6-8]"))
         self.assertEqual(
             self.session.query(CustomRetrievalEvent)

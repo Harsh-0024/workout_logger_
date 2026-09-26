@@ -1,0 +1,170 @@
+{% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
+{% block content %}
+{{ st.styles() }}
+<style>
+    .rp-kicker { margin: 0 0 6px; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-subtle); }
+    .rp-title-input {
+        display: block; width: 100%;
+        margin: 0 0 8px; padding: 2px 0;
+        border: 0; border-bottom: 1px dashed var(--border-subtle);
+        border-radius: 0;
+        background: transparent;
+        color: var(--text-primary);
+        font: 600 clamp(1.8rem, 7vw, 2.3rem)/1.1 'Cormorant Garamond', 'Playfair Display', serif;
+    }
+    .rp-title-input:focus { outline: none; border-bottom-color: var(--gold-primary); }
+    .rp-meta { color: var(--text-muted); font-size: 0.86rem; margin: 0; }
+
+    .rp-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 18px; }
+    .rp-row + .rp-row { border-top: 1px solid var(--st-hair); }
+    .rp-main { flex: 1; min-width: 0; }
+    .rp-name { display: block; font-size: 0.95rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+    .rp-sets { display: block; margin-top: 4px; font-size: 0.82rem; line-height: 1.45; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .rp-sets.is-fresh { color: var(--text-subtle); font-style: italic; }
+    .rp-target { flex: none; max-width: 42%; padding-top: 2px; text-align: right; font-size: 0.78rem; line-height: 1.4; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+
+    .rp-text > summary { display: inline-flex; align-items: center; gap: 6px; margin: 16px 4px 0; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
+    .rp-text > summary .st-chev { transition: transform var(--transition-fast); }
+    .rp-text[open] > summary .st-chev { transform: rotate(90deg); }
+    .rp-text .st-group { margin-top: 12px; }
+    .rp-text pre { margin: 0; padding: 16px 18px; font: 0.8rem/1.7 'SF Mono', 'Menlo', 'Monaco', monospace; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
+
+    .rp-bar {
+        position: sticky; bottom: 16px; z-index: 7;
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        margin-top: 28px;
+        padding: 10px 12px 10px 18px;
+        border-radius: 16px;
+        border: 1px solid var(--border-subtle);
+        background: var(--card-bg-solid);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    [data-theme="light"] .rp-bar { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); }
+    .rp-bar-meta { min-width: 0; font-size: 0.8rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .rp-bar-actions { display: flex; gap: 8px; flex: none; }
+    .rp-bar .st-btn.is-done { background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; }
+
+    @media (max-width: 576px) {
+        .rp-row { padding: 13px 16px; }
+        .rp-bar { bottom: calc(86px + env(safe-area-inset-bottom) + 10px); padding-left: 16px; }
+    }
+</style>
+
+<div class="st rp">
+    <header class="st-head">
+        <a class="st-back" href="{{ back_url }}" aria-label="Back" title="Back"><i class="bi bi-arrow-left"></i></a>
+        <p class="rp-kicker">{{ kicker }}</p>
+        {% if custom_retrieval %}
+        <label for="customWorkoutTitle" class="visually-hidden">Workout title</label>
+        <input type="text" id="customWorkoutTitle" class="rp-title-input" maxlength="80" autocomplete="off"
+               value="{{ custom_workout_title }}" placeholder="{{ default_custom_workout_title }}"
+               data-default-title="{{ default_custom_workout_title }}">
+        {% else %}
+        <h1 class="st-title">{{ title }}</h1>
+        {% endif %}
+        <p class="rp-meta">{{ exercise_count or 0 }} exercise{{ '' if exercise_count == 1 else 's' }} · {{ set_count or 0 }} set{{ '' if set_count == 1 else 's' }}{% if plan.bodyweight %} · Bodyweight {{ plan.bodyweight }}{% endif %}</p>
+    </header>
+
+    <section class="st-section" aria-label="Plan">
+        <div class="st-label"><span>Plan</span><span class="st-label-aside">Last numbers under each</span></div>
+        <div class="st-group">
+            {% for ex in plan.exercises %}
+            <div class="rp-row">
+                <div class="rp-main">
+                    <span class="rp-name">{{ ex.name }}</span>
+                    {% if ex.fresh %}
+                    <span class="rp-sets is-fresh">No history yet</span>
+                    {% else %}
+                    <span class="rp-sets">{{ ex.sets_label }}</span>
+                    {% endif %}
+                </div>
+                {% if ex.target %}<span class="rp-target">{{ ex.target }}</span>{% endif %}
+            </div>
+            {% else %}
+            <div class="st-empty">{{ output }}</div>
+            {% endfor %}
+        </div>
+
+        <details class="rp-text">
+            <summary>View as text<i class="bi bi-chevron-right st-chev" aria-hidden="true"></i></summary>
+            <div class="st-group"><pre id="planPreview"></pre></div>
+        </details>
+    </section>
+
+    <textarea id="planText" class="visually-hidden" readonly tabindex="-1" aria-hidden="true">{{ output }}</textarea>
+
+    <div class="rp-bar">
+        <span class="rp-bar-meta">Ready for Notes</span>
+        <div class="rp-bar-actions">
+            <button type="button" class="st-btn st-btn-quiet st-btn-sm" id="shareBtn" hidden><i class="bi bi-box-arrow-up"></i>Share</button>
+            <button type="button" class="st-btn st-btn-primary st-btn-sm" id="copyBtn"><i class="bi bi-clipboard"></i>Copy</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        const textArea = document.getElementById('planText');
+        const preview = document.getElementById('planPreview');
+        const copyBtn = document.getElementById('copyBtn');
+        const shareBtn = document.getElementById('shareBtn');
+        const titleInput = document.getElementById('customWorkoutTitle');
+        const sync = () => { preview.textContent = textArea.value; };
+        sync();
+
+        if (titleInput) {
+            // Header line looks like "24/9/26 - Chest & Triceps"; keep the date, swap the title.
+            const firstLine = textArea.value.split('\n', 1)[0];
+            const datePrefix = firstLine.split(' - ', 1)[0];
+            const fallback = titleInput.getAttribute('data-default-title') || 'Custom Workout';
+            titleInput.addEventListener('input', () => {
+                const title = titleInput.value.replace(/\s+/g, ' ').trim() || fallback;
+                const lines = textArea.value.split('\n');
+                lines[0] = `${datePrefix} - ${title}`;
+                textArea.value = lines.join('\n');
+                sync();
+            });
+            titleInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); }
+            });
+        }
+
+        const copied = () => {
+            const original = copyBtn.innerHTML;
+            copyBtn.innerHTML = '<i class="bi bi-check2"></i>Copied';
+            copyBtn.classList.add('is-done');
+            setTimeout(() => { copyBtn.innerHTML = original; copyBtn.classList.remove('is-done'); }, 1800);
+        };
+        const copy = async () => {
+            try {
+                await navigator.clipboard.writeText(textArea.value);
+            } catch (e) {
+                textArea.classList.remove('visually-hidden');
+                textArea.select();
+                document.execCommand('copy');
+                textArea.classList.add('visually-hidden');
+                textArea.blur();
+            }
+            copied();
+        };
+        copyBtn.addEventListener('click', copy);
+
+        // Share sheet (iPhone: straight into Notes). Only where the browser has one.
+        if (navigator.share) {
+            shareBtn.hidden = false;
+            shareBtn.addEventListener('click', async () => {
+                try { await navigator.share({ text: textArea.value }); } catch (e) { /* closed */ }
+            });
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (!e.metaKey || (e.key || '').toLowerCase() !== 'c') return;
+            if (document.activeElement === titleInput) return;
+            if (String(window.getSelection() || '').length) return;
+            e.preventDefault();
+            copy();
+        });
+    })();
+</script>
+{% endblock %}

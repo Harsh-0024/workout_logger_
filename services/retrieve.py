@@ -1155,3 +1155,75 @@ def _count_sets_from_line(sets_line: str, target_sets: int = 3) -> int:
     tokens = sets_line.replace('kg', '').replace('lbs', '').replace('lb', '').strip().split()
     raw_count = len([t for t in tokens if t])
     return int(target_sets) if target_sets and raw_count < int(target_sets) else raw_count
+
+
+def _target_label(declared_sets, inline_range) -> str:
+    parts = []
+    if declared_sets:
+        parts.append(f"{declared_sets} set{'' if declared_sets == 1 else 's'}")
+    rng = (inline_range or "").strip()
+    if rng:
+        if re.fullmatch(r"[\d\s\-–—]+", rng):
+            rng = f"{rng} reps"
+        elif re.fullmatch(r"[\d\s\-–—]+s", rng, flags=re.IGNORECASE):
+            rng = f"{rng[:-1].strip()} s"
+        else:
+            rng = rng[:1].lower() + rng[1:]
+        parts.append(rng)
+    return " · ".join(parts)
+
+
+def _pretty_load(token: str) -> str:
+    token = str(token or "").strip()
+    if token.lower().startswith("bw"):
+        return "BW" + token[2:].replace("-", "−")
+    try:
+        return f"{float(token):g}"
+    except ValueError:
+        return token
+
+
+def describe_retrieve_output(output: str) -> Dict:
+    """
+    Split retrieve text into what the plan page shows: bodyweight, and per exercise its
+    target and last numbers as "30×7 · 26.4×7". The text itself is what gets copied.
+    """
+    blocks = [block for block in re.split(r"\n\s*\n", (output or "").strip()) if block.strip()]
+    described = {"header": "", "bodyweight": None, "exercises": []}
+    if not blocks:
+        return described
+    described["header"] = blocks[0].split("\n", 1)[0].strip()
+    for block in blocks[1:]:
+        lines = [line.strip() for line in block.split("\n") if line.strip()]
+        bw_match = re.match(r"^body\s*weight\s*[-:]\s*(.+)$", lines[0], flags=re.IGNORECASE)
+        if bw_match and len(lines) == 1:
+            described["bodyweight"] = bw_match.group(1).strip()
+            continue
+        plan = _parse_plan_exercise_line(lines[0])
+        declared = plan.get("declared_sets")
+        inline_range = plan.get("inline_range")
+        target_sets = int(declared) if declared else 3
+        sets_line = lines[1] if len(lines) > 1 else ""
+        fresh = not sets_line or _is_default_numeric_sets(sets_line) or sets_line.lower().replace(" ", "") == "bw/4,1"
+        sets_label = ""
+        if not fresh:
+            try:
+                normalized = _normalize_sets_line(sets_line, target_sets=target_sets)
+                if " x " in normalized:
+                    pairs = [pair.split(" x ") for pair in normalized.split(", ")]
+                else:
+                    weights_part, reps_part = normalized.split(",", 1)
+                    pairs = list(zip(weights_part.split(), reps_part.split()))
+                timed = bool(inline_range and str(inline_range).strip().lower().endswith("s"))
+                sets_label = " · ".join(
+                    f"{_pretty_load(w)}×{r}{'s' if timed else ''}" for w, r in pairs
+                )
+            except Exception:
+                sets_label = sets_line
+        described["exercises"].append({
+            "name": plan.get("name") or lines[0],
+            "target": _target_label(declared, inline_range),
+            "sets_label": sets_label,
+            "fresh": fresh,
+        })
+    return described

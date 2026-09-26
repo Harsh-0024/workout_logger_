@@ -1,0 +1,271 @@
+"""
+Read a workout the way saving would, and say what is wrong with it before anything is stored.
+
+Used by the Log page's live preview, by saving from the web, and by the Apple Shortcut, so all
+three agree on what blocks a save (numbers with no exercise name, nothing readable) and what is
+only worth a warning (a line with no numbers, a name that looks like a typo).
+"""
+import difflib
+import re
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional
+
+from sqlalchemy import func
+
+from list_of_exercise import get_workout_days
+from models import WorkoutLog
+from parsers.workout import workout_parser
+from services.bodyweight import has_bodyweight_token
+from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names
+from services.retrieve import _parse_plan_exercise_line, get_effective_plan_text
+
+
+def _fmt_num(value) -> str:
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    return f"{number:g}"
+
+
+def _sets_label(weights, reps, *, bodyweight: bool) -> str:
+    parts = []
+    for weight, rep in zip(weights or [], reps or []):
+        if bodyweight:
+            w = float(weight or 0)
+            load = "BW" if abs(w) < 1e-9 else f"BW{'+' if w > 0 else '−'}{_fmt_num(abs(w))}"
+        else:
+            load = _fmt_num(weight)
+        parts.append(f"{load}×{rep}")
+    return " · ".join(parts)
+
+
+def _date_label(value: datetime) -> str:
+    day = value.date()
+    today = datetime.now().date()
+    if day == today:
+        return "Today"
+    if day == today - timedelta(days=1):
+        return "Yesterday"
+    label = f"{day.strftime('%a')}, {day.day} {day.strftime('%b')}"
+    return label if day.year == today.year else f"{label} {day.year}"
+
+
+def _plain(name: str) -> str:
+    """Lower-case letters and digits only, for typo distance (no plural stripping)."""
+    return re.sub(r"[^a-z0-9]+", " ", (name or "").lower()).strip()
+
+
+def _changed_chars(a: str, b: str) -> int:
+    matcher = difflib.SequenceMatcher(None, a, b)
+    return sum(max(i2 - i1, j2 - j1) for tag, i1, i2, j1, j2 in matcher.get_opcodes() if tag != "equal")
+
+
+class _KnownNames:
+    """The user's logged exercise names plus their plan's, for "is this new?" and "did you mean?"."""
+
+    def __init__(self, db_session, user):
+        rows = (
+            db_session.query(WorkoutLog.exercise, func.count(WorkoutLog.id))
+            .filter(WorkoutLog.user_id == user.id)
+            .group_by(WorkoutLog.exercise)
+            .all()
+        )
+        counts = {name: count for name, count in rows if name and name != "Unknown Exercise"}
+        self.history_index = build_name_index(counts.keys())
+
+        plan_names = []
+        try:
+            data = get_workout_days(get_effective_plan_text(db_session, user) or "")
+            for days in (data.get("workout") or {}).values():
+                for lines in (days or {}).values():
+                    for line in lines or []:
+                        name = _parse_plan_exercise_line(line).get("name")
+                        if name:
+                            plan_names.append(name)
+        except Exception:
+            plan_names = []
+        self.plan_norms = {normalize_exercise_name(n) for n in plan_names if normalize_exercise_name(n)}
+
+        # Suggestion candidates: the most-logged spelling wins for each plain name.
+        self.candidates: Dict[str, str] = {}
+        for name in sorted(counts, key=lambda n: counts[n]):
+            key = _plain(name)
+            if key:
+                self.candidates[key] = name
+        for name in plan_names:
+            key = _plain(name)
+            if key and key not in self.candidates:
+                self.candidates[key] = name
+
+    def is_known(self, name: str) -> bool:
+        if resolve_equivalent_names(name, self.history_index):
+            return True
+        return normalize_exercise_name(name) in self.plan_norms
+
+    def suggestion(self, name: str) -> Optional[str]:
+        key = _plain(name)
+        if not key:
+            return None
+        best, best_changes = None, None
+        for candidate in difflib.get_close_matches(key, list(self.candidates), n=3, cutoff=0.8):
+            changes = _changed_chars(key, candidate)
+            if changes <= max(2, len(key) // 7) and (best_changes is None or changes < best_changes):
+                best, best_changes = candidate, changes
+        return self.candidates.get(best) if best else None
+
+
+def _existing_day(db_session, user_id: int, day: datetime) -> Optional[Dict]:
+    start = datetime.combine(day.date(), datetime.min.time())
+    logs = (
+        db_session.query(WorkoutLog)
+        .filter(WorkoutLog.user_id == user_id)
+        .filter(WorkoutLog.date >= start, WorkoutLog.date < start + timedelta(days=1))
+        .order_by(WorkoutLog.id)
+        .all()
+    )
+    if not logs:
+        return None
+    return {
+        "date_str": start.strftime("%Y-%m-%d"),
+        "date": logs[0].date,
+        "title": logs[0].workout_name or "Workout",
+        "exercise_count": len(logs),
+        "exercises": {normalize_exercise_name(log.exercise) for log in logs},
+    }
+
+
+def _quote(text: str, limit: int = 40) -> str:
+    text = re.sub(r"\s+", " ", text or "").strip()
+    return f"“{text[:limit - 1]}…”" if len(text) > limit else f"“{text}”"
+
+
+def check_workout_text(db_session, user, text: str, *, header: Optional[str] = None, append: bool = False) -> Dict:
+    """
+    Parse `text` like saving would and describe the result.
+
+    `header` is a first line to put in front (the Edit page keeps title and date in their own fields);
+    line numbers still refer to `text`. With `append`, exercises already logged that day are flagged.
+    """
+    offset = 0
+    source = text or ""
+    if header:
+        source = f"{header}\n{source}"
+        offset = 1
+    lines = source.split("\n")
+
+    result: Dict = {
+        "ok": False,
+        "parsed": None,
+        "errors": [],
+        "warnings": [],
+        "exercises": [],
+        "exercise_count": 0,
+        "set_count": 0,
+        "existing": None,
+    }
+
+    parsed = workout_parser(source, bodyweight=getattr(user, "bodyweight", None), preserve_bodyweight_offsets=True) \
+        if source.strip() else None
+    if not parsed:
+        result["errors"].append({"line": None, "message": "Paste or type a workout first."})
+        return result
+    result["parsed"] = parsed
+
+    parsed_date = parsed.get("date") or datetime.now()
+    result.update({
+        "title": parsed.get("workout_name") or "Workout",
+        "date_str": parsed_date.strftime("%Y-%m-%d"),
+        "date_label": _date_label(parsed_date),
+        "date_found": bool(parsed.get("date_found")),
+        "bodyweight": parsed.get("bodyweight"),
+    })
+
+    existing = _existing_day(db_session, user.id, parsed_date)
+    if existing:
+        result["existing"] = {k: v for k, v in existing.items() if k not in {"exercises", "date"}}
+
+    known = _KnownNames(db_session, user)
+    needs_bodyweight = False
+    for item in parsed.get("exercises") or []:
+        line_no = item.get("line")
+        shown_line = (line_no - offset) if isinstance(line_no, int) else None
+        raw_line = lines[line_no - 1] if isinstance(line_no, int) and 0 < line_no <= len(lines) else ""
+        uses_bw = has_bodyweight_token(item.get("exercise_string") or "")
+        entry = {
+            "line": shown_line,
+            "name": item.get("name"),
+            "sets_label": "",
+            "set_count": 0,
+            "state": "ok",
+            "note": "",
+            "suggestion": None,
+            "fix_line": None,
+        }
+
+        if item.get("missing_name"):
+            first_data = (item.get("exercise_string") or raw_line).split("\n", 1)[0]
+            message = (
+                f"Line {shown_line}: {_quote(first_data)} has numbers but no exercise name. "
+                "Put the exercise name on the line above it."
+            )
+            entry.update(state="missing", name="No exercise name", note="Add the exercise name above these numbers")
+            result["errors"].append({"line": shown_line, "message": message})
+            result["exercises"].append(entry)
+            continue
+
+        if not item.get("valid"):
+            entry.update(state="skip", name=(raw_line.strip() or item.get("name")),
+                         note="No numbers, so this line won't be saved")
+            result["warnings"].append({
+                "line": shown_line,
+                "message": f"Line {shown_line}: {_quote(raw_line or item.get('name'))} has no numbers, so it won't be saved.",
+            })
+            result["exercises"].append(entry)
+            continue
+
+        weights, reps = item.get("weights") or [], item.get("reps") or []
+        entry["sets_label"] = _sets_label(weights, reps, bodyweight=uses_bw)
+        entry["set_count"] = len(reps)
+        result["exercise_count"] += 1
+        result["set_count"] += len(reps)
+        if uses_bw and getattr(user, "bodyweight", None) is None and parsed.get("bodyweight") is None:
+            needs_bodyweight = True
+
+        name = item.get("name") or ""
+        if append and existing and normalize_exercise_name(name) in existing["exercises"]:
+            entry.update(state="dup", note="Already logged that day, would be added again")
+        elif not known.is_known(name):
+            suggestion = known.suggestion(name)
+            if suggestion:
+                source_name = item.get("source_name") or ""
+                fix_line = raw_line.replace(source_name, suggestion, 1) if source_name and source_name in raw_line else None
+                entry.update(state="suggest", suggestion=suggestion, fix_line=fix_line,
+                             note=f"New name. Did you mean {suggestion}?")
+                result["warnings"].append({
+                    "line": shown_line,
+                    "message": f"Line {shown_line}: “{name}” is new. Did you mean {suggestion}?",
+                })
+            else:
+                entry.update(state="new", note="New exercise")
+        result["exercises"].append(entry)
+
+    if needs_bodyweight:
+        result["warnings"].append({
+            "line": None,
+            "message": "BW is used but no bodyweight is set. Add a “Body Weight - 73 kg” line or set it in Settings.",
+        })
+
+    if not result["errors"] and result["exercise_count"] == 0:
+        result["errors"].append({
+            "line": None,
+            "message": "Couldn't find any exercise with numbers in this text. Nothing was saved.",
+        })
+
+    result["ok"] = not result["errors"]
+    return result
+
+
+def public_check(result: Dict) -> Dict:
+    """The JSON-safe part of a check, for the Log page preview."""
+    return {k: v for k, v in result.items() if k != "parsed"}

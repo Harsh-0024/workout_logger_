@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
+{% block content %}
+{{ st.styles() }}
+<style>
+    /* Every session on one screen-and-a-bit: two columns on phones, four on wide screens,
+       cells split by hairlines inside one quiet group per cycle (no boxes per session). */
+    .rt-group + .rt-group { margin-top: 24px; }
+    .rt-group .st-label { margin-bottom: 9px; }
+    .rt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .rt-cell {
+        display: flex; flex-direction: column; justify-content: center; gap: 3px;
+        min-height: 64px;
+        padding: 12px 16px;
+        color: var(--text-primary);
+        text-decoration: none;
+        /* Hairlines to the right and below; the group clips the outer edges. */
+        box-shadow: 1px 0 0 var(--st-hair), 0 1px 0 var(--st-hair);
+        transition: background var(--transition-fast);
+        -webkit-tap-highlight-color: transparent;
+    }
+    .st a.rt-cell, .st a.rt-cell:hover { color: var(--text-primary); }
+    .rt-cell:hover { background: var(--st-row-hover); }
+    .rt-cell:active { background: var(--gold-subtle); }
+    .rt-cell:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-glow); }
+    .rt-num { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    .rt-name { font-size: 0.93rem; font-weight: 600; line-height: 1.3; overflow-wrap: anywhere; }
+    .rt-more { margin-top: 30px; }
+
+    @media (min-width: 720px) {
+        .st.rt { max-width: 860px; }
+        .rt-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .rt-cell { min-height: 76px; padding: 14px 18px; }
+    }
+    @media (max-width: 576px) {
+        .rt .st-head { padding-bottom: 0; }
+        .rt-cell { padding: 12px 14px; }
+    }
+</style>
+
+<div class="st rt">
+    {{ st.head('Retrieve', 'Pick a session to get its plan with your last numbers.') }}
+
+    <div class="st-section">
+        {% set ns = namespace(n=0) %}
+        {% for group in groups %}
+        <section class="rt-group" aria-label="{{ group.title }}">
+            <div class="st-label"><span>{{ group.title }}</span></div>
+            <div class="st-group rt-grid">
+                {% for item in group['items'] %}
+                {% set ns.n = ns.n + 1 %}
+                <a class="rt-cell" href="{{ item.url }}" {% if ns.n <= 9 %}data-shortcut="{{ ns.n }}"{% endif %}>
+                    <span class="rt-num">{{ item.number }}</span>
+                    <span class="rt-name">{{ item.name }}</span>
+                </a>
+                {% endfor %}
+            </div>
+        </section>
+        {% endfor %}
+    </div>
+
+    <div class="st-group rt-more">
+        <a class="st-row" href="{{ url_for('retrieve_custom') }}">
+            <i class="bi bi-sliders2-vertical st-row-ico" aria-hidden="true"></i>
+            <span class="st-row-main">
+                <span class="st-row-title">Custom workout</span>
+                <span class="st-row-desc">Pick any exercises from your plan and history</span>
+            </span>
+            <i class="bi bi-chevron-right st-chev" aria-hidden="true"></i>
+        </a>
+    </div>
+</div>
+{% endblock %}

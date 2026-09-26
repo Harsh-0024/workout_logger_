@@ -1355,7 +1355,7 @@ def _get_best_log_before_date(
 
 def compute_workout_summary_for_date(db_session, user, workout_date: date | datetime) -> tuple[list[Dict], int, int]:
     """
-    Build the `summary` rows that `templates/result.html` expects, for an already-logged day.
+    Build per-exercise summary rows (previous best, today, medal) for an already-logged day.
     This recreates the "previous best vs today's performance" session summary without mutating history.
     """
     workout_day = workout_date.date() if isinstance(workout_date, datetime) else workout_date
