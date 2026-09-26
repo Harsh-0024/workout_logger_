@@ -1,65 +1,46 @@
 {% extends "base.html" %}
-{% block title %}Verify Email Change - Workout Tracker{% endblock %}
+{% import '_auth_ui.html' as au with context %}
+
+{% block title %}Confirm email change - Workout Tracker{% endblock %}
+{% block flashes %}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-8 col-lg-6">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3">
-                    <i class="bi bi-envelope-check text-gold" style="font-size: clamp(2.5rem, 6vw, 3rem); opacity: 0.7;"></i>
-                </div>
-                <h2 class="fw-bold mb-2">Confirm Email Change</h2>
-                <p class="text-muted mb-0">Enter the codes sent to both addresses.</p>
+{{ au.styles() }}
+<main class="au">
+    <div class="au-card au-wide">
+        <div class="au-icon"><i class="bi bi-envelope-check" aria-hidden="true"></i></div>
+        {{ au.head('Confirm email change', "We sent a code to both addresses. Enter them here to switch.") }}
+        {{ au.messages(quiet=True) }}
+
+        <form method="POST" action="{{ action_url }}" id="emailChangeForm">
+            <div class="au-code-block" data-field>
+                <label class="au-code-label" for="otp_code_old"><span>Current ·</span> {{ current_email }}</label>
+                {{ au.code('otp_code_old', label='Code sent to ' ~ current_email, autosubmit=False) }}
             </div>
-
-            <form method="POST" action="{{ action_url }}">
-                <div class="mb-4">
-                    <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Code sent to {{ current_email }}
-                    </label>
-                    <input
-                        type="text"
-                        name="otp_code_old"
-                        required
-                        maxlength="6"
-                        pattern="[0-9]{6}"
-                        class="form-control text-center"
-                        style="font-size: clamp(1.25rem, 4.5vw, 1.6rem); letter-spacing: 0.35rem; font-weight: 700;"
-                        placeholder="000000"
-                        autocomplete="one-time-code"
-                    >
-                </div>
-
-                <div class="mb-4">
-                    <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Code sent to {{ new_email }}
-                    </label>
-                    <input
-                        type="text"
-                        name="otp_code_new"
-                        required
-                        maxlength="6"
-                        pattern="[0-9]{6}"
-                        class="form-control text-center"
-                        style="font-size: clamp(1.25rem, 4.5vw, 1.6rem); letter-spacing: 0.35rem; font-weight: 700;"
-                        placeholder="000000"
-                        autocomplete="one-time-code"
-                    >
-                </div>
-
-                <button type="submit" class="btn btn-gold-solid w-100">
-                    Verify Email Change
-                </button>
-            </form>
-
-            <div class="text-center pt-4 mt-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <p class="text-muted small mb-2">Need new codes?</p>
-                <form method="POST" action="{{ resend_url }}" class="d-inline">
-                    <button type="submit" class="btn btn-gold-outline btn-sm">Resend Codes</button>
-                </form>
+            <div class="au-code-block" data-field>
+                <label class="au-code-label" for="otp_code_new"><span>New ·</span> {{ new_email }}</label>
+                {{ au.code('otp_code_new', label='Code sent to ' ~ new_email, autofocus=False, autosubmit=False) }}
             </div>
-        </div>
+            <div class="au-actions">
+                <button type="submit" class="au-btn" data-loading-text="Checking…">Confirm change</button>
+                <p class="au-note">Codes work for {{ expiry_minutes or 10 }} minutes. Can't find them? Check spam.</p>
+            </div>
+        </form>
+
+        {{ au.resend(resend_url, label='Resend codes') }}
     </div>
-</div>
+
+    <p class="au-alt"><a href="{{ url_for('user_settings') }}" class="au-link au-back"><i class="bi bi-arrow-left" aria-hidden="true"></i>Back to settings</a></p>
+</main>
+
+<script>
+    // When the first code is complete, move on to the second.
+    (function () {
+        const first = document.getElementById('otp_code_old');
+        const second = document.getElementById('otp_code_new');
+        first?.addEventListener('input', () => {
+            if (first.value.length === 6 && !second.value) second.focus();
+        });
+    })();
+</script>
 {% endblock %}

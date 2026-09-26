@@ -251,7 +251,7 @@ def register_auth_routes(app, email_service):
                         "warning",
                     )
                 else:
-                    flash("Account created! Please check your email for the verification code.", "success")
+                    flash("Account created. Your code is on its way.", "success")
 
                 session['pending_verification_user_id'] = user.id
                 return redirect(url_for('verify_email'))
@@ -428,6 +428,9 @@ def register_auth_routes(app, email_service):
             purpose_label='Login',
             resend_url=url_for('resend_login_otp'),
             action_url=url_for('verify_login_otp'),
+            expiry_minutes=Config.OTP_TOKEN_EXPIRY_MINUTES,
+            back_url=url_for('login_otp_request'),
+            back_label='Use a different account',
         )
 
     def resend_login_otp():
@@ -524,7 +527,11 @@ def register_auth_routes(app, email_service):
                 logger.error(f"Verification error: {e}", exc_info=True)
                 flash("An error occurred. Please try again.", "error")
 
-        return render_template('verify_email.html', email=user_email)
+        return render_template(
+            'verify_email.html',
+            email=user_email,
+            expiry_hours=Config.VERIFICATION_TOKEN_EXPIRY,
+        )
 
     def resend_verification():
         if current_user.is_authenticated:
@@ -1305,6 +1312,9 @@ def register_auth_routes(app, email_service):
             purpose_label='Profile Update',
             resend_url=url_for('resend_profile_update_otp'),
             action_url=url_for('verify_profile_update_otp'),
+            expiry_minutes=Config.OTP_TOKEN_EXPIRY_MINUTES,
+            back_url=url_for('user_settings'),
+            back_label='Back to settings',
         )
 
     @login_required
@@ -1348,6 +1358,9 @@ def register_auth_routes(app, email_service):
             purpose_label='Change Password',
             resend_url=url_for('resend_password_change_otp'),
             action_url=url_for('verify_password_change_otp'),
+            expiry_minutes=Config.OTP_TOKEN_EXPIRY_MINUTES,
+            back_url=url_for('account_settings'),
+            back_label='Back to account',
         )
 
     @login_required
@@ -1454,6 +1467,7 @@ def register_auth_routes(app, email_service):
             new_email=new_email,
             resend_url=url_for('resend_email_change_otp'),
             action_url=url_for('verify_email_change_otp'),
+            expiry_minutes=Config.OTP_TOKEN_EXPIRY_MINUTES,
         )
 
     @login_required

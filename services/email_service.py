@@ -1,12 +1,116 @@
 """
 Email service for sending verification codes and admin notifications.
 """
+import html
+
 import requests
 from flask_mail import Mail, Message
 from flask import current_app
 from typing import Optional
 from utils.logger import logger
 from config import Config
+
+
+# ---------------------------------------------------------------------------
+# One calm layout for every account email. Tables and inline styles so it looks
+# the same in Gmail, Outlook and Apple Mail; Apple Mail also gets a dark version.
+# ---------------------------------------------------------------------------
+
+_EMAIL_DARK_CSS = """
+    @media (prefers-color-scheme: dark) {
+        .wt-bg { background: #000000 !important; }
+        .wt-card { background: #111113 !important; border-color: #26262a !important; }
+        .wt-t1 { color: #f5f5f5 !important; }
+        .wt-t2 { color: #a1a1aa !important; }
+        .wt-t3 { color: #71717a !important; }
+        .wt-codebox { background: #1a1608 !important; border-color: #3d3314 !important; }
+        .wt-code { color: #f4d03f !important; }
+        .wt-hair { border-color: #26262a !important; }
+    }
+"""
+
+
+def _email_page(preheader: str, inner_html: str) -> str:
+    """Wrap card content in the shared email shell (brand, card, footer)."""
+    font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>Workout Tracker</title>
+<style>{_EMAIL_DARK_CSS}</style>
+</head>
+<body class="wt-bg" style="margin:0;padding:0;background:#f4f2ee;-webkit-text-size-adjust:100%;">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{html.escape(preheader)}&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;&#8199;&#847;</div>
+<table role="presentation" class="wt-bg" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f2ee;">
+<tr><td align="center" style="padding:40px 16px 48px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;">
+    <tr><td style="padding:0 4px 22px;">
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+        <td width="34" height="34" align="center" valign="middle" style="width:34px;height:34px;background:#0b0b0d;border-radius:10px;font-family:{font};font-size:12px;font-weight:700;letter-spacing:0.5px;color:#d4af37;">WT</td>
+        <td class="wt-t1" style="padding-left:12px;font-family:{font};font-size:15px;font-weight:600;color:#1a1a1a;">Workout Tracker</td>
+      </tr></table>
+    </td></tr>
+    <tr><td class="wt-card" style="background:#ffffff;border:1px solid #e8e4dc;border-radius:18px;padding:36px 32px 32px;font-family:{font};">
+      {inner_html}
+    </td></tr>
+    <tr><td class="wt-t3" align="center" style="padding:22px 16px 0;font-family:{font};font-size:12px;line-height:1.6;color:#9a958a;">
+      Sent by Workout Tracker. Replies to this address aren't read.
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>"""
+
+
+def _email_title(text: str) -> str:
+    return (
+        f'<h1 class="wt-t1" style="margin:0 0 12px;font-size:22px;line-height:1.3;font-weight:600;color:#111111;">'
+        f'{text}</h1>'
+    )
+
+
+def _email_text(text: str, muted: bool = False, top: int = 0) -> str:
+    color, cls, size = ('#8a8579', 'wt-t3', 13) if muted else ('#55524c', 'wt-t2', 15)
+    return (
+        f'<p class="{cls}" style="margin:{top}px 0 0;font-size:{size}px;line-height:1.6;color:{color};">{text}</p>'
+    )
+
+
+def _code_email_html(preheader: str, title: str, intro: str, code: str, expiry: str, notes: list[str]) -> str:
+    """Card for any email whose job is to deliver a 6-digit code."""
+    mono = "'SF Mono', SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace"
+    code_box = f"""
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:26px 0 12px;">
+        <tr><td class="wt-codebox" align="center" style="background:#faf6ea;border:1px solid #ece2c4;border-radius:14px;padding:22px 12px;">
+          <div class="wt-code" style="font-family:{mono};font-size:34px;line-height:1;font-weight:700;letter-spacing:10px;padding-left:10px;color:#1a1a1a;">{html.escape(code)}</div>
+        </td></tr>
+      </table>"""
+    parts = [
+        _email_title(title),
+        _email_text(intro),
+        code_box,
+        f'<p class="wt-t3" align="center" style="margin:0;font-size:13px;line-height:1.6;color:#8a8579;text-align:center;">{expiry}</p>',
+    ]
+    for i, note in enumerate(notes):
+        parts.append(_email_text(note, muted=(i == len(notes) - 1), top=22 if i == 0 else 10))
+    return _email_page(preheader, '\n'.join(parts))
+
+
+# purpose -> (subject, title, what the code does)
+_CODE_EMAILS = {
+    'login_otp': ('Your sign-in code', 'Your sign-in code', 'sign in to Workout Tracker'),
+    'forgot_password': ('Your password reset code', 'Reset your password', 'reset your password'),
+    'change_password': ('Your password change code', 'Confirm password change', 'change your password'),
+    'verify_email': ('Confirm your email for Workout Tracker', 'Confirm your email', 'confirm your email and finish setting up your account'),
+    'change_email_old': ('Confirm your email change', 'Confirm email change', "confirm it's you"),
+    'change_email_new': ('Confirm your new email', 'Confirm your new email', 'confirm this address'),
+    'profile_update': ('Your profile update code', 'Confirm profile update', 'save changes to your profile'),
+}
 
 
 class EmailService:
@@ -73,360 +177,63 @@ class EmailService:
     def send_otp_email(self, email: str, username: str, otp_code: str, purpose: str = 'login') -> bool:
         """Send a one-time passcode email for verification flows."""
         try:
-            purpose_aliases = {
-                'login': 'login_otp',
-            }
-            normalized_purpose = purpose_aliases.get(purpose, purpose)
-            purpose_details = {
-                'login_otp': {
-                    'label': 'Login',
-                    'subject': 'Login Code - Workout Tracker',
-                    'action': 'sign in',
-                },
-                'forgot_password': {
-                    'label': 'Password Reset',
-                    'subject': 'Password Reset Code - Workout Tracker',
-                    'action': 'reset your password',
-                },
-                'change_password': {
-                    'label': 'Change Password',
-                    'subject': 'Password Change Code - Workout Tracker',
-                    'action': 'change your password',
-                },
-                'verify_email': {
-                    'label': 'Email Verification',
-                    'subject': 'Verify Your Email - Workout Tracker',
-                    'action': 'verify your email address',
-                },
-                'change_email_old': {
-                    'label': 'Confirm Email Change',
-                    'subject': 'Confirm Email Change - Workout Tracker',
-                    'action': 'confirm your current email address',
-                },
-                'change_email_new': {
-                    'label': 'Confirm New Email',
-                    'subject': 'Confirm New Email - Workout Tracker',
-                    'action': 'confirm your new email address',
-                },
-                'profile_update': {
-                    'label': 'Profile Update',
-                    'subject': 'Profile Update Code - Workout Tracker',
-                    'action': 'update your profile',
-                },
-            }
-
-            details = purpose_details.get(
+            normalized_purpose = {'login': 'login_otp'}.get(purpose, purpose)
+            subject, title, action = _CODE_EMAILS.get(
                 normalized_purpose,
-                {
-                    'label': 'Verification',
-                    'subject': 'Verification Code - Workout Tracker',
-                    'action': 'complete your request',
-                },
+                ('Your verification code', 'Your verification code', 'complete your request'),
             )
 
             if normalized_purpose == 'verify_email':
-                expiry_value = Config.VERIFICATION_TOKEN_EXPIRY
-                expiry_unit = 'hours'
+                expiry = f"{Config.VERIFICATION_TOKEN_EXPIRY} hours"
             else:
-                expiry_value = Config.OTP_TOKEN_EXPIRY_MINUTES
-                expiry_unit = 'minutes'
+                expiry = f"{Config.OTP_TOKEN_EXPIRY_MINUTES} minutes"
 
-            extra_note = ""
-            if normalized_purpose in {'change_email_old', 'change_email_new'}:
-                extra_note = (
-                    "You'll need to enter both codes (current and new email) to complete the email change."
-                )
+            name = html.escape(username)
+            if normalized_purpose == 'verify_email':
+                intro = f"Hi {name}, welcome to Workout Tracker! Enter this code to {action}."
+            else:
+                intro = f"Hi {name}, enter this code to {action}."
 
-            subject = details['subject']
+            notes = []
+            if normalized_purpose == 'login_otp':
+                notes.append("Once you're in, you'll be asked to choose a new password.")
+            elif normalized_purpose == 'change_email_old':
+                notes.append("We've also sent a code to your new address. You'll need both to finish the change.")
+            elif normalized_purpose == 'change_email_new':
+                notes.append("You'll also need the code we sent to your current email.")
+            if normalized_purpose == 'verify_email':
+                notes.append("Didn't sign up? You can ignore this email and no account will be activated.")
+            else:
+                notes.append("Didn't ask for this? You can ignore this email. Nobody can get in without the code.")
 
-            body = f"""
-Hello {username.title()},
+            plain_intro = intro.replace(name, username)
+            body = "\n\n".join([
+                plain_intro,
+                otp_code,
+                f"The code works for {expiry}.",
+                *notes,
+                "Workout Tracker",
+            ]) + "\n"
 
-Use the code below to {details['action']}:
-
-Your one-time code is: {otp_code}
-
-This code will expire in {expiry_value} {expiry_unit}.
-{extra_note}
-
-If you didn't request this, you can ignore this email.
-
-Best regards,
-Workout Tracker Team
-            """
-
-            html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-            padding: 40px 20px;
-            line-height: 1.6;
-        }}
-        .container {{
-            max-width: 600px;
-            margin: 0 auto;
-            background: rgba(20, 20, 20, 0.95);
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.1);
-        }}
-        .header {{
-            background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
-            padding: 40px 30px;
-            text-align: center;
-            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
-        }}
-        .header h1 {{
-            color: #D4AF37;
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
-        }}
-        .header p {{
-            color: rgba(212, 175, 55, 0.7);
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }}
-        .content {{
-            padding: 40px 30px;
-            color: rgba(255, 255, 255, 0.9);
-        }}
-        .content h2 {{
-            color: #D4AF37;
-            font-size: 22px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }}
-        .content p {{
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 16px;
-            font-size: 15px;
-        }}
-        .code-box {{
-            background: rgba(212, 175, 55, 0.05);
-            border: 2px solid rgba(212, 175, 55, 0.3);
-            padding: 30px;
-            margin: 30px 0;
-            text-align: center;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.1);
-        }}
-        .code {{
-            font-size: 36px;
-            font-weight: 700;
-            color: #D4AF37;
-            letter-spacing: 8px;
-            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
-            font-family: 'Courier New', monospace;
-        }}
-        .highlight {{
-            color: #D4AF37;
-            font-weight: 600;
-        }}
-        .footer {{
-            text-align: center;
-            padding: 30px;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 12px;
-            border-top: 1px solid rgba(212, 175, 55, 0.1);
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🏋️ WORKOUT TRACKER</h1>
-            <p>{details['label']} Code</p>
-        </div>
-        <div class="content">
-            <h2>Hello {username.title()},</h2>
-            <p>Use the code below to <span class="highlight">{details['action']}</span>:</p>
-
-            <div class="code-box">
-                <div class="code">{otp_code}</div>
-            </div>
-
-            <p><span class="highlight">This code will expire in {expiry_value} {expiry_unit}.</span></p>
-
-            {'<p>' + extra_note + '</p>' if extra_note else ''}
-
-            <p>If you didn't request this, you can ignore this email.</p>
-
-            <p style="margin-top: 30px;">Best regards,<br><span class="highlight">Workout Tracker Team</span></p>
-        </div>
-        <div class="footer">
-            <p>This is an automated message, please do not reply.</p>
-        </div>
-    </div>
-</body>
-</html>
-            """
+            html_body = _code_email_html(
+                preheader=f"{otp_code} is your code. It works for {expiry}.",
+                title=title,
+                intro=intro,
+                code=otp_code,
+                expiry=f"Works for {expiry}",
+                notes=notes,
+            )
 
             return self._send_message(subject=subject, recipients=[email], body=body, html=html_body)
 
         except Exception as e:
             logger.error(f"Failed to send OTP email to {email}: {e}", exc_info=True)
             return False
-    
+
     def send_verification_email(self, email: str, username: str, verification_code: str) -> bool:
-        """
-        Send verification code email to user.
-        
-        Args:
-            email: User's email address
-            username: User's username
-            verification_code: 6-digit verification code
-        
-        Returns:
-            True if email sent successfully, False otherwise
-        """
-        try:
-            subject = "Verify Your Workout Tracker Account"
-            
-            body = f"""
-Hello {username.title()},
+        """Send the sign-up verification code (same email as the verify_email OTP)."""
+        return self.send_otp_email(email, username, verification_code, purpose='verify_email')
 
-Welcome to Workout Tracker! To complete your registration, please verify your email address.
-
-Your verification code is: {verification_code}
-
-This code will expire in 24 hours.
-
-If you didn't create this account, please ignore this email.
-
-Best regards,
-Workout Tracker Team
-            """
-            
-            html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-            padding: 40px 20px;
-            line-height: 1.6;
-        }}
-        .container {{ 
-            max-width: 600px;
-            margin: 0 auto;
-            background: rgba(20, 20, 20, 0.95);
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.1);
-        }}
-        .header {{ 
-            background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
-            padding: 40px 30px;
-            text-align: center;
-            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
-        }}
-        .header h1 {{
-            color: #D4AF37;
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
-        }}
-        .header p {{
-            color: rgba(212, 175, 55, 0.7);
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }}
-        .content {{ 
-            padding: 40px 30px;
-            color: rgba(255, 255, 255, 0.9);
-        }}
-        .content h2 {{
-            color: #D4AF37;
-            font-size: 22px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }}
-        .content p {{
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 16px;
-            font-size: 15px;
-        }}
-        .code-box {{ 
-            background: rgba(212, 175, 55, 0.05);
-            border: 2px solid rgba(212, 175, 55, 0.3);
-            padding: 30px;
-            margin: 30px 0;
-            text-align: center;
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(212, 175, 55, 0.1);
-        }}
-        .code {{ 
-            font-size: 36px;
-            font-weight: 700;
-            color: #D4AF37;
-            letter-spacing: 8px;
-            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
-            font-family: 'Courier New', monospace;
-        }}
-        .highlight {{
-            color: #D4AF37;
-            font-weight: 600;
-        }}
-        .footer {{ 
-            text-align: center;
-            padding: 30px;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 12px;
-            border-top: 1px solid rgba(212, 175, 55, 0.1);
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🏋️ WORKOUT TRACKER</h1>
-            <p>Email Verification</p>
-        </div>
-        <div class="content">
-            <h2>Hello {username.title()},</h2>
-            <p>Welcome to <span class="highlight">Workout Tracker</span>! To complete your registration, please verify your email address using the code below:</p>
-            
-            <div class="code-box">
-                <div class="code">{verification_code}</div>
-            </div>
-            
-            <p><span class="highlight">This code will expire in 24 hours.</span></p>
-            
-            <p>If you didn't create this account, please ignore this email.</p>
-            
-            <p style="margin-top: 30px;">Best regards,<br><span class="highlight">Workout Tracker Team</span></p>
-        </div>
-        <div class="footer">
-            <p>This is an automated message, please do not reply.</p>
-        </div>
-    </div>
-</body>
-</html>
-            """
-            
-            return self._send_message(subject=subject, recipients=[email], body=body, html=html_body)
-            
-        except Exception as e:
-            logger.error(f"Failed to send verification email to {email}: {e}", exc_info=True)
-            return False
-    
     def send_account_deletion_email(
         self, 
         email: str, 
@@ -584,159 +391,38 @@ Workout Tracker Team
             return False
     
     def send_welcome_email(self, email: str, username: str) -> bool:
-        """
-        Send welcome email after successful verification.
-        
-        Args:
-            email: User's email address
-            username: User's username
-        
-        Returns:
-            True if email sent successfully, False otherwise
-        """
+        """Send welcome email after successful verification."""
         try:
-            subject = "Welcome to Workout Tracker!"
-            
-            body = f"""
-Hello {username.title()},
+            subject = "Welcome to Workout Tracker"
+            features = [
+                ("Log", "Type a workout the way you'd write it in your notes."),
+                ("Retrieve", "Pull up last session's plan before you lift."),
+                ("Stats", "Watch every lift add up over weeks and months."),
+            ]
 
-Your email has been successfully verified! Welcome to Workout Tracker.
+            body = "\n\n".join([
+                f"Hi {username}, your email is confirmed and you're all set.",
+                "\n".join(f"- {name}: {text}" for name, text in features),
+                "Workout Tracker",
+            ]) + "\n"
 
-You can now log in and start tracking your workouts.
+            rows = "".join(
+                f"""<tr><td class="wt-hair" style="padding:14px 0;border-top:1px solid #efebe3;">
+                    <div class="wt-t1" style="font-size:15px;font-weight:600;color:#111111;">{name}</div>
+                    <div class="wt-t2" style="font-size:14px;line-height:1.5;color:#6b675e;margin-top:2px;">{text}</div>
+                </td></tr>"""
+                for name, text in features
+            )
+            inner = "\n".join([
+                _email_title("You're all set"),
+                _email_text(f"Hi {html.escape(username)}, your email is confirmed. Here's what you can do:"),
+                f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:20px;">{rows}</table>',
+                _email_text("Happy lifting.", muted=True, top=18),
+            ])
+            html_body = _email_page("Your email is confirmed. Here's how to get started.", inner)
 
-Features available:
-- Log your workouts
-- Track your progress
-- View statistics and charts
-- Export your data
-
-Get started at your dashboard!
-
-Best regards,
-Workout Tracker Team
-            """
-            
-            html_body = f"""
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{ 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a1a 100%);
-            padding: 40px 20px;
-            line-height: 1.6;
-        }}
-        .container {{ 
-            max-width: 600px;
-            margin: 0 auto;
-            background: rgba(20, 20, 20, 0.95);
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(212, 175, 55, 0.1);
-        }}
-        .header {{ 
-            background: linear-gradient(135deg, rgba(212, 175, 55, 0.1) 0%, rgba(212, 175, 55, 0.05) 100%);
-            padding: 40px 30px;
-            text-align: center;
-            border-bottom: 1px solid rgba(212, 175, 55, 0.2);
-        }}
-        .header h1 {{
-            color: #D4AF37;
-            font-size: 28px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            text-shadow: 0 2px 10px rgba(212, 175, 55, 0.3);
-        }}
-        .header p {{
-            color: rgba(212, 175, 55, 0.7);
-            font-size: 14px;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-        }}
-        .content {{ 
-            padding: 40px 30px;
-            color: rgba(255, 255, 255, 0.9);
-        }}
-        .content h2 {{
-            color: #D4AF37;
-            font-size: 22px;
-            margin-bottom: 20px;
-            font-weight: 500;
-        }}
-        .content p {{
-            color: rgba(255, 255, 255, 0.7);
-            margin-bottom: 16px;
-            font-size: 15px;
-        }}
-        .features {{ 
-            background: rgba(212, 175, 55, 0.05);
-            border: 1px solid rgba(212, 175, 55, 0.2);
-            padding: 25px;
-            margin: 25px 0;
-            border-radius: 12px;
-        }}
-        .features h3 {{
-            color: #D4AF37;
-            font-size: 18px;
-            margin-bottom: 16px;
-            font-weight: 600;
-        }}
-        .feature {{ 
-            padding: 12px 0;
-            color: rgba(255, 255, 255, 0.8);
-            border-bottom: 1px solid rgba(212, 175, 55, 0.1);
-            font-size: 15px;
-        }}
-        .feature:last-child {{ border-bottom: none; }}
-        .highlight {{
-            color: #D4AF37;
-            font-weight: 600;
-        }}
-        .footer {{ 
-            text-align: center;
-            padding: 30px;
-            color: rgba(255, 255, 255, 0.4);
-            font-size: 12px;
-            border-top: 1px solid rgba(212, 175, 55, 0.1);
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🏋️ WORKOUT TRACKER</h1>
-            <p>Welcome Aboard!</p>
-        </div>
-        <div class="content">
-            <h2>Hello {username.title()},</h2>
-            <p>Your email has been successfully verified! Welcome to <span class="highlight">Workout Tracker</span>.</p>
-            
-            <div class="features">
-                <h3>Features Available:</h3>
-                <div class="feature">📝 Log your workouts</div>
-                <div class="feature">📊 Track your progress</div>
-                <div class="feature">📈 View statistics and charts</div>
-                <div class="feature">💾 Export your data</div>
-            </div>
-            
-            <p>You can now log in and start tracking your fitness journey!</p>
-            
-            <p style="margin-top: 30px;">Best regards,<br><span class="highlight">Workout Tracker Team</span></p>
-        </div>
-        <div class="footer">
-            <p>This is an automated message, please do not reply.</p>
-        </div>
-    </div>
-</body>
-</html>
-            """
-            
             return self._send_message(subject=subject, recipients=[email], body=body, html=html_body)
-            
+
         except Exception as e:
             logger.error(f"Failed to send welcome email to {email}: {e}", exc_info=True)
             return False

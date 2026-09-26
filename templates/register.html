@@ -1,241 +1,98 @@
 {% extends "base.html" %}
+{% import '_auth_ui.html' as au with context %}
 
-{% block title %}Register - Workout Tracker{% endblock %}
+{% block title %}Create account - Workout Tracker{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+{% block flashes %}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-8 col-lg-6">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3">
-                    <i class="bi bi-person-plus text-gold" style="font-size: clamp(2.5rem, 6vw, 3rem); opacity: 0.7;"></i>
-                </div>
-                <h2 class="fw-bold mb-2">Create Account</h2>
-                <p class="text-muted mb-0">Join Workout Tracker and start your fitness journey</p>
+{{ au.styles() }}
+<main class="au">
+    <div class="au-card au-wide">
+        {{ au.brand() }}
+        {{ au.head('Create your account', 'Log workouts in plain text and watch every lift add up.') }}
+        {{ au.messages() }}
+
+        <form method="POST" action="{{ url_for('register') }}" id="registerForm">
+            <div class="au-field">
+                <label for="name">Name</label>
+                <input type="text" id="name" name="name" class="form-control" required
+                       autocomplete="name" autocapitalize="words" enterkeyhint="next"
+                       value="{{ prefill_name or '' }}">
             </div>
 
-            <form method="POST" action="{{ url_for('register') }}">
-                <div class="mb-3">
-                    <label for="name" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Full Name
-                    </label>
-                    <input 
-                        type="text" 
-                        id="name" 
-                        name="name" 
-                        required 
-                        class="form-control"
-                        placeholder="Enter your full name"
-                        value="{{ prefill_name or '' }}"
-                    >
-                </div>
-
-                <div class="mb-3">
-                    <label for="username" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Username
-                    </label>
-                    <input 
-                        type="text" 
-                        id="username" 
-                        name="username" 
-                        required 
-                        minlength="3"
-                        pattern="[a-zA-Z0-9_-]+"
-                        data-pattern-message="Use only letters, numbers, underscore, or dash."
-                        class="form-control"
-                        placeholder="Choose a username (letters, numbers, _, -)"
-                        value="{{ prefill_username or '' }}"
-                    >
-                    <div class="form-text text-muted" style="font-size: var(--fs-xs);">
-                        Minimum 3 characters, only letters, numbers, underscore, and dash
-                    </div>
-                </div>
-
-                <div class="mb-3">
-                    <label for="email" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Email Address
-                    </label>
-                    <input 
-                        type="email" 
-                        inputmode="email"
-                        id="email" 
-                        name="email" 
-                        required 
-                        class="form-control"
-                        placeholder="your.email@example.com"
-                        value="{{ prefill_email or '' }}"
-                    >
-                    <div class="email-domain-grid mt-2">
-                        <button type="button" class="email-domain-chip" data-email-domain="gmail.com">@gmail.com</button>
-                        <button type="button" class="email-domain-chip" data-email-domain="icloud.com">@icloud.com</button>
-                        <button type="button" class="email-domain-chip" data-email-domain="outlook.com">@outlook.com</button>
-                        <button type="button" class="email-domain-chip" data-email-domain="yahoo.com">@yahoo.com</button>
-                    </div>
-                    <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                        Tap a domain to finish your email
-                    </small>
-                </div>
-
-                <div class="mb-3">
-                    <label for="password" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Password
-                    </label>
-                    <input 
-                        type="password" 
-                        id="password" 
-                        name="password" 
-                        required 
-                        minlength="8"
-                        class="form-control"
-                        placeholder="Create a strong password"
-                    >
-                    <div class="mt-2" id="passwordRequirements" style="font-size: var(--fs-xs);">
-                        <div id="req-length" class="text-muted"><i class="bi bi-circle me-1"></i>At least 8 characters</div>
-                        <div id="req-number" class="text-muted"><i class="bi bi-circle me-1"></i>At least 1 number</div>
-                    </div>
-                </div>
-
-                <div class="mb-4">
-                    <label for="confirm_password" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Confirm Password
-                    </label>
-                    <input 
-                        type="password" 
-                        id="confirm_password" 
-                        name="confirm_password" 
-                        required 
-                        minlength="8"
-                        class="form-control"
-                        placeholder="Re-enter your password"
-                        data-inline-error="true"
-                    >
-                    <div id="confirmPasswordError" class="text-danger mt-2 d-none" style="font-size: var(--fs-xs);">
-                        <i class="bi bi-exclamation-circle me-1"></i>Passwords do not match
-                    </div>
-                </div>
-
-                <button 
-                    type="submit" 
-                    class="btn btn-gold-solid w-100"
-                >
-                    Create Account
-                </button>
-            </form>
-
-            <div class="text-center pt-4 mt-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <span class="text-muted small">Already have an account?</span>
-                <a href="{{ url_for('login') }}" class="text-gold text-decoration-none hover-gold ms-1">
-                    Sign In
-                </a>
+            <div class="au-field">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" class="form-control" required
+                       minlength="3" maxlength="30" pattern="[a-zA-Z0-9_\-]+"
+                       data-pattern-message="Use only letters, numbers, _ or -."
+                       autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next"
+                       value="{{ prefill_username or '' }}">
+                <div class="au-hint">At least 3 characters: letters, numbers, _ or -.</div>
             </div>
-        </div>
+
+            <div class="au-field">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email" class="form-control" required
+                       inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" enterkeyhint="next"
+                       value="{{ prefill_email or '' }}">
+                {{ au.domains('email') }}
+            </div>
+
+            {% call au.password('password', 'Password', 'new-password', minlength=8) %}
+                <div class="au-checks" aria-live="polite">
+                    <span id="req-length"><i class="bi bi-circle" aria-hidden="true"></i>8+ characters</span>
+                    <span id="req-number"><i class="bi bi-circle" aria-hidden="true"></i>A number</span>
+                </div>
+            {% endcall %}
+
+            {{ au.password('confirm_password', 'Confirm password', 'new-password', minlength=8) }}
+
+            <div class="au-actions">
+                <button type="submit" class="au-btn" data-loading-text="Creating account…">Create account</button>
+                <p class="au-note">We'll email you a 6-digit code to confirm it's you.</p>
+            </div>
+        </form>
     </div>
-</div>
+
+    <p class="au-alt">Already have an account?<a href="{{ url_for('login') }}" class="au-link">Sign in</a></p>
+</main>
 
 <script>
-    (function() {
-        const style = document.createElement('style');
-        style.textContent = `
-            .email-domain-grid {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.45rem;
-                align-items: center;
-            }
-            .email-domain-chip {
-                border: 1px solid rgba(212, 175, 55, 0.35);
-                background: transparent;
-                color: rgba(212, 175, 55, 0.95);
-                font-size: 0.68rem;
-                font-weight: 600;
-                letter-spacing: 0.02em;
-                text-transform: none;
-                padding: 0.3rem 0.65rem;
-                border-radius: 999px;
-                line-height: 1.2;
-                white-space: nowrap;
-                transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-            }
-            .email-domain-chip:hover {
-                background: var(--gold-subtle);
-                border-color: rgba(212, 175, 55, 0.65);
-                transform: translateY(-1px);
-            }
-        `;
-        document.head.appendChild(style);
-    })();
+    (function () {
+        const form = document.getElementById('registerForm');
+        const username = document.getElementById('username');
+        const password = document.getElementById('password');
+        const confirm = document.getElementById('confirm_password');
+        if (!form || !password || !confirm) return;
 
-    (function() {
-        const form = document.querySelector('form');
-        const passwordInput = document.getElementById('password');
-        const confirmInput = document.getElementById('confirm_password');
-        const errorEl = document.getElementById('confirmPasswordError');
-        const reqLength = document.getElementById('req-length');
-        const reqNumber = document.getElementById('req-number');
-        if (!form || !passwordInput || !confirmInput || !errorEl) return;
+        // Usernames are saved in lowercase, so show them that way.
+        username?.addEventListener('input', () => {
+            const pos = username.selectionStart;
+            username.value = username.value.toLowerCase();
+            try { username.setSelectionRange(pos, pos); } catch (_) {}
+        });
 
         const setReq = (el, met) => {
             if (!el) return;
-            el.className = met ? 'text-success' : 'text-muted';
-            const icon = el.querySelector('i');
-            if (icon) {
-                icon.className = met ? 'bi bi-check-circle-fill me-1' : 'bi bi-circle me-1';
-            }
+            el.classList.toggle('is-met', met);
+            el.querySelector('i').className = met ? 'bi bi-check-circle-fill' : 'bi bi-circle';
         };
 
-        const validatePassword = () => {
-            const pw = passwordInput.value;
+        const check = () => {
+            const pw = password.value;
             const hasLength = pw.length >= 8;
             const hasNumber = /\d/.test(pw);
-            setReq(reqLength, hasLength);
-            setReq(reqNumber, hasNumber);
-            if (!hasLength || !hasNumber) {
-                passwordInput.setCustomValidity('Password must be at least 8 characters and contain at least 1 number.');
-            } else {
-                passwordInput.setCustomValidity('');
-            }
+            setReq(document.getElementById('req-length'), hasLength);
+            setReq(document.getElementById('req-number'), hasNumber);
+            password.setCustomValidity(pw && !(hasLength && hasNumber) ? 'Use at least 8 characters, including a number.' : '');
+            confirm.setCustomValidity(confirm.value && confirm.value !== pw ? "Passwords don't match." : '');
         };
 
-        const validateMatch = () => {
-            const password = passwordInput.value;
-            const confirmPassword = confirmInput.value;
-            if (confirmPassword && password !== confirmPassword) {
-                confirmInput.setCustomValidity('Passwords do not match');
-                errorEl.classList.remove('d-none');
-            } else {
-                confirmInput.setCustomValidity('');
-                errorEl.classList.add('d-none');
-            }
-        };
-
-        passwordInput.addEventListener('input', () => { validatePassword(); validateMatch(); });
-        confirmInput.addEventListener('input', validateMatch);
-        form.addEventListener('submit', (e) => {
-            validatePassword();
-            validateMatch();
-            if (!form.checkValidity()) {
-                e.preventDefault();
-                form.reportValidity();
-            }
-        });
-    })();
-
-    (function() {
-        const input = document.getElementById('email');
-        if (!input) return;
-        document.querySelectorAll('[data-email-domain]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const domain = button.getAttribute('data-email-domain');
-                const value = (input.value || '').trim();
-                const localPart = value.split('@')[0].trim();
-                if (!localPart) {
-                    input.focus();
-                    return;
-                }
-                input.value = `${localPart}@${domain}`;
-                input.focus();
-            });
-        });
+        password.addEventListener('input', check);
+        confirm.addEventListener('input', check);
+        // Runs before the page-wide validator, so its messages see the custom errors.
+        form.addEventListener('submit', check);
     })();
 </script>
 {% endblock %}

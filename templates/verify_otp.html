@@ -1,73 +1,44 @@
 {% extends "base.html" %}
+{% import '_auth_ui.html' as au with context %}
 
-{% block title %}Verify One-Time Code - Workout Tracker{% endblock %}
+{% block title %}Enter your code - Workout Tracker{% endblock %}
+{% block body_class %}{{ '' if current_user.is_authenticated else 'auth-page' }}{% endblock %}
+{% block flashes %}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-7 col-lg-5">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3">
-                    <i class="bi bi-shield-check text-gold" style="font-size: clamp(2.5rem, 6vw, 3rem); opacity: 0.7;"></i>
-                </div>
-                <h2 class="fw-bold mb-2">{{ purpose_label }} Verification</h2>
-                <p class="text-muted mb-1">Enter the 6-digit code sent to</p>
-                <p class="text-gold fw-semibold mb-0">{{ email }}</p>
+{% set action_phrase = {
+    'Login': 'sign in',
+    'Change Password': 'change your password',
+    'Profile Update': 'save your profile changes',
+}.get(purpose_label, 'continue') %}
+{{ au.styles() }}
+<main class="au">
+    <div class="au-card">
+        <div class="au-icon"><i class="bi bi-envelope-open" aria-hidden="true"></i></div>
+        <header class="au-head">
+            <h1 class="au-title">Check your email</h1>
+            <p class="au-sub">To {{ action_phrase }}, enter the 6-digit code we sent to <strong class="au-email">{{ email }}</strong></p>
+        </header>
+        {{ au.messages(quiet=True) }}
+
+        <form method="POST" action="{{ action_url }}" id="otpVerifyForm">
+            <div data-field>
+                {{ au.code('otp_code') }}
             </div>
-
-            <form method="POST" action="{{ action_url }}" id="otpVerifyForm">
-                <div class="mb-4">
-                    <label for="otp_code" class="form-label text-muted mb-2 text-center w-100" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Enter 6-Digit Code
-                    </label>
-                    <input
-                        type="text"
-                        id="otp_code"
-                        name="otp_code"
-                        required
-                        autofocus
-                        maxlength="6"
-                        pattern="[0-9]{6}"
-                        class="form-control text-center"
-                        style="font-size: clamp(1.5rem, 5vw, 2rem); letter-spacing: 0.4rem; font-weight: 700;"
-                        placeholder="000000"
-                        autocomplete="one-time-code"
-                    >
-                    <div class="form-text text-muted text-center" style="font-size: var(--fs-xs);">Code expires soon</div>
-                </div>
-
-                <button
-                    type="submit"
-                    class="btn btn-gold-solid w-100"
-                >
-                    Verify Code
-                </button>
-            </form>
-
-            <div class="text-center pt-4 mt-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <p class="text-muted small mb-2">Didn't receive the code?</p>
-                <form method="POST" action="{{ resend_url }}" class="d-inline">
-                    <button
-                        type="submit"
-                        class="btn btn-gold-outline btn-sm"
-                    >
-                        Resend Code
-                    </button>
-                </form>
+            <div class="au-actions">
+                <button type="submit" class="au-btn" data-loading-text="Checking…">Continue</button>
+                <p class="au-note">
+                    {% if expiry_minutes %}The code works for {{ expiry_minutes }} minutes.{% else %}The code works for a few minutes.{% endif %}
+                    Can't find it? Check spam.
+                </p>
             </div>
-        </div>
+        </form>
+
+        {{ au.resend(resend_url) }}
     </div>
-</div>
-<script>
-    (function() {
-        const form = document.getElementById('otpVerifyForm');
-        const input = document.getElementById('otp_code');
-        if (!form || !input) return;
-        input.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter') return;
-            event.preventDefault();
-            form.requestSubmit();
-        });
-    })();
-</script>
+
+    {% if back_url %}
+        <p class="au-alt"><a href="{{ back_url }}" class="au-link au-back"><i class="bi bi-arrow-left" aria-hidden="true"></i>{{ back_label or 'Back' }}</a></p>
+    {% endif %}
+</main>
 {% endblock %}

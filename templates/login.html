@@ -1,210 +1,62 @@
 {% extends "base.html" %}
+{% import '_auth_ui.html' as au with context %}
 
-{% block title %}Login - Workout Tracker{% endblock %}
+{% block title %}Sign in - Workout Tracker{% endblock %}
+{% block body_class %}auth-page{% endblock %}
+{% block flashes %}{% endblock %}
 
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-7 col-lg-5">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3">
-                    <i class="bi bi-box-arrow-in-right text-gold" style="font-size: clamp(2.5rem, 6vw, 3rem); opacity: 0.7;"></i>
-                </div>
-                <h2 class="fw-bold mb-2">Welcome Back</h2>
-                <p class="text-muted mb-0">Sign in to continue tracking your progress</p>
+{{ au.styles() }}
+<main class="au">
+    <div class="au-card">
+        {{ au.brand() }}
+        {{ au.head('Welcome back', 'Sign in to pick up where you left off.') }}
+        {{ au.messages() }}
+
+        <form method="POST" action="{{ url_for('login') }}{% if request.args.get('next') %}?next={{ request.args.get('next')|urlencode }}{% endif %}" id="loginForm">
+            <div class="au-field">
+                <label for="username_or_email">Username or email</label>
+                <input type="text" id="username_or_email" name="username_or_email" class="form-control" required
+                       autocomplete="username" autocapitalize="none" spellcheck="false" enterkeyhint="next"
+                       value="{{ request.form.get('username_or_email', '') }}">
+                {{ au.domains('username_or_email', mode='mixed') }}
             </div>
 
-            <form method="POST" action="{{ url_for('login') }}" id="loginForm">
-                <div class="mb-3">
-                    <label for="username_or_email" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Username or Email
-                    </label>
-                    <input 
-                        type="text" 
-                        id="username_or_email" 
-                        name="username_or_email" 
-                        required 
-                        class="form-control"
-                        placeholder="Enter your username or email"
-                    >
-                    <div class="email-domain-grid mt-2">
-                        <button type="button" class="email-domain-chip" data-email-domain="gmail.com">@gmail.com</button>
-                        <button type="button" class="email-domain-chip" data-email-domain="icloud.com">@icloud.com</button>
-                        <button type="button" class="email-domain-chip" data-email-domain="outlook.com">@outlook.com</button>
-                        <button type="button" class="email-domain-chip" data-email-domain="yahoo.com">@yahoo.com</button>
-                    </div>
-                </div>
+            {{ au.password('password', 'Password', 'current-password',
+                           aside_url=url_for('login_otp_request'), aside_label='Forgot password?', aside_id='otpLoginLink') }}
 
-                <div class="mb-3">
-                    <label for="password" class="form-label text-muted mb-2" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Password
-                    </label>
-                    <div class="password-field">
-                        <input 
-                            type="password" 
-                            id="password" 
-                            name="password" 
-                            required 
-                            class="form-control"
-                            placeholder="Enter your password"
-                        >
-                        <button type="button" class="password-toggle" aria-label="Show password" title="Show password">
-                            <i class="bi bi-eye"></i>
-                        </button>
-                    </div>
-                </div>
-
-                <div class="form-check mb-4">
-                    <input 
-                        type="checkbox" 
-                        id="remember_me" 
-                        name="remember_me" 
-                        class="form-check-input"
-                    >
-                    <label for="remember_me" class="form-check-label text-muted">
-                        Remember me (30 days)
-                    </label>
-                </div>
-
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <a
-                        href="{{ url_for('login_otp_request') }}"
-                        id="otpLoginLink"
-                        class="text-gold text-decoration-none small hover-gold"
-                    >
-                        Forgot password? Use a one-time code
-                    </a>
-                </div>
-
-                <button 
-                    type="submit" 
-                    class="btn btn-gold-solid w-100"
-                >
-                    Sign In
-                </button>
-            </form>
-
-            <div class="text-center pt-4 mt-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <span class="text-muted small">Don't have an account?</span>
-                <a href="{{ url_for('register') }}" class="text-gold text-decoration-none hover-gold ms-1">
-                    Create Account
-                </a>
+            <div class="au-row">
+                <label class="au-check">
+                    <input type="checkbox" id="remember_me" name="remember_me">
+                    Keep me signed in
+                </label>
             </div>
-        </div>
+
+            <button type="submit" class="au-btn" data-loading-text="Signing in…">Sign in</button>
+        </form>
     </div>
-</div>
+
+    <p class="au-alt">New here?<a href="{{ url_for('register') }}" class="au-link">Create an account</a></p>
+</main>
 
 <form id="otpLoginForm" method="POST" action="{{ url_for('login_otp_request') }}" class="d-none">
     <input type="hidden" name="username_or_email" id="otpLoginIdentifier">
 </form>
 
 <script>
-    (function() {
-        const style = document.createElement('style');
-        style.textContent = `
-            .email-domain-grid {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.45rem;
-                align-items: center;
-            }
-            .email-domain-chip {
-                border: 1px solid rgba(212, 175, 55, 0.35);
-                background: transparent;
-                color: rgba(212, 175, 55, 0.95);
-                font-size: 0.68rem;
-                font-weight: 600;
-                letter-spacing: 0.02em;
-                text-transform: none;
-                padding: 0.3rem 0.65rem;
-                border-radius: 999px;
-                line-height: 1.2;
-                white-space: nowrap;
-                transition: background 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
-            }
-            .email-domain-chip:hover {
-                background: var(--gold-subtle);
-                border-color: rgba(212, 175, 55, 0.65);
-                transform: translateY(-1px);
-            }
-            .password-field {
-                position: relative;
-            }
-            .password-field .form-control {
-                padding-right: 44px;
-            }
-            .password-toggle {
-                position: absolute;
-                top: 50%;
-                right: 12px;
-                transform: translateY(-50%);
-                border: none;
-                background: transparent;
-                color: var(--text-muted);
-                font-size: 1rem;
-                padding: 0;
-                cursor: pointer;
-            }
-            .password-toggle:hover {
-                color: var(--gold-primary);
-            }
-        `;
-        document.head.appendChild(style);
-    })();
-
-    (function() {
+    // "Forgot password?" with a username already typed sends the code straight away.
+    (function () {
         const link = document.getElementById('otpLoginLink');
         const input = document.getElementById('username_or_email');
         const form = document.getElementById('otpLoginForm');
         const hidden = document.getElementById('otpLoginIdentifier');
         if (!link || !input || !form || !hidden) return;
-
         link.addEventListener('click', (event) => {
-            const value = (input.value || '').trim();
+            const value = input.value.trim();
             if (!value) return;
             event.preventDefault();
             hidden.value = value;
-            form.submit();
-        });
-    })();
-
-    (function() {
-        const input = document.getElementById('username_or_email');
-        const password = document.getElementById('password');
-        const form = document.getElementById('loginForm');
-        const toggle = document.querySelector('.password-toggle');
-        if (!input) return;
-        document.querySelectorAll('[data-email-domain]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const domain = button.getAttribute('data-email-domain');
-                const value = (input.value || '').trim();
-                const localPart = value.split('@')[0].trim();
-                if (!localPart) {
-                    input.focus();
-                    return;
-                }
-                input.value = `${localPart}@${domain}`;
-                input.focus();
-            });
-        });
-
-        const handleEnterSubmit = (event) => {
-            if (event.key !== 'Enter') return;
-            if (!form) return;
-            event.preventDefault();
             form.requestSubmit();
-        };
-
-        input.addEventListener('keydown', handleEnterSubmit);
-        password?.addEventListener('keydown', handleEnterSubmit);
-
-        toggle?.addEventListener('click', () => {
-            if (!password) return;
-            const isHidden = password.type === 'password';
-            password.type = isHidden ? 'text' : 'password';
-            toggle.innerHTML = isHidden ? '<i class="bi bi-eye-slash"></i>' : '<i class="bi bi-eye"></i>';
-            toggle.setAttribute('aria-label', isHidden ? 'Hide password' : 'Show password');
-            toggle.setAttribute('title', isHidden ? 'Hide password' : 'Show password');
         });
     })();
 </script>
