@@ -255,6 +255,24 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertTrue(picked["ok"], picked)
         self.assertIn("Pull Ups", picked["text"])
 
+    def test_shortcut_key_problems_explain_themselves_to_the_shortcut(self):
+        # Empty key (the "paste your key" question was skipped): the app's JSON, not a
+        # "not found" web page, so the shortcut shows the message instead of "not reachable".
+        for path in ("/shortcut/pick/?list=1", "/shortcut/log/"):
+            data = self.client.get(path).get_json()
+            self.assertIsNotNone(data, path)
+            self.assertEqual(data["server"], "Local")
+            self.assertIn("shortcut key is missing", data["error"])
+            self.assertIn("Apple Shortcuts", data["error"])
+
+        wrong = self.client.get("/shortcut/pick/not-a-key?list=1").get_json()
+        self.assertIn("shortcut key isn't valid", wrong["error"])
+        self.assertIn("shortcut key isn't valid", self.client.post("/shortcut/log/not-a-key").get_json()["error"])
+        # Old plain-text shortcuts keep their old reply.
+        self.assertEqual(self.client.get("/shortcut/pick/not-a-key").get_data(as_text=True), "Invalid shortcut token.")
+        # Other missing pages are unchanged.
+        self.assertIn("text/html", self.client.get("/no-such-page").content_type)
+
     def test_shortcut_log_accepts_rich_text_notes(self):
         self._create_logged_in_user(username="shortcut_rich_text_user")
         log_path = urlsplit(self.client.get("/shortcut/log").get_json()["url"]).path

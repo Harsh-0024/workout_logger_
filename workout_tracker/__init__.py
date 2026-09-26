@@ -21,7 +21,7 @@ from .routes.admin import register_admin_routes
 from .routes.auth import register_auth_routes
 from .routes.plans import register_plan_routes
 from .routes.stats import register_stats_routes
-from .routes.workouts import register_workout_routes
+from .routes.workouts import SHORTCUT_KEY_MISSING, deployment_name, register_workout_routes
 
 
 def create_app(config_object=Config, init_db: bool = True):
@@ -140,6 +140,14 @@ def create_app(config_object=Config, init_db: bool = True):
 
     @app.errorhandler(404)
     def not_found(error):
+        if request.path.startswith('/shortcut/log/') or request.path.startswith('/shortcut/pick/'):
+            # A shortcut link without its key. Answer in the shortcut's own format, so the
+            # shortcut shows this message instead of treating the site as unreachable.
+            return jsonify({
+                'ok': False,
+                'error': SHORTCUT_KEY_MISSING,
+                'server': deployment_name(request.host),
+            }), 404
         return render_template('error.html', error_code=404, error_message="Page not found"), 404
 
     @app.errorhandler(CSRFError)

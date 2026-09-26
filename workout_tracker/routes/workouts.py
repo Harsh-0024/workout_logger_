@@ -43,6 +43,25 @@ from utils.rich_text import to_plain_text
 from utils.validators import sanitize_text_input, validate_username
 
 
+SHORTCUT_KEY_HELP = (
+    "Copy your shortcut key again from Workout Logger > Settings > Integrations > Apple Shortcuts. "
+    "Then open this shortcut in the Shortcuts app and paste the key into the first box."
+)
+SHORTCUT_KEY_INVALID = "Your shortcut key isn't valid. " + SHORTCUT_KEY_HELP
+SHORTCUT_KEY_MISSING = "Your shortcut key is missing. " + SHORTCUT_KEY_HELP
+
+
+def deployment_name(host: str) -> str:
+    host = host.lower()
+    if host.split(':')[0] in {'localhost', '127.0.0.1'}:
+        return 'Local'
+    if host.endswith('.railway.app'):
+        return 'Railway'
+    if host.endswith('.onrender.com'):
+        return 'Render'
+    return host
+
+
 def register_workout_routes(app):
     serializer = URLSafeSerializer(app.config.get('SECRET_KEY', 'workout-share'))
 
@@ -2515,15 +2534,7 @@ def register_workout_routes(app):
         sample = ", ".join(sorted(all_labels)[:8])
         return None, f"No workout day matched '{raw_key}'. Try one of: {sample}"
 
-    def _deployment_name(host: str) -> str:
-        host = host.lower()
-        if host.split(':')[0] in {'localhost', '127.0.0.1'}:
-            return 'Local'
-        if host.endswith('.railway.app'):
-            return 'Railway'
-        if host.endswith('.onrender.com'):
-            return 'Render'
-        return host
+    _deployment_name = deployment_name
 
     def _deployment_base_urls() -> list[tuple[str, str]]:
         """(name, base URL) for this site first, then every other deployment."""
@@ -2610,7 +2621,7 @@ def register_workout_routes(app):
         return jsonify({**payload, "server": _deployment_name(request.host)}), status
 
     def shortcut_pick(token):
-        as_json = str(request.args.get("format") or "").strip().lower() == "json"
+        as_json = str(request.args.get("format") or "").strip().lower() == "json" or bool(request.args.get("list"))
 
         def reply(text: str, status: int = 200):
             if as_json:
@@ -2627,10 +2638,10 @@ def register_workout_routes(app):
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
-            return reply("Invalid shortcut token.", 401)
+            return reply(SHORTCUT_KEY_INVALID if as_json else "Invalid shortcut token.", 401)
         except Exception as e:
             logger.error(f"Shortcut token error: {e}", exc_info=True)
-            return reply("Invalid shortcut token.", 401)
+            return reply(SHORTCUT_KEY_INVALID if as_json else "Invalid shortcut token.", 401)
 
         if request.args.get("list"):
             # The user's own sessions, so a shared Get Workout shortcut needs no hard-coded list.
@@ -2664,10 +2675,10 @@ def register_workout_routes(app):
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
-            return _shortcut_json({"ok": False, "error": "Invalid shortcut token."})
+            return _shortcut_json({"ok": False, "error": SHORTCUT_KEY_INVALID})
         except Exception as e:
             logger.error(f"Shortcut token error: {e}", exc_info=True)
-            return _shortcut_json({"ok": False, "error": "Invalid shortcut token."})
+            return _shortcut_json({"ok": False, "error": SHORTCUT_KEY_INVALID})
 
         raw_text = ""
         source = "none"
