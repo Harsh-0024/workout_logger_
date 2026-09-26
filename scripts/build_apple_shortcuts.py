@@ -248,13 +248,18 @@ def get_workout():
     return f
 
 
-def save(name, flow, color):
+# Icon colours and symbols from the Shortcuts palette (colour as RGBA; symbol as its glyph code).
+GREEN, BLUE = 0x19BD03FF, 0x1B9AF7FF
+WEIGHT_LIFTING, NOTE = 0xE99F, 0xE975
+
+
+def save(name, flow, color, glyph):
     workflow = {
         "WFWorkflowActions": flow.actions,
         "WFWorkflowClientVersion": "4407",
         "WFWorkflowMinimumClientVersion": 900,
         "WFWorkflowMinimumClientVersionString": "900",
-        "WFWorkflowIcon": {"WFWorkflowIconStartColor": color, "WFWorkflowIconGlyphNumber": 61440},
+        "WFWorkflowIcon": {"WFWorkflowIconStartColor": color, "WFWorkflowIconGlyphNumber": glyph},
         "WFWorkflowTypes": ["WFWorkflowTypeShowInSearch"],
         "WFWorkflowInputContentItemClasses": [],
         "WFWorkflowOutputContentItemClasses": [],
@@ -277,5 +282,5 @@ def save(name, flow, color):
 
 
 if __name__ == "__main__":
-    save("Log Workout", log_workout(), 4282601983)
-    save("Get Workout", get_workout(), 2071128575)
+    save("Log Workout", log_workout(), GREEN, WEIGHT_LIFTING)
+    save("Get Workout", get_workout(), BLUE, NOTE)
