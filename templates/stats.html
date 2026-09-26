@@ -3,13 +3,17 @@
 <div class="row">
     <div class="col-12">
         <div class="card stats-page">
-            <div class="stats-header">
+            <div class="stats-header" id="statsHeader">
                 <h1 class="stats-hero-label">
                     <span id="heroLabel">Overall strength</span>
                     <button type="button" id="heroInfoBtn" class="stats-info-btn" aria-expanded="false" aria-controls="heroInfo" aria-label="What is this?">
                         <i class="bi bi-info-circle"></i>
                     </button>
                 </h1>
+                <!-- Phones: search collapses to this icon so the title area stays calm. -->
+                <button type="button" id="searchToggle" class="stats-search-toggle" aria-label="Search an exercise" aria-expanded="false" aria-controls="exerciseSearch">
+                    <i class="bi bi-search"></i>
+                </button>
                 <div class="stats-search">
                     <i class="bi bi-search stats-search-icon" aria-hidden="true"></i>
                     <input
@@ -41,13 +45,6 @@
                     <div class="stats-hero-caption" id="heroCaption"></div>
                     <div class="stats-hero-change" id="heroChange"></div>
                 </div>
-                <div class="stats-segmented stats-range" role="group" aria-label="Time range">
-                    <button type="button" class="range-pill" data-range="30">1M</button>
-                    <button type="button" class="range-pill" data-range="90">3M</button>
-                    <button type="button" class="range-pill" data-range="180">6M</button>
-                    <button type="button" class="range-pill" data-range="365">1Y</button>
-                    <button type="button" class="range-pill active" data-range="all">All</button>
-                </div>
             </section>
 
             <div class="stats-chart-card">
@@ -56,6 +53,13 @@
                         <button type="button" class="metric-pill active" data-metric="e1rm">Est. max</button>
                         <button type="button" class="metric-pill" data-metric="top_weight">Heaviest</button>
                         <button type="button" class="metric-pill" data-metric="tonnage">Volume</button>
+                    </div>
+                    <div class="stats-range" role="group" aria-label="Time range">
+                        <button type="button" class="range-pill" data-range="30">1M</button>
+                        <button type="button" class="range-pill" data-range="90">3M</button>
+                        <button type="button" class="range-pill" data-range="180">6M</button>
+                        <button type="button" class="range-pill" data-range="365">1Y</button>
+                        <button type="button" class="range-pill active" data-range="all">All</button>
                     </div>
                 </div>
                 <div class="stats-chart">
@@ -187,10 +191,6 @@
         cursor: pointer;
     }
 
-    .stats-search-clear:hover {
-        color: var(--gold-primary);
-        background: var(--gold-subtle);
-    }
 
     .stats-search-clear[hidden] {
         display: none;
@@ -287,9 +287,6 @@
         cursor: pointer;
     }
 
-    .suggestion-sort button:hover {
-        color: var(--gold-primary);
-    }
 
     .suggestion-sort button.active {
         background: #D4AF37;
@@ -334,7 +331,6 @@
         display: block;
     }
 
-    .stats-info-btn:hover,
     .stats-info-btn[aria-expanded="true"] {
         color: var(--gold-primary);
     }
@@ -393,13 +389,16 @@
     }
 
     .stats-hero-change {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
         font-size: var(--fs-sm);
         font-weight: 600;
-        line-height: 1.2;
+        line-height: 1.3;
         color: var(--text-muted);
+    }
+
+    .stats-hero-change i {
+        display: inline-block;
+        margin-right: 0.3rem;
+        vertical-align: -0.1em;
     }
 
     .stats-hero-change:empty {
@@ -410,20 +409,25 @@
         display: block;
     }
 
-    .stats-hero-change.is-up,
-    .stats-hero-change.is-down {
-        padding: 0.3rem 0.7rem;
-        border-radius: 999px;
+    /* Quiet text, not a chip: only the arrow and amount carry colour. */
+    .stats-hero-change {
+        font-weight: 500;
     }
 
-    .stats-hero-change.is-up {
+    .stats-change-amount {
+        font-weight: 700;
+    }
+
+    .stats-change-amount {
+        color: var(--text-secondary);
+    }
+
+    .stats-hero-change.is-up i {
         color: var(--stats-up);
-        background: var(--gold-subtle);
     }
 
-    .stats-hero-change.is-down {
+    .stats-hero-change.is-down i {
         color: var(--stats-down);
-        background: rgba(239, 68, 68, 0.1);
     }
 
     .stats-hero[hidden] + .stats-chart-card {
@@ -448,24 +452,53 @@
         justify-content: space-between;
         gap: 0.6rem;
         flex-wrap: wrap;
-        margin-bottom: 0.5rem;
+        margin-bottom: 0.75rem;
     }
 
     .stats-range {
+        display: inline-flex;
+        gap: 0.2rem;
         margin-left: auto;
         align-self: center;
+    }
+
+    .stats-range button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+        min-height: 30px;
+        padding: 0 0.7rem;
+        border: none;
+        border-radius: 999px;
+        background: transparent;
+        color: var(--text-muted);
+        font-size: 0.78rem;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        transition: background var(--transition-fast), color var(--transition-fast);
+    }
+
+
+    .stats-range button.active {
+        background: #D4AF37;
+        color: #141414;
+    }
+
+    /* Search icon for phones; desktop always shows the full search bar. */
+    .stats-search-toggle {
+        display: none;
     }
 
     .stats-chart-toolbar[hidden] {
         display: none;
     }
 
+    /* Light text tabs (same feel as the range tabs); only the selected one is filled. */
     .stats-segmented {
         display: inline-flex;
-        gap: 2px;
-        padding: 3px;
-        border-radius: 999px;
-        background: var(--stats-seg-bg);
+        gap: 0.2rem;
     }
 
     .stats-segmented[hidden] {
@@ -491,9 +524,6 @@
         white-space: nowrap;
     }
 
-    .stats-segmented button:hover {
-        color: var(--gold-primary);
-    }
 
     .stats-segmented button.active {
         background: #D4AF37;
@@ -504,7 +534,7 @@
         position: relative;
         width: 100%;
         /* Sized so the whole chart fits under the header on a laptop screen. */
-        height: clamp(240px, calc(100vh - 360px), 460px);
+        height: clamp(240px, calc(100vh - 390px), 460px);
     }
 
     .stats-empty {
@@ -606,20 +636,66 @@
         text-overflow: ellipsis;
     }
 
+    /* Hover colours only on devices with a real pointer; phones keep :hover stuck after a tap. */
+    @media (hover: hover) {
+        .stats-search-clear:hover {
+            color: var(--gold-primary);
+            background: var(--gold-subtle);
+        }
+
+        .stats-info-btn:hover,
+        .suggestion-sort button:not(.active):hover,
+        .stats-range button:not(.active):hover,
+        .stats-segmented button:not(.active):hover {
+            color: var(--gold-primary);
+        }
+    }
+
     @media (max-width: 576px) {
         .stats-page {
             padding: 22px 20px;
         }
 
         .stats-header {
-            gap: 1.1rem;
+            gap: 1rem;
+            flex-wrap: nowrap;
+        }
+
+        .stats-header.is-search-open {
+            flex-wrap: wrap;
+        }
+
+        .stats-search-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            width: 42px;
+            height: 42px;
+            margin-left: auto;
+            padding: 0;
+            border: 1px solid var(--border-subtle);
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 1rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .stats-search-toggle i::before {
+            display: block;
+        }
+
+        .stats-header.is-search-open .stats-search-toggle {
+            display: none;
         }
 
         /* Tiles: slim stacked rows, label left, value + detail on one line right. */
         .stats-tiles {
             grid-template-columns: 1fr;
             gap: 0;
-            margin-top: 1.1rem;
+            margin-top: 1.5rem;
             border: 1px solid var(--border-subtle);
             border-radius: 16px;
             background: var(--stats-surface);
@@ -675,15 +751,30 @@
             font-size: 0.7rem;
         }
 
-        /* Phone: search first, full width; label sits under it. */
+        /* Phone: search stays tucked behind the icon until it's needed. */
         .stats-search {
+            display: none;
             flex: 1 1 100%;
             order: -1;
         }
 
+        .stats-header.is-search-open .stats-search {
+            display: block;
+        }
+
+        /* Title steps back a little so the number is clearly the star. */
+        .stats-hero-label {
+            font-size: 1.6rem;
+        }
+
+        /* Number on top, caption + "up from…" right under it: one group, space around it. */
         .stats-hero {
-            margin: 0.9rem 0 1.25rem;
-            gap: 1.1rem 0.9rem;
+            flex-direction: column;
+            align-items: flex-start;
+            /* The serif's short old-style digits leave empty space at the top of the number's
+               box, so the top margin is smaller to make the group look evenly spaced. */
+            margin: 1.2rem 0 2.6rem;
+            gap: 0.55rem;
         }
 
         .stats-hero-value {
@@ -692,12 +783,12 @@
 
         /* Caption stays beside the number unless the number is very wide. */
         .stats-hero-text {
-            flex: 1 1 190px;
-            gap: 0.35rem;
+            flex: 0 0 auto;
+            gap: 0.3rem;
         }
 
         .stats-hero-caption {
-            font-size: var(--fs-sm);
+            font-size: var(--fs-base);
             line-height: 1.3;
         }
 
@@ -733,8 +824,17 @@
         }
 
         .stats-range {
+            display: flex;
+            justify-content: space-between;
             margin-left: 0;
             flex: 1 1 100%;
+        }
+
+        .stats-range button {
+            flex: 0 0 auto;
+            min-width: 48px;
+            min-height: 26px;
+            padding: 0 0.75rem;
         }
 
     }
@@ -756,11 +856,11 @@
     ];
     const PHONE_CHART_WIDTH = 500;
     const BREAK_GAP_DAYS = 45;
-    const RANGE_PHRASES = {
-        '30': 'in the last month',
-        '90': 'in the last 3 months',
-        '180': 'in the last 6 months',
-        '365': 'in the last year',
+    const RANGE_AGO = {
+        '30': 'a month ago',
+        '90': '3 months ago',
+        '180': '6 months ago',
+        '365': 'a year ago',
     };
     const RANGE_SHORT = {
         '30': 'last month',
@@ -781,7 +881,7 @@
     // Saved on the account, so the last sort and range follow the user across devices.
     const statsPreferencesEl = document.getElementById('statsPreferencesData');
     const statsPreferences = statsPreferencesEl ? JSON.parse(statsPreferencesEl.textContent || '{}') : {};
-    let currentRange = (statsPreferences.range === 'all' || RANGE_PHRASES[statsPreferences.range]) ? statsPreferences.range : 'all';
+    let currentRange = (statsPreferences.range === 'all' || RANGE_AGO[statsPreferences.range]) ? statsPreferences.range : 'all';
     let currentMetric = 'e1rm';
     let sortMode = statsPreferences.sort_mode || 'most_viewed';
     let fullChartData = null;
@@ -1503,6 +1603,8 @@
     document.addEventListener('click', (e) => {
         const searchInput = document.getElementById('exerciseSearch');
         const suggestionsList = document.getElementById('suggestionsList');
+        const toggle = document.getElementById('searchToggle');
+        if (toggle && toggle.contains(e.target)) return;
         if (searchInput && suggestionsList && !searchInput.contains(e.target) && !suggestionsList.contains(e.target)) {
             hideSuggestions();
             selectedSuggestionIndex = -1;
@@ -1564,9 +1666,9 @@
 
         valueEl.classList.remove('is-up', 'is-down', 'is-flat');
         changeEl.classList.remove('is-up', 'is-down');
+        changeEl.replaceChildren();
 
         const startLabel = formatDateLabel(labels[firstFiniteIndex(values)], { month: 'short', year: 'numeric' });
-        const onAll = currentRange === 'all';
 
         if (isOverall) {
             setText('heroLabel', 'Overall strength');
@@ -1575,15 +1677,15 @@
             const pctText = formatPercentChange(diff);
             if (diff >= 0.5) {
                 valueEl.textContent = `+${pctText}`;
-                setText('heroCaption', onAll ? `stronger since ${startLabel}` : 'stronger than when you started');
+                setText('heroCaption', `stronger since ${startLabel}`);
             } else if (diff <= -0.5) {
                 valueEl.textContent = `−${pctText}`;
                 valueEl.classList.add('is-down');
-                setText('heroCaption', onAll ? `below your ${startLabel} start` : 'below where you started');
+                setText('heroCaption', `below your ${startLabel} start`);
             } else {
                 valueEl.textContent = '0%';
                 valueEl.classList.add('is-flat');
-                setText('heroCaption', onAll ? `level with your ${startLabel} start` : 'right where you started');
+                setText('heroCaption', `level with your ${startLabel} start`);
             }
         } else {
             const option = exerciseOptions.find(opt => opt.value === currentExercise);
@@ -1606,9 +1708,9 @@
             fromIdx = firstFiniteIndex(trend, startIdx);
             if (fromIdx === null || fromIdx >= endIdx) fromIdx = startIdx > 0 ? lastFiniteIndex(trend, startIdx - 1) : null;
         }
-        const period = currentRange === 'all'
-            ? `since ${formatDateLabel(labels[fromIdx], { month: 'short', year: 'numeric' })}`
-            : RANGE_PHRASES[currentRange];
+        const when = currentRange === 'all'
+            ? `in ${formatDateLabel(labels[fromIdx], { month: 'short', year: 'numeric' })}`
+            : RANGE_AGO[currentRange];
 
         if (isOverall && currentRange === 'all') {
             // The headline is already "vs. when you started"; the caption says since when.
@@ -1619,16 +1721,21 @@
             const from = Number(trend[fromIdx]);
             const to = Number(trend[endIdx]);
             const pct = from > 0 ? ((to / from) - 1) * 100 : 0;
+            // Compare with your past self in plain words ("51% stronger than a year ago"),
+            // so nobody has to decode a minus sign or do maths.
+            const up = pct > 0;
+            const amountEl = document.createElement('span');
+            amountEl.className = 'stats-change-amount';
+            amountEl.textContent = isOverall
+                ? formatPercentChange(pct)
+                : withUnit(Math.abs(to - from), metricInfo.unit);
             if (Math.abs(pct) < 0.5) {
-                changeEl.textContent = `Steady ${period}`;
+                changeEl.append(`About the same as ${when}`);
             } else {
-                const up = pct > 0;
-                const amount = isOverall
-                    ? formatPercentChange(pct)
-                    : withUnit(Math.abs(to - from), metricInfo.unit);
+                const word = isOverall ? (up ? 'stronger' : 'weaker') : (up ? 'more' : 'less');
                 changeEl.classList.add(up ? 'is-up' : 'is-down');
-                changeEl.innerHTML = `<i class="bi bi-arrow-${up ? 'up' : 'down'}-right"></i>`;
-                changeEl.append(`${up ? 'Up' : 'Down'} ${amount} ${period}`);
+                changeEl.innerHTML = `<i class="bi bi-arrow-${up ? 'up' : 'down'}-right" aria-hidden="true"></i>`;
+                changeEl.append(amountEl, ` ${word} than ${when}`);
             }
         }
         hero.hidden = false;
@@ -1677,7 +1784,6 @@
         const metricInfo = getMetricInfo(currentMetric, data);
 
         document.getElementById('metricControls').hidden = isOverall;
-        document.getElementById('chartToolbar').hidden = isOverall;
         document.querySelectorAll('.metric-pill').forEach(btn => {
             btn.textContent = getMetricInfo(btn.dataset.metric, data).name;
         });
@@ -1730,12 +1836,13 @@
 
         const light = isLightTheme();
         const gold = '#D4AF37';
-        // Few workouts on screen: bigger, outlined dots so they stand out from the line.
+        // Desktop, few workouts on screen: bigger, outlined dots so they stand out from the line.
+        // Phones always get small faint dots; solid ones merge with the line on a narrow chart.
         const visibleWorkouts = loggedIndices.filter(i => i >= startIdx).length;
-        const sparse = visibleWorkouts < 40;
+        const sparse = visibleWorkouts < 40 && !isPhoneChart();
         const dense = visibleWorkouts > 120;
-        const dotRadius = sparse ? 4.5 : (dense ? (isPhoneChart() ? 1.6 : 2) : 3);
-        const dotAlpha = dense && isPhoneChart() ? 0.28 : (light ? 0.45 : 0.4);
+        const dotRadius = sparse ? 4.5 : (isPhoneChart() ? (dense ? 1.6 : 2.2) : (dense ? 2 : 3));
+        const dotAlpha = isPhoneChart() ? (dense ? 0.28 : 0.35) : (light ? 0.45 : 0.4);
         const dotColor = sparse ? gold : (light ? `rgba(168, 132, 31, ${dotAlpha})` : `rgba(212, 175, 55, ${dotAlpha})`);
         const cardColor = light ? '#FFFAF1' : '#0F0F11';
         const tickColor = light ? '#6B7280' : '#9CA3AF';
@@ -1858,10 +1965,8 @@
                         cubicInterpolationMode: 'monotone',
                         fill: trendFill,
                         backgroundColor: gradient,
-                        pointRadius: (c) => (c.dataIndex === lastTrendIdx ? 4.5 : 0),
-                        pointBackgroundColor: gold,
-                        pointBorderColor: cardColor,
-                        pointBorderWidth: 2,
+                        // No end dot: it read as a second workout on the same day.
+                        pointRadius: 0,
                         pointHoverRadius: 0,
                         pointHitRadius: 0,
                     },
@@ -1986,6 +2091,30 @@
         btn.setAttribute('aria-expanded', String(open));
     });
 
+    // Phones: the search bar hides behind an icon in the title row. It stays open while it
+    // holds a picked exercise, so the × to get back to "Overall strength" is always reachable.
+    function setSearchOpen(open) {
+        const header = document.getElementById('statsHeader');
+        header.classList.toggle('is-search-open', open);
+        document.getElementById('searchToggle').setAttribute('aria-expanded', String(open));
+    }
+
+    function syncSearchOpen() {
+        const input = document.getElementById('exerciseSearch');
+        const busy = document.activeElement === input || !!input.value.trim() || !!currentExercise;
+        setSearchOpen(busy);
+    }
+
+    document.getElementById('searchToggle').addEventListener('click', () => {
+        setSearchOpen(true);
+        document.getElementById('exerciseSearch').focus();
+    });
+
+    document.getElementById('exerciseSearch').addEventListener('blur', () => {
+        // Wait for a suggestion tap to land before deciding whether to fold it away.
+        setTimeout(syncSearchOpen, 250);
+    });
+
     document.getElementById('exerciseClear').addEventListener('click', () => {
         selectExercise('');
         document.getElementById('exerciseSearch').focus();
@@ -2015,6 +2144,7 @@
             currentExercise = initialExercise.value;
             document.getElementById('exerciseSearch').value = initialExercise.label || initialExercise.value;
         }
+        syncSearchOpen();
         loadChart();
     });
 
