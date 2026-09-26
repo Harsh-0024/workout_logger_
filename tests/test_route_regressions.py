@@ -225,6 +225,7 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("Apple Shortcuts", page)
         self.assertIn("shortcuts/Log%20Workout.shortcut", page)
         self.assertIn("shortcuts/Get%20Workout.shortcut", page)
+        self.assertIn("Workout Logs folder", page)  # where the shortcuts keep workout notes
         key = re.search(r'value="([^"]+)"[^>]*aria-label="Shortcut key"', page).group(1)
 
         log = self.client.post(f"/shortcut/log/{key}", data={"workout_text": ""}).get_json()

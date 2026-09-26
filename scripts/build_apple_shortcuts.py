@@ -9,6 +9,13 @@ shortcut, Shortcuts asks for their key from Settings > Apple Shortcuts.
 
 Each request goes to Railway first. If the reply isn't this app's JSON (every
 shortcut reply has a "server" key), the same request goes to Render.
+
+Workouts live in one Notes folder, "Workout Logs". A folder picked in the
+Shortcuts editor is stored as an ID that only exists on the author's account,
+so the shortcuts find the folder by name instead: they look at the folder of
+each recent note. If none is in "Workout Logs", the folder is created (with a
+message saying what it is for). Get Workout saves into it; Log Workout offers
+only its newest notes.
 """
 import copy
 import os
@@ -32,6 +39,12 @@ KEY_QUESTION = "Paste your shortcut key. In Workout Logger, open Settings → In
 OBJ = "￼"  # placeholder Shortcuts uses for a variable inside text
 
 NOTES_APP = {"TeamIdentifier": "0000000000", "BundleIdentifier": "com.apple.Notes", "Name": "Notes"}
+WORKOUT_FOLDER = "Workout Logs"
+NOTES_SHOWN_FOR_LOGGING = 5
+FOLDER_EXPLAINED = (
+    f"Your workouts live in the {WORKOUT_FOLDER} folder in Notes. Get Workout saves every workout there, "
+    "and Log Workout only logs notes from there. Please keep your workout notes in this folder."
+)
 
 
 def uid():
@@ -154,15 +167,63 @@ class Flow:
         self.end_if(g)
 
 
+def find_notes(limit):
+    return dict(
+        AppIntentDescriptor={**NOTES_APP, "AppIntentIdentifier": "NoteEntity", "ActionRequiresAppInstallation": True},
+        WFContentItemSortProperty="Creation Date", WFContentItemSortOrder="Latest First",
+        WFContentItemLimitEnabled=True, WFContentItemLimitNumber=float(limit),
+    )
+
+
+def collect_workout_notes(f, limit):
+    """Newest notes first; keep those in the workout folder (by name) and remember the folder."""
+    notes = f.out("filter.notes", "Notes", **find_notes(limit))
+    loop = uid()
+    f.add(act("repeat.each", GroupingIdentifier=loop, WFControlFlowMode=0, WFInput=att(notes)))
+    folder_of_item = {**var("Repeat Item"), "Aggrandizements": [
+        {"Type": "WFPropertyVariableAggrandizement", "PropertyName": "Folder"}]}
+    folder_name = f.out("gettext", "Text", WFTextActionText=text(OBJ, folder_of_item))
+    g = f.begin_if(folder_name, 4, WFConditionalActionString=WORKOUT_FOLDER)
+    f.add(act("appendvariable", WFVariableName="WorkoutNotes", WFInput=att(var("Repeat Item"))))
+    f.set_var("Folder", folder_of_item)
+    f.end_if(g)
+    f.add(act("repeat.each", GroupingIdentifier=loop, WFControlFlowMode=2, UUID=uid()))
+
+
+def ensure_workout_folder(f, then_stop_with=None):
+    """Sets Folder (and WorkoutNotes). Looks at the newest 40 notes, then 400;
+    creates the folder if it still isn't found."""
+    collect_workout_notes(f, 40)
+    g = f.begin_if(var("Folder"), 101)
+    collect_workout_notes(f, 400)
+    f.end_if(g)
+    g = f.begin_if(var("Folder"), 101)
+    created = uid()
+    f.add(act("com.apple.Notes.CreateFolderLinkAction", UUID=created, name=WORKOUT_FOLDER,
+              AppIntentDescriptor={**NOTES_APP, "AppIntentIdentifier": "CreateFolderLinkAction"}))
+    f.set_var("Folder", ref(created, "Folder"))
+    message = FOLDER_EXPLAINED + (f" {then_stop_with}" if then_stop_with else "")
+    f.add(act("alert", WFAlertActionTitle=f"{WORKOUT_FOLDER} folder created", WFAlertActionMessage=message,
+              WFAlertActionCancelButtonShown=False))
+    if then_stop_with:
+        f.add(act("exit"))
+    f.end_if(g)
+
+
 def log_workout():
     f = Flow()
     f.ask_for_key()
-    notes = f.out("filter.notes", "Notes", AppIntentDescriptor={**NOTES_APP, "AppIntentIdentifier": "NoteEntity",
-                                                               "ActionRequiresAppInstallation": True},
-                  WFContentItemSortProperty="Creation Date", WFContentItemSortOrder="Latest First",
-                  WFContentItemLimitEnabled=True, WFContentItemLimitNumber=5.0)
-    note = f.out("choosefromlist", "Selected Item", WFInput=att(notes),
-                 WFChooseFromListActionPrompt="Which note is today's workout?")
+    ensure_workout_folder(f, then_stop_with="Write today's workout in a note there, then run Log Workout again.")
+    # Offer the newest few (asking for a range longer than the list is an error).
+    f.set_var("Offered", var("WorkoutNotes"))
+    count = f.out("count", "Count", Input=att(var("WorkoutNotes")), WFCountType="Items")
+    g = f.begin_if(count, 2, WFNumberValue=NOTES_SHOWN_FOR_LOGGING)
+    f.set_var("Offered", f.out("getitemfromlist", "Items in Range", WFInput=att(var("WorkoutNotes")),
+                               WFItemSpecifier="Items in Range", WFItemRangeStart=1,
+                               WFItemRangeEnd=NOTES_SHOWN_FOR_LOGGING))
+    f.end_if(g)
+    note = f.out("choosefromlist", "Selected Item", WFInput=att(var("Offered")),
+                 WFChooseFromListActionPrompt="Which workout do you want to log?")
     note_text = f.out("detect.text", "Text", WFInput=att(note))
     f.fetch(f"log/{OBJ}", form_text=note_text)
     f.stop_unless_ok()
@@ -173,6 +234,7 @@ def log_workout():
 def get_workout():
     f = Flow()
     f.ask_for_key()
+    ensure_workout_folder(f)
     f.fetch(f"pick/{OBJ}?list=1")
     f.stop_unless_ok()
     session = f.out("choosefromlist", "Selected Item", WFInput=att(f.get("sessions")),
@@ -182,7 +244,7 @@ def get_workout():
     f.stop_unless_ok()
     f.add(act("com.apple.mobilenotes.SharingExtension", UUID=uid(),
               AppIntentDescriptor={**NOTES_APP, "AppIntentIdentifier": "CreateNoteLinkAction"},
-              WFCreateNoteInput=text(OBJ, f.get("text"))))
+              WFCreateNoteInput=text(OBJ, f.get("text")), folder=att(var("Folder"))))
     return f
 
 
