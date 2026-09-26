@@ -1,3 +1,4 @@
+import io
 import re
 import unittest
 import os
@@ -216,6 +217,26 @@ class TestRouteRegressions(unittest.TestCase):
 
         bad_token = self.client.post("/shortcut/log/not-a-token").get_json()
         self.assertEqual(bad_token["server"], "Local")
+
+    def test_shortcut_log_accepts_rich_text_notes(self):
+        self._create_logged_in_user(username="shortcut_rich_text_user")
+        log_path = urlsplit(self.client.get("/shortcut/log").get_json()["url"]).path
+
+        # Apple Notes rich text: its own line breaks and non-breaking spaces.
+        note = "12/01 Chest Day\u2028Bench Press\u00a0100x5\u2028Pec Fly 15 15"
+        data = self.client.post(log_path, data={"workout_text": note}).get_json()
+        self.assertTrue(data["ok"], data)
+        self.assertEqual(data["exercise_count"], 2)
+
+        # The note sent as an HTML file instead of a form field.
+        page = b"<div><b>13/01 Back Day</b></div><div>Pull Ups -35x5</div>"
+        data = self.client.post(
+            log_path,
+            data={"workout_text": (io.BytesIO(page), "note.html")},
+            content_type="multipart/form-data",
+        ).get_json()
+        self.assertTrue(data["ok"], data)
+        self.assertEqual(data["input_source"], "file")
 
     def test_custom_retrieve_uses_selected_exercises_in_selection_order(self):
         user = self._create_logged_in_user(username="custom_retrieve_user")

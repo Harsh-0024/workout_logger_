@@ -68,10 +68,26 @@ def require_db_ready_for_requests():
         return None
     if request.path.startswith('/static/'):
         return None
-    if not app.config.get("DB_READY", False):
-        if request.path in ('/', '/favicon.ico'):
-            return "Service warming up", 200
-        return "Service warming up", 503
+    if app.config.get("DB_READY", False):
+        return None
+    # After a cold start the database is usually ready within seconds, so hold
+    # the request instead of answering "warming up" (a Shortcut would save that
+    # text, and a browser would need a manual refresh).
+    deadline = time.monotonic() + float(os.environ.get("WARMUP_WAIT_SECONDS", "20"))
+    while time.monotonic() < deadline:
+        time.sleep(0.25)
+        if app.config.get("DB_READY", False):
+            return None
+    status = 200 if request.path in ('/', '/favicon.ico') else 503
+    if request.method == 'GET' and request.accept_mimetypes.accept_html:
+        page = (
+            '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">'
+            '<meta http-equiv="refresh" content="3"><title>Starting up</title>'
+            '<p style="font-family:system-ui;text-align:center;margin-top:40vh">'
+            'Starting up, this page will reload by itself…</p>'
+        )
+        return page, status, {"Retry-After": "3"}
+    return "Service warming up", status, {"Retry-After": "3"}
 
 
 # Application entry point

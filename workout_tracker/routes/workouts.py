@@ -39,6 +39,7 @@ from services.bodyweight import (
 from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
 from utils.profile_images import get_profile_image_url
+from utils.rich_text import to_plain_text
 from utils.validators import sanitize_text_input, validate_username
 
 
@@ -2691,11 +2692,17 @@ def register_workout_routes(app):
                         if str_values:
                             raw_text = max(str_values, key=len)
                             source = "json.any"
-                content_type = (request.content_type or "").lower()
-                if not raw_text and content_type.startswith("text/plain"):
-                    raw_text = str(request.get_data(as_text=True) or "").strip()
+                if not raw_text and request.files:
+                    # Rich-text notes can arrive as an uploaded file (RTF/HTML).
+                    uploads = [f.read(200_000) for f in request.files.values()]
+                    uploads = [u for u in uploads if u and u.strip()]
+                    if uploads:
+                        raw_text = to_plain_text(max(uploads, key=len))
+                        source = "file"
+                if not raw_text and not request.form and not request.is_json:
+                    raw_text = to_plain_text(request.get_data())
                     if raw_text:
-                        source = "raw.text_plain"
+                        source = "raw.body"
             else:
                 raw_text = str(
                     request.args.get("workout_text")
@@ -2714,6 +2721,11 @@ def register_workout_routes(app):
 
         result, error = _parse_and_save_workout_text(user, raw_text)
         if error:
+            logger.info(
+                "Shortcut log failed: %s (source=%s, content_type=%s, chars=%s, unusual=%s)",
+                error, source, request.content_type, len(raw_text),
+                sorted({f"U+{ord(c):04X}" for c in raw_text if ord(c) > 126})[:20],
+            )
             return _shortcut_json(
                 {
                     "ok": False,
@@ -3156,7 +3168,7 @@ def register_workout_routes(app):
             return redirect(url_for('user_dashboard', username=user.username))
 
     def _parse_and_save_workout_text(user, raw_text: str):
-        text = str(raw_text or "").strip()
+        text = to_plain_text(raw_text)
         if not text:
             return None, "Please enter workout data."
 
