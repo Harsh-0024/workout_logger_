@@ -2769,6 +2769,8 @@ def register_workout_routes(app):
 
             share_user = Session.get(User, user_id)
             share_username = share_user.username.title() if share_user else "Workout Logger User"
+            # Public URL (static upload or R2 public bucket), so logged-out friends can load it.
+            share_avatar_url = get_profile_image_url(getattr(share_user, 'profile_image', None)) if share_user else None
 
             workout_date = datetime.strptime(date_str, '%Y-%m-%d').date()
             start_dt = datetime.combine(workout_date, datetime.min.time())
@@ -2813,6 +2815,7 @@ def register_workout_routes(app):
                 date=date_str,
                 date_label=date_label,
                 share_username=share_username,
+                share_avatar_url=share_avatar_url,
                 workout_name=workout_name,
                 rows=rows,
                 exercise_count=len(logs),

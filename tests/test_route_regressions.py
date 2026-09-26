@@ -150,6 +150,35 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(expired.status_code, 200)
         self.assertIn("This link has expired", expired.get_data(as_text=True))
 
+    def test_shared_workout_page_shows_owner_profile_photo(self):
+        from itsdangerous import URLSafeSerializer
+
+        user = self._create_logged_in_user(username="share_photo_owner")
+        # The login helper leaves `user` detached, so set the photo on a fresh copy.
+        self.session.get(User, user.id).profile_image = "uploads/avatars/share_photo_owner.png"
+        self.session.add(
+            WorkoutLog(
+                user_id=user.id,
+                date=datetime(2026, 1, 10, 9, 0, 0),
+                workout_name="Push Day",
+                exercise="Flat Dumbbell Press",
+                exercise_string="Flat Dumbbell Press\n30 30, 8 8",
+                sets_json={"weights": [30, 30], "reps": [8, 8]},
+                bodyweight=user.bodyweight,
+            )
+        )
+        self.session.commit()
+
+        token = URLSafeSerializer(self.app.config.get("SECRET_KEY", "workout-share")).dumps(
+            {"user_id": user.id, "date": "2026-01-10"}
+        )
+        page = self.app.test_client().get(f"/share/{token}").get_data(as_text=True)
+
+        # Photo from the public avatar store, with the initial kept as a fallback.
+        self.assertIn('class="sw-avatar"', page)
+        self.assertRegex(page, r'<img src="[^"]*avatars/share_photo_owner\.png"')
+        self.assertIn('class="sw-initial"', page)
+
     def test_shortcut_pick_url_is_available_to_regular_users(self):
         self._create_logged_in_user(username="shortcut_pick_user")
 

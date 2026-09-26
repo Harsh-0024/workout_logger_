@@ -78,24 +78,43 @@
         pointer-events: none;
     }
     .sw-hero > * { position: relative; }
+    /* Who shared it: photo with a thin gold ring, name over "shared a workout". */
     .sw-by {
-        display: inline-flex; align-items: center; gap: 10px;
-        padding: 5px 14px 5px 5px;
+        display: inline-flex; align-items: center; gap: 12px;
+        padding: 6px 20px 6px 6px;
         border-radius: 999px;
         border: 1px solid var(--sw-line);
         background: var(--sw-surface);
-        font-size: 0.82rem;
-        color: var(--text-muted);
+        text-align: left;
     }
-    .sw-by strong { color: var(--text-primary); font-weight: 600; }
     .sw-avatar {
-        width: 28px; height: 28px;
-        display: inline-flex; align-items: center; justify-content: center;
+        position: relative;
+        flex: 0 0 auto;
+        width: 46px; height: 46px;
+        padding: 2px;
         border-radius: 50%;
         background: linear-gradient(135deg, var(--gold-bright), var(--gold-dark));
-        color: #1a1405;
-        font-weight: 700; font-size: 0.8rem;
+        box-shadow: 0 4px 14px rgba(212, 175, 55, 0.22);
     }
+    .sw-avatar img,
+    .sw-avatar .sw-initial {
+        width: 100%; height: 100%;
+        border-radius: 50%;
+        border: 2px solid var(--card-bg-solid);
+    }
+    .sw-avatar img { display: block; object-fit: cover; background: var(--card-bg-solid); }
+    .sw-avatar .sw-initial {
+        display: flex; align-items: center; justify-content: center;
+        background: linear-gradient(135deg, var(--gold-bright), var(--gold-dark));
+        color: #1a1405;
+        font-weight: 700; font-size: 1.05rem;
+    }
+    .sw-avatar img + .sw-initial { display: none; }
+    .sw-avatar.no-photo img { display: none; }
+    .sw-avatar.no-photo img + .sw-initial { display: flex; }
+    .sw-by-text { display: flex; flex-direction: column; line-height: 1.25; }
+    .sw-by-text strong { color: var(--text-primary); font-weight: 600; font-size: 0.95rem; }
+    .sw-by-text span { color: var(--text-muted); font-size: 0.78rem; }
     .sw-title {
         font-size: clamp(2rem, 7vw, 2.8rem);
         font-weight: 600;
@@ -174,8 +193,26 @@
         font-variant-numeric: tabular-nums;
     }
 
-    /* ---- Invite ---- */
-    .sw-cta { padding: 36px 32px; overflow: hidden; }
+    /* ---- End of workout: separates the workout from the app invite ---- */
+    .sw-end {
+        display: flex; align-items: center; gap: 14px;
+        margin: 30px 4px 18px;
+        font-size: 0.68rem; font-weight: 700;
+        letter-spacing: 0.12em; text-transform: uppercase;
+        color: var(--text-subtle);
+    }
+    .sw-end::before, .sw-end::after { content: ''; flex: 1; height: 1px; background: var(--sw-line); }
+    .sw-end + .sw-panel { margin-top: 0; }
+
+    /* ---- Invite: its own gold-tinted card so it never reads as part of the workout ---- */
+    .sw-cta {
+        padding: 36px 32px;
+        overflow: hidden;
+        border-color: var(--border-gold);
+        background:
+            linear-gradient(160deg, var(--gold-subtle) 0%, transparent 55%),
+            var(--card-bg-solid);
+    }
     .sw-cta::after {
         content: '';
         position: absolute;
@@ -209,7 +246,8 @@
         font-size: 1rem;
     }
     .sw-features b { display: block; font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
-    .sw-features span { display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 1px; }
+    /* Only the description text; a bare ".sw-features span" also hit the icon box and un-centred the icon. */
+    .sw-features li > div > span { display: block; font-size: 0.8rem; color: var(--text-muted); margin-top: 1px; }
     .sw-actions { display: flex; flex-wrap: wrap; gap: 10px; }
     .sw-btn {
         display: inline-flex; align-items: center; justify-content: center; gap: 8px;
@@ -266,6 +304,18 @@
         .sw-stat span { font-size: 0.6rem; }
 
         .sw-list { padding: 18px 0 8px; }
+        .sw-end { margin: 34px 0 20px; }
+        /* On phones everything else is box-free, so the invite gets a card to stand apart. */
+        .sw-panel.sw-cta,
+        [data-theme="light"] .sw-panel.sw-cta {
+            padding: 26px 20px 24px;
+            border: 1px solid var(--border-gold);
+            border-radius: 20px;
+            background:
+                linear-gradient(160deg, var(--gold-subtle) 0%, transparent 60%),
+                var(--card-bg-solid);
+            overflow: hidden;
+        }
         .sw-list-head { padding: 12px 0 12px; }
         .sw-copy { height: 30px; padding: 0 10px; border-color: transparent; margin-right: -10px; }
         .sw-ex { grid-template-columns: minmax(0, 1fr) auto; row-gap: 6px; padding: 18px 0; }
@@ -280,15 +330,14 @@
         }
         .sw-set + .sw-set::before { content: "·"; margin: 0 7px; opacity: 0.6; }
 
-        .sw-cta { margin-top: 12px; padding: 30px 0 8px; border-top: 1px solid var(--sw-line) !important; overflow: visible; }
         .sw-cta::after { display: none; }
-        .sw-cta h2 { font-size: 1.7rem; margin: 16px 0 10px; }
+        .sw-cta h2 { font-size: 1.6rem; margin: 16px 0 10px; }
         .sw-cta p { font-size: 0.88rem; margin-bottom: 24px; }
         .sw-features { gap: 16px; margin-bottom: 28px; }
         .sw-features li { grid-template-columns: 22px 1fr; gap: 10px; }
         .sw-feat-icon { width: 22px; height: 22px; border: 0; background: transparent; font-size: 1rem; justify-content: flex-start; }
         .sw-features b { font-size: 0.88rem; }
-        .sw-features span { font-size: 0.78rem; }
+        .sw-features li > div > span { font-size: 0.78rem; }
         .sw-actions .sw-btn { flex: 1 1 auto; }
 
         .sw-missing { padding: 40px 8px; }
@@ -310,8 +359,17 @@
 
     <section class="sw-panel sw-hero">
         <div class="sw-by">
-            <span class="sw-avatar">{{ (share_username or 'W')[:1] | upper }}</span>
-            <span><strong>{{ share_username }}</strong> shared a workout</span>
+            <span class="sw-avatar">
+                {% if share_avatar_url %}
+                <img src="{{ share_avatar_url }}" alt="" loading="lazy" referrerpolicy="no-referrer"
+                     onerror="this.parentNode.classList.add('no-photo')">
+                {% endif %}
+                <span class="sw-initial" aria-hidden="true">{{ (share_username or 'W')[:1] | upper }}</span>
+            </span>
+            <span class="sw-by-text">
+                <strong>{{ share_username }}</strong>
+                <span>shared a workout</span>
+            </span>
         </div>
         <h1 class="sw-title">{{ workout_name }}</h1>
         <p class="sw-date">{{ date_label }}</p>
@@ -343,6 +401,8 @@
         </div>
         {% endfor %}
     </section>
+
+    <div class="sw-end" role="separator"><span>End of workout</span></div>
 
     <section class="sw-panel sw-cta">
         <div class="sw-brand"><span class="sw-logo">WT</span>Workout Logger</div>
