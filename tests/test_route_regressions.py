@@ -197,6 +197,26 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(token_response.status_code, 400)
         self.assertIn("Missing key", token_response.get_data(as_text=True))
 
+    def test_shortcut_replies_name_the_server_so_shortcuts_can_fall_back(self):
+        self._create_logged_in_user(username="shortcut_fallback_user")
+        pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
+        log_path = urlsplit(self.client.get("/shortcut/log").get_json()["url"]).path
+
+        # Plain text stays the default for existing Shortcuts.
+        self.assertEqual(self.client.get(pick_path).mimetype, "text/plain")
+
+        pick = self.client.get(f"{pick_path}?format=json").get_json()
+        self.assertEqual(pick["server"], "Local")
+        self.assertFalse(pick["ok"])
+        self.assertIn("Missing key", pick["error"])
+
+        log = self.client.post(log_path, data={"workout_text": ""}).get_json()
+        self.assertEqual(log["server"], "Local")
+        self.assertFalse(log["ok"])
+
+        bad_token = self.client.post("/shortcut/log/not-a-token").get_json()
+        self.assertEqual(bad_token["server"], "Local")
+
     def test_custom_retrieve_uses_selected_exercises_in_selection_order(self):
         user = self._create_logged_in_user(username="custom_retrieve_user")
         self.session.add(

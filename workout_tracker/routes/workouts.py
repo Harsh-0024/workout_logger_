@@ -2595,7 +2595,20 @@ def register_workout_routes(app):
         output, _, _ = generate_retrieve_output(Session, user, category, day_id)
         return Response(str(output), mimetype="text/plain")
 
+    def _shortcut_json(payload: dict, status: int = 200):
+        # "server" is always present, so a Shortcut can tell this app's reply
+        # from a host error page and fall back to the other deployment.
+        return jsonify({**payload, "server": _deployment_name(request.host)}), status
+
     def shortcut_pick(token):
+        as_json = str(request.args.get("format") or "").strip().lower() == "json"
+
+        def reply(text: str, status: int = 200):
+            if as_json:
+                key = "text" if status == 200 else "error"
+                return _shortcut_json({"ok": status == 200, key: text}, status)
+            return Response(text, status=status, mimetype="text/plain")
+
         try:
             payload = _load_shortcut_pick_token(token)
             user_id = payload.get("user_id")
@@ -2605,25 +2618,25 @@ def register_workout_routes(app):
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
-            return Response("Invalid shortcut token.", status=401, mimetype="text/plain")
+            return reply("Invalid shortcut token.", 401)
         except Exception as e:
             logger.error(f"Shortcut token error: {e}", exc_info=True)
-            return Response("Invalid shortcut token.", status=401, mimetype="text/plain")
+            return reply("Invalid shortcut token.", 401)
 
         raw_key = str(request.args.get("key") or request.args.get("session") or request.args.get("word") or "").strip()
         if len(raw_key) > 140:
             raw_key = raw_key[:140]
         if not raw_key:
-            return Response("Missing key. Pass ?key=<session-name-or-day>.", status=400, mimetype="text/plain")
+            return reply("Missing key. Pass ?key=<session-name-or-day>.", 400)
 
         picked_day, error = _resolve_shortcut_pick_day(user, raw_key)
         if error:
-            return Response(str(error), status=400, mimetype="text/plain")
+            return reply(str(error), 400)
 
         category = picked_day.get("category")
         day_id = picked_day.get("day_id")
         output, _, _ = generate_retrieve_output(Session, user, category, day_id)
-        return Response(str(output), mimetype="text/plain")
+        return reply(str(output))
 
     def shortcut_log(token):
         try:
@@ -2635,10 +2648,10 @@ def register_workout_routes(app):
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
-            return jsonify({"ok": False, "error": "Invalid shortcut token."})
+            return _shortcut_json({"ok": False, "error": "Invalid shortcut token."})
         except Exception as e:
             logger.error(f"Shortcut token error: {e}", exc_info=True)
-            return jsonify({"ok": False, "error": "Invalid shortcut token."})
+            return _shortcut_json({"ok": False, "error": "Invalid shortcut token."})
 
         raw_text = ""
         source = "none"
@@ -2701,7 +2714,7 @@ def register_workout_routes(app):
 
         result, error = _parse_and_save_workout_text(user, raw_text)
         if error:
-            return jsonify(
+            return _shortcut_json(
                 {
                     "ok": False,
                     "error": error,
@@ -2712,7 +2725,7 @@ def register_workout_routes(app):
 
         date_str = result.get("date_str")
         detail_url = url_for('workout_summary', date_str=date_str, _external=True)
-        return jsonify(
+        return _shortcut_json(
             {
                 "ok": True,
                 "date": date_str,
