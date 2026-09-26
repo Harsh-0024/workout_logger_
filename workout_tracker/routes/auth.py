@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta
 import re
 import json
+import secrets
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -168,7 +169,9 @@ def register_auth_routes(app, email_service):
         size = 320
         image = ImageOps.fit(image, (size, size), Image.LANCZOS)
 
-        output_name = f"avatars/user_{user_id}.png"
+        # A fresh name per upload, so the URL changes and no cache (browser,
+        # service worker, CDN) can keep showing the previous photo.
+        output_name = f"avatars/user_{user_id}_{secrets.token_hex(4)}.png"
         buffer = BytesIO()
         image.save(buffer, format='PNG', optimize=True)
         buffer.seek(0)
@@ -189,6 +192,19 @@ def register_auth_routes(app, email_service):
                 f.write(buffer.getvalue())
 
         return output_name
+
+    def _delete_profile_image(profile_image: str | None) -> None:
+        import os
+
+        if not profile_image:
+            return
+        key = normalize_profile_image_key(profile_image)
+        local_path = get_local_profile_image_path(key)
+        if local_path and os.path.exists(local_path):
+            os.remove(local_path)
+        elif has_r2_profile_image_storage():
+            s3 = get_r2_profile_image_client()
+            s3.delete_object(Bucket=get_r2_bucket_name(), Key=key)
 
     def _enforce_rate_limit(action: str, identifier: str | None, limit: int, window_seconds: int) -> None:
         if not app.config.get('ENABLE_RATE_LIMITING', False):
@@ -637,9 +653,15 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('account_settings'))
 
                     try:
+                        old_image = user.profile_image
                         user.profile_image = _save_profile_image(user.id, image_file)
                         user.updated_at = datetime.now()
                         Session.commit()
+                        if old_image and old_image != user.profile_image:
+                            try:
+                                _delete_profile_image(old_image)
+                            except Exception as e:
+                                logger.warning(f"Could not delete old profile photo {old_image}: {e}")
                         flash("Profile photo updated successfully!", "success")
                     except AuthenticationError as e:
                         Session.rollback()
@@ -652,16 +674,7 @@ def register_auth_routes(app, email_service):
 
                 if form_type == 'remove_photo':
                     try:
-                        if user.profile_image:
-                            import os
-                            key = normalize_profile_image_key(user.profile_image)
-                            local_path = get_local_profile_image_path(key)
-                            if local_path and os.path.exists(local_path):
-                                os.remove(local_path)
-                            elif has_r2_profile_image_storage():
-                                s3 = get_r2_profile_image_client()
-                                bucket = get_r2_bucket_name()
-                                s3.delete_object(Bucket=bucket, Key=key)
+                        _delete_profile_image(user.profile_image)
                         user.profile_image = None
                         user.updated_at = datetime.now()
                         Session.commit()

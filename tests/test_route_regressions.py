@@ -542,10 +542,38 @@ class TestRouteRegressions(unittest.TestCase):
         s3.put_object.assert_called_once()
         put_kwargs = s3.put_object.call_args.kwargs
         self.assertEqual(put_kwargs["Bucket"], "workout-tracker-avatars")
-        self.assertEqual(put_kwargs["Key"], f"avatars/user_{user.id}.png")
+        self.assertRegex(put_kwargs["Key"], rf"^avatars/user_{user.id}_[0-9a-f]{{8}}\.png$")
         self.assertEqual(put_kwargs["ContentType"], "image/png")
         stored_user = self.session.query(User).filter_by(id=user.id).one()
-        self.assertEqual(stored_user.profile_image, f"avatars/user_{user.id}.png")
+        self.assertEqual(stored_user.profile_image, put_kwargs["Key"])
+
+    def test_profile_photo_reupload_gets_new_url_and_deletes_old_photo(self):
+        user = self._create_logged_in_user(username="avatar_reupload_user")
+        self.session.get(User, user.id).profile_image = f"avatars/user_{user.id}.png"
+        self.session.commit()
+        image_bytes = BytesIO()
+        Image.new("RGB", (32, 32), "blue").save(image_bytes, format="PNG")
+        image_bytes.seek(0)
+        s3 = Mock()
+
+        with patch("workout_tracker.routes.auth.has_r2_profile_image_storage", return_value=True), \
+             patch("workout_tracker.routes.auth.get_r2_profile_image_client", return_value=s3), \
+             patch("workout_tracker.routes.auth.get_r2_bucket_name", return_value="workout-tracker-avatars"):
+            self.client.post(
+                "/settings",
+                data={
+                    "form_type": "profile_photo",
+                    "profile_image": (image_bytes, "avatar.png"),
+                },
+                content_type="multipart/form-data",
+            )
+
+        new_key = s3.put_object.call_args.kwargs["Key"]
+        self.assertNotEqual(new_key, f"avatars/user_{user.id}.png")
+        s3.delete_object.assert_called_once_with(
+            Bucket="workout-tracker-avatars",
+            Key=f"avatars/user_{user.id}.png",
+        )
 
     def test_r2_client_uses_configured_endpoint_credentials_region_and_bucket(self):
         s3 = object()
