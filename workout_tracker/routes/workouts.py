@@ -2510,15 +2510,40 @@ def register_workout_routes(app):
         sample = ", ".join(sorted(all_labels)[:8])
         return None, f"No workout day matched '{raw_key}'. Try one of: {sample}"
 
+    def _deployment_name(host: str) -> str:
+        host = host.lower()
+        if host.split(':')[0] in {'localhost', '127.0.0.1'}:
+            return 'Local'
+        if host.endswith('.railway.app'):
+            return 'Railway'
+        if host.endswith('.onrender.com'):
+            return 'Render'
+        return host
+
+    def _deployment_base_urls() -> list[tuple[str, str]]:
+        """(name, base URL) for this site first, then every other deployment."""
+        current = request.host_url.rstrip('/')
+        bases = [(_deployment_name(request.host), current)]
+        seen = {urlsplit(current).netloc.lower()}
+        for entry in str(app.config.get('DEPLOYMENT_URLS') or '').split(','):
+            name, _, url = entry.strip().rpartition('=')
+            url = url.strip().rstrip('/')
+            host = urlsplit(url).netloc.lower()
+            if not host or host in seen:
+                continue
+            seen.add(host)
+            bases.append((name.strip() or _deployment_name(host), url))
+        return bases
+
     @login_required
     def shortcut_urls():
-        log_token = _make_shortcut_log_token(current_user.id)
-        pick_token = _make_shortcut_pick_token(current_user.id)
-        return render_template(
-            'shortcut_urls.html',
-            log_url=url_for('shortcut_log', token=log_token, _external=True),
-            retrieve_url=url_for('shortcut_pick', token=pick_token, _external=True),
-        )
+        log_path = url_for('shortcut_log', token=_make_shortcut_log_token(current_user.id))
+        pick_path = url_for('shortcut_pick', token=_make_shortcut_pick_token(current_user.id))
+        deployments = [
+            {'name': name, 'log_url': base + log_path, 'retrieve_url': base + pick_path}
+            for name, base in _deployment_base_urls()
+        ]
+        return render_template('shortcut_urls.html', deployments=deployments)
 
     @login_required
     def shortcut_recommend_url():

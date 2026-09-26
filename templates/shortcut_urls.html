@@ -11,15 +11,25 @@
                 <p class="text-muted mb-0" style="font-size: var(--fs-sm);">Use these private URLs in Apple Shortcuts.</p>
             </div>
 
-            <div class="shortcut-url-list">
+            {% if deployments|length > 1 %}
+            <div class="shortcut-host-switch" role="tablist" aria-label="Deployment">
+                {% for d in deployments %}
+                <button type="button" class="shortcut-host-btn{% if loop.first %} active{% endif %}" role="tab"
+                        aria-selected="{{ 'true' if loop.first else 'false' }}" data-host-target="{{ loop.index }}">{{ d.name }}</button>
+                {% endfor %}
+            </div>
+            {% endif %}
+
+            {% for d in deployments %}
+            <div class="shortcut-url-list" data-host-panel="{{ loop.index }}"{% if not loop.first %} hidden{% endif %}>
                 <section class="shortcut-url-item">
                     <div class="d-flex align-items-center gap-2 mb-2">
                         <i class="bi bi-phone-vibrate text-gold"></i>
                         <h6 class="fw-semibold mb-0">Log URL</h6>
                     </div>
                     <div class="input-group">
-                        <input type="text" class="form-control shortcut-url-input" value="{{ log_url }}" readonly aria-label="Shortcut log URL">
-                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ log_url }}">
+                        <input type="text" class="form-control shortcut-url-input" value="{{ d.log_url }}" readonly aria-label="{{ d.name }} shortcut log URL">
+                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ d.log_url }}">
                             <i class="bi bi-copy me-2"></i>Copy
                         </button>
                     </div>
@@ -32,14 +42,15 @@
                         <h6 class="fw-semibold mb-0">Retrieve URL</h6>
                     </div>
                     <div class="input-group">
-                        <input type="text" class="form-control shortcut-url-input" value="{{ retrieve_url }}" readonly aria-label="Shortcut retrieve URL">
-                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ retrieve_url }}">
+                        <input type="text" class="form-control shortcut-url-input" value="{{ d.retrieve_url }}" readonly aria-label="{{ d.name }} shortcut retrieve URL">
+                        <button type="button" class="btn btn-gold-outline shortcut-copy-btn" data-copy-value="{{ d.retrieve_url }}">
                             <i class="bi bi-copy me-2"></i>Copy
                         </button>
                     </div>
                     <div class="text-muted mt-2" style="font-size: var(--fs-xs);">Add <code>?key=URL%20Encoded%20Text</code> to pick a session.</div>
                 </section>
             </div>
+            {% endfor %}
 
             <div class="d-grid gap-2 gap-md-3 mt-4">
                 <a href="{{ url_for('shortcut_key_map_settings') }}" class="btn btn-gold-outline">
@@ -57,6 +68,36 @@
     .shortcut-url-list {
         display: grid;
         gap: 1rem;
+    }
+
+    .shortcut-host-switch {
+        display: flex;
+        justify-content: center;
+        gap: 0.25rem;
+        margin: 0 auto 1.25rem;
+        padding: 0.25rem;
+        width: fit-content;
+        max-width: 100%;
+        border: 1px solid var(--border-subtle);
+        border-radius: 999px;
+    }
+
+    .shortcut-host-btn {
+        border: 0;
+        background: transparent;
+        color: var(--text-muted, inherit);
+        font-size: var(--fs-sm);
+        padding: 0.35rem 1.1rem;
+        border-radius: 999px;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .shortcut-host-btn.active {
+        background: rgba(201, 169, 97, 0.16);
+        color: var(--gold-primary);
     }
 
     .shortcut-url-item {
@@ -95,6 +136,20 @@
 
 <script>
     document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.shortcut-host-btn').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                const target = tab.getAttribute('data-host-target');
+                document.querySelectorAll('.shortcut-host-btn').forEach((other) => {
+                    const on = other === tab;
+                    other.classList.toggle('active', on);
+                    other.setAttribute('aria-selected', on ? 'true' : 'false');
+                });
+                document.querySelectorAll('[data-host-panel]').forEach((panel) => {
+                    panel.hidden = panel.getAttribute('data-host-panel') !== target;
+                });
+            });
+        });
+
         document.querySelectorAll('.shortcut-copy-btn').forEach((button) => {
             button.addEventListener('click', async () => {
                 const value = button.getAttribute('data-copy-value') || '';

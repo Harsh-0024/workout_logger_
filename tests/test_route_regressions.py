@@ -648,6 +648,26 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("/shortcut/pick/", page)
         self.assertIn("Shortcut Session Mapping", page)
 
+    def test_shortcut_urls_page_lists_every_deployment_over_https(self):
+        self._create_logged_in_user(username="shortcut_hosts_user")
+        self.app.config["DEPLOYMENT_URLS"] = (
+            "Railway=https://workoutlogger-production-7f91.up.railway.app,"
+            "Render=https://workout-logger.onrender.com"
+        )
+
+        # Behind an HTTPS-terminating proxy, like Railway and Render.
+        response = self.client.get("/shortcut/urls", headers={"X-Forwarded-Proto": "https"})
+
+        page = response.get_data(as_text=True)
+        self.assertIn("https://localhost/shortcut/log/", page)
+        self.assertIn("https://workoutlogger-production-7f91.up.railway.app/shortcut/log/", page)
+        self.assertIn("https://workout-logger.onrender.com/shortcut/log/", page)
+        self.assertIn("https://workout-logger.onrender.com/shortcut/pick/", page)
+        self.assertNotIn("http://localhost/shortcut", page)
+        # The site being viewed comes first, then the other deployments.
+        self.assertLess(page.index(">Local<"), page.index(">Railway<"))
+        self.assertLess(page.index(">Railway<"), page.index(">Render<"))
+
     def test_shortcut_mapping_is_available_to_regular_users(self):
         self._create_logged_in_user(username="shortcut_mapping_user")
 

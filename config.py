@@ -19,6 +19,14 @@ class Config:
     
     # Database
     DATABASE_URL = os.environ.get('DATABASE_URL')
+
+    # Public addresses of every deployment (they share one database), used to
+    # show Shortcut URLs for each. Format: "Name=https://host,Name=https://host".
+    DEPLOYMENT_URLS = os.environ.get(
+        'DEPLOYMENT_URLS',
+        'Railway=https://workoutlogger-production-7f91.up.railway.app,'
+        'Render=https://workout-tracker-62qi.onrender.com',
+    )
     
     # App Settings
     DEBUG = os.environ.get('FLASK_DEBUG', 'False').lower() == 'true'

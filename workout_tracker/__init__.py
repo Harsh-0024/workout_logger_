@@ -9,6 +9,7 @@ from flask import Flask, render_template, send_from_directory, jsonify, request
 from flask_login import LoginManager
 from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect, CSRFError
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
 from models import Session, User, initialize_database
@@ -31,6 +32,9 @@ def create_app(config_object=Config, init_db: bool = True):
         static_folder=os.path.join(base_dir, 'static'),
     )
     app.config.from_object(config_object)
+    # Railway and Render terminate HTTPS at their proxy; trust its forwarded
+    # scheme so external URLs (share and shortcut links) come out as https.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_proto=1)
 
     if not app.config.get('SECRET_KEY'):
         if app.config.get('TESTING') or app.config.get('DEBUG'):
