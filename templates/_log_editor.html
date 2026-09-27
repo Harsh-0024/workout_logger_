@@ -102,7 +102,7 @@
     .lg-row + .lg-row { border-top: 1px solid var(--st-hair); }
     .lg-row:hover { background: var(--st-row-hover); }
     .lg-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-glow); }
-    .lg-line { flex: none; width: 22px; padding-top: 2px; font-size: 0.7rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; opacity: 0.8; }
+    .lg-num { flex: none; width: 22px; padding-top: 2px; font-size: 0.7rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; opacity: 0.8; }
     .lg-row-main { flex: 1; min-width: 0; }
     .lg-name { display: block; font-size: 0.93rem; font-weight: 600; line-height: 1.35; color: var(--text-primary); overflow-wrap: anywhere; }
     .lg-sets { display: block; margin-top: 3px; font-size: 0.8rem; line-height: 1.45; color: var(--text-muted); font-variant-numeric: tabular-nums; }
@@ -421,7 +421,10 @@
             }
             notes.innerHTML = notesHtml;
 
+            // Rows count the exercises 1, 2, 3; the line each one sits on is only used to jump there.
+            let order = 0;
             list.innerHTML = exercises.map((ex) => {
+                const number = ex.state === 'skip' ? '' : (order += 1);
                 const tag = ex.state === 'ok' || ex.state === 'new'
                     ? (ex.state === 'new' ? 'New' : `${ex.set_count} set${ex.set_count === 1 ? '' : 's'}`)
                     : TAGS[ex.state] || '';
@@ -432,7 +435,7 @@
                     note = `<span class="lg-note">${esc(ex.note)}</span>`;
                 }
                 return `<div class="lg-row is-${esc(ex.state)}" role="button" tabindex="0" data-line="${ex.line || ''}">
-                    <span class="lg-line">${ex.line || ''}</span>
+                    <span class="lg-num">${number}</span>
                     <span class="lg-row-main"><span class="lg-name">${esc(ex.name)}</span>${ex.sets_label ? `<span class="lg-sets">${esc(ex.sets_label)}</span>` : ''}${note}</span>
                     <span class="lg-tag">${esc(tag)}</span>
                 </div>`;
