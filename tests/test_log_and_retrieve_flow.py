@@ -1,6 +1,6 @@
 """Log page checks before saving, the workout page after saving, and the one-page Retrieve."""
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 import tests.test_route_regressions as base
@@ -29,6 +29,10 @@ class TestParserDetails(unittest.TestCase):
         parsed = workout_parser("1/9 Day\nForearm Roller - 5 2.5, 1\nPreacher Curl\t (Wellness) - [2]\n20 15, 10")
         names = [ex["name"] for ex in parsed["exercises"]]
         self.assertEqual(names, ["Forearm Roller", "Preacher Curl (Wellness)"])
+
+    def test_apostrophes_keep_a_small_letter(self):
+        parsed = workout_parser("1/9 Day\nDumbbell farmer's walk 30 25, 40\nfarmer’s walk 20, 30")
+        self.assertEqual([ex["name"] for ex in parsed["exercises"]], ["Dumbbell Farmer's Walk", "Farmer’s Walk"])
 
     def test_numbers_without_a_name_are_flagged_with_their_line(self):
         text = "1/9 Day\n\nBench Press - [3]\n50 45, 8\n\n12.5 9.25, 10 16"
@@ -138,6 +142,24 @@ class TestLogAndRetrieveFlow(unittest.TestCase):
         self.assertFalse(data["ok"])
         self.assertEqual(data["errors"][0]["line"], 4)
 
+    def test_preview_explains_a_missing_title_line_and_a_future_date(self):
+        self._create_logged_in_user(username="title_checker")
+        data = self.client.post("/log/preview", data={"workout_text": "Bench Press - [3]\n60 55, 8"}).get_json()
+        self.assertIn("is read as the title", data["errors"][0]["message"])
+
+        tomorrow = datetime.now() + timedelta(days=1)
+        text = f"{tomorrow.day}/{tomorrow.month} - Push\nBench Press 60 x 8"
+        data = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        self.assertTrue(data["ok"])
+        self.assertTrue(any("in the future" in w["message"] for w in data["warnings"]))
+
+    def test_seconds_only_for_timed_targets(self):
+        self._create_logged_in_user(username="seconds_checker")
+        text = "1/9/26 - Mixed\nFarmer's Walk - [2, 20-60s]\n30 25, 45 40\n\nPush-Ups - [1, Max reps]\nbw, 22"
+        rows = self.client.post("/log/preview", data={"workout_text": text}).get_json()["exercises"]
+        self.assertEqual(rows[0]["sets_label"], "30×45s · 25×40s")
+        self.assertEqual(rows[1]["sets_label"], "BW×22")
+
     # ---- Shortcut and old links ----
 
     def test_shortcut_refuses_numbers_without_a_name_and_links_to_the_workout_page(self):
@@ -238,6 +260,7 @@ class TestLogAndRetrieveFlow(unittest.TestCase):
 
         html = self.client.get("/retrieve/final/Session/1").get_data(as_text=True)
         self.assertIn("Session 1 · Cycle 1", html)
+        self.assertIn("Your best under each", html)
         self.assertIn("Chest &amp; Biceps", html)
         self.assertIn("60×6 · 55×7 · 50×8", html)
         self.assertIn("No history yet", html)          # Barbell Curl

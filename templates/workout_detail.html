@@ -420,7 +420,7 @@
         <div class="wd-callout saved" role="status">
             <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
             <div class="wd-callout-main">
-                <strong>{{ 'Added to this day' if saved.appended else 'Saved' }}</strong>{% if summary_counts.new_best and not saved.appended %} · {{ summary_counts.new_best }} new best{{ '' if summary_counts.new_best == 1 else 's' }}{% endif %}
+                <strong>{{ 'Added to this day' if saved.appended else 'Saved' }}</strong>
                 {% for line in saved.skipped %}<p>{{ line | replace("won't be saved", "wasn't saved") }}</p>{% endfor %}
                 {% if saved.needs_bodyweight %}<p>Set your bodyweight in <a href="{{ url_for('user_settings') }}">Settings</a> so BW sets are counted correctly.</p>{% endif %}
                 {% for exercise in saved.timed_prompts %}

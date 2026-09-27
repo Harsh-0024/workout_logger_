@@ -1214,7 +1214,8 @@ def describe_retrieve_output(output: str) -> Dict:
                 else:
                     weights_part, reps_part = normalized.split(",", 1)
                     pairs = list(zip(weights_part.split(), reps_part.split()))
-                timed = bool(inline_range and str(inline_range).strip().lower().endswith("s"))
+                # "20–60s" is seconds; "Max reps" merely ends in an s.
+                timed = bool(inline_range and re.search(r"\d\s*s$", str(inline_range).strip(), flags=re.IGNORECASE))
                 sets_label = " · ".join(
                     f"{_pretty_load(w)}×{r}{'s' if timed else ''}" for w, r in pairs
                 )

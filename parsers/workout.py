@@ -361,6 +361,11 @@ def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_r
     return weights, reps
 
 
+def _title_case(name: str) -> str:
+    """str.title(), but "Farmer's" stays "Farmer's" (not "Farmer'S")."""
+    return re.sub(r"(\w['’])([A-Z])\b", lambda m: m.group(1) + m.group(2).lower(), name.title())
+
+
 def clean_exercise_name(name: str) -> str:
     """Drop stray separators and tabs around a typed name ("Forearm Roller -" -> "Forearm Roller")."""
     name = re.sub(r'\s+', ' ', name or '').strip()
@@ -569,7 +574,7 @@ def workout_parser(
         is_valid = bool(reps) or any(w != 0 for w in weights)
 
         workout_day["exercises"].append({
-            "name": name.title(),
+            "name": _title_case(name),
             "exercise_string": "\n".join(exercise_lines).strip(),
             "weights": weights,
             "reps": reps,

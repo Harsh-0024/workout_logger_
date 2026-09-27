@@ -48,7 +48,7 @@
         </section>
 
         <div class="lg-bar">
-            <button type="button" class="lg-meta" id="logMeta" aria-live="polite">Paste a workout to check it</button>
+            <button type="button" class="lg-meta" id="logMeta" aria-live="polite">Nothing to check yet</button>
             <div class="lg-bar-actions">
                 <button type="button" class="st-btn st-btn-quiet st-btn-sm" id="pasteBtn"><i class="bi bi-clipboard"></i>Paste</button>
                 <button type="submit" class="st-btn st-btn-primary st-btn-sm" id="saveBtn">Save</button>
@@ -101,7 +101,7 @@
             check.hidden = !hasText;
             modeInput.value = '';
             if (!hasText) {
-                meta.textContent = 'Paste a workout to check it';
+                meta.textContent = 'Nothing to check yet';
                 meta.className = 'lg-meta';
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Save';

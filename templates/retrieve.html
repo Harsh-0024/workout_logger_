@@ -10,7 +10,8 @@
     .rt-grid { display: grid; grid-template-columns: repeat(var(--cols-narrow, 2), minmax(0, 1fr)); }
     .rt-grid > .rt-cell { grid-column: span var(--span-narrow, 1); }
     .rt-cell {
-        display: flex; flex-direction: column; justify-content: center; gap: 3px;
+        /* Top-aligned so session numbers line up across a row when a name wraps. */
+        display: flex; flex-direction: column; justify-content: flex-start; gap: 3px;
         min-height: 64px;
         padding: 12px 16px;
         color: var(--text-primary);
@@ -41,7 +42,7 @@
 </style>
 
 <div class="st rt">
-    {{ st.head('Retrieve', 'Pick a session to get its plan with your last numbers.') }}
+    {{ st.head('Retrieve', 'Each plan comes with your best numbers.') }}
 
     <div class="st-section">
         {% set ns = namespace(n=0) %}

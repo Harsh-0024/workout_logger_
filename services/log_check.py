@@ -28,7 +28,13 @@ def _fmt_num(value) -> str:
     return f"{number:g}"
 
 
-def _sets_label(weights, reps, *, bodyweight: bool) -> str:
+def _has_seconds_target(exercise_string: str) -> bool:
+    """A bracket like "[2, 20-60s]" means the second numbers are seconds (not "Max reps")."""
+    match = re.search(r"\[([^\]]*)\]", exercise_string or "")
+    return bool(match and re.search(r"\d\s*s(?:ec(?:onds?)?)?\s*$", match.group(1), flags=re.IGNORECASE))
+
+
+def _sets_label(weights, reps, *, bodyweight: bool, seconds: bool = False) -> str:
     parts = []
     for weight, rep in zip(weights or [], reps or []):
         if bodyweight:
@@ -36,7 +42,7 @@ def _sets_label(weights, reps, *, bodyweight: bool) -> str:
             load = "BW" if abs(w) < 1e-9 else f"BW{'+' if w > 0 else '−'}{_fmt_num(abs(w))}"
         else:
             load = _fmt_num(weight)
-        parts.append(f"{load}×{rep}")
+        parts.append(f"{load}×{rep}{'s' if seconds else ''}")
     return " · ".join(parts)
 
 
@@ -181,6 +187,12 @@ def check_workout_text(db_session, user, text: str, *, header: Optional[str] = N
         "bodyweight": parsed.get("bodyweight"),
     })
 
+    if parsed_date.date() > datetime.now().date():
+        result["warnings"].append({
+            "line": None,
+            "message": f"The date is in the future ({result['date_label']}). Check the first line if that's a typo.",
+        })
+
     existing = _existing_day(db_session, user.id, parsed_date)
     if existing:
         result["existing"] = {k: v for k, v in existing.items() if k not in {"exercises", "date"}}
@@ -205,10 +217,17 @@ def check_workout_text(db_session, user, text: str, *, header: Optional[str] = N
 
         if item.get("missing_name"):
             first_data = (item.get("exercise_string") or raw_line).split("\n", 1)[0]
-            message = (
-                f"Line {shown_line}: {_quote(first_data)} has numbers but no exercise name. "
-                "Put the exercise name on the line above it."
-            )
+            if not header and not result["exercises"] and not parsed.get("date_found"):
+                # Pasted without the date/title line: the first exercise became the title.
+                message = (
+                    f"The first line, {_quote(result['title'])}, is read as the title, so line {shown_line} "
+                    "has no exercise name. Start with a date and title line, like “27/9/26 - Push”."
+                )
+            else:
+                message = (
+                    f"Line {shown_line}: {_quote(first_data)} has numbers but no exercise name. "
+                    "Put the exercise name on the line above it."
+                )
             entry.update(state="missing", name="No exercise name", note="Add the exercise name above these numbers")
             result["errors"].append({"line": shown_line, "message": message})
             result["exercises"].append(entry)
@@ -225,7 +244,9 @@ def check_workout_text(db_session, user, text: str, *, header: Optional[str] = N
             continue
 
         weights, reps = item.get("weights") or [], item.get("reps") or []
-        entry["sets_label"] = _sets_label(weights, reps, bodyweight=uses_bw)
+        entry["sets_label"] = _sets_label(
+            weights, reps, bodyweight=uses_bw, seconds=_has_seconds_target(item.get("exercise_string") or ""),
+        )
         entry["set_count"] = len(reps)
         result["exercise_count"] += 1
         result["set_count"] += len(reps)
