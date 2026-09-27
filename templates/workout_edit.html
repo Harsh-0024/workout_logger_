@@ -14,7 +14,7 @@
 </style>
 
 <div class="st lg" id="editPage" data-preview-url="{{ url_for('log_preview') }}" data-original-date="{{ date }}">
-    {{ st.head('Edit workout', 'Fix names or numbers. Changes are checked before saving.', back=url_for('view_workout', date_str=date), back_label='Back to workout') }}
+    {{ st.head('Edit workout', 'Fix names or numbers.', back=url_for('view_workout', date_str=date), back_label='Back to workout') }}
 
     {% if errors %}
     <div class="lg-callout is-error" role="alert">

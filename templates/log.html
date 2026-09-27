@@ -5,7 +5,7 @@
 {% include '_log_editor.html' %}
 
 <div class="st lg" id="logPage" data-preview-url="{{ url_for('log_preview') }}">
-    {{ st.head('Log workout', 'Paste your workout from Notes. It’s checked before anything is saved.') }}
+    {{ st.head('Log workout', 'Paste your workout from Notes.') }}
 
     {% if error %}
     <div class="lg-callout is-error" role="alert">
