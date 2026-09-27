@@ -16,13 +16,15 @@
     .rp-title-input:focus { outline: none; border-bottom-color: var(--gold-primary); }
     .rp-meta { color: var(--text-muted); font-size: 0.86rem; margin: 0; }
 
-    .rp-row { display: flex; align-items: flex-start; gap: 14px; padding: 14px 18px; }
+    /* Name alone on the first line with a short target beside it; the best numbers sit quietly below. */
+    .rp-list { margin-top: 28px; }
+    .rp-row { display: flex; align-items: baseline; gap: 14px; padding: 16px 18px; }
     .rp-row + .rp-row { border-top: 1px solid var(--st-hair); }
     .rp-main { flex: 1; min-width: 0; }
     .rp-name { display: block; font-size: 0.95rem; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
-    .rp-sets { display: block; margin-top: 4px; font-size: 0.82rem; line-height: 1.45; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+    .rp-sets { display: block; margin-top: 6px; font-size: 0.82rem; line-height: 1.45; color: var(--text-muted); font-variant-numeric: tabular-nums; }
     .rp-sets.is-fresh { color: var(--text-subtle); font-style: italic; }
-    .rp-target { flex: none; max-width: 42%; padding-top: 2px; text-align: right; font-size: 0.78rem; line-height: 1.4; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    .rp-target { flex: none; max-width: 40%; text-align: right; font-size: 0.78rem; line-height: 1.4; color: var(--text-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
     .rp-text > summary { display: inline-flex; align-items: center; gap: 6px; margin: 16px 4px 0; font-size: 0.82rem; font-weight: 600; color: var(--text-muted); }
     .rp-text > summary .st-chev { transition: transform var(--transition-fast); }
@@ -30,24 +32,34 @@
     .rp-text .st-group { margin-top: 12px; }
     .rp-text pre { margin: 0; padding: 16px 18px; font: 0.8rem/1.7 'SF Mono', 'Menlo', 'Monaco', monospace; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
 
+    /* Copy stays in reach while scrolling. The dock fades the page out beneath the bar,
+       so rows disappear softly instead of peeking through the gap above the bottom nav. */
+    .rp-dock {
+        position: sticky; bottom: 0; z-index: 7;
+        margin-top: 10px;
+        padding: 18px 0 16px;
+        pointer-events: none;
+    }
+    .rp-dock.is-floating { background: linear-gradient(to bottom, transparent, var(--bg-primary) 18px); }
     .rp-bar {
-        position: sticky; bottom: 16px; z-index: 7;
         display: flex; align-items: center; justify-content: space-between; gap: 12px;
-        margin-top: 28px;
         padding: 10px 12px 10px 18px;
         border-radius: 16px;
         border: 1px solid var(--border-subtle);
         background: var(--card-bg-solid);
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        pointer-events: auto;
     }
-    [data-theme="light"] .rp-bar { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); }
+    [data-theme="light"] .rp-bar { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07); }
     .rp-bar-meta { min-width: 0; font-size: 0.8rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .rp-bar-actions { display: flex; gap: 8px; flex: none; }
     .rp-bar .st-btn.is-done { background: linear-gradient(135deg, #16a34a, #22c55e); color: #fff; }
 
     @media (max-width: 576px) {
-        .rp-row { padding: 13px 16px; }
-        .rp-bar { bottom: calc(86px + env(safe-area-inset-bottom) + 10px); padding-left: 16px; }
+        .rp-row { padding: 15px 16px; }
+        /* Sits right on top of the bottom nav, leaving no strip for rows to show through. */
+        .rp-dock { bottom: calc(86px + env(safe-area-inset-bottom)); padding-bottom: 10px; }
+        .rp-bar { padding-left: 16px; }
     }
 </style>
 
@@ -66,8 +78,7 @@
         <p class="rp-meta">{{ exercise_count or 0 }} exercise{{ '' if exercise_count == 1 else 's' }} · {{ set_count or 0 }} set{{ '' if set_count == 1 else 's' }}{% if plan.bodyweight %} · Bodyweight {{ plan.bodyweight }}{% endif %}</p>
     </header>
 
-    <section class="st-section" aria-label="Plan">
-        <div class="st-label"><span>Plan</span><span class="st-label-aside">Your best under each</span></div>
+    <section class="rp-list" aria-label="Plan, with your best numbers under each exercise">
         <div class="st-group">
             {% for ex in plan.exercises %}
             <div class="rp-row">
@@ -94,13 +105,16 @@
 
     <textarea id="planText" class="visually-hidden" readonly tabindex="-1" aria-hidden="true">{{ output }}</textarea>
 
-    <div class="rp-bar">
-        <span class="rp-bar-meta">Ready for Notes</span>
-        <div class="rp-bar-actions">
-            <button type="button" class="st-btn st-btn-quiet st-btn-sm" id="shareBtn" hidden><i class="bi bi-box-arrow-up"></i>Share</button>
-            <button type="button" class="st-btn st-btn-primary st-btn-sm" id="copyBtn"><i class="bi bi-clipboard"></i>Copy</button>
+    <div class="rp-dock">
+        <div class="rp-bar">
+            <span class="rp-bar-meta">Ready for Notes</span>
+            <div class="rp-bar-actions">
+                <button type="button" class="st-btn st-btn-quiet st-btn-sm" id="shareBtn" hidden><i class="bi bi-box-arrow-up"></i>Share</button>
+                <button type="button" class="st-btn st-btn-primary st-btn-sm" id="copyBtn"><i class="bi bi-clipboard"></i>Copy</button>
+            </div>
         </div>
     </div>
+    <div class="rp-dock-end" aria-hidden="true"></div>
 </div>
 
 <script>
@@ -149,6 +163,16 @@
             copied();
         };
         copyBtn.addEventListener('click', copy);
+
+        // The dock only fades the page while it floats; resting at the end of the page it stays clear.
+        const dock = document.querySelector('.rp-dock');
+        const dockEnd = document.querySelector('.rp-dock-end');
+        if (dock && dockEnd && 'IntersectionObserver' in window) {
+            const offset = parseFloat(getComputedStyle(dock).bottom) || 0;
+            new IntersectionObserver(([entry]) => {
+                dock.classList.toggle('is-floating', !entry.isIntersecting);
+            }, { rootMargin: `0px 0px -${offset}px 0px` }).observe(dockEnd);
+        }
 
         // Share sheet (iPhone: straight into Notes). Only where the browser has one.
         if (navigator.share) {

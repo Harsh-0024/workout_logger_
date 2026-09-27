@@ -260,7 +260,8 @@ class TestLogAndRetrieveFlow(unittest.TestCase):
 
         html = self.client.get("/retrieve/final/Session/1").get_data(as_text=True)
         self.assertIn("Session 1 · Cycle 1", html)
-        self.assertIn("Your best under each", html)
+        self.assertNotIn("Your best under each", html)
+        self.assertIn("Ready for Notes", html)
         self.assertIn("Chest &amp; Biceps", html)
         self.assertIn("60×6 · 55×7 · 50×8", html)
         self.assertIn("No history yet", html)          # Barbell Curl

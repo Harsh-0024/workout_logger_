@@ -1109,19 +1109,20 @@ def _count_sets_from_line(sets_line: str, target_sets: int = 3) -> int:
 
 
 def _target_label(declared_sets, inline_range) -> str:
-    parts = []
-    if declared_sets:
-        parts.append(f"{declared_sets} set{'' if declared_sets == 1 else 's'}")
+    """Gym shorthand: "3 × 10–15" (sets × reps), or "2 sets" / "10–15 reps" when only one is set."""
     rng = (inline_range or "").strip()
-    if rng:
-        if re.fullmatch(r"[\d\s\-–—]+", rng):
-            rng = f"{rng} reps"
-        elif re.fullmatch(r"[\d\s\-–—]+s", rng, flags=re.IGNORECASE):
-            rng = f"{rng[:-1].strip()} s"
-        else:
-            rng = rng[:1].lower() + rng[1:]
-        parts.append(rng)
-    return " · ".join(parts)
+    timed = bool(re.fullmatch(r"[\d\s\-–—]+s", rng, flags=re.IGNORECASE))
+    if timed:
+        rng = f"{rng[:-1].strip()} s"
+    elif rng and not re.fullmatch(r"[\d\s\-–—]+", rng):
+        rng = rng[:1].lower() + rng[1:]
+    if declared_sets and rng:
+        return f"{declared_sets} × {rng}"
+    if declared_sets:
+        return f"{declared_sets} set{'' if declared_sets == 1 else 's'}"
+    if rng and re.fullmatch(r"[\d\s\-–—]+", rng):
+        return f"{rng} reps"
+    return rng
 
 
 def _pretty_load(token: str) -> str:
