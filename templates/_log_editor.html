@@ -1,11 +1,19 @@
-{#- Workout text editor shared by Log and Edit: growing text box, name suggestions,
+{#- Workout text editor shared by Log and Edit: a text box that scrolls inside itself, name suggestions,
     and the live check ("Check" list) that runs before saving. Needs _settings_ui styles. -#}
 <style>
     .lg-editor-group { position: relative; }
+    /* The box grows with the text up to a cap, then scrolls inside itself, so a long
+       workout never pushes the Check list screens away. Scrolling past its end carries on
+       down the page. 1.75em is the editor's line height. */
     .st .lg-editor {
         min-height: 34vh;
+        max-height: 50vh;
         resize: none;
-        overflow: hidden;
+        overflow-y: auto;
+    }
+    @media (max-width: 576px) {
+        /* Six and a half lines: two whole exercises, with the half line hinting there is more. */
+        .st .lg-editor { min-height: calc(6.5 * 1.75em + 32px); max-height: calc(6.5 * 1.75em + 32px); }
     }
     .st .lg-editor::placeholder { color: var(--text-subtle); opacity: 0.7; }
     /* Save bar floats at the bottom while the editor or the check is on screen. */
@@ -124,7 +132,7 @@
         const esc = (value) => String(value == null ? '' : value)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-        // Grow with the text so the page scrolls, not a box inside it.
+        // Grow with the text until the CSS cap; past that the box scrolls inside itself.
         function autoGrow(textarea) {
             const fit = () => {
                 // Measuring collapses the box for a moment; keep the page where it was.
@@ -180,6 +188,11 @@
             textarea.focus({ preventScroll: true });
             // Caret at the start of the line (no selection, so typing can't wipe the numbers).
             textarea.setSelectionRange(range.start, range.start);
+            // Scroll the box so the line sits one line below its top edge, then bring it into view.
+            const style = window.getComputedStyle(textarea);
+            const before = caretTop(textarea, range.start);
+            const lineInContent = before.top + textarea.scrollTop - (parseFloat(style.paddingTop) || 0);
+            textarea.scrollTop = Math.max(0, lineInContent - before.lineHeight);
             const { top } = caretTop(textarea, range.start);
             const y = textarea.getBoundingClientRect().top + window.scrollY + top - window.innerHeight * 0.3;
             window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
@@ -190,6 +203,36 @@
             if (!range) return;
             textarea.value = textarea.value.slice(0, range.start) + text + textarea.value.slice(range.end);
             textarea.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        // Some phone Notes apps copy with a blank line after every line, doubling the workout's
+        // length. Only then (no two text lines touch anywhere) drop those blanks and put back one
+        // gap before each name that follows a line of numbers. The parser needs no blank lines,
+        // so this only changes how the text reads.
+        const NUMBERS_LINE = /^\s*(?:bw\b|[+-]?\d)/i;
+        function tidyPaste(text) {
+            const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n');
+            const filled = lines.map((line) => line.trim() !== '');
+            const touching = filled.some((isFilled, i) => isFilled && filled[i + 1]);
+            if (touching || filled.filter(Boolean).length < 4) return text;
+            const kept = lines.filter((line, i) => filled[i]);
+            const out = [];
+            kept.forEach((line, i) => {
+                if (i > 0 && !NUMBERS_LINE.test(line)) out.push('');
+                out.push(line);
+            });
+            return out.join('\n') + (/\n\s*$/.test(text) ? '\n' : '');
+        }
+
+        function attachPasteTidy(textarea) {
+            textarea.addEventListener('paste', (e) => {
+                const text = e.clipboardData && e.clipboardData.getData('text/plain');
+                if (!text) return;
+                const tidy = tidyPaste(text);
+                if (tidy === text) return;
+                e.preventDefault();
+                insertAtCursor(textarea, tidy);
+            });
         }
 
         function insertAtCursor(textarea, text) {
@@ -420,6 +463,6 @@
             el.innerHTML = esc(view.metaText) + (view.metaSub ? `<span class="lg-meta-sub">${esc(view.metaSub)}</span>` : '');
         }
 
-        return { paintMeta, autoGrow, attachSuggestions, previewer, renderCheck, insertAtCursor, jumpToLine, replaceLine };
+        return { paintMeta, autoGrow, attachSuggestions, attachPasteTidy, tidyPaste, previewer, renderCheck, insertAtCursor, jumpToLine, replaceLine };
     })();
 </script>

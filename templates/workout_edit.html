@@ -89,6 +89,7 @@
         const LogEditor = window.LogEditor;
 
         LogEditor.autoGrow(textarea);
+        LogEditor.attachPasteTidy(textarea);
         LogEditor.attachSuggestions(textarea, document.getElementById('exerciseSuggestions'),
             JSON.parse(document.getElementById('exerciseData').textContent || '[]'), { firstLineIsTitle: false });
 

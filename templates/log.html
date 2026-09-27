@@ -75,6 +75,7 @@
 
         const LogEditor = window.LogEditor;
         LogEditor.autoGrow(textarea);
+        LogEditor.attachPasteTidy(textarea);
         LogEditor.attachSuggestions(textarea, document.getElementById('exerciseSuggestions'),
             JSON.parse(document.getElementById('exerciseData').textContent || '[]'));
 
@@ -136,7 +137,7 @@
             try {
                 const text = await navigator.clipboard.readText();
                 if (!text) return;
-                LogEditor.insertAtCursor(textarea, text);
+                LogEditor.insertAtCursor(textarea, LogEditor.tidyPaste(text));
             } catch (e) {
                 textarea.focus();
             }
