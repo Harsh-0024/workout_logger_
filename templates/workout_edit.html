@@ -4,7 +4,9 @@
 {{ st.styles() }}
 {% include '_log_editor.html' %}
 <style>
-    .ed-fields { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; }
+    .ed-fields { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; align-items: end; }
+    /* Side by side here, so no stacked-field gap above the second one. */
+    .ed-fields .st-field + .st-field { margin-top: 0; }
     .ed-danger { margin-top: 44px; display: flex; justify-content: center; }
     @media (max-width: 576px) {
         .ed-fields { grid-template-columns: minmax(0, 1fr); gap: 16px; }

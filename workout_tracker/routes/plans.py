@@ -55,6 +55,40 @@ def _resolve_custom_retrieval_selection(catalog, selected_keys, two_set_keys):
 
 
 def register_plan_routes(app):
+    def _grid_columns(count):
+        """Columns for a group on wide screens: whole rows where the count allows it."""
+        if count <= 5:
+            return max(count, 1)
+        for cols in (4, 3, 5):
+            if count % cols == 0:
+                return cols
+        return 4
+
+    def _lay_out_groups(groups):
+        """Merge lone single-session groups, then size each grid so no row ends in a gap."""
+        singles = [g for g in groups if len(g['items']) == 1]
+        if len(singles) > 1:
+            merged = {'title': 'Other' if len(singles) < len(groups) else 'Workouts', 'items': [
+                {**g['items'][0], 'number': g['title']} for g in singles
+            ]}
+            first = groups.index(singles[0])
+            groups = [g for g in groups if g not in singles]
+            groups.insert(first, merged)
+        for group in groups:
+            count = len(group['items'])
+            wide = _grid_columns(count)
+            narrow = 1 if count == 1 else 2
+            group['wide'], group['narrow'] = wide, narrow
+            # The last cell stretches over whatever the last row leaves empty.
+            for item in group['items']:
+                item['span_wide'] = item['span_narrow'] = 1
+            left_wide, left_narrow = count % wide, count % narrow
+            if left_wide:
+                group['items'][-1]['span_wide'] = wide - left_wide + 1
+            if left_narrow:
+                group['items'][-1]['span_narrow'] = narrow - left_narrow + 1
+        return groups
+
     def _retrieve_groups(data):
         """Every session in the plan, grouped the way the plan groups them (cycles, or categories)."""
         workout = data.get('workout') if isinstance(data, dict) else None
@@ -106,7 +140,7 @@ def register_plan_routes(app):
 
         try:
             raw_text = get_effective_plan_text(Session, user)
-            groups = _retrieve_groups(get_workout_days(raw_text or ""))
+            groups = _lay_out_groups(_retrieve_groups(get_workout_days(raw_text or "")))
             if not groups:
                 flash("No workout plan found. Please set up your plan first.", "info")
                 return redirect(url_for('set_plan'))

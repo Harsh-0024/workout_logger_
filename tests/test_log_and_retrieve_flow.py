@@ -209,6 +209,26 @@ class TestLogAndRetrieveFlow(unittest.TestCase):
         # Old step links still land somewhere useful.
         self.assertEqual(urlsplit(self.client.get("/retrieve/heading/1").headers["Location"]).path, "/retrieve/categories")
 
+    def test_retrieve_grid_fits_any_plan_shape(self):
+        user = self._create_logged_in_user(username="shape_user")
+        five = "\n\n".join(f"Session {i} – Day {i}\nBench Press" for i in range(1, 6))
+        self.session.add(Plan(user_id=user.id, text_content=five))
+        self.session.commit()
+        html = self.client.get("/retrieve/categories").get_data(as_text=True)
+        # Five sessions: one row of five on wide screens; on phones the fifth fills its row.
+        self.assertIn("--cols-narrow: 2; --cols-wide: 5;", html)
+        self.assertIn("--span-narrow: 2; --span-wide: 1;", html)
+
+        # Categories with a single day are gathered into one group instead of lone headings.
+        other = self._create_logged_in_user(username="category_user")
+        self.session.add(Plan(user_id=other.id, text_content="Push 1\nBench\n\nPush 2\nDips\n\nPull 1\nRows\n\nLegs 1\nSquat"))
+        self.session.commit()
+        html = self.client.get("/retrieve/categories").get_data(as_text=True)
+        self.assertIn("<span>Push</span>", html)
+        self.assertIn("<span>Other</span>", html)
+        self.assertNotIn("<span>Pull</span>", html)
+        self.assertIn('href="/retrieve/final/Pull/1"', html)
+
     def test_plan_page_reads_as_a_list_and_keeps_the_text_to_copy(self):
         user = self._create_logged_in_user(username="plan_reader")
         self.session.add(Plan(user_id=user.id, text_content=PLAN))

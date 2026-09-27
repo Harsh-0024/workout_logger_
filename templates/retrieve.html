@@ -7,7 +7,8 @@
        cells split by hairlines inside one quiet group per cycle (no boxes per session). */
     .rt-group + .rt-group { margin-top: 24px; }
     .rt-group .st-label { margin-bottom: 9px; }
-    .rt-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .rt-grid { display: grid; grid-template-columns: repeat(var(--cols-narrow, 2), minmax(0, 1fr)); }
+    .rt-grid > .rt-cell { grid-column: span var(--span-narrow, 1); }
     .rt-cell {
         display: flex; flex-direction: column; justify-content: center; gap: 3px;
         min-height: 64px;
@@ -29,7 +30,8 @@
 
     @media (min-width: 720px) {
         .st.rt { max-width: 860px; }
-        .rt-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+        .rt-grid { grid-template-columns: repeat(var(--cols-wide, 4), minmax(0, 1fr)); }
+        .rt-grid > .rt-cell { grid-column: span var(--span-wide, 1); }
         .rt-cell { min-height: 76px; padding: 14px 18px; }
     }
     @media (max-width: 576px) {
@@ -46,10 +48,11 @@
         {% for group in groups %}
         <section class="rt-group" aria-label="{{ group.title }}">
             <div class="st-label"><span>{{ group.title }}</span></div>
-            <div class="st-group rt-grid">
+            <div class="st-group rt-grid" style="--cols-narrow: {{ group.narrow }}; --cols-wide: {{ group.wide }};">
                 {% for item in group['items'] %}
                 {% set ns.n = ns.n + 1 %}
-                <a class="rt-cell" href="{{ item.url }}" {% if ns.n <= 9 %}data-shortcut="{{ ns.n }}"{% endif %}>
+                <a class="rt-cell" href="{{ item.url }}" {% if ns.n <= 9 %}data-shortcut="{{ ns.n }}"{% endif %}
+                   {%- if item.span_narrow > 1 or item.span_wide > 1 %} style="--span-narrow: {{ item.span_narrow }}; --span-wide: {{ item.span_wide }};"{% endif %}>
                     <span class="rt-num">{{ item.number }}</span>
                     <span class="rt-name">{{ item.name }}</span>
                 </a>
