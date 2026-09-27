@@ -48,8 +48,12 @@
         </section>
 
         <div class="lg-bar">
-            <button type="button" class="lg-meta" id="logMeta" aria-live="polite">Nothing to check yet</button>
+            <div class="lg-bar-info">
+                <button type="button" class="lg-meta" id="logMeta" aria-live="polite">Nothing to check yet</button>
+                <button type="button" class="lg-undo" id="undoBtn" hidden>Undo</button>
+            </div>
             <div class="lg-bar-actions">
+                {#- Paste when the box is empty, Clear once it has text: clear and re-paste are two taps on one spot. -#}
                 <button type="button" class="st-btn st-btn-quiet st-btn-sm" id="pasteBtn"><i class="bi bi-clipboard"></i>Paste</button>
                 <button type="submit" class="st-btn st-btn-primary st-btn-sm" id="saveBtn">Save</button>
             </div>
@@ -133,7 +137,35 @@
             if (!check.hidden) check.scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
 
-        document.getElementById('pasteBtn').addEventListener('click', async () => {
+        const pasteBtn = document.getElementById('pasteBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        let cleared = null;
+        const syncSlot = () => {
+            const hasText = !!textarea.value.trim();
+            pasteBtn.innerHTML = hasText ? '<i class="bi bi-x-lg"></i>Clear' : '<i class="bi bi-clipboard"></i>Paste';
+            if (hasText && cleared !== null) { cleared = null; undoBtn.hidden = true; }
+        };
+        textarea.addEventListener('input', syncSlot);
+        syncSlot();
+
+        undoBtn.addEventListener('click', () => {
+            if (cleared === null) return;
+            textarea.value = cleared;
+            textarea.dispatchEvent(new Event('input', { bubbles: true }));
+            textarea.scrollTop = 0;
+        });
+
+        pasteBtn.addEventListener('click', async () => {
+            if (textarea.value.trim()) {
+                // Clear everything at once; Undo (left of the bar) brings it back until new text arrives.
+                const text = textarea.value;
+                textarea.value = '';
+                textarea.dispatchEvent(new Event('input', { bubbles: true }));
+                cleared = text;
+                meta.textContent = 'Cleared';
+                undoBtn.hidden = false;
+                return;
+            }
             try {
                 const text = await navigator.clipboard.readText();
                 if (!text) return;
