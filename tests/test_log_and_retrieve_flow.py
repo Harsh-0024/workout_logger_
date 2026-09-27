@@ -34,6 +34,12 @@ class TestParserDetails(unittest.TestCase):
         parsed = workout_parser("1/9 Day\nDumbbell farmer's walk 30 25, 40\nfarmer’s walk 20, 30")
         self.assertEqual([ex["name"] for ex in parsed["exercises"]], ["Dumbbell Farmer's Walk", "Farmer’s Walk"])
 
+    def test_short_capital_words_keep_their_capitals(self):
+        parsed = workout_parser("1/9 Day\nSingle-Arm Cable OH Extension - [2]\n18 15, 10 12\n"
+                                "incline EZ-bar skull crushers\n20, 10\nRDL\n60, 8\nLEG PRESS\n100, 10")
+        self.assertEqual([ex["name"] for ex in parsed["exercises"]],
+                         ["Single-Arm Cable OH Extension", "Incline EZ-Bar Skull Crushers", "RDL", "Leg Press"])
+
     def test_numbers_without_a_name_are_flagged_with_their_line(self):
         text = "1/9 Day\n\nBench Press - [3]\n50 45, 8\n\n12.5 9.25, 10 16"
         exercises = workout_parser(text)["exercises"]
@@ -57,6 +63,17 @@ class TestLogAndRetrieveFlow(unittest.TestCase):
 
     def _count_logs(self, user):
         return self.session.query(WorkoutLog).filter_by(user_id=user.id).count()
+
+    def test_name_suggestions_use_the_latest_spelling(self):
+        user = self._create_logged_in_user(username="spelling_user")
+        for day in (1, 2, 3):
+            self._log(user, datetime(2026, 8, day), "Arms", "Cable Oh Extension",
+                      {"weights": [20], "reps": [10]}, "Cable Oh Extension\n20, 10")
+        self._log(user, datetime(2026, 9, 1), "Arms", "Cable OH Extension",
+                  {"weights": [20], "reps": [12]}, "Cable OH Extension\n20, 12")
+        html = self.client.get("/log").get_data(as_text=True)
+        self.assertIn('"Cable OH Extension"', html)
+        self.assertNotIn('"Cable Oh Extension"', html)
 
     # ---- Log: blocked saves keep the text and store nothing ----
 

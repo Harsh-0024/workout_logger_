@@ -3261,16 +3261,27 @@ def register_workout_routes(app):
             return None, "Error saving workout. Please try again."
 
     def _log_name_suggestions(user):
-        # The user's own spellings first (most logged first), so suggestions keep names consistent.
+        # The user's own exercises first (most logged first). Spellings of one exercise
+        # ("Cable Oh Extension" / "Cable OH Extension") count together and are offered the way
+        # they were last logged, so a corrected spelling takes over at once.
         rows = (
-            Session.query(WorkoutLog.exercise, func.count(WorkoutLog.id))
+            Session.query(WorkoutLog.exercise, func.count(WorkoutLog.id), func.max(WorkoutLog.date))
             .filter(WorkoutLog.user_id == user.id)
             .group_by(WorkoutLog.exercise)
-            .order_by(func.count(WorkoutLog.id).desc())
             .all()
         )
-        own = [name for name, _ in rows if name and name != "Unknown Exercise"]
-        return own + [name for name in list_of_exercises if name not in own]
+        groups = {}
+        for name, count, last in rows:
+            if not name or name == "Unknown Exercise":
+                continue
+            key = normalize_exercise_name(name) or name.lower()
+            group = groups.setdefault(key, {"count": 0, "name": name, "last": last})
+            group["count"] += count
+            if last and (group["last"] is None or last > group["last"]):
+                group["name"], group["last"] = name, last
+        own = [g["name"] for g in sorted(groups.values(), key=lambda g: -g["count"])]
+        own_keys = set(groups)
+        return own + [name for name in list_of_exercises if (normalize_exercise_name(name) or name.lower()) not in own_keys]
 
     def _render_log_page(text='', *, error=None, errors=None, existing=None, status=200):
         return render_template(
