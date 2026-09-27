@@ -101,6 +101,8 @@
     }
     .lg-row + .lg-row { border-top: 1px solid var(--st-hair); }
     .lg-row:hover { background: var(--st-row-hover); }
+    /* A soft gold while pressed, like the Retrieve tiles; phones skip it once a touch turns into a scroll. */
+    .lg-row:active { background: var(--gold-subtle); }
     .lg-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-glow); }
     .lg-num { flex: none; width: 22px; padding-top: 2px; font-size: 0.7rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; opacity: 0.8; }
     .lg-row-main { flex: 1; min-width: 0; }
@@ -129,6 +131,8 @@
 </style>
 <script>
     window.LogEditor = window.LogEditor || (function () {
+        // iPhone Safari only shows :active press states when a touch listener exists.
+        document.addEventListener('touchstart', () => {}, { passive: true });
         const esc = (value) => String(value == null ? '' : value)
             .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
