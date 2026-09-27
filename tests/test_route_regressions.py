@@ -103,6 +103,22 @@ class TestRouteRegressions(unittest.TestCase):
             sess["_id"] = "route-test-session"
         return user
 
+    def test_service_worker_is_served_from_root_without_login(self):
+        # Browsers refuse a service worker behind a redirect, so '/<username>'
+        # must not catch /sw.js and send it to the login page.
+        response = self.client.get("/sw.js")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/javascript")
+        self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
+        self.assertIn(b"addEventListener('fetch'", response.data)
+        response.close()
+
+        # What the worker fetches on install must not need a login either.
+        for path in ("/static/offline.html", "/static/manifest.json"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            response.close()
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 
