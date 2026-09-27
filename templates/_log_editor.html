@@ -229,14 +229,29 @@
             return out.join('\n') + (/\n\s*$/.test(text) ? '\n' : '');
         }
 
+        // After a whole workout lands, the caret is on its last line. Let the paste show for a
+        // moment, then glide back up so the title is the first thing you read.
+        function showFromTop(textarea) {
+            setTimeout(() => {
+                if (typeof textarea.scrollTo === 'function') textarea.scrollTo({ top: 0, behavior: 'smooth' });
+                else textarea.scrollTop = 0;
+            }, 220);
+        }
+
+        // Tidy doubled pastes, and return to the top when the paste is the whole workout
+        // (an empty box, or everything selected); a line pasted mid-text stays where it is.
         function attachPasteTidy(textarea) {
             textarea.addEventListener('paste', (e) => {
                 const text = e.clipboardData && e.clipboardData.getData('text/plain');
                 if (!text) return;
+                const whole = !textarea.value.trim()
+                    || (textarea.selectionStart === 0 && textarea.selectionEnd === textarea.value.length);
                 const tidy = tidyPaste(text);
-                if (tidy === text) return;
-                e.preventDefault();
-                insertAtCursor(textarea, tidy);
+                if (tidy !== text) {
+                    e.preventDefault();
+                    insertAtCursor(textarea, tidy);
+                }
+                if (whole) showFromTop(textarea);
             });
         }
 
@@ -468,6 +483,6 @@
             el.innerHTML = esc(view.metaText) + (view.metaSub ? `<span class="lg-meta-sub">${esc(view.metaSub)}</span>` : '');
         }
 
-        return { paintMeta, autoGrow, attachSuggestions, attachPasteTidy, tidyPaste, previewer, renderCheck, insertAtCursor, jumpToLine, replaceLine };
+        return { paintMeta, autoGrow, attachSuggestions, attachPasteTidy, tidyPaste, showFromTop, previewer, renderCheck, insertAtCursor, jumpToLine, replaceLine };
     })();
 </script>

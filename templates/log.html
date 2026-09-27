@@ -170,6 +170,7 @@
                 const text = await navigator.clipboard.readText();
                 if (!text) return;
                 LogEditor.insertAtCursor(textarea, LogEditor.tidyPaste(text));
+                LogEditor.showFromTop(textarea);
             } catch (e) {
                 textarea.focus();
             }
