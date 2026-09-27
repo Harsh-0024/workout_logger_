@@ -374,6 +374,27 @@ class TestPlanParser(unittest.TestCase):
         self.assertEqual(data.get("heading_sessions", {}).get("Cycle 1"), [1])
         self.assertEqual(data.get("heading_sessions", {}).get("Cycle 2"), [2])
 
+    def test_plan_exercise_line_reads_sets_with_or_without_a_dash(self):
+        from parsers.workout import _parse_plan_exercise_line as parse
+        cases = {
+            "Deadlift [3]": ("Deadlift", 3, None),
+            "Deadlift - [3]": ("Deadlift", 3, None),
+            "Deadlift – [3]": ("Deadlift", 3, None),
+            "Deadlift [3, 3-6]": ("Deadlift", 3, "3-6"),
+            "Deadlift [3-6]": ("Deadlift", None, "3-6"),
+            "Plank [2, 30-60s]": ("Plank", 2, "30-60s"),
+            "Deadlift": ("Deadlift", None, None),
+            "Curl [EZ]": ("Curl [EZ]", None, None),
+        }
+        for line, (name, sets, rng) in cases.items():
+            parsed = parse(line)
+            self.assertEqual((parsed["name"], parsed["declared_sets"], parsed["inline_range"]), (name, sets, rng), line)
+
+    def test_plan_target_sets_read_sets_without_a_dash(self):
+        from services.logging import _parse_plan_target_sets
+        targets = _parse_plan_target_sets("Session 1 - Back\nDeadlift [3]\nLat Pulldown - [2]")
+        self.assertEqual(targets, {"deadlift": 3, "lat pulldown": 2})
+
 
 class TestWorkoutQualityScorer(unittest.TestCase):
 

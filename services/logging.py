@@ -13,6 +13,7 @@ from parsers.workout import (
     extract_numbers,
     _extract_declared_sets,
     _extract_sets_from_bracket,
+    _parse_plan_exercise_line,
 )
 from services.best_scoring import (
     compare_strength_workouts,
@@ -262,19 +263,14 @@ def _parse_plan_target_sets(plan_text: str) -> Dict[str, int]:
                 line = str(raw_exercise or "").strip()
                 if not line:
                     continue
-                bracket_sets = _extract_sets_from_bracket(line)
-                if not (isinstance(bracket_sets, int) and bracket_sets > 0):
+                if _extract_sets_from_bracket(line) is None:
                     continue
-                base_name = line
-                if " - [" in line:
-                    base_name = line.split(" - [", 1)[0].strip()
-                declared_sets, cleaned_name = _extract_declared_sets(base_name)
-                if isinstance(declared_sets, int) and declared_sets > 0:
-                    base_name = cleaned_name
-                key = normalize_exercise_name(base_name or "")
-                if not key:
+                parsed = _parse_plan_exercise_line(line)
+                declared_sets = parsed.get("declared_sets")
+                key = normalize_exercise_name(parsed.get("name") or "")
+                if not key or not declared_sets:
                     continue
-                target_counters[key][int(bracket_sets)] += 1
+                target_counters[key][int(declared_sets)] += 1
 
     resolved: Dict[str, int] = {}
     for key, counter in target_counters.items():

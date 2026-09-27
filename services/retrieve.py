@@ -32,7 +32,7 @@ from services.exercise_matching import (
     token_signature,
 )
 from services.workout_title import infer_workout_title, split_title, title_from_plan_day
-from parsers.workout import _extract_declared_sets, _extract_sets_from_bracket, parse_bw_weight
+from parsers.workout import _parse_plan_exercise_line, parse_bw_weight
 
 
 CUSTOM_RETRIEVAL_SORT_MODES = {
@@ -616,55 +616,6 @@ def _parse_rep_range(value: str):
         n = int(nums[0])
         return n, n
     return None
-
-
-def _parse_plan_exercise_line(raw_line: str) -> Dict[str, Optional[str]]:
-    """
-    Parse plan line variants:
-    - Exercise
-    - Exercise - [n]
-    - Exercise - [a-b]
-    - Exercise - [n, a-b]
-    """
-    line = str(raw_line or "").strip()
-    name = line
-    declared_sets: Optional[int] = None
-    inline_range: Optional[str] = None
-
-    if " - [" in line and "]" in line:
-        name = line.split(" - [", 1)[0].strip()
-        try:
-            inside = line.split("[", 1)[1].split("]", 1)[0].strip()
-        except Exception:
-            inside = ""
-        if inside:
-            first_token = inside.split(",", 1)[0].strip()
-            if re.match(r"^\d+$", first_token):
-                try:
-                    declared_sets = int(first_token)
-                except Exception:
-                    declared_sets = None
-                remainder = inside.split(",", 1)[1].strip() if "," in inside else ""
-                if remainder:
-                    inline_range = remainder
-            else:
-                inline_range = inside
-
-    if not declared_sets:
-        bracket_sets = _extract_sets_from_bracket(line)
-        if isinstance(bracket_sets, int) and bracket_sets > 0:
-            declared_sets = int(bracket_sets)
-
-    explicit_sets, cleaned = _extract_declared_sets(name)
-    if isinstance(explicit_sets, int) and explicit_sets > 0:
-        declared_sets = int(explicit_sets)
-        name = cleaned
-
-    return {
-        "name": name.strip(),
-        "declared_sets": declared_sets if isinstance(declared_sets, int) and declared_sets > 0 else None,
-        "inline_range": (inline_range or "").strip() or None,
-    }
 
 
 def _compress_shorthand_values(values):

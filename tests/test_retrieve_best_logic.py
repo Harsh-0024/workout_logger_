@@ -435,6 +435,34 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertIn("bw, 18", output)
         self.assertNotIn("80, 18", output)
 
+    def test_plan_sets_in_brackets_without_a_dash(self):
+        # "Deadlift [3]" once kept "[3]" in the name, so the rep range and history never matched.
+        plan = Plan(
+            user_id=self.user.id,
+            text_content="\n".join(["Session 6 - Back & Biceps", "Deadlift [3]", "Lat Pulldown [2, 6-10]"]),
+        )
+        rep = RepRange(user_id=self.user.id, text_content="Deadlift: 3–6\nLat Pulldown: 8–12")
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.add(
+            WorkoutLog(
+                user_id=self.user.id,
+                date=datetime.now(),
+                workout_name="Session 6 - Back & Biceps",
+                exercise="Deadlift",
+                exercise_string="Deadlift - [3, 3–6]\n100 90 80, 5 6 6",
+                sets_json={"weights": [100, 90, 80], "reps": [5, 6, 6]},
+            )
+        )
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 6)
+
+        self.assertIn("Deadlift - [3, 3–6]\n100 90 80, 5 6", output)
+        self.assertIn("Lat Pulldown - [2, 8–12]", output)
+        self.assertNotIn("[3] -", output)
+        self.assertNotIn("[2] -", output)
+
     def test_logged_bw_notation_rebases_when_current_bodyweight_changed(self):
         self.user.bodyweight = 72
         plan = Plan(

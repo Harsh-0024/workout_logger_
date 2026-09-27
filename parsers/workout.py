@@ -92,6 +92,65 @@ def _extract_sets_from_bracket(line: str) -> Optional[int]:
     return count if count > 0 else None
 
 
+def _parse_plan_exercise_line(raw_line: str) -> Dict[str, Optional[str]]:
+    """
+    Parse plan line variants:
+    - Exercise
+    - Exercise - [n]
+    - Exercise - [a-b]
+    - Exercise - [n, a-b]
+    - Exercise [n] / Exercise [n, a-b]  (no dash; the bracket must start with a number)
+    """
+    line = str(raw_line or "").strip()
+    name = line
+    declared_sets: Optional[int] = None
+    inline_range: Optional[str] = None
+
+    inside = None
+    if " - [" in line and "]" in line:
+        name = line.split(" - [", 1)[0].strip()
+        try:
+            inside = line.split("[", 1)[1].split("]", 1)[0].strip()
+        except Exception:
+            inside = ""
+    else:
+        # "Deadlift [3]", "Deadlift – [3, 3-6]": a trailing bracket of targets. Without
+        # this the "[3]" stays in the name, so rep ranges and history never match.
+        m = re.match(r"^(.*?\S)\s*(?:[-–—:]\s*)?\[\s*(\d[^\[\]]*)\]\s*$", line)
+        if m:
+            name = m.group(1).strip()
+            inside = m.group(2).strip()
+
+    if inside:
+        first_token = inside.split(",", 1)[0].strip()
+        if re.match(r"^\d+$", first_token):
+            try:
+                declared_sets = int(first_token)
+            except Exception:
+                declared_sets = None
+            remainder = inside.split(",", 1)[1].strip() if "," in inside else ""
+            if remainder:
+                inline_range = remainder
+        else:
+            inline_range = inside
+
+    if not declared_sets:
+        bracket_sets = _extract_sets_from_bracket(line)
+        if isinstance(bracket_sets, int) and bracket_sets > 0:
+            declared_sets = int(bracket_sets)
+
+    explicit_sets, cleaned = _extract_declared_sets(name)
+    if isinstance(explicit_sets, int) and explicit_sets > 0:
+        declared_sets = int(explicit_sets)
+        name = cleaned
+
+    return {
+        "name": name.strip(),
+        "declared_sets": declared_sets if isinstance(declared_sets, int) and declared_sets > 0 else None,
+        "inline_range": (inline_range or "").strip() or None,
+    }
+
+
 def _has_time_range_hint(line: str) -> bool:
     if not line or '[' not in line or ']' not in line:
         return False
