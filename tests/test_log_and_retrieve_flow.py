@@ -34,11 +34,13 @@ class TestParserDetails(unittest.TestCase):
         parsed = workout_parser("1/9 Day\nDumbbell farmer's walk 30 25, 40\nfarmer’s walk 20, 30")
         self.assertEqual([ex["name"] for ex in parsed["exercises"]], ["Dumbbell Farmer's Walk", "Farmer’s Walk"])
 
-    def test_short_capital_words_keep_their_capitals(self):
-        parsed = workout_parser("1/9 Day\nSingle-Arm Cable OH Extension - [2]\n18 15, 10 12\n"
-                                "incline EZ-bar skull crushers\n20, 10\nRDL\n60, 8\nLEG PRESS\n100, 10")
+    def test_names_only_gain_capitals(self):
+        parsed = workout_parser("1/9 Day\nsingle-arm cable oH extension - [2]\n18 15, 10 12\n"
+                                "incline EZ-bar skull crushers\n20, 10\nrdl\n60, 8\nLEG PRESS\n100, 10\n"
+                                "t-bar row (wide grip)\n40, 10")
         self.assertEqual([ex["name"] for ex in parsed["exercises"]],
-                         ["Single-Arm Cable OH Extension", "Incline EZ-Bar Skull Crushers", "RDL", "Leg Press"])
+                         ["Single-Arm Cable OH Extension", "Incline EZ-Bar Skull Crushers", "Rdl",
+                          "LEG PRESS", "T-Bar Row (Wide Grip)"])
 
     def test_numbers_without_a_name_are_flagged_with_their_line(self):
         text = "1/9 Day\n\nBench Press - [3]\n50 45, 8\n\n12.5 9.25, 10 16"

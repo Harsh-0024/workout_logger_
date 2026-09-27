@@ -421,17 +421,11 @@ def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_r
 
 
 def _title_case(name: str) -> str:
-    """str.title(), but "Farmer's" stays "Farmer's" (not "Farmer'S"), and short all-caps
-    words typed that way stay as typed: "OH", "EZ-Bar", "RDL", "DB" (not "Oh", "Ez-Bar").
-    A name typed entirely in capitals ("LEG PRESS") is still title-cased, unless it is one
-    short word ("RDL")."""
-    titled = re.sub(r"(\w['’])([A-Z])\b", lambda m: m.group(1) + m.group(2).lower(), name.title())
-    shouting = name.upper() == name and not re.fullmatch(r"\s*[A-Z]{2,4}\s*", name)
-    if shouting or len(titled) != len(name):
-        return titled
-    for m in re.finditer(r"(?<![A-Za-z])[A-Z]{2,4}(?![A-Za-z])", name):
-        titled = titled[:m.start()] + m.group(0) + titled[m.end():]
-    return titled
+    """Capitalise the first letter of each word and leave every other letter as typed:
+    "oh" -> "Oh", "oH" -> "OH", "EZ-bar" -> "EZ-Bar", "LEG PRESS" stays. A word starts after
+    a space, hyphen, slash or bracket, not after an apostrophe ("farmer's" -> "Farmer's").
+    Matching ignores case everywhere, so this only decides how a name looks."""
+    return re.sub(r"(^|[\s\-/(\[])([a-z])", lambda m: m.group(1) + m.group(2).upper(), name)
 
 
 def clean_exercise_name(name: str) -> str:
