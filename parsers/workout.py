@@ -365,12 +365,15 @@ def workout_parser(
     workout_day_received: str,
     bodyweight: Optional[float] = None,
     preserve_bodyweight_offsets: bool = False,
+    now: Optional[datetime] = None,
 ) -> Optional[Dict]:
     """
     Parse raw workout text into structured data.
     
     Args:
         workout_day_received: Raw workout text string
+        now: When the workout was saved (defaults to the current time); used
+            for undated workouts and to pick the year of a dated one
         
     Returns:
         Dictionary with date, workout_name, and exercises list, or None if parsing fails
@@ -400,17 +403,18 @@ def workout_parser(
     # Header
     title_line = raw_lines[0]
     date_nums = re.findall(r'\d+', title_line.split()[0])
-    current_year = datetime.now().year
+    now = now or datetime.now()
+    current_year = now.year
 
     if len(date_nums) >= 2:
         parsed_month = int(date_nums[1])
-        year = current_year - 1 if parsed_month > datetime.now().month + 1 else current_year
+        year = current_year - 1 if parsed_month > now.month + 1 else current_year
         try:
             date_obj = datetime.strptime(f"{date_nums[0]}-{date_nums[1]}-{year}", "%d-%m-%Y")
         except ValueError:
-            date_obj = datetime.now()
+            date_obj = now
     else:
-        date_obj = datetime.now()
+        date_obj = now
 
     workout_name = title_line
     if len(date_nums) >= 2:

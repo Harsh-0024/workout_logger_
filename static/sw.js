@@ -1,11 +1,15 @@
-const VERSION = 'v3';
+importScripts('/static/offline-workouts.js');
+
+const VERSION = 'v4';
 // Files that are the same for everyone (styles, icons, the offline page).
 const SHARED_CACHE = `workout-tracker-shared-${VERSION}`;
 // The signed-in person's pages and data; emptied when nobody is signed in.
 const USER_CACHE = `workout-tracker-user-${VERSION}`;
 const OFFLINE_URL = '/static/offline.html';
-// Where '/' sends the signed-in person, so the installed app can open offline.
-const HOME_KEY = '/__sw/home';
+// Who is signed in, and where '/' sends them so the installed app can open offline.
+const SIGNED_IN_KEY = '/__sw/signed-in';
+// A save that gets no answer in this long is kept on the device instead.
+const SAVE_TIMEOUT_MS = 20000;
 
 const CORE_PAGES = ['/log', '/stats', '/retrieve/categories'];
 
@@ -20,7 +24,9 @@ function cacheNameFor(url) {
 // navigation, and error pages shouldn't stand in for the page offline.
 // Cross-origin CDN files load as opaque responses, which are fine to keep.
 function cacheable(response) {
-  return response && !response.redirected && (response.ok || response.type === 'opaque');
+  if (!response || response.redirected) return false;
+  if (/no-store/.test(response.headers.get('Cache-Control') || '')) return false;
+  return response.ok || response.type === 'opaque';
 }
 
 function remember(request, response) {
@@ -56,32 +62,93 @@ self.addEventListener('activate', (event) => {
 // Every page tells the worker who is signed in (see base.html).
 self.addEventListener('message', (event) => {
   const data = event.data || {};
-  if (data.type === 'signed-in' && typeof data.home === 'string') {
+  if (data.type === 'signed-in' && typeof data.home === 'string' && typeof data.user === 'string') {
+    const who = JSON.stringify({ home: data.home, user: data.user });
     event.waitUntil(
-      caches.open(USER_CACHE).then((cache) => cache.put(HOME_KEY, new Response(data.home)))
+      caches.open(USER_CACHE).then((cache) => cache.put(SIGNED_IN_KEY, new Response(who)))
     );
   } else if (data.type === 'signed-out') {
     event.waitUntil(caches.delete(USER_CACHE));
   }
 });
 
+function signedIn() {
+  return caches.open(USER_CACHE)
+    .then((cache) => cache.match(SIGNED_IN_KEY))
+    .then((response) => (response ? response.json() : null))
+    .catch(() => null);
+}
+
 function offlineNavigation(request) {
   return caches.match(request).then((cached) => {
     if (cached) return cached;
     if (new URL(request.url).pathname === '/') {
-      return caches.open(USER_CACHE)
-        .then((cache) => cache.match(HOME_KEY))
-        .then((home) => (home ? home.text() : null))
-        .then((home) => (home ? Response.redirect(home, 302) : caches.match(OFFLINE_URL)));
+      return signedIn().then((who) =>
+        who ? Response.redirect(who.home, 302) : caches.match(OFFLINE_URL)
+      );
     }
     return caches.match(OFFLINE_URL);
   });
+}
+
+function newId() {
+  if (self.crypto && self.crypto.randomUUID) return self.crypto.randomUUID();
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// "Analyze & Save" on /log. Online it goes through untouched; if the server
+// can't be reached (or doesn't answer), the workout is kept on the device and
+// uploaded later by the pages (see offline-sync.js).
+async function saveWorkout(request) {
+  const form = await request.clone().formData();
+  const text = String(form.get('workout_text') || '').trim();
+  const fixingId = String(form.get('offline_id') || '');
+
+  let timer;
+  const timeout = new Promise((resolve, reject) => {
+    timer = setTimeout(() => reject(new Error('no answer')), SAVE_TIMEOUT_MS);
+  });
+  try {
+    const response = await Promise.race([fetch(request), timeout]);
+    clearTimeout(timer);
+    // 400: the page's security token went stale (it was opened offline);
+    // keep the workout and upload it with a fresh one.
+    if (response.status === 400) throw new Error('stale page');
+    if (fixingId) {
+      // Fixing a kept workout: a result page means it's in. Otherwise the
+      // server sent back an error, so keep the latest edit for the next try.
+      const kept = await offlineWorkouts.get(fixingId).catch(() => null);
+      if (response.status === 200) await offlineWorkouts.remove(fixingId).catch(() => {});
+      else if (kept && text) await offlineWorkouts.put({ ...kept, text }).catch(() => {});
+    }
+    return response;
+  } catch (err) {
+    clearTimeout(timer);
+    const who = await signedIn();
+    if (!text) return Response.redirect('/log', 303);
+    if (!who) return caches.match(OFFLINE_URL);
+    const kept = fixingId ? await offlineWorkouts.get(fixingId).catch(() => null) : null;
+    await offlineWorkouts.put({
+      id: kept ? kept.id : newId(),
+      user: who.user,
+      text,
+      savedAt: kept ? kept.savedAt : Date.now(),
+      status: 'pending',
+      error: '',
+    });
+    return Response.redirect('/log#saved-offline', 303);
+  }
 }
 
 // Network first for everything, so pages and data are never stale while
 // online; the cache only answers when the network can't.
 self.addEventListener('fetch', (event) => {
   const { request } = event;
+  if (request.method === 'POST' && request.mode === 'navigate'
+      && new URL(request.url).pathname === '/log') {
+    event.respondWith(saveWorkout(request));
+    return;
+  }
   if (request.method !== 'GET' || !request.url.startsWith('http')) return;
 
   event.respondWith(
