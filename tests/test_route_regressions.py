@@ -119,6 +119,16 @@ class TestRouteRegressions(unittest.TestCase):
             self.assertEqual(response.status_code, 200, path)
             response.close()
 
+    def test_pages_tell_the_service_worker_who_is_signed_in(self):
+        # Signed out, the worker drops saved pages; signed in, it learns where '/' leads.
+        login_page = self.client.get("/login").get_data(as_text=True)
+        self.assertIn("{ type: 'signed-out' }", login_page)
+        self.assertNotIn("type: 'signed-in'", login_page)
+
+        self._create_logged_in_user(username="sw_owner")
+        log_page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn("{ type: 'signed-in', home: \"/sw_owner\" }", log_page)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

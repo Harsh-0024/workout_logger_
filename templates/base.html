@@ -2701,9 +2701,19 @@
     <script>
         (function() {
             if (!('serviceWorker' in navigator)) return;
+            // Signed out: the worker forgets this device's saved pages, so the next
+            // person can't open them offline. Signed in: it learns where '/' leads.
+            {% if current_user.is_authenticated %}
+            const message = { type: 'signed-in', home: {{ url_for('user_dashboard', username=current_user.username)|tojson }} };
+            {% else %}
+            const message = { type: 'signed-out' };
+            {% endif %}
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch((err) => {
                     console.warn('Service worker registration failed', err);
+                });
+                navigator.serviceWorker.ready.then((registration) => {
+                    if (registration.active) registration.active.postMessage(message);
                 });
             });
         })();
