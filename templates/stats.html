@@ -5,7 +5,11 @@
         <div class="card stats-page">
             <div class="stats-header" id="statsHeader">
                 <h1 class="stats-hero-label">
-                    <span id="heroLabel">Overall strength</span>
+                    <!-- Tapping the title swaps Overall strength and Consistency. -->
+                    <button type="button" id="viewToggle" class="stats-view-toggle">
+                        <span id="heroLabel" class="stats-swap">Overall strength</span>
+                        <i class="bi bi-chevron-expand stats-view-icon" aria-hidden="true"></i>
+                    </button>
                     <button type="button" id="heroInfoBtn" class="stats-info-btn" aria-expanded="false" aria-controls="heroInfo" aria-label="What is this?">
                         <i class="bi bi-info-circle"></i>
                     </button>
@@ -39,7 +43,7 @@
             <p id="heroInfo" class="stats-hero-info" hidden></p>
 
             <!-- Headline: one number that answers "am I getting stronger?" -->
-            <section id="statsHero" class="stats-hero" hidden>
+            <section id="statsHero" class="stats-hero stats-swap" hidden>
                 <div class="stats-hero-value" id="heroValue">-</div>
                 <div class="stats-hero-text">
                     <div class="stats-hero-caption" id="heroCaption"></div>
@@ -62,7 +66,7 @@
                         <button type="button" class="range-pill active" data-range="all">All</button>
                     </div>
                 </div>
-                <div class="stats-chart">
+                <div class="stats-chart stats-swap">
                     <canvas id="progressChart"></canvas>
                     <div id="chartTip" class="chart-tip" role="status" hidden>
                         <div class="chart-tip-date"></div>
@@ -70,9 +74,10 @@
                         <div class="chart-tip-value"></div>
                         <div class="chart-tip-set"></div>
                     </div>
+                    <div id="consistencyGrid" class="cal" aria-label="Days you trained" hidden></div>
                     <div id="chartEmpty" class="stats-empty" hidden>
                         <i class="bi bi-graph-up"></i>
-                        <span>Log a few workouts to see your progress here.</span>
+                        <span id="chartEmptyText">Log a few workouts to see your progress here.</span>
                     </div>
                 </div>
             </div>
@@ -85,7 +90,7 @@
             <script type="application/json" id="bwExercisesData">{{ bw_exercises | tojson }}</script>
             {% endif %}
 
-            <div id="statsTiles" class="stats-tiles" hidden>
+            <div id="statsTiles" class="stats-tiles stats-swap" hidden>
                 <div class="stats-tile">
                     <div class="stats-tile-label" id="tile1Label">Best</div>
                     <div class="stats-tile-value" id="tile1Value">-</div>
@@ -584,6 +589,104 @@
     .chart-tip-value { margin-top: 3px; font-size: 0.95rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
     .chart-tip-set { font-size: 0.78rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
+    /* ---------- Switching between Overall strength and Consistency ---------- */
+    .stats-view-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        min-width: 0;
+        margin: 0 0 0 -0.3rem;
+        padding: 0.1rem 0.3rem;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        line-height: inherit;
+        text-align: left;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        transition: background var(--transition-fast);
+    }
+    .stats-view-toggle:active { background: var(--gold-subtle); }
+    .stats-view-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--gold-glow); }
+    .stats-view-toggle:disabled { cursor: default; background: transparent; }
+    .stats-hero-label .stats-view-toggle .stats-view-icon {
+        flex: none;
+        font-size: 13px;
+        line-height: 1;
+        color: var(--text-muted);
+        transition: color var(--transition-fast), opacity var(--transition-fast);
+    }
+    .stats-view-toggle:disabled .stats-view-icon { display: none; }
+    #heroLabel { min-width: 0; overflow-wrap: anywhere; }
+    .stats-view-toggle:not(:disabled) #heroLabel { white-space: nowrap; }
+
+    /* The swap: what changes fades and settles; the frame around it never moves. */
+    .stats-swap {
+        transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .stats-page.is-swapping .stats-swap {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .stats-swap { transition: none; }
+        .stats-page.is-swapping .stats-swap { transform: none; }
+    }
+
+    /* ---------- Consistency: one square per day, gold where you trained ---------- */
+    .stats-page { --cal-off: rgba(255, 255, 255, 0.06); --cal-on: #D4AF37; --cal-on-rgb: 212, 175, 55; }
+    [data-theme="light"] .stats-page { --cal-off: rgba(0, 0, 0, 0.06); --cal-on: #B08A3E; --cal-on-rgb: 176, 138, 62; }
+    .cal {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--cal-band-gap, 14px);
+    }
+    .cal[hidden] { display: none; }
+    .cal-band { position: relative; }
+    .cal-months { position: relative; height: 16px; }
+    .cal-months span, .cal-years span, .cal-heads span {
+        font-size: 0.66rem;
+        font-weight: 600;
+        line-height: 1;
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+    .cal-months span { position: absolute; top: 0; }
+    .cal-grid {
+        display: grid;
+        grid-auto-flow: column;
+        grid-template-rows: repeat(7, var(--cal-cell));
+        grid-auto-columns: var(--cal-cell);
+        gap: var(--cal-gap);
+    }
+    .cal-cell {
+        display: block;
+        border-radius: var(--cal-radius, 4px);
+        background: var(--cal-off);
+        animation: calIn 380ms ease both;
+        animation-delay: calc(var(--c, 0) * 9ms);
+    }
+    .cal-cell.is-on { background: var(--cal-on); cursor: pointer; }
+    .cal-cell.is-level { background: rgba(var(--cal-on-rgb), var(--lvl)); }
+    .cal-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--text-muted); }
+    .cal-cell.is-on.is-today { box-shadow: none; }
+    .cal-cell.is-out { visibility: hidden; }
+    .cal-cell.is-hot { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+    @keyframes calIn { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+    .cal.no-anim .cal-cell { animation: none; }
+    @media (prefers-reduced-motion: reduce) { .cal-cell { animation: none; } }
+    /* All time on a phone: one row per year, one square per month. */
+    .cal-year-grid { display: grid; gap: var(--cal-gap); align-items: center; }
+    .cal-year-grid .cal-cell { width: 100%; height: 100%; align-self: stretch; }
+    .cal-heads span { text-align: center; }
+    .cal-years span { text-align: right; padding-right: 4px; }
+
     /* ---------- Tiles ---------- */
     .stats-tiles {
         display: grid;
@@ -722,13 +825,19 @@
         }
 
         .stats-tile-label {
-            flex: 1;
+            flex: 1 0 auto;
             font-size: 0.65rem;
+        }
+
+        .stats-tile-sub {
+            min-width: 0;
+            flex: 0 1 auto;
         }
 
         .stats-tile-value {
             margin-top: 0;
             font-size: 1.05rem;
+            flex: none;
         }
 
         .stats-tile-sub {
@@ -1179,6 +1288,7 @@
     function hideChartTip() {
         const tip = document.getElementById('chartTip');
         if (tip) tip.hidden = true;
+        document.querySelectorAll('.cal-cell.is-hot').forEach(el => el.classList.remove('is-hot'));
         if (myChart && myChart.tooltip) {
             myChart.tooltip.setActiveElements([], { x: 0, y: 0 });
             myChart.update('none');
@@ -1752,11 +1862,13 @@
 
         if (isOverall) {
             setTile(1, 'Best', formatVsStart(values[bestIdx]), shortDate(labels[bestIdx]));
-            setTile(2, 'Workouts', String(inRange.length), rangeText);
-            const firstDay = dayNumber(labels[currentRange === 'all' ? inRange[0] : startIdx]);
-            const lastDay = dayNumber(labels[labels.length - 1]);
-            const weeks = Math.max(1, ((lastDay - firstDay) + 1) / 7);
-            setTile(3, 'Per week', String(Number((inRange.length / weeks).toFixed(1))), 'on average');
+            const highlights = strengthHighlights(data, labels[startIdx]);
+            setTile(2, 'New bests', String(highlights.newBests), rangeText);
+            if (highlights.top) {
+                setTile(3, 'Most improved', `+${formatPercentChange(highlights.top.pct)}`, highlights.top.name);
+            } else {
+                setTile(3, 'Most improved', '–', 'nothing yet');
+            }
         } else {
             setTile(1, 'Best', withUnit(values[bestIdx], metricInfo.unit), shortDate(labels[bestIdx]));
             const lastIdx = inRange[inRange.length - 1];
@@ -1778,6 +1890,12 @@
         fullChartData = data;
         const staleTip = document.getElementById('chartTip');
         if (staleTip) staleTip.hidden = true;
+        if (!currentExercise && currentView === 'consistency') {
+            renderConsistency(data);
+            return;
+        }
+        document.getElementById('consistencyGrid').hidden = true;
+        setText('chartEmptyText', 'Log a few workouts to see your progress here.');
 
         const isOverall = !currentExercise && data && data.unit === 'percent';
         const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
@@ -2027,6 +2145,458 @@
         myChart.draw();
     }
 
+    // ================= Consistency: the days you trained =================
+    const VIEW_KEY = 'wt-stats-view';
+    const CONSISTENCY_INFO = 'Each gold square is a day you trained. The big number is how many workouts you averaged a week over the time you pick.';
+    const RANGE_BEFORE = {
+        '30': 'the month before',
+        '90': 'the 3 months before',
+        '180': 'the 6 months before',
+        '365': 'the year before',
+    };
+    const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    let currentView = (() => {
+        try { return localStorage.getItem(VIEW_KEY) === 'consistency' ? 'consistency' : 'strength'; } catch (e) { return 'strength'; }
+    })();
+    let calendarSize = '';
+
+    const dateOf = (iso) => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(y, m - 1, d); };
+    const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+    const localToday = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+    const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
+    const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+
+    // Strength tiles: personal records set in the range, and the exercise that moved most.
+    function strengthHighlights(data, rangeStartLabel) {
+        const exercises = (data && Array.isArray(data.exercises)) ? data.exercises : [];
+        const from = currentRange === 'all' ? '' : String(rangeStartLabel || '');
+        let newBests = 0;
+        let top = null;
+        exercises.forEach((ex) => {
+            const days = Array.isArray(ex.days) ? ex.days : [];
+            const vals = Array.isArray(ex.values) ? ex.values : [];
+            let bestSoFar = null;
+            let bestBefore = null;
+            let bestIn = null;
+            days.forEach((day, i) => {
+                const v = Number(vals[i]);
+                if (!(v > 0)) return;
+                const inRange = day >= from;
+                if (inRange && bestSoFar !== null && v > bestSoFar * 1.001) newBests += 1;
+                if (bestSoFar === null || v > bestSoFar) bestSoFar = v;
+                if (inRange) bestIn = Math.max(bestIn || 0, v);
+                else bestBefore = Math.max(bestBefore || 0, v);
+            });
+            // Best in the range vs. best before it (all time: vs. where you started), so one
+            // light day never counts as a big jump.
+            const ref = currentRange === 'all' ? Number(ex.baseline) : bestBefore;
+            if (bestIn && ref > 0) {
+                const pct = ((bestIn / ref) - 1) * 100;
+                if (pct >= 0.5 && (!top || pct > top.pct)) top = { name: ex.name, pct };
+            }
+        });
+        return { newBests, top };
+    }
+
+    function consistencyWindow(dayList) {
+        const end = localToday();
+        const first = dateOf(dayList[0]);
+        const start = currentRange === 'all' ? (first < end ? first : end) : addDays(end, -(Number(currentRange) - 1));
+        return { start, end, first };
+    }
+
+    const countBetween = (dayList, start, end) => {
+        const a = isoOf(start), b = isoOf(end);
+        return dayList.filter(d => d >= a && d <= b).length;
+    };
+
+    function updateConsistencyHero(dayList, win) {
+        const hero = document.getElementById('statsHero');
+        const valueEl = document.getElementById('heroValue');
+        const changeEl = document.getElementById('heroChange');
+        setText('heroLabel', 'Consistency');
+        document.getElementById('heroInfo').textContent = CONSISTENCY_INFO;
+        valueEl.classList.remove('is-up', 'is-down', 'is-flat');
+        changeEl.classList.remove('is-up', 'is-down');
+        changeEl.replaceChildren();
+
+        const span = daysBetween(win.start, win.end) + 1;
+        const weeks = Math.max(1, span / 7);
+        const perWeek = Number((countBetween(dayList, win.start, win.end) / weeks).toFixed(1));
+        valueEl.textContent = perWeek.toFixed(1);
+        const since = `${MONTHS[win.first.getMonth()]} ${win.first.getFullYear()}`;
+        setText('heroCaption', currentRange === 'all' ? `workouts a week since ${since}` : 'workouts a week');
+
+        // Compared with the same stretch of time just before, in plain words.
+        if (currentRange !== 'all' && win.first < win.start) {
+            const prevEnd = addDays(win.start, -1);
+            const prevStart = addDays(win.start, -span);
+            const before = Number((countBetween(dayList, prevStart, prevEnd) / weeks).toFixed(1));
+            const diff = Number((perWeek - before).toFixed(1));
+            if (Math.abs(diff) < 0.1) {
+                changeEl.append(`About the same as ${RANGE_BEFORE[currentRange]}`);
+            } else {
+                const up = diff > 0;
+                changeEl.classList.add(up ? 'is-up' : 'is-down');
+                changeEl.innerHTML = `<i class="bi bi-arrow-${up ? 'up' : 'down'}-right" aria-hidden="true"></i>`;
+                const amount = document.createElement('span');
+                amount.className = 'stats-change-amount';
+                amount.textContent = Math.abs(diff).toFixed(1);
+                changeEl.append(amount, ` ${up ? 'more' : 'fewer'} a week than ${RANGE_BEFORE[currentRange]}`);
+            }
+        }
+        hero.hidden = false;
+    }
+
+    function updateConsistencyTiles(dayList, win) {
+        const a = isoOf(win.start), b = isoOf(win.end);
+        const inRange = dayList.filter(d => d >= a && d <= b);
+        setTile(1, 'Workouts', String(inRange.length), RANGE_SHORT[currentRange]);
+
+        // Weeks in a row with at least one workout; this week still counts while it's running.
+        const weeks = new Set(dayList.map(d => isoOf(mondayOf(dateOf(d)))));
+        let week = mondayOf(localToday());
+        if (!weeks.has(isoOf(week))) week = addDays(week, -7);
+        let current = 0;
+        while (weeks.has(isoOf(week))) { current += 1; week = addDays(week, -7); }
+        let best = 0, run = 0, prev = null;
+        [...weeks].sort().forEach((w) => {
+            const d = dateOf(w);
+            run = (prev && daysBetween(prev, d) === 7) ? run + 1 : 1;
+            best = Math.max(best, run);
+            prev = d;
+        });
+        const streakSub = `${current === 1 ? 'week' : 'weeks'} in a row${best > current ? ` · best ${best}` : ''}`;
+        setTile(2, 'Streak', String(current), streakSub);
+
+        const byDay = [0, 0, 0, 0, 0, 0, 0];
+        inRange.forEach(d => { byDay[dateOf(d).getDay()] += 1; });
+        const most = Math.max(...byDay);
+        if (most > 0) {
+            // Ties go to the earlier day of the week (Monday first).
+            const order = [1, 2, 3, 4, 5, 6, 0];
+            const fav = order.find(i => byDay[i] === most);
+            setTile(3, 'Favourite day', WEEKDAYS[fav], `${most} workout${most === 1 ? '' : 's'}`);
+        } else {
+            setTile(3, 'Favourite day', '–', RANGE_SHORT[currentRange]);
+        }
+        document.getElementById('statsTiles').hidden = false;
+    }
+
+    function renderConsistency(data, { animate = true } = {}) {
+        const grid = document.getElementById('consistencyGrid');
+        const canvas = document.getElementById('progressChart');
+        const empty = document.getElementById('chartEmpty');
+        hideChartTip();
+        document.getElementById('metricControls').hidden = true;
+        canvas.style.visibility = 'hidden';
+
+        const dayList = (data && Array.isArray(data.workout_days) ? data.workout_days : []).slice().sort();
+        if (!dayList.length) {
+            grid.hidden = true;
+            setText('heroLabel', 'Consistency');
+            setText('chartEmptyText', 'Log a few workouts to see the days you trained.');
+            empty.hidden = false;
+            document.getElementById('statsHero').hidden = true;
+            document.getElementById('statsTiles').hidden = true;
+            return;
+        }
+        empty.hidden = true;
+        const win = consistencyWindow(dayList);
+        updateConsistencyHero(dayList, win);
+        updateConsistencyTiles(dayList, win);
+        grid.hidden = false;
+        grid.classList.toggle('no-anim', !animate);
+        drawCalendar(grid, dayList, (data && data.day_titles) || {}, win);
+    }
+
+    function calendarLayout(W, H, weeks) {
+        const LABEL = 16, BAND_GAP = 14;
+        let best = null;
+        for (let bands = 1; bands <= 4; bands += 1) {
+            const cols = Math.ceil(weeks / bands);
+            [3, 2].forEach((gap) => {
+                const byW = (W - (cols - 1) * gap) / cols;
+                const byH = (H - bands * LABEL - (bands - 1) * BAND_GAP - bands * 6 * gap) / (7 * bands);
+                let cell = Math.min(byW, byH, W > 600 ? 34 : 26);
+                // Bigger squares get a little more air between them.
+                if (gap === 2 && cell >= 12) cell -= 0.01;
+                if (!best || cell > best.cell) best = { bands, cols, gap, cell };
+            });
+        }
+        best.cell = Math.floor(best.cell * 2) / 2;
+        return best;
+    }
+
+    function drawCalendar(grid, dayList, titles, win) {
+        const box = grid.parentNode;
+        const W = box.clientWidth;
+        const H = box.clientHeight;
+        calendarSize = `${W}x${H}`;
+        const first = mondayOf(win.start);
+        const weeks = Math.floor(daysBetween(first, win.end) / 7) + 1;
+        grid.replaceChildren();
+        // A month or so reads best as an ordinary calendar: weekdays across, weeks down.
+        if (weeks <= 6) {
+            drawMonthCalendar(grid, dayList, titles, win, first, weeks, W, H);
+            return;
+        }
+        const layout = calendarLayout(W, H, weeks);
+        // Too many weeks for the screen (all time on a phone): one square per month instead.
+        if (layout.cell < 7) {
+            drawYearGrid(grid, dayList, win, W, H);
+            return;
+        }
+        const { bands, cols, gap, cell } = layout;
+        grid.style.setProperty('--cal-cell', `${cell}px`);
+        grid.style.setProperty('--cal-gap', `${gap}px`);
+        grid.style.setProperty('--cal-radius', `${Math.max(2, Math.round(cell * 0.24))}px`);
+
+        const trained = new Set(dayList);
+        const todayIso = isoOf(win.end);
+        const startIso = isoOf(win.start);
+        const multiYear = daysBetween(win.start, win.end) > 370;
+
+        for (let b = 0; b < bands; b += 1) {
+            const from = b * cols;
+            const to = Math.min(weeks, from + cols);
+            if (from >= to) break;
+            const band = document.createElement('div');
+            band.className = 'cal-band';
+            const months = document.createElement('div');
+            months.className = 'cal-months';
+            months.style.width = `${(to - from) * cell + (to - from - 1) * gap}px`;
+            const body = document.createElement('div');
+            body.className = 'cal-grid';
+
+            // Month names where a month starts, never crowding each other.
+            const marks = [];
+            for (let c = from; c < to; c += 1) {
+                const monday = addDays(first, 7 * c);
+                const starts = c > 0 && addDays(monday, -7).getMonth() !== monday.getMonth();
+                if (c === from || starts) marks.push({ col: c - from, date: monday, bandStart: c === from && !starts });
+            }
+            let lastCol = -99;
+            marks.forEach((m, i) => {
+                const next = marks[i + 1];
+                if (m.bandStart && next && next.col - m.col < 3) return;
+                if (m.col - lastCol < 3) return;
+                lastCol = m.col;
+                const label = document.createElement('span');
+                const jan = m.date.getMonth() === 0 && multiYear;
+                label.textContent = jan ? String(m.date.getFullYear()) : MONTHS[m.date.getMonth()];
+                label.style.left = `${m.col * (cell + gap)}px`;
+                months.appendChild(label);
+            });
+
+            for (let c = from; c < to; c += 1) {
+                for (let i = 0; i < 7; i += 1) {
+                    const d = addDays(first, 7 * c + i);
+                    const iso = isoOf(d);
+                    const el = document.createElement('span');
+                    el.className = 'cal-cell';
+                    el.style.setProperty('--c', String(Math.min(c, 60)));
+                    if (iso < startIso || iso > todayIso) {
+                        el.classList.add('is-out');
+                    } else {
+                        el.dataset.d = iso;
+                        if (trained.has(iso)) {
+                            el.classList.add('is-on');
+                            el.dataset.title = titles[iso] || 'Workout';
+                        }
+                        if (iso === todayIso) el.classList.add('is-today');
+                    }
+                    body.appendChild(el);
+                }
+            }
+            band.append(months, body);
+            grid.appendChild(band);
+        }
+    }
+
+    function drawMonthCalendar(grid, dayList, titles, win, first, weeks, W, H) {
+        const HEAD = 14, gap = 6;
+        const cell = Math.floor(Math.min((W - 6 * gap) / 7, (H - HEAD - weeks * gap) / weeks, W > 600 ? 48 : 32));
+        grid.style.setProperty('--cal-cell', `${cell}px`);
+        grid.style.setProperty('--cal-gap', `${gap}px`);
+        grid.style.setProperty('--cal-radius', `${Math.max(4, Math.round(cell * 0.26))}px`);
+        const trained = new Set(dayList);
+        const todayIso = isoOf(win.end);
+        const startIso = isoOf(win.start);
+        const table = document.createElement('div');
+        table.className = 'cal-year-grid';
+        table.style.gridTemplateColumns = `repeat(7, ${cell}px)`;
+        table.style.gridTemplateRows = `${HEAD}px repeat(${weeks}, ${cell}px)`;
+        ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach((d) => {
+            const h = document.createElement('span');
+            h.className = 'cal-heads';
+            h.innerHTML = `<span>${d}</span>`;
+            h.style.textAlign = 'center';
+            table.appendChild(h);
+        });
+        for (let w = 0; w < weeks; w += 1) {
+            for (let i = 0; i < 7; i += 1) {
+                const d = addDays(first, 7 * w + i);
+                const iso = isoOf(d);
+                const el = document.createElement('span');
+                el.className = 'cal-cell';
+                el.style.setProperty('--c', String(w * 2 + i));
+                if (iso < startIso || iso > todayIso) {
+                    el.classList.add('is-out');
+                } else {
+                    el.dataset.d = iso;
+                    if (trained.has(iso)) {
+                        el.classList.add('is-on');
+                        el.dataset.title = titles[iso] || 'Workout';
+                    }
+                    if (iso === todayIso) el.classList.add('is-today');
+                }
+                table.appendChild(el);
+            }
+        }
+        grid.appendChild(table);
+    }
+
+    function drawYearGrid(grid, dayList, win, W, H) {
+        const counts = {};
+        dayList.forEach((d) => { const k = d.slice(0, 7); counts[k] = (counts[k] || 0) + 1; });
+        const max = Math.max(1, ...Object.values(counts));
+        const firstYear = win.first.getFullYear();
+        const lastYear = win.end.getFullYear();
+        const rows = lastYear - firstYear + 1;
+        const YEAR_W = 34, HEAD = 14, gap = 4;
+        const cell = Math.floor(Math.min((W - YEAR_W - 11 * gap) / 12, (H - HEAD - rows * gap) / rows, 40));
+        // A little taller than wide when there's room, so a few years still fill the box.
+        const rowH = Math.floor(Math.max(cell, Math.min((H - HEAD - rows * gap) / rows, cell * 1.75)));
+        grid.style.setProperty('--cal-cell', `${cell}px`);
+        grid.style.setProperty('--cal-gap', `${gap}px`);
+        grid.style.setProperty('--cal-radius', `${Math.max(3, Math.round(cell * 0.22))}px`);
+        const firstKey = dayList[0].slice(0, 7);
+        const lastKey = isoOf(win.end).slice(0, 7);
+
+        const table = document.createElement('div');
+        table.className = 'cal-year-grid';
+        table.style.gridTemplateColumns = `${YEAR_W}px repeat(12, ${cell}px)`;
+        table.style.gridTemplateRows = `${HEAD}px repeat(${rows}, ${rowH}px)`;
+        const corner = document.createElement('span');
+        table.appendChild(corner);
+        MONTHS.forEach((m) => {
+            const h = document.createElement('span');
+            h.className = 'cal-heads';
+            h.innerHTML = `<span>${m.charAt(0)}</span>`;
+            h.style.textAlign = 'center';
+            table.appendChild(h);
+        });
+        for (let y = firstYear; y <= lastYear; y += 1) {
+            const label = document.createElement('span');
+            label.className = 'cal-years';
+            label.innerHTML = `<span>${y}</span>`;
+            label.style.textAlign = 'right';
+            table.appendChild(label);
+            for (let m = 0; m < 12; m += 1) {
+                const key = `${y}-${String(m + 1).padStart(2, '0')}`;
+                const el = document.createElement('span');
+                el.className = 'cal-cell';
+                el.style.setProperty('--c', String(m + (y - firstYear) * 3));
+                if (key < firstKey || key > lastKey) {
+                    el.classList.add('is-out');
+                } else {
+                    el.dataset.m = key;
+                    el.dataset.n = String(counts[key] || 0);
+                    if (counts[key]) {
+                        el.classList.add('is-level');
+                        el.style.setProperty('--lvl', String(0.3 + 0.7 * (counts[key] / max)));
+                    }
+                }
+                table.appendChild(el);
+            }
+        }
+        grid.appendChild(table);
+    }
+
+    // Hover (mouse) or tap (touch) a square to see the day; a workout day opens its page.
+    function showCalendarTip(cell, pointerType) {
+        const tip = document.getElementById('chartTip');
+        const box = document.getElementById('consistencyGrid').parentNode;
+        if (!cell || (!cell.dataset.d && !cell.dataset.m)) { hideChartTip(); return; }
+        document.querySelectorAll('.cal-cell.is-hot').forEach(el => el.classList.remove('is-hot'));
+        cell.classList.add('is-hot');
+        if (cell.dataset.m) {
+            const [y, m] = cell.dataset.m.split('-').map(Number);
+            const n = Number(cell.dataset.n) || 0;
+            tip.querySelector('.chart-tip-date').textContent = `${new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long' })} ${y}`;
+            tip.querySelector('.chart-tip-value').textContent = n ? `${n} workout${n === 1 ? '' : 's'}` : 'No workouts';
+            tip.dataset.index = '-1';
+        } else {
+            tip.querySelector('.chart-tip-date').textContent = longDate(cell.dataset.d);
+            tip.querySelector('.chart-tip-value').textContent = cell.dataset.title || 'Rest day';
+            tip.dataset.index = cell.dataset.title ? '0' : '-1';
+            tip.dataset.date = cell.dataset.d;
+        }
+        tip.querySelector('.chart-tip-title').textContent = '';
+        tip.querySelector('.chart-tip-set').textContent = '';
+        tip.classList.toggle('is-touch', pointerType !== 'mouse' && tip.dataset.index === '0');
+        openChartTipPoint = (idx) => {
+            if (idx === 0 && tip.dataset.date) window.location.href = `/workout/${encodeURIComponent(tip.dataset.date)}?return_to=/stats`;
+        };
+        tip.hidden = false;
+        const r = cell.getBoundingClientRect();
+        const br = box.getBoundingClientRect();
+        const w = tip.offsetWidth;
+        const h = tip.offsetHeight;
+        const cx = r.left - br.left + r.width / 2;
+        const left = Math.max(0, Math.min(cx - w / 2, box.clientWidth - w));
+        const above = r.top - br.top - h - 8;
+        tip.style.left = `${left}px`;
+        tip.style.top = `${above >= 0 ? above : r.bottom - br.top + 8}px`;
+    }
+
+    function setupCalendarEvents() {
+        const grid = document.getElementById('consistencyGrid');
+        grid.addEventListener('pointerover', (e) => {
+            if (e.pointerType !== 'mouse') return;
+            showCalendarTip(e.target.closest('.cal-cell'), 'mouse');
+        });
+        grid.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hideChartTip(); });
+        grid.addEventListener('pointerdown', (e) => {
+            chartPointerType = e.pointerType || 'mouse';
+            if (chartPointerType === 'mouse') return;
+            showCalendarTip(e.target.closest('.cal-cell'), chartPointerType);
+        });
+        grid.addEventListener('click', (e) => {
+            if (chartPointerType !== 'mouse') return;
+            const cell = e.target.closest('.cal-cell.is-on');
+            if (cell && cell.dataset.d) window.location.href = `/workout/${encodeURIComponent(cell.dataset.d)}?return_to=/stats`;
+        });
+    }
+
+    // The title is the switch: Overall strength ⇄ Consistency. Only the contents change.
+    function syncViewToggle() {
+        const btn = document.getElementById('viewToggle');
+        const onExercise = !!currentExercise;
+        btn.disabled = onExercise;
+        if (onExercise) btn.removeAttribute('aria-label');
+        else btn.setAttribute('aria-label', currentView === 'consistency' ? 'Consistency. Switch to overall strength' : 'Overall strength. Switch to consistency');
+    }
+
+    function switchView() {
+        if (currentExercise) return;
+        const next = currentView === 'consistency' ? 'strength' : 'consistency';
+        const page = document.querySelector('.stats-page');
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        hideChartTip();
+        page.classList.add('is-swapping');
+        setTimeout(() => {
+            currentView = next;
+            try { localStorage.setItem(VIEW_KEY, next); } catch (e) { /* private mode */ }
+            syncViewToggle();
+            if (fullChartData) renderChart(fullChartData);
+            requestAnimationFrame(() => requestAnimationFrame(() => page.classList.remove('is-swapping')));
+        }, reduce ? 0 : 180);
+    }
+
     function loadAverageChart() {
         const params = new URLSearchParams({
             mode: 'index',
@@ -2049,6 +2619,7 @@
         const bwExercises = bwData ? JSON.parse(bwData.textContent || '[]') : [];
 
         syncClearButton();
+        syncViewToggle();
         if (bwAlert) {
             const showBw = !!exercise && bwExercises.includes(exercise);
             if (showBw && bwLabel) bwLabel.textContent = exercise;
@@ -2082,6 +2653,8 @@
             if (fullChartData) renderChart(fullChartData);
         });
     });
+
+    document.getElementById('viewToggle').addEventListener('click', switchView);
 
     document.getElementById('heroInfoBtn').addEventListener('click', (event) => {
         const btn = event.currentTarget;
@@ -2136,10 +2709,11 @@
         // Touch: tapping anywhere outside the chart and the box closes the box.
         document.addEventListener('pointerdown', (event) => {
             if (chartTip.hidden) return;
-            if (chartTip.contains(event.target) || chartCanvas.contains(event.target)) return;
+            if (chartTip.contains(event.target) || chartCanvas.parentNode.contains(event.target)) return;
             hideChartTip();
         });
 
+        setupCalendarEvents();
         if (initialExercise && initialExercise.value) {
             currentExercise = initialExercise.value;
             document.getElementById('exerciseSearch').value = initialExercise.label || initialExercise.value;
@@ -2153,6 +2727,11 @@
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
+            if (fullChartData && !currentExercise && currentView === 'consistency') {
+                const box = document.getElementById('consistencyGrid').parentNode;
+                if (`${box.clientWidth}x${box.clientHeight}` !== calendarSize) renderConsistency(fullChartData, { animate: false });
+                return;
+            }
             if (!myChart || !fullChartData) return;
             const phone = isPhoneChart();
             if (lastPhoneLayout !== null && phone !== lastPhoneLayout) {

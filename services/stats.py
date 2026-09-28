@@ -725,6 +725,7 @@ def get_overall_progress_data(
     exercise_day_values: Dict[str, Dict] = {}
     workout_days = set()
     title_by_day: Dict = {}
+    name_by_key: Dict[str, str] = {}
 
     for log in logs:
         if not log.date:
@@ -735,6 +736,8 @@ def get_overall_progress_data(
         day = local_date(log.date)
         workout_days.add(day)
         title_by_day.setdefault(day, _clean_workout_title(getattr(log, 'workout_name', None)))
+        # The latest spelling names the exercise.
+        name_by_key[key] = str(log.exercise or '').strip() or key
         value = _get_peak_1rm_for_log(db_session, log)
         if not value or value <= 0:
             continue
@@ -785,12 +788,17 @@ def get_overall_progress_data(
         if sessions_by_exercise.get(key, 0) >= int(min_sessions)
     ]
 
+    # Every day trained and what it was called, for the Consistency view.
+    day_titles = {d.isoformat(): title_by_day.get(d, 'Workout') for d in workout_days_sorted}
+
     if not universe:
         return {
             'labels': [],
             'data': [],
             'log_data': [],
-            'workout_days': [],
+            'workout_days': [d.isoformat() for d in workout_days_sorted],
+            'day_titles': day_titles,
+            'exercises': [],
             'weight': [],
             'reps': [],
             'exercise': 'Overall',
@@ -904,6 +912,17 @@ def get_overall_progress_data(
         'data': series,
         'log_data': log_series,
         'workout_days': [d.isoformat() for d in workout_days_sorted],
+        'day_titles': day_titles,
+        # Each exercise's estimated max per session, for "New bests" and "Most improved".
+        'exercises': [
+            {
+                'name': name_by_key.get(key, key),
+                'baseline': round(baseline_by_exercise[key], 2),
+                'days': [d.isoformat() for d in timelines[key]['days']],
+                'values': [round(v, 2) for v in timelines[key]['values']],
+            }
+            for key in universe
+        ],
         'weight': [],
         'reps': [],
         'workout_titles': workout_titles,
