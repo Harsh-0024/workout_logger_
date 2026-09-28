@@ -58,13 +58,14 @@
                         <button type="button" class="metric-pill" data-metric="top_weight">Heaviest</button>
                         <button type="button" class="metric-pill" data-metric="tonnage">Volume</button>
                     </div>
-                    <div class="stats-range" role="group" aria-label="Time range">
+                    <div class="stats-range" id="rangeControls" role="group" aria-label="Time range">
                         <button type="button" class="range-pill" data-range="30">1M</button>
                         <button type="button" class="range-pill" data-range="90">3M</button>
                         <button type="button" class="range-pill" data-range="180">6M</button>
                         <button type="button" class="range-pill" data-range="365">1Y</button>
                         <button type="button" class="range-pill active" data-range="all">All</button>
                     </div>
+                    <div class="stats-range stats-years" id="yearControls" role="group" aria-label="Year" hidden></div>
                 </div>
                 <div class="stats-chart stats-swap">
                     <canvas id="progressChart"></canvas>
@@ -636,27 +637,40 @@
     }
 
     /* ---------- Consistency: one square per day, gold where you trained ---------- */
-    .stats-page { --cal-off: rgba(255, 255, 255, 0.06); --cal-on: #D4AF37; --cal-on-rgb: 212, 175, 55; }
-    [data-theme="light"] .stats-page { --cal-off: rgba(0, 0, 0, 0.06); --cal-on: #B08A3E; --cal-on-rgb: 176, 138, 62; }
-    .cal {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: var(--cal-band-gap, 14px);
-    }
+    .stats-page { --cal-off: rgba(255, 255, 255, 0.06); --cal-future: rgba(255, 255, 255, 0.025); --cal-on: #E2BC45; --cal-on-rgb: 212, 175, 55; }
+    [data-theme="light"] .stats-page { --cal-off: rgba(0, 0, 0, 0.065); --cal-future: rgba(0, 0, 0, 0.03); --cal-on: #9E7A2F; --cal-on-rgb: 176, 138, 62; }
+    .stats-range[hidden] { display: none; }
+    /* Years slide sideways when there are more than fit. */
+    .stats-years { overflow-x: auto; scrollbar-width: none; }
+    .stats-years::-webkit-scrollbar { display: none; }
+    .stats-years button { flex: none; }
+
+    /* A year in one row, like a contribution graph: weekday names on the left,
+       months on top, and a square per day that gets more golden with more sets. */
+    .stats-chart.is-cal { height: auto; }
+    .stats-chart.is-cal canvas { display: none !important; }
+    .cal { position: absolute; inset: 0; }
     .cal[hidden] { display: none; }
-    .cal-band { position: relative; }
-    .cal-months { position: relative; height: 16px; }
-    .cal-months span, .cal-years span, .cal-heads span {
-        font-size: 0.66rem;
-        font-weight: 600;
+    .stats-chart.is-cal .cal { position: static; padding: 10px 2px 2px; }
+    .cal-body { display: flex; justify-content: center; }
+    .cal-days {
+        flex: none;
+        width: var(--cal-days-w, 32px);
+        display: grid;
+        grid-template-rows: calc(18px - var(--cal-gap)) repeat(7, var(--cal-cell));
+        row-gap: var(--cal-gap);
+    }
+    .cal-days span, .cal-months span, .cal-legend {
+        font-size: 0.68rem;
+        font-weight: 500;
         line-height: 1;
         color: var(--text-muted);
         white-space: nowrap;
     }
+    .cal-days span { align-self: center; }
+    .cal-scroll { min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+    .cal-scroll::-webkit-scrollbar { display: none; }
+    .cal-months { position: relative; height: 18px; }
     .cal-months span { position: absolute; top: 0; }
     .cal-grid {
         display: grid;
@@ -667,25 +681,27 @@
     }
     .cal-cell {
         display: block;
-        border-radius: var(--cal-radius, 4px);
+        border-radius: var(--cal-radius, 3px);
         background: var(--cal-off);
-        animation: calIn 380ms ease both;
-        animation-delay: calc(var(--c, 0) * 9ms);
+        animation: calIn 360ms ease both;
+        animation-delay: calc(var(--c, 0) * 6ms);
     }
-    .cal-cell.is-on { background: var(--cal-on); cursor: pointer; }
-    .cal-cell.is-level { background: rgba(var(--cal-on-rgb), var(--lvl)); }
-    .cal-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--text-muted); }
-    .cal-cell.is-on.is-today { box-shadow: none; }
+    .cal-cell.is-future { background: var(--cal-future); }
     .cal-cell.is-out { visibility: hidden; }
+    .cal-cell.is-on { cursor: pointer; }
+    .cal-cell.is-on[data-l="1"], .cal-swatch[data-l="1"] { background: rgba(var(--cal-on-rgb), 0.3); }
+    .cal-cell.is-on[data-l="2"], .cal-swatch[data-l="2"] { background: rgba(var(--cal-on-rgb), 0.52); }
+    .cal-cell.is-on[data-l="3"], .cal-swatch[data-l="3"] { background: rgba(var(--cal-on-rgb), 0.76); }
+    .cal-cell.is-on[data-l="4"], .cal-swatch[data-l="4"] { background: var(--cal-on); }
+    .cal-swatch[data-l="0"] { background: var(--cal-off); }
+    .cal-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--text-muted); }
     .cal-cell.is-hot { outline: 2px solid var(--text-primary); outline-offset: 1px; }
-    @keyframes calIn { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+    @keyframes calIn { from { opacity: 0; } to { opacity: 1; } }
     .cal.no-anim .cal-cell { animation: none; }
     @media (prefers-reduced-motion: reduce) { .cal-cell { animation: none; } }
-    /* All time on a phone: one row per year, one square per month. */
-    .cal-year-grid { display: grid; gap: var(--cal-gap); align-items: center; }
-    .cal-year-grid .cal-cell { width: 100%; height: 100%; align-self: stretch; }
-    .cal-heads span { text-align: center; }
-    .cal-years span { text-align: right; padding-right: 4px; }
+    .cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 14px; }
+    .cal-legend span { margin: 0 4px; }
+    .cal-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
 
     /* ---------- Tiles ---------- */
     .stats-tiles {
@@ -1895,6 +1911,9 @@
             return;
         }
         document.getElementById('consistencyGrid').hidden = true;
+        document.getElementById('consistencyGrid').parentNode.classList.remove('is-cal');
+        document.getElementById('rangeControls').hidden = false;
+        document.getElementById('yearControls').hidden = true;
         setText('chartEmptyText', 'Log a few workouts to see your progress here.');
 
         const isOverall = !currentExercise && data && data.unit === 'percent';
@@ -2147,19 +2166,15 @@
 
     // ================= Consistency: the days you trained =================
     const VIEW_KEY = 'wt-stats-view';
-    const CONSISTENCY_INFO = 'Each gold square is a day you trained. The big number is how many workouts you averaged a week over the time you pick.';
-    const RANGE_BEFORE = {
-        '30': 'the month before',
-        '90': 'the 3 months before',
-        '180': 'the 6 months before',
-        '365': 'the year before',
-    };
+    const CONSISTENCY_INFO = 'A square for every day of the year. Gold days are days you trained; the deeper the gold, the more sets you did. The big number is how many workouts you averaged a week that year.';
+    const YEAR_KEY = 'wt-stats-year';
     const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     let currentView = (() => {
         try { return localStorage.getItem(VIEW_KEY) === 'consistency' ? 'consistency' : 'strength'; } catch (e) { return 'strength'; }
     })();
     let calendarSize = '';
+    let consYear = null;
 
     const dateOf = (iso) => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(y, m - 1, d); };
     const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -2205,17 +2220,57 @@
         return { newBests, top };
     }
 
-    function consistencyWindow(dayList) {
-        const end = localToday();
-        const first = dateOf(dayList[0]);
-        const start = currentRange === 'all' ? (first < end ? first : end) : addDays(end, -(Number(currentRange) - 1));
-        return { start, end, first };
+    // ---- Consistency: one calendar year at a time ----
+    function consistencyYears(dayList) {
+        const now = localToday().getFullYear();
+        const first = dayList.length ? Math.min(Number(dayList[0].slice(0, 4)), now) : now;
+        const years = [];
+        for (let y = first; y <= now; y += 1) years.push(y);
+        return years;
+    }
+
+    function yearWindow(year) {
+        const today = localToday();
+        const isCurrent = year === today.getFullYear();
+        return {
+            year,
+            isCurrent,
+            today,
+            start: new Date(year, 0, 1),
+            yearEnd: new Date(year, 11, 31),
+            // Counted up to today in the year that's still going.
+            end: isCurrent ? today : new Date(year, 11, 31),
+        };
     }
 
     const countBetween = (dayList, start, end) => {
         const a = isoOf(start), b = isoOf(end);
         return dayList.filter(d => d >= a && d <= b).length;
     };
+
+    function syncYearPills(years) {
+        const bar = document.getElementById('yearControls');
+        const key = years.join(',');
+        if (bar.dataset.years !== key) {
+            bar.replaceChildren(...years.map((y) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.dataset.year = String(y);
+                b.textContent = String(y);
+                return b;
+            }));
+            bar.dataset.years = key;
+        }
+        bar.querySelectorAll('button').forEach((b) => {
+            const on = Number(b.dataset.year) === consYear;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-pressed', String(on));
+        });
+        const active = bar.querySelector('button.active');
+        if (active && bar.scrollWidth > bar.clientWidth) {
+            bar.scrollLeft = Math.max(0, active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2);
+        }
+    }
 
     function updateConsistencyHero(dayList, win) {
         const hero = document.getElementById('statsHero');
@@ -2227,21 +2282,20 @@
         changeEl.classList.remove('is-up', 'is-down');
         changeEl.replaceChildren();
 
-        const span = daysBetween(win.start, win.end) + 1;
-        const weeks = Math.max(1, span / 7);
-        const perWeek = Number((countBetween(dayList, win.start, win.end) / weeks).toFixed(1));
+        const weeksOf = (a, b) => Math.max(1, (daysBetween(a, b) + 1) / 7);
+        const perWeek = Number((countBetween(dayList, win.start, win.end) / weeksOf(win.start, win.end)).toFixed(1));
         valueEl.textContent = perWeek.toFixed(1);
-        const since = `${MONTHS[win.first.getMonth()]} ${win.first.getFullYear()}`;
-        setText('heroCaption', currentRange === 'all' ? `workouts a week since ${since}` : 'workouts a week');
+        setText('heroCaption', `workouts a week in ${win.year}`);
 
-        // Compared with the same stretch of time just before, in plain words.
-        if (currentRange !== 'all' && win.first < win.start) {
-            const prevEnd = addDays(win.start, -1);
-            const prevStart = addDays(win.start, -span);
-            const before = Number((countBetween(dayList, prevStart, prevEnd) / weeks).toFixed(1));
+        // Compared with the same stretch of the year before, if you were training then.
+        const prevStart = new Date(win.year - 1, 0, 1);
+        const prevEnd = new Date(win.year - 1, win.end.getMonth(), win.end.getDate());
+        if (dayList.length && dateOf(dayList[0]) <= prevStart) {
+            const before = Number((countBetween(dayList, prevStart, prevEnd) / weeksOf(prevStart, prevEnd)).toFixed(1));
             const diff = Number((perWeek - before).toFixed(1));
+            const than = win.isCurrent ? 'this time last year' : String(win.year - 1);
             if (Math.abs(diff) < 0.1) {
-                changeEl.append(`About the same as ${RANGE_BEFORE[currentRange]}`);
+                changeEl.append(`About the same as ${than}`);
             } else {
                 const up = diff > 0;
                 changeEl.classList.add(up ? 'is-up' : 'is-down');
@@ -2249,7 +2303,7 @@
                 const amount = document.createElement('span');
                 amount.className = 'stats-change-amount';
                 amount.textContent = Math.abs(diff).toFixed(1);
-                changeEl.append(amount, ` ${up ? 'more' : 'fewer'} a week than ${RANGE_BEFORE[currentRange]}`);
+                changeEl.append(amount, ` ${up ? 'more' : 'fewer'} a week than ${than}`);
             }
         }
         hero.hidden = false;
@@ -2257,49 +2311,65 @@
 
     function updateConsistencyTiles(dayList, win) {
         const a = isoOf(win.start), b = isoOf(win.end);
-        const inRange = dayList.filter(d => d >= a && d <= b);
-        setTile(1, 'Workouts', String(inRange.length), RANGE_SHORT[currentRange]);
+        const inYear = dayList.filter(d => d >= a && d <= b);
+        const workoutsText = (n) => `${n} workout${n === 1 ? '' : 's'}`;
+        setTile(1, 'Workouts', String(inYear.length), `in ${win.year}`);
 
-        // Weeks in a row with at least one workout; this week still counts while it's running.
-        const weeks = new Set(dayList.map(d => isoOf(mondayOf(dateOf(d)))));
-        let week = mondayOf(localToday());
-        if (!weeks.has(isoOf(week))) week = addDays(week, -7);
-        let current = 0;
-        while (weeks.has(isoOf(week))) { current += 1; week = addDays(week, -7); }
-        let best = 0, run = 0, prev = null;
-        [...weeks].sort().forEach((w) => {
-            const d = dateOf(w);
-            run = (prev && daysBetween(prev, d) === 7) ? run + 1 : 1;
-            best = Math.max(best, run);
-            prev = d;
-        });
-        const streakSub = `${current === 1 ? 'week' : 'weeks'} in a row${best > current ? ` · best ${best}` : ''}`;
-        setTile(2, 'Streak', String(current), streakSub);
+        const byMonth = new Array(12).fill(0);
+        inYear.forEach((d) => { byMonth[Number(d.slice(5, 7)) - 1] += 1; });
+        const topMonth = Math.max(...byMonth);
+        if (topMonth > 0) {
+            const m = byMonth.indexOf(topMonth);
+            const name = new Date(win.year, m, 1).toLocaleDateString('en-US', { month: isPhoneChart() ? 'short' : 'long' });
+            setTile(2, 'Busiest month', name, workoutsText(topMonth));
+        } else {
+            setTile(2, 'Busiest month', '–', `in ${win.year}`);
+        }
 
         const byDay = [0, 0, 0, 0, 0, 0, 0];
-        inRange.forEach(d => { byDay[dateOf(d).getDay()] += 1; });
+        inYear.forEach((d) => { byDay[dateOf(d).getDay()] += 1; });
         const most = Math.max(...byDay);
         if (most > 0) {
             // Ties go to the earlier day of the week (Monday first).
-            const order = [1, 2, 3, 4, 5, 6, 0];
-            const fav = order.find(i => byDay[i] === most);
-            setTile(3, 'Favourite day', WEEKDAYS[fav], `${most} workout${most === 1 ? '' : 's'}`);
+            const fav = [1, 2, 3, 4, 5, 6, 0].find(i => byDay[i] === most);
+            setTile(3, 'Favourite day', WEEKDAYS[fav], workoutsText(most));
         } else {
-            setTile(3, 'Favourite day', '–', RANGE_SHORT[currentRange]);
+            setTile(3, 'Favourite day', '–', `in ${win.year}`);
         }
         document.getElementById('statsTiles').hidden = false;
     }
 
+    // Busier days (more sets) get deeper gold: four steps, split at your own quartiles.
+    function levelFor(daySets) {
+        const vals = Object.values(daySets || {}).map(Number).filter(v => v > 0).sort((x, y) => x - y);
+        if (vals.length < 4) return () => 3;
+        const q = (p) => vals[Math.floor(p * (vals.length - 1))];
+        const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
+        return (n) => (!(n > 0) ? 3 : n <= t1 ? 1 : n <= t2 ? 2 : n <= t3 ? 3 : 4);
+    }
+
     function renderConsistency(data, { animate = true } = {}) {
         const grid = document.getElementById('consistencyGrid');
+        const chart = grid.parentNode;
         const canvas = document.getElementById('progressChart');
         const empty = document.getElementById('chartEmpty');
         hideChartTip();
         document.getElementById('metricControls').hidden = true;
+        document.getElementById('rangeControls').hidden = true;
         canvas.style.visibility = 'hidden';
 
         const dayList = (data && Array.isArray(data.workout_days) ? data.workout_days : []).slice().sort();
+        const years = consistencyYears(dayList);
+        if (consYear === null) {
+            try { consYear = Number(localStorage.getItem(YEAR_KEY)) || null; } catch (e) { consYear = null; }
+        }
+        if (!years.includes(consYear)) consYear = years[years.length - 1];
+        const yearBar = document.getElementById('yearControls');
+        yearBar.hidden = !dayList.length;
+        syncYearPills(years);
+
         if (!dayList.length) {
+            chart.classList.remove('is-cal');
             grid.hidden = true;
             setText('heroLabel', 'Consistency');
             setText('chartEmptyText', 'Log a few workouts to see the days you trained.');
@@ -2309,239 +2379,115 @@
             return;
         }
         empty.hidden = true;
-        const win = consistencyWindow(dayList);
+        const win = yearWindow(consYear);
         updateConsistencyHero(dayList, win);
         updateConsistencyTiles(dayList, win);
+        chart.classList.add('is-cal');
         grid.hidden = false;
         grid.classList.toggle('no-anim', !animate);
-        drawCalendar(grid, dayList, (data && data.day_titles) || {}, win);
+        drawYear(grid, new Set(dayList), (data && data.day_titles) || {}, (data && data.day_sets) || {}, win);
     }
 
-    function calendarLayout(W, H, weeks) {
-        const LABEL = 16, BAND_GAP = 14;
-        let best = null;
-        for (let bands = 1; bands <= 4; bands += 1) {
-            const cols = Math.ceil(weeks / bands);
-            [3, 2].forEach((gap) => {
-                const byW = (W - (cols - 1) * gap) / cols;
-                const byH = (H - bands * LABEL - (bands - 1) * BAND_GAP - bands * 6 * gap) / (7 * bands);
-                let cell = Math.min(byW, byH, W > 600 ? 34 : 26);
-                // Bigger squares get a little more air between them.
-                if (gap === 2 && cell >= 12) cell -= 0.01;
-                if (!best || cell > best.cell) best = { bands, cols, gap, cell };
-            });
-        }
-        best.cell = Math.floor(best.cell * 2) / 2;
-        return best;
-    }
-
-    function drawCalendar(grid, dayList, titles, win) {
-        const box = grid.parentNode;
-        const W = box.clientWidth;
-        const H = box.clientHeight;
-        calendarSize = `${W}x${H}`;
-        const first = mondayOf(win.start);
-        const weeks = Math.floor(daysBetween(first, win.end) / 7) + 1;
+    function drawYear(grid, trained, titles, daySets, win) {
         grid.replaceChildren();
-        // A month or so reads best as an ordinary calendar: weekdays across, weeks down.
-        if (weeks <= 6) {
-            drawMonthCalendar(grid, dayList, titles, win, first, weeks, W, H);
-            return;
-        }
-        const layout = calendarLayout(W, H, weeks);
-        // Too many weeks for the screen (all time on a phone): one square per month instead.
-        if (layout.cell < 7) {
-            drawYearGrid(grid, dayList, win, W, H);
-            return;
-        }
-        const { bands, cols, gap, cell } = layout;
+        const box = grid.parentNode;
+        const first = mondayOf(win.start);
+        const last = addDays(mondayOf(win.yearEnd), 6);
+        const weeks = (daysBetween(first, last) + 1) / 7;
+        const DAYS_W = 32;
+        const gap = 3;
+        // Fill the width on a laptop; on a phone keep squares tappable and let the year slide.
+        const fit = Math.floor((box.clientWidth - 8 - DAYS_W - (weeks - 1) * gap) / weeks);
+        const slides = fit < 10;
+        const cell = slides ? 12 : Math.min(fit, 17);
         grid.style.setProperty('--cal-cell', `${cell}px`);
         grid.style.setProperty('--cal-gap', `${gap}px`);
-        grid.style.setProperty('--cal-radius', `${Math.max(2, Math.round(cell * 0.24))}px`);
+        grid.style.setProperty('--cal-radius', `${cell >= 14 ? 3 : 2.5}px`);
+        grid.style.setProperty('--cal-days-w', `${DAYS_W}px`);
+        const level = levelFor(daySets);
+        const todayIso = isoOf(win.today);
 
-        const trained = new Set(dayList);
-        const todayIso = isoOf(win.end);
-        const startIso = isoOf(win.start);
-        const multiYear = daysBetween(win.start, win.end) > 370;
-
-        for (let b = 0; b < bands; b += 1) {
-            const from = b * cols;
-            const to = Math.min(weeks, from + cols);
-            if (from >= to) break;
-            const band = document.createElement('div');
-            band.className = 'cal-band';
-            const months = document.createElement('div');
-            months.className = 'cal-months';
-            months.style.width = `${(to - from) * cell + (to - from - 1) * gap}px`;
-            const body = document.createElement('div');
-            body.className = 'cal-grid';
-
-            // Month names where a month starts, never crowding each other.
-            const marks = [];
-            for (let c = from; c < to; c += 1) {
-                const monday = addDays(first, 7 * c);
-                const starts = c > 0 && addDays(monday, -7).getMonth() !== monday.getMonth();
-                if (c === from || starts) marks.push({ col: c - from, date: monday, bandStart: c === from && !starts });
-            }
-            let lastCol = -99;
-            marks.forEach((m, i) => {
-                const next = marks[i + 1];
-                if (m.bandStart && next && next.col - m.col < 3) return;
-                if (m.col - lastCol < 3) return;
-                lastCol = m.col;
-                const label = document.createElement('span');
-                const jan = m.date.getMonth() === 0 && multiYear;
-                label.textContent = jan ? String(m.date.getFullYear()) : MONTHS[m.date.getMonth()];
-                label.style.left = `${m.col * (cell + gap)}px`;
-                months.appendChild(label);
-            });
-
-            for (let c = from; c < to; c += 1) {
-                for (let i = 0; i < 7; i += 1) {
-                    const d = addDays(first, 7 * c + i);
-                    const iso = isoOf(d);
-                    const el = document.createElement('span');
-                    el.className = 'cal-cell';
-                    el.style.setProperty('--c', String(Math.min(c, 60)));
-                    if (iso < startIso || iso > todayIso) {
-                        el.classList.add('is-out');
-                    } else {
-                        el.dataset.d = iso;
-                        if (trained.has(iso)) {
-                            el.classList.add('is-on');
-                            el.dataset.title = titles[iso] || 'Workout';
-                        }
-                        if (iso === todayIso) el.classList.add('is-today');
-                    }
-                    body.appendChild(el);
-                }
-            }
-            band.append(months, body);
-            grid.appendChild(band);
-        }
-    }
-
-    function drawMonthCalendar(grid, dayList, titles, win, first, weeks, W, H) {
-        const HEAD = 14, gap = 6;
-        const cell = Math.floor(Math.min((W - 6 * gap) / 7, (H - HEAD - weeks * gap) / weeks, W > 600 ? 48 : 32));
-        grid.style.setProperty('--cal-cell', `${cell}px`);
-        grid.style.setProperty('--cal-gap', `${gap}px`);
-        grid.style.setProperty('--cal-radius', `${Math.max(4, Math.round(cell * 0.26))}px`);
-        const trained = new Set(dayList);
-        const todayIso = isoOf(win.end);
-        const startIso = isoOf(win.start);
-        const table = document.createElement('div');
-        table.className = 'cal-year-grid';
-        table.style.gridTemplateColumns = `repeat(7, ${cell}px)`;
-        table.style.gridTemplateRows = `${HEAD}px repeat(${weeks}, ${cell}px)`;
-        ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach((d) => {
-            const h = document.createElement('span');
-            h.className = 'cal-heads';
-            h.innerHTML = `<span>${d}</span>`;
-            h.style.textAlign = 'center';
-            table.appendChild(h);
+        const body = document.createElement('div');
+        body.className = 'cal-body';
+        const days = document.createElement('div');
+        days.className = 'cal-days';
+        days.setAttribute('aria-hidden', 'true');
+        ['', '', 'Mon', '', 'Wed', '', 'Fri', ''].forEach((t) => {
+            const s = document.createElement('span');
+            s.textContent = t;
+            days.appendChild(s);
         });
-        for (let w = 0; w < weeks; w += 1) {
+        const scroll = document.createElement('div');
+        scroll.className = 'cal-scroll';
+        const months = document.createElement('div');
+        months.className = 'cal-months';
+        months.setAttribute('aria-hidden', 'true');
+        months.style.width = `${weeks * cell + (weeks - 1) * gap}px`;
+        for (let m = 0; m < 12; m += 1) {
+            const col = Math.ceil(daysBetween(first, new Date(win.year, m, 1)) / 7);
+            const label = document.createElement('span');
+            label.textContent = MONTHS[m];
+            label.style.left = `${col * (cell + gap)}px`;
+            months.appendChild(label);
+        }
+        const cells = document.createElement('div');
+        cells.className = 'cal-grid';
+        for (let c = 0; c < weeks; c += 1) {
             for (let i = 0; i < 7; i += 1) {
-                const d = addDays(first, 7 * w + i);
+                const d = addDays(first, 7 * c + i);
                 const iso = isoOf(d);
                 const el = document.createElement('span');
                 el.className = 'cal-cell';
-                el.style.setProperty('--c', String(w * 2 + i));
-                if (iso < startIso || iso > todayIso) {
+                el.style.setProperty('--c', String(c));
+                if (d.getFullYear() !== win.year) {
                     el.classList.add('is-out');
+                } else if (iso > todayIso) {
+                    el.classList.add('is-future');
                 } else {
                     el.dataset.d = iso;
                     if (trained.has(iso)) {
+                        const sets = Number(daySets[iso]) || 0;
                         el.classList.add('is-on');
+                        el.dataset.l = String(level(sets));
                         el.dataset.title = titles[iso] || 'Workout';
+                        if (sets) el.dataset.sets = String(sets);
                     }
                     if (iso === todayIso) el.classList.add('is-today');
                 }
-                table.appendChild(el);
+                cells.appendChild(el);
             }
         }
-        grid.appendChild(table);
-    }
+        scroll.append(months, cells);
+        body.append(days, scroll);
 
-    function drawYearGrid(grid, dayList, win, W, H) {
-        const counts = {};
-        dayList.forEach((d) => { const k = d.slice(0, 7); counts[k] = (counts[k] || 0) + 1; });
-        const max = Math.max(1, ...Object.values(counts));
-        const firstYear = win.first.getFullYear();
-        const lastYear = win.end.getFullYear();
-        const rows = lastYear - firstYear + 1;
-        const YEAR_W = 34, HEAD = 14, gap = 4;
-        const cell = Math.floor(Math.min((W - YEAR_W - 11 * gap) / 12, (H - HEAD - rows * gap) / rows, 40));
-        // A little taller than wide when there's room, so a few years still fill the box.
-        const rowH = Math.floor(Math.max(cell, Math.min((H - HEAD - rows * gap) / rows, cell * 1.75)));
-        grid.style.setProperty('--cal-cell', `${cell}px`);
-        grid.style.setProperty('--cal-gap', `${gap}px`);
-        grid.style.setProperty('--cal-radius', `${Math.max(3, Math.round(cell * 0.22))}px`);
-        const firstKey = dayList[0].slice(0, 7);
-        const lastKey = isoOf(win.end).slice(0, 7);
+        const legend = document.createElement('div');
+        legend.className = 'cal-legend';
+        legend.setAttribute('aria-hidden', 'true');
+        legend.innerHTML = '<span>Less</span>' + [0, 1, 2, 3, 4].map(l => `<i class="cal-swatch" data-l="${l}"></i>`).join('') + '<span>More</span>';
+        grid.append(body, legend);
 
-        const table = document.createElement('div');
-        table.className = 'cal-year-grid';
-        table.style.gridTemplateColumns = `${YEAR_W}px repeat(12, ${cell}px)`;
-        table.style.gridTemplateRows = `${HEAD}px repeat(${rows}, ${rowH}px)`;
-        const corner = document.createElement('span');
-        table.appendChild(corner);
-        MONTHS.forEach((m) => {
-            const h = document.createElement('span');
-            h.className = 'cal-heads';
-            h.innerHTML = `<span>${m.charAt(0)}</span>`;
-            h.style.textAlign = 'center';
-            table.appendChild(h);
-        });
-        for (let y = firstYear; y <= lastYear; y += 1) {
-            const label = document.createElement('span');
-            label.className = 'cal-years';
-            label.innerHTML = `<span>${y}</span>`;
-            label.style.textAlign = 'right';
-            table.appendChild(label);
-            for (let m = 0; m < 12; m += 1) {
-                const key = `${y}-${String(m + 1).padStart(2, '0')}`;
-                const el = document.createElement('span');
-                el.className = 'cal-cell';
-                el.style.setProperty('--c', String(m + (y - firstYear) * 3));
-                if (key < firstKey || key > lastKey) {
-                    el.classList.add('is-out');
-                } else {
-                    el.dataset.m = key;
-                    el.dataset.n = String(counts[key] || 0);
-                    if (counts[key]) {
-                        el.classList.add('is-level');
-                        el.style.setProperty('--lvl', String(0.3 + 0.7 * (counts[key] / max)));
-                    }
-                }
-                table.appendChild(el);
-            }
+        // Sliding year: open on the latest weeks (this week, or December for a past year).
+        if (slides) {
+            const col = win.isCurrent ? Math.floor(daysBetween(first, win.today) / 7) : weeks - 1;
+            scroll.scrollLeft = Math.max(0, (col + 1) * (cell + gap) - scroll.clientWidth + cell * 2);
         }
-        grid.appendChild(table);
+        calendarSize = `${box.clientWidth}x${box.clientHeight}`;
     }
 
     // Hover (mouse) or tap (touch) a square to see the day; a workout day opens its page.
     function showCalendarTip(cell, pointerType) {
         const tip = document.getElementById('chartTip');
         const box = document.getElementById('consistencyGrid').parentNode;
-        if (!cell || (!cell.dataset.d && !cell.dataset.m)) { hideChartTip(); return; }
+        if (!cell || !cell.dataset.d) { hideChartTip(); return; }
         document.querySelectorAll('.cal-cell.is-hot').forEach(el => el.classList.remove('is-hot'));
         cell.classList.add('is-hot');
-        if (cell.dataset.m) {
-            const [y, m] = cell.dataset.m.split('-').map(Number);
-            const n = Number(cell.dataset.n) || 0;
-            tip.querySelector('.chart-tip-date').textContent = `${new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long' })} ${y}`;
-            tip.querySelector('.chart-tip-value').textContent = n ? `${n} workout${n === 1 ? '' : 's'}` : 'No workouts';
-            tip.dataset.index = '-1';
-        } else {
-            tip.querySelector('.chart-tip-date').textContent = longDate(cell.dataset.d);
-            tip.querySelector('.chart-tip-value').textContent = cell.dataset.title || 'Rest day';
-            tip.dataset.index = cell.dataset.title ? '0' : '-1';
-            tip.dataset.date = cell.dataset.d;
-        }
+        const sets = Number(cell.dataset.sets) || 0;
+        tip.querySelector('.chart-tip-date').textContent = longDate(cell.dataset.d);
         tip.querySelector('.chart-tip-title').textContent = '';
-        tip.querySelector('.chart-tip-set').textContent = '';
+        tip.querySelector('.chart-tip-value').textContent = cell.dataset.title || 'Rest day';
+        tip.querySelector('.chart-tip-set').textContent = cell.dataset.title && sets ? `${sets} set${sets === 1 ? '' : 's'}` : '';
+        tip.dataset.index = cell.dataset.title ? '0' : '-1';
+        tip.dataset.date = cell.dataset.d;
         tip.classList.toggle('is-touch', pointerType !== 'mouse' && tip.dataset.index === '0');
         openChartTipPoint = (idx) => {
             if (idx === 0 && tip.dataset.date) window.location.href = `/workout/${encodeURIComponent(tip.dataset.date)}?return_to=/stats`;
@@ -2570,6 +2516,8 @@
             if (chartPointerType === 'mouse') return;
             showCalendarTip(e.target.closest('.cal-cell'), chartPointerType);
         });
+        // Sliding the year on a phone moves the squares out from under the note.
+        grid.addEventListener('scroll', () => hideChartTip(), { capture: true, passive: true });
         grid.addEventListener('click', (e) => {
             if (chartPointerType !== 'mouse') return;
             const cell = e.target.closest('.cal-cell.is-on');
@@ -2719,6 +2667,13 @@
         });
 
         setupCalendarEvents();
+        document.getElementById('yearControls').addEventListener('click', (event) => {
+            const btn = event.target.closest('button[data-year]');
+            if (!btn || Number(btn.dataset.year) === consYear) return;
+            consYear = Number(btn.dataset.year);
+            try { localStorage.setItem(YEAR_KEY, String(consYear)); } catch (e) { /* private mode */ }
+            if (fullChartData) renderConsistency(fullChartData);
+        });
         if (initialExercise && initialExercise.value) {
             currentExercise = initialExercise.value;
             document.getElementById('exerciseSearch').value = initialExercise.label || initialExercise.value;

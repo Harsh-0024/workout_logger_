@@ -692,6 +692,22 @@ def _fade_multiplier(days_since_last: int, fade_start_days: int, fade_end_days: 
     return max(0.0, min(1.0, (fade_end_days - float(days_since_last)) / span))
 
 
+def _logged_set_count(log) -> int:
+    """How many sets a log holds (at least 1), for how full a day looks in Consistency."""
+    data = getattr(log, 'sets_json', None)
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except ValueError:
+            data = None
+    if isinstance(data, dict):
+        for key in ('reps', 'weights'):
+            values = data.get(key)
+            if isinstance(values, list) and values:
+                return len(values)
+    return 1
+
+
 def get_overall_progress_data(
     db_session,
     user,
@@ -726,6 +742,7 @@ def get_overall_progress_data(
     workout_days = set()
     title_by_day: Dict = {}
     name_by_key: Dict[str, str] = {}
+    sets_by_day: Dict = {}
 
     for log in logs:
         if not log.date:
@@ -738,6 +755,7 @@ def get_overall_progress_data(
         title_by_day.setdefault(day, _clean_workout_title(getattr(log, 'workout_name', None)))
         # The latest spelling names the exercise.
         name_by_key[key] = str(log.exercise or '').strip() or key
+        sets_by_day[day] = sets_by_day.get(day, 0) + _logged_set_count(log)
         value = _get_peak_1rm_for_log(db_session, log)
         if not value or value <= 0:
             continue
@@ -790,6 +808,7 @@ def get_overall_progress_data(
 
     # Every day trained and what it was called, for the Consistency view.
     day_titles = {d.isoformat(): title_by_day.get(d, 'Workout') for d in workout_days_sorted}
+    day_sets = {d.isoformat(): int(sets_by_day.get(d, 0)) for d in workout_days_sorted}
 
     if not universe:
         return {
@@ -798,6 +817,7 @@ def get_overall_progress_data(
             'log_data': [],
             'workout_days': [d.isoformat() for d in workout_days_sorted],
             'day_titles': day_titles,
+            'day_sets': day_sets,
             'exercises': [],
             'weight': [],
             'reps': [],
@@ -913,6 +933,7 @@ def get_overall_progress_data(
         'log_data': log_series,
         'workout_days': [d.isoformat() for d in workout_days_sorted],
         'day_titles': day_titles,
+        'day_sets': day_sets,
         # Each exercise's estimated max per session, for "New bests" and "Most improved".
         'exercises': [
             {

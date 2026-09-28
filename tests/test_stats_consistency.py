@@ -29,6 +29,9 @@ class TestStatsConsistencyData(unittest.TestCase):
         data = self.client.get("/stats/data/average?mode=index").get_json()
         self.assertEqual(data["workout_days"], ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-05", "2026-09-07"])
         self.assertEqual(data["day_titles"]["2026-09-02"], "Cardio")
+        # Sets per day shade the squares: one set per log here.
+        self.assertEqual(data["day_sets"]["2026-09-02"], 1)
+        self.assertEqual(data["day_sets"]["2026-09-01"], 1)
         bench = [ex for ex in data["exercises"] if ex["name"] == "Bench Press"]
         self.assertEqual(len(bench), 1)
         self.assertEqual(bench[0]["days"], ["2026-09-01", "2026-09-03", "2026-09-05", "2026-09-07"])
@@ -42,6 +45,7 @@ class TestStatsConsistencyData(unittest.TestCase):
         data = self.client.get("/stats/data/average?mode=index").get_json()
         self.assertEqual(data["workout_days"], ["2026-09-01"])
         self.assertEqual(data["day_titles"], {"2026-09-01": "Legs"})
+        self.assertEqual(data["day_sets"], {"2026-09-01": 1})
 
     def test_stats_page_has_the_view_switch(self):
         self._create_logged_in_user(username="switcher")
