@@ -308,7 +308,7 @@ def register_workout_routes(app):
 
         return None, None
 
-    def get_recent_workouts(user, limit=50):
+    def get_recent_workouts(user, limit=50, include_details=True):
         try:
             logs = (
                 Session.query(WorkoutLog)
@@ -326,21 +326,23 @@ def register_workout_routes(app):
                     by_date[date_key] = {
                         'date': log.date,
                         'title': _clean_workout_title(log.workout_name or "Workout"),
-                        'exercises': set(),
+                        'exercises': [],
                         'logs': [],
                     }
-                by_date[date_key]['exercises'].add(log.exercise)
+                # Exercises in the order they were logged.
+                if log.exercise not in by_date[date_key]['exercises']:
+                    by_date[date_key]['exercises'].append(log.exercise)
                 by_date[date_key]['logs'].append(log)
 
             for date_key in sorted(by_date.keys(), reverse=True):
                 item = by_date[date_key]
-                exercise_list = sorted(item['exercises'])
+                exercise_list = item['exercises']
                 workouts.append({
                     'date': item['date'],
                     'title': item['title'],
                     'exercises': ", ".join(exercise_list),
                     'exercise_list': exercise_list,
-                    'exercise_details': build_exercise_text(item['logs']),
+                    'exercise_details': build_exercise_text(item['logs']) if include_details else '',
                 })
                 if limit is not None and len(workouts) >= limit:
                     break
@@ -388,6 +390,39 @@ def register_workout_routes(app):
                 'latest_workout': None,
             }
 
+    _SESSION_TITLE_RE = re.compile(r"^(session\s+\d+)\s*[-–—:]\s*(.+)$", re.IGNORECASE)
+
+    def _home_history(workouts):
+        """Workouts grouped by month, newest first, for Home and All workouts."""
+        months = []
+        for w in workouts:
+            d = w['date'].date() if isinstance(w['date'], datetime) else w['date']
+            title = w.get('title') or 'Workout'
+            session_label = ''
+            match = _SESSION_TITLE_RE.match(title)
+            if match:
+                session_label = match.group(1).title()
+                title = match.group(2).strip()
+            key = (d.year, d.month)
+            if not months or months[-1]['key'] != key:
+                months.append({'key': key, 'label': d.strftime('%B %Y'), 'items': []})
+            months[-1]['items'].append({
+                'iso': d.isoformat(),
+                'day': d.day,
+                'weekday': d.strftime('%a'),
+                'date_label': f"{d.strftime('%a')}, {d.day} {d.strftime('%b %Y')}",
+                'title': title,
+                'full_title': w.get('title') or 'Workout',
+                'session_label': session_label,
+                'exercises': w.get('exercise_list') or [],
+                'search': ' '.join([
+                    w.get('title') or '',
+                    d.strftime('%Y-%m-%d'), d.strftime('%d-%m-%y'), f"{d.day} {d.strftime('%b %B %Y %A')}",
+                    w.get('exercises') or '',
+                ]).lower(),
+            })
+        return months
+
     def index():
         if current_user.is_authenticated:
             return redirect(url_for('user_dashboard', username=current_user.username))
@@ -413,15 +448,19 @@ def register_workout_routes(app):
                 flash("You can only view your own dashboard.", "error")
                 return redirect(url_for('user_dashboard', username=normalized_current or current_user.username))
 
-            recent_workouts = get_recent_workouts(user, limit=250)
+            # Home only shows the last few; the full list lives on /workouts.
+            recent_workouts = get_recent_workouts(user, limit=3, include_details=False)
+            recent = [item for month in _home_history(recent_workouts) for item in month['items']]
 
             profile_image_url = get_profile_image_url(getattr(user, 'profile_image', None))
 
             display_name = (user.full_name or user.username or '').strip()
+            first_name = display_name.split()[0] if display_name else ''
             return render_template(
                 'index.html',
-                display_name=display_name,
-                recent_workouts=recent_workouts,
+                first_name=first_name,
+                initial=(display_name[:1] or '?').upper(),
+                recent=recent,
                 profile_image_url=profile_image_url,
             )
         except (ValidationError, UserNotFoundError) as e:
@@ -472,7 +511,7 @@ def register_workout_routes(app):
                 parsed = urlsplit(return_to)
                 if (not parsed.scheme) and (not parsed.netloc):
                     candidate = parsed.path or ''
-                    if candidate.startswith('/workout/') or candidate.startswith('/stats'):
+                    if candidate.startswith('/workout/') or candidate.startswith('/stats') or candidate == '/workouts':
                         back_url = candidate + ((f"?{parsed.query}") if parsed.query else '')
 
             current_workout_url = url_for('view_workout', date_str=date_str)
@@ -737,7 +776,10 @@ def register_workout_routes(app):
 
     @login_required
     def workout_history():
-        return redirect(url_for('user_dashboard', username=current_user.username))
+        workouts = get_recent_workouts(current_user, limit=None, include_details=False)
+        count = len(workouts)
+        subtitle = f"{count} workout{'' if count == 1 else 's'} logged" if count else ''
+        return render_template('workout_history.html', history=_home_history(workouts), subtitle=subtitle)
 
     def _recommend_workout_payload(
         user,
@@ -3117,7 +3159,7 @@ def register_workout_routes(app):
         selected_dates = request.form.getlist('selected_dates')
         if not selected_dates:
             flash("Select at least one workout day to delete.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
 
         unique_dates = []
         seen = set()
@@ -3130,7 +3172,7 @@ def register_workout_routes(app):
 
         if not unique_dates:
             flash("Select at least one workout day to delete.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
 
         total_deleted_days = 0
         affected_exercises = set()
@@ -3170,16 +3212,16 @@ def register_workout_routes(app):
             Session.commit()
 
             if total_deleted_days:
-                flash(f"Deleted {total_deleted_days} workout day(s).", "success")
+                flash(f"Deleted {total_deleted_days} workout{'' if total_deleted_days == 1 else 's'}.", "success")
             else:
                 flash("No matching workouts were found to delete.", "info")
 
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
         except Exception as e:
             Session.rollback()
             logger.error(f"Error bulk deleting workouts: {e}", exc_info=True)
             flash("Error deleting selected workouts.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
 
     def _check_error_message(check):
         errors = check.get("errors") or []

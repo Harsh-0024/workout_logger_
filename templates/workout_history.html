@@ -1,102 +1,268 @@
 {% extends 'base.html' %}
-
-{% block title %}Workout History - Workout Tracker{% endblock %}
-
+{% import '_settings_ui.html' as st %}
+{% block title %}All workouts - Workout Tracker{% endblock %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-lg-10 col-xl-9">
-        <div class="card workout-history-card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3">
-                    <i class="bi bi-journal-text" style="font-size: clamp(2.5rem, 8vw, 3.25rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                </div>
-                <h2 class="fw-bold mb-2">Workout History</h2>
-                <p class="text-muted mb-0" style="font-size: var(--fs-sm);">
-                    All logged sessions for {{ user }}
-                </p>
-            </div>
+{{ st.styles() }}
+<style>
+    /* Every workout, a month at a time, with search and picking several to delete. */
+    .wh-search { margin-bottom: 26px; }
+    .wh .wh-search .form-control { height: 46px; }
+    .wh-search input::-webkit-search-decoration { -webkit-appearance: none; }
+    .wh-month + .wh-month { margin-top: 26px; }
+    .wh-row { gap: 16px; -webkit-tap-highlight-color: transparent; cursor: pointer; }
+    .wh a.wh-row:active { background: var(--gold-subtle); }
+    .wh-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-glow); }
+    .wh-date { flex: none; width: 34px; text-align: center; line-height: 1; }
+    .wh-date b { display: block; font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .wh-date small { display: block; margin-top: 4px; font-size: 0.62rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-subtle); }
+    .wh-row .st-row-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .wh-check {
+        flex: none; display: none;
+        width: 24px; height: 24px; border-radius: 50%;
+        align-items: center; justify-content: center;
+        border: 1.5px solid var(--text-subtle);
+        color: var(--st-on-accent); font-size: 0.95rem;
+        transition: background var(--transition-fast), border-color var(--transition-fast);
+    }
+    .wh-check i { opacity: 0; }
+    .wh-more { margin-top: 26px; }
 
-            <div class="d-flex align-items-center gap-2 mb-3">
-                <input id="historySearch" type="text" class="form-control flex-grow-1" placeholder="Search by date, workout name, exercise (comma-separated)" style="font-size: var(--fs-sm);">
-                <button type="button" class="btn btn-sm btn-gold-outline" data-bs-toggle="tooltip" title="Use 'not term' or 'no term' to exclude results">
-                    <i class="bi bi-question-circle"></i>
-                </button>
-            </div>
+    .wh.is-selecting .wh-row .st-chev { display: none; }
+    .wh.is-selecting .wh-check { display: inline-flex; }
+    .wh-row.is-picked { background: var(--gold-subtle); }
+    .wh-row.is-picked .wh-check { background: var(--gold-primary); border-color: var(--gold-primary); }
+    .wh-row.is-picked .wh-check i { opacity: 1; }
+    .wh-bar {
+        position: fixed; z-index: 1030;
+        left: 50%; bottom: 20px; transform: translateX(-50%);
+        width: min(560px, calc(100% - 32px));
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 10px 10px 18px;
+        border-radius: 16px;
+        border: 1px solid var(--border-subtle);
+        background: var(--card-bg-solid);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    }
+    .wh-bar[hidden] { display: none; }
+    [data-theme="light"] .wh-bar { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08); }
+    .wh-bar-count { font-size: 0.88rem; font-weight: 600; color: var(--text-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .wh-bar-actions { display: flex; align-items: center; gap: 14px; }
+    .wh.is-selecting { padding-bottom: 110px; }
 
-            <div id="historyEmpty" class="text-muted text-center py-4" style="display: none; font-size: var(--fs-sm);">No results.</div>
+    @media (max-width: 575.98px) {
+        .wh-bar { bottom: calc(86px + env(safe-area-inset-bottom) + 10px); }
+        .wh.is-selecting { padding-bottom: 190px; }
+        .wh-row { gap: 14px; }
+    }
+</style>
 
-            <div id="historyList" class="workout-history-list">
-                {% for workout in workouts %}
-                <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="recent-workout-item text-decoration-none history-item" style="display: block; transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d-%m-%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="flex-grow-1">
-                            <span class="text-white fw-semibold d-block" style="font-size: clamp(0.875rem, 3vw, 1rem);">{{ workout.title }}</span>
-                            <small class="text-muted" style="font-size: var(--fs-xs);">{{ workout.date | format_date }} • {{ workout.date.strftime('%A') }}</small>
-                        </div>
-                        <i class="bi bi-chevron-right text-muted"></i>
-                    </div>
-                </a>
-                {% endfor %}
-            </div>
+<div class="st wh" id="historyPage">
+    {{ st.head('All workouts', subtitle, back=url_for('index'), back_label='Home') }}
 
-            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <a href="{{ url_for('user_dashboard', username=current_user.username) }}" class="text-muted text-decoration-none small hover-gold tracking-wide">
-                    <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
-                </a>
-            </div>
+    {% if history %}
+    <section class="st-section" aria-label="Workouts">
+        <div class="st-search wh-search">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input id="historySearch" type="search" class="form-control" placeholder="Search workouts" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="search" aria-label="Search workouts">
         </div>
+
+        <div class="st-group st-empty" id="historyEmpty" hidden>No workouts match.</div>
+
+        <div id="historyList">
+            {% for month in history %}
+            <div class="wh-month">
+                <div class="st-label">
+                    <span>{{ month.label }}</span>
+                    {% if loop.first %}<span class="st-label-aside"><button type="button" class="st-link" id="whSelect">Select</button></span>{% endif %}
+                </div>
+                <div class="st-group">
+                    {% for item in month['items'] %}
+                    <a class="st-row wh-row" href="{{ url_for('view_workout', date_str=item.iso, return_to=url_for('workout_history')) }}" data-d="{{ item.iso }}" data-search="{{ item.search }}" aria-label="{{ item.full_title }}, {{ item.date_label }}">
+                        <span class="wh-date" aria-hidden="true"><b>{{ item.day }}</b><small>{{ item.weekday }}</small></span>
+                        <span class="st-row-main">
+                            <span class="st-row-title">{{ item.title }}</span>
+                            <span class="st-row-desc">{% if item.session_label %}{{ item.session_label }}<span class="st-dot"></span>{% endif %}{{ item.exercises|join(', ') }}</span>
+                        </span>
+                        <i class="bi bi-chevron-right st-chev" aria-hidden="true"></i>
+                        <span class="wh-check" aria-hidden="true"><i class="bi bi-check-lg"></i></span>
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <button type="button" class="st-btn st-btn-quiet st-btn-block wh-more" id="whMore" hidden>Show earlier workouts</button>
+    </section>
+
+    <form id="bulkDeleteForm" method="POST" action="{{ url_for('bulk_delete_workouts') }}" data-no-loading="true" hidden></form>
+    <div class="wh-bar" id="whBar" role="region" aria-label="Selected workouts" hidden>
+        <span class="wh-bar-count" id="whCount" aria-live="polite">Select workouts</span>
+        <span class="wh-bar-actions">
+            <button type="button" class="st-link" id="whAll">Select all</button>
+            <button type="button" class="st-btn st-btn-danger st-btn-sm" id="whDelete" disabled><i class="bi bi-trash3" aria-hidden="true"></i>Delete</button>
+        </span>
     </div>
+    {% else %}
+    <div class="st-section">
+        <div class="st-group st-empty">Your workouts will show up here.</div>
+    </div>
+    {% endif %}
 </div>
 
 <script>
-    (function() {
-        const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.forEach((el) => new bootstrap.Tooltip(el));
-        const input = document.getElementById('historySearch');
+    (function () {
+        // iPhone Safari only shows :active press states when a touch listener exists.
+        document.addEventListener('touchstart', () => {}, { passive: true });
+
+        const page = document.getElementById('historyPage');
         const list = document.getElementById('historyList');
+        if (!list) return;
+        const groups = Array.from(list.querySelectorAll('.wh-month'));
+        const rows = Array.from(list.querySelectorAll('.wh-row'));
+        const input = document.getElementById('historySearch');
         const empty = document.getElementById('historyEmpty');
-        if (!input || !list) return;
+        const more = document.getElementById('whMore');
 
-        const items = Array.from(list.querySelectorAll('.history-item'));
-
-        const applyFilter = () => {
-            const q = (input.value || '').toLowerCase().trim();
-            const terms = q
-                ? q.split(',').map(t => t.trim()).filter(Boolean)
-                : [];
-
-            const include = [];
-            const exclude = [];
-            for (const term of terms) {
-                const normalized = term.trim();
-                if (normalized.startsWith('not ') || normalized.startsWith('no ')) {
-                    const ex = normalized.replace(/^(not|no)\s+/, '').trim();
-                    if (ex) exclude.push(ex);
-                } else {
-                    include.push(normalized);
-                }
+        // A few months at first; earlier ones a batch at a time.
+        const FIRST = 20, BATCH = 40;
+        let shownGroups = 0;
+        const reveal = (minRows) => {
+            let added = 0;
+            while (shownGroups < groups.length && (added < minRows || shownGroups === 0)) {
+                added += groups[shownGroups].querySelectorAll('.wh-row').length;
+                shownGroups += 1;
             }
-
-            let shown = 0;
-            for (const el of items) {
-                const hay = (el.getAttribute('data-search') || '').toLowerCase();
-                
-                const hasExcluded = exclude.some(ex => hay.includes(ex));
-                if (hasExcluded) {
-                    el.style.display = 'none';
-                    continue;
-                }
-                
-                const match = include.length === 0 || include.some(t => hay.includes(t));
-                el.style.display = match ? 'block' : 'none';
-                if (match) shown++;
-            }
-
-            if (empty) empty.style.display = shown === 0 ? 'block' : 'none';
+            paint();
         };
 
-        input.addEventListener('input', applyFilter);
-        applyFilter();
+        const normalize = (value) => String(value || '')
+            .toLowerCase()
+            .replace(/[-–—]+/g, ' ')
+            .replace(/[^a-z0-9\s]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        rows.forEach((row) => { row._hay = normalize(row.dataset.search); });
+
+        // "chest, curl" matches either; "not legs" leaves those out.
+        const readQuery = () => {
+            const include = [], exclude = [];
+            (input ? input.value : '').split(',').map((t) => t.trim().toLowerCase()).filter(Boolean).forEach((term) => {
+                const neg = term.match(/^(not|no)\s+(.+)$/);
+                const value = normalize(neg ? neg[2] : term);
+                if (value) (neg ? exclude : include).push(value);
+            });
+            return { include, exclude };
+        };
+
+        function paint() {
+            const { include, exclude } = readQuery();
+            const searching = include.length > 0 || exclude.length > 0;
+            let shown = 0;
+            groups.forEach((group, index) => {
+                let visible = 0;
+                group.querySelectorAll('.wh-row').forEach((row) => {
+                    const hay = row._hay;
+                    const match = !searching || (!exclude.some((t) => hay.includes(t)) && (include.length === 0 || include.some((t) => hay.includes(t))));
+                    row.hidden = !match;
+                    if (match) visible += 1;
+                });
+                group.hidden = searching ? visible === 0 : index >= shownGroups;
+                if (!group.hidden) shown += visible;
+            });
+            if (empty) empty.hidden = !(searching && shown === 0);
+            if (more) more.hidden = searching || shownGroups >= groups.length;
+            refreshBar();
+        }
+
+        if (input) input.addEventListener('input', paint);
+        if (more) more.addEventListener('click', () => reveal(BATCH));
+
+        // ---- Picking several workouts to delete ----
+        const selectBtn = document.getElementById('whSelect');
+        const bar = document.getElementById('whBar');
+        const countEl = document.getElementById('whCount');
+        const allBtn = document.getElementById('whAll');
+        const deleteBtn = document.getElementById('whDelete');
+        const form = document.getElementById('bulkDeleteForm');
+        const picked = new Set();
+        let selecting = false;
+
+        const visibleRows = () => rows.filter((row) => !row.hidden && !row.closest('.wh-month').hidden);
+
+        function refreshBar() {
+            if (!bar) return;
+            const n = picked.size;
+            countEl.textContent = n ? `${n} selected` : 'Select workouts';
+            deleteBtn.disabled = n === 0;
+            const vis = visibleRows();
+            allBtn.textContent = vis.length && vis.every((row) => picked.has(row.dataset.d)) ? 'Clear' : 'Select all';
+        }
+
+        const setSelecting = (on) => {
+            selecting = on;
+            page.classList.toggle('is-selecting', on);
+            bar.hidden = !on;
+            selectBtn.textContent = on ? 'Cancel' : 'Select';
+            if (!on) {
+                picked.clear();
+                rows.forEach((row) => row.classList.remove('is-picked'));
+            }
+            rows.forEach((row) => {
+                if (on) { row.setAttribute('role', 'checkbox'); row.setAttribute('aria-checked', 'false'); }
+                else { row.removeAttribute('role'); row.removeAttribute('aria-checked'); }
+            });
+            refreshBar();
+        };
+
+        const setPicked = (row, on) => {
+            if (on) picked.add(row.dataset.d); else picked.delete(row.dataset.d);
+            row.classList.toggle('is-picked', on);
+            row.setAttribute('aria-checked', on ? 'true' : 'false');
+        };
+
+        list.addEventListener('click', (e) => {
+            const row = e.target.closest('.wh-row');
+            if (!row || !selecting) return;
+            e.preventDefault();
+            setPicked(row, !picked.has(row.dataset.d));
+            refreshBar();
+        });
+
+        if (selectBtn) selectBtn.addEventListener('click', () => setSelecting(!selecting));
+        if (allBtn) allBtn.addEventListener('click', () => {
+            const vis = visibleRows();
+            const pickAll = vis.some((row) => !picked.has(row.dataset.d));
+            vis.forEach((row) => setPicked(row, pickAll));
+            refreshBar();
+        });
+        if (deleteBtn) deleteBtn.addEventListener('click', () => {
+            const n = picked.size;
+            if (!n) return;
+            if (!window.confirm(`Delete ${n} workout${n === 1 ? '' : 's'}? This can't be undone.`)) return;
+            form.querySelectorAll('input[name="selected_dates"]').forEach((el) => el.remove());
+            picked.forEach((iso) => {
+                const field = document.createElement('input');
+                field.type = 'hidden';
+                field.name = 'selected_dates';
+                field.value = iso;
+                form.appendChild(field);
+            });
+            deleteBtn.disabled = true;
+            form.requestSubmit ? form.requestSubmit() : form.submit();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && selecting) setSelecting(false);
+        });
+
+        reveal(FIRST);
+
+        // Settings → "Delete several workouts" opens this page ready to pick.
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('bulk_delete') === '1') {
+            setSelecting(true);
+            window.history.replaceState({}, '', window.location.pathname);
+        }
     })();
 </script>
 {% endblock %}
