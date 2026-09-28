@@ -2391,7 +2391,7 @@
         drawYear(grid, new Set(dayList), (data && data.day_titles) || {}, (data && data.day_sets) || {}, win);
     }
 
-    // The year split into equal blocks of months (12, 6, 4 or 3), each a row of week columns.
+    // The year split into equal blocks of months (12, 6 or 3), each a row of week columns.
     function yearBands(year, count) {
         const per = 12 / count;
         return Array.from({ length: count }, (_, b) => {
@@ -2415,10 +2415,10 @@
             const weeks = Math.max(...bands.map(b => b.weeks));
             return Math.floor((box.clientWidth - 8 - daysWidth(bands) - (weeks - 1) * gap) / weeks);
         };
-        // The whole year at a glance: one row on a laptop; on a phone, stack the months
-        // in as few rows as keep the squares big enough to tap.
+        // The whole year at a glance: one row on a laptop, two halves on a tablet,
+        // and on a phone four quarters of three months, squares sized to fill the width.
         let bands = null;
-        for (const count of [1, 2, 3, 4]) {
+        for (const count of [1, 2, 4]) {
             bands = yearBands(win.year, count);
             if (fitFor(bands) >= MIN_CELL) break;
         }
