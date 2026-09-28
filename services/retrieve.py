@@ -8,6 +8,7 @@ from config import Config
 from models import (
     CustomRetrievalEvent,
     CustomRetrievalPreference,
+    ExerciseGroupChoice,
     Plan,
     RepRange,
     User,
@@ -435,6 +436,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
                     plan_parts.setdefault(normalize_exercise_name(name), []).append(parts)
 
     custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
+    moved = get_exercise_group_choices(db_session, user)
     for key, item in catalog.items():
         usage = usage_by_key.get(key, {})
         item["retrieval_count"] = int(usage.get("count") or 0)
@@ -448,7 +450,8 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         item["rep_range"] = (
             custom_ranges.get(item["name"].lower()) or custom_ranges.get(key) or parsed.get("inline_range") or ""
         )
-        item["group"] = _picker_group(item["name"], plan_parts.get(key))
+        item["auto_group"] = _picker_group(item["name"], plan_parts.get(key))
+        item["group"] = moved.get(key) or item["auto_group"]
 
     mode = sort_mode if sort_mode in CUSTOM_RETRIEVAL_SORT_MODES else get_custom_retrieval_sort_preference(db_session, user)
     return _sort_custom_retrieval_catalog(list(catalog.values()), mode)
@@ -506,6 +509,36 @@ def _parse_rep_ranges_text(rep_text):
 
 # Muscle groups for the custom workout picker, in the order they are shown.
 CUSTOM_PICKER_GROUPS = ("Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms", "Legs", "Abs", "Other")
+
+
+def get_exercise_group_choices(db_session, user) -> Dict[str, str]:
+    """Exercises this user moved to another group: {exercise key: group}."""
+    rows = (
+        db_session.query(ExerciseGroupChoice.exercise_key, ExerciseGroupChoice.group_name)
+        .filter(ExerciseGroupChoice.user_id == user.id)
+        .all()
+    )
+    return {key: group for key, group in rows if group in CUSTOM_PICKER_GROUPS}
+
+
+def set_exercise_group_choice(db_session, user, exercise_key, group, auto_group) -> None:
+    """Remember a move; moving it back to where the app would put it forgets the choice."""
+    if group not in CUSTOM_PICKER_GROUPS:
+        raise ValueError("Unknown group.")
+    choice = (
+        db_session.query(ExerciseGroupChoice)
+        .filter(ExerciseGroupChoice.user_id == user.id, ExerciseGroupChoice.exercise_key == exercise_key)
+        .first()
+    )
+    if group == auto_group:
+        if choice is not None:
+            db_session.delete(choice)
+    elif choice is None:
+        db_session.add(ExerciseGroupChoice(user_id=user.id, exercise_key=exercise_key, group_name=group))
+    else:
+        choice.group_name = group
+        choice.updated_at = datetime.now()
+    db_session.commit()
 
 
 def _picker_group(name, plan_day_parts=None) -> str:

@@ -38,6 +38,38 @@
     .cr-ex.is-picked { color: var(--st-accent); font-weight: 600; }
     .cr-ex.is-picked .cr-tick { opacity: 1; }
     .cr-ex[hidden], .cr-group[hidden] { display: none; }
+    /* Long-press opens "Move to…", so no text selection or iPhone callout on the rows. */
+    .cr-ex { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+    .cr-ex.is-held { background: var(--gold-subtle); }
+
+    /* ---- Move to… ---- */
+    .cr-menu {
+        position: fixed; z-index: 1045;
+        min-width: 210px; padding: 6px;
+        border-radius: 14px;
+        border: 1px solid var(--border-subtle);
+        background: var(--card-bg-solid);
+        box-shadow: 0 14px 36px rgba(0, 0, 0, 0.45);
+        animation: cr-menu-in 0.14s ease-out;
+    }
+    [data-theme="light"] .cr-menu { box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14); }
+    .cr-menu[hidden] { display: none; }
+    @keyframes cr-menu-in { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+    .cr-menu-title {
+        padding: 8px 12px 6px;
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+        color: var(--text-subtle);
+    }
+    .cr-menu button {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        width: 100%; height: 40px; padding: 0 12px;
+        border: 0; border-radius: 9px; background: transparent;
+        color: var(--text-primary); font: 500 0.9rem 'Inter', system-ui, sans-serif; text-align: left;
+    }
+    .cr-menu button:hover, .cr-menu button:focus-visible { background: var(--st-row-hover); outline: none; }
+    .cr-menu button i { color: var(--st-accent); opacity: 0; }
+    .cr-menu button[aria-checked="true"] { color: var(--st-accent); font-weight: 600; }
+    .cr-menu button[aria-checked="true"] i { opacity: 1; }
 
     /* ---- Your workout ---- */
     .cr-mine .st-label { margin-top: 0; }
@@ -151,7 +183,7 @@
 
                 <div class="st-group" id="crGroups">
                     {% for group in groups %}
-                    <details class="cr-group" data-group="{{ group.name }}">
+                    <details class="cr-group" data-group="{{ group.name }}"{% if not group['items'] %} hidden{% endif %}>
                         <summary class="st-row">
                             <span class="st-row-main"><span class="st-row-title">{{ group.name }}</span></span>
                             <span class="cr-picked-count" data-picked></span>
@@ -159,7 +191,7 @@
                         </summary>
                         <div class="cr-list">
                             {% for ex in group['items'] %}
-                            <button type="button" class="cr-ex{% if not ex.yours %} is-other{% endif %}" data-key="{{ ex.key }}" data-name="{{ ex.name }}" data-sets="{{ ex.default_sets }}" data-reps="{{ ex.rep_range }}" aria-pressed="false">
+                            <button type="button" class="cr-ex{% if not ex.yours %} is-other{% endif %}" data-key="{{ ex.key }}" data-name="{{ ex.name }}" data-sets="{{ ex.default_sets }}" data-reps="{{ ex.rep_range }}" data-auto="{{ ex.auto_group }}" aria-pressed="false">
                                 <span class="cr-ex-name">{{ ex.name }}</span>
                                 <i class="bi bi-check-lg cr-tick" aria-hidden="true"></i>
                             </button>
@@ -194,6 +226,12 @@
         <div id="crFields"></div>
     </form>
     <div class="cr-backdrop" id="crBackdrop"></div>
+    <div class="cr-menu" id="crMenu" role="menu" aria-label="Move to" hidden>
+        <div class="cr-menu-title">Move to</div>
+        {% for group in groups %}
+        <button type="button" role="menuitemradio" aria-checked="false" data-group="{{ group.name }}">{{ group.name }}<i class="bi bi-check-lg" aria-hidden="true"></i></button>
+        {% endfor %}
+    </div>
 </div>
 
 <script>
@@ -329,7 +367,109 @@
             render();
         };
 
-        buttons.forEach((b) => b.addEventListener('click', () => toggle(b.dataset.key)));
+        buttons.forEach((b) => b.addEventListener('click', (e) => {
+            if (b._held) { b._held = false; e.preventDefault(); return; }
+            toggle(b.dataset.key);
+        }));
+
+        // ---- Long-press (or right-click) an exercise: "Move to…" another group ----
+        const menu = document.getElementById('crMenu');
+        const menuItems = Array.from(menu.querySelectorAll('button'));
+        const groupByName = new Map(groups.map((g) => [g.dataset.group, g]));
+        let menuFor = null;
+        let hold = null;
+
+        const closeMenu = () => {
+            if (!menuFor) return;
+            menuFor.classList.remove('is-held');
+            menu.hidden = true;
+            menuFor = null;
+        };
+        const openMenu = (b, x, y) => {
+            closeMenu();
+            menuFor = b;
+            b.classList.add('is-held');
+            const current = b.closest('.cr-group').dataset.group;
+            menuItems.forEach((item) => item.setAttribute('aria-checked', item.dataset.group === current ? 'true' : 'false'));
+            menu.hidden = false;
+            // Keep it clear of the phone's tab bar at the bottom.
+            const nav = document.querySelector('.mobile-bottom-nav');
+            const navTop = nav && getComputedStyle(nav).display !== 'none' ? nav.getBoundingClientRect().top : window.innerHeight;
+            const w = menu.offsetWidth, h = menu.offsetHeight, pad = 10;
+            menu.style.left = `${Math.max(pad, Math.min(x, window.innerWidth - w - pad))}px`;
+            menu.style.top = `${Math.max(pad, Math.min(y, navTop - h - pad))}px`;
+            (menu.querySelector('[aria-checked="true"]') || menuItems[0]).focus({ preventScroll: true });
+        };
+
+        const placeInGroup = (b, group) => {
+            const list = group.querySelector('.cr-list');
+            const rank = (el) => [el.classList.contains('is-other') ? 1 : 0, el.dataset.name.toLowerCase()];
+            const mine = rank(b);
+            const after = Array.from(list.children).find((el) => {
+                if (el === b) return false;
+                const r = rank(el);
+                return r[0] > mine[0] || (r[0] === mine[0] && r[1] > mine[1]);
+            });
+            list.insertBefore(b, after || null);
+            groups.forEach((g) => { if (!search.value) g.hidden = !g.querySelector('.cr-ex'); });
+        };
+
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
+        menuItems.forEach((item) => item.addEventListener('click', () => {
+            const b = menuFor;
+            const from = b && b.closest('.cr-group');
+            const to = groupByName.get(item.dataset.group);
+            closeMenu();
+            if (!b || !to || from === to) return;
+            placeInGroup(b, to);
+            render();
+            fetch('{{ url_for("save_exercise_group") }}', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8', 'X-CSRFToken': csrf },
+                body: new URLSearchParams({ exercise: b.dataset.key, group: item.dataset.group }).toString(),
+            }).then((r) => { if (!r.ok) throw new Error(); }).catch(() => {
+                // Not saved: put it back where it was.
+                placeInGroup(b, from);
+                render();
+            });
+        }));
+
+        buttons.forEach((b) => {
+            b.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                if (menuFor === b) return;
+                openMenu(b, e.clientX, e.clientY);
+            });
+            b.addEventListener('pointerdown', (e) => {
+                if (e.pointerType === 'mouse') return;
+                const x = e.clientX, y = e.clientY;
+                hold = { b, x, y, timer: setTimeout(() => {
+                    b._held = true;
+                    if (navigator.vibrate) navigator.vibrate(8);
+                    openMenu(b, x, y);
+                }, 480) };
+            });
+            b.addEventListener('pointermove', (e) => {
+                if (hold && Math.hypot(e.clientX - hold.x, e.clientY - hold.y) > 8) { clearTimeout(hold.timer); hold = null; }
+            });
+            ['pointerup', 'pointercancel', 'pointerleave'].forEach((type) => b.addEventListener(type, () => {
+                if (hold) { clearTimeout(hold.timer); hold = null; }
+            }));
+        });
+        document.addEventListener('pointerdown', (e) => {
+            if (menuFor && !menu.contains(e.target) && e.target.closest('.cr-ex') !== menuFor) closeMenu();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (!menuFor) return;
+            if (e.key === 'Escape') { const b = menuFor; closeMenu(); b.focus(); }
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                const at = menuItems.indexOf(document.activeElement);
+                menuItems[(at + (e.key === 'ArrowDown' ? 1 : -1) + menuItems.length) % menuItems.length].focus();
+            }
+        });
+        window.addEventListener('scroll', closeMenu, { passive: true });
 
         pickedList.addEventListener('click', (e) => {
             const row = e.target.closest('.cr-row');
@@ -422,7 +562,7 @@
                     b.hidden = !hit;
                     if (hit) hits += 1;
                 });
-                g.hidden = q && hits === 0;
+                g.hidden = q ? hits === 0 : !g.querySelector('.cr-ex');
                 if (q) g.open = hits > 0;
                 if (hits) any = true;
             });

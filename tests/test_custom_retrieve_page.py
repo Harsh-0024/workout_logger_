@@ -3,7 +3,7 @@ import re
 import unittest
 
 import tests.test_route_regressions as base
-from models import Plan, RepRange, WorkoutLog
+from models import ExerciseGroupChoice, Plan, RepRange, WorkoutLog
 from services.exercise_matching import normalize_exercise_name
 
 
@@ -111,6 +111,44 @@ class TestCustomRetrievePage(unittest.TestCase):
         self.assertEqual(group_of("Mudgal"), "Legs")          # only ever on a Legs day
         self.assertEqual(group_of("Dand"), "Other")           # Chest or Biceps? Can't tell
         self.assertEqual(group_of("Barbell Curl"), "Biceps")  # the name decides, not the day
+
+    def _group_of(self, html, name):
+        at = html.index('data-name="%s"' % name)
+        return re.findall(r'data-group="([^"]+)"', html[:at])[-1]
+
+    def test_moving_an_exercise_is_remembered_and_moving_it_back_forgets(self):
+        user = self._user_with_plan("picker_move")
+        key = normalize_exercise_name("Dumbbell Curl")
+        response = self.client.post("/retrieve/custom/group", data={"exercise": key, "group": "Forearms"})
+        self.assertEqual(response.get_json(), {"ok": True, "group": "Forearms", "auto_group": "Biceps"})
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        self.assertEqual(self._group_of(html, "Dumbbell Curl"), "Forearms")
+        self.assertIn('data-auto="Biceps"', self._button(html, "Dumbbell Curl"))
+        self.assertEqual(self.session.query(ExerciseGroupChoice).filter_by(user_id=user.id).count(), 1)
+
+        self.client.post("/retrieve/custom/group", data={"exercise": key, "group": "Biceps"})
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        self.assertEqual(self._group_of(html, "Dumbbell Curl"), "Biceps")
+        self.assertEqual(self.session.query(ExerciseGroupChoice).filter_by(user_id=user.id).count(), 0)
+
+    def test_moves_belong_to_one_account(self):
+        self._user_with_plan("picker_move_a")
+        self.client.post("/retrieve/custom/group", data={"exercise": normalize_exercise_name("Dumbbell Curl"), "group": "Other"})
+        self._user_with_plan("picker_move_b")
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        self.assertEqual(self._group_of(html, "Dumbbell Curl"), "Biceps")
+
+    def test_unknown_exercises_or_groups_are_refused(self):
+        self._user_with_plan("picker_move_bad")
+        for data in ({"exercise": "no such lift", "group": "Chest"},
+                     {"exercise": normalize_exercise_name("Dumbbell Curl"), "group": "Glutes"}):
+            self.assertEqual(self.client.post("/retrieve/custom/group", data=data).status_code, 400)
+
+    def test_an_empty_group_is_still_there_to_move_into(self):
+        self._user_with_plan("picker_empty_group")
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        self.assertIn('data-group="Other" hidden', html)
+        self.assertIn('role="menuitemradio" aria-checked="false" data-group="Other"', html)
 
 
 if __name__ == "__main__":

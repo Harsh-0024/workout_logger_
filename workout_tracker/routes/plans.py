@@ -20,6 +20,7 @@ from services.retrieve import (
     is_plan_owner,
     record_custom_retrieval,
     set_custom_retrieval_sort_preference,
+    set_exercise_group_choice,
 )
 from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
 from utils.logger import logger
@@ -205,9 +206,10 @@ def register_plan_routes(app):
         groups = {name: [] for name in CUSTOM_PICKER_GROUPS}
         for item in catalog:
             groups.setdefault(item.get('group') or 'Other', []).append(item)
+        # Empty groups are kept (hidden) so an exercise can be moved into them.
         return [
             {'name': name, 'items': sorted(items, key=lambda i: (not i.get('yours'), i['name'].casefold()))}
-            for name, items in groups.items() if items
+            for name, items in groups.items()
         ]
 
     def _custom_set_overrides(selected_keys, two_set_keys, set_counts):
@@ -307,6 +309,23 @@ def register_plan_routes(app):
     def retrieve_custom_review():
         # Picking, sets and order all happen on the one Custom workout page now.
         return redirect(url_for('retrieve_custom'))
+
+    @login_required
+    def save_exercise_group():
+        """Long-press "Move to…" on the Custom workout page."""
+        key = str(request.form.get('exercise') or '').strip()
+        group = str(request.form.get('group') or '').strip()
+        catalog = get_custom_retrieval_exercise_catalog(Session, current_user, sort_mode='alpha_asc')
+        item = next((i for i in catalog if i['key'] == key), None)
+        if item is None or group not in CUSTOM_PICKER_GROUPS:
+            return jsonify({'ok': False, 'error': 'Unknown exercise or group.'}), 400
+        try:
+            set_exercise_group_choice(Session, current_user, key, group, item['auto_group'])
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"Error saving exercise group: {e}", exc_info=True)
+            return jsonify({'ok': False, 'error': 'Could not save that right now.'}), 500
+        return jsonify({'ok': True, 'group': group, 'auto_group': item['auto_group']})
 
     @login_required
     def save_custom_retrieval_sort_preference():
@@ -454,6 +473,12 @@ def register_plan_routes(app):
         endpoint='retrieve_custom_review',
         view_func=retrieve_custom_review,
         methods=['GET', 'POST'],
+    )
+    app.add_url_rule(
+        '/retrieve/custom/group',
+        endpoint='save_exercise_group',
+        view_func=save_exercise_group,
+        methods=['POST'],
     )
     app.add_url_rule(
         '/retrieve/custom/sort-preference',

@@ -96,6 +96,7 @@ class User(Base):
     custom_retrieval_preference = relationship("CustomRetrievalPreference", uselist=False, back_populates="user", cascade="all, delete-orphan")
     stats_preference = relationship("StatsPreference", uselist=False, back_populates="user", cascade="all, delete-orphan")
     stats_exercise_views = relationship("StatsExerciseView", back_populates="user", cascade="all, delete-orphan")
+    exercise_groups = relationship("ExerciseGroupChoice", back_populates="user", cascade="all, delete-orphan")
     
     def is_admin(self):
         """Check if user has admin role."""
@@ -385,6 +386,22 @@ class StatsExerciseView(Base):
     )
 
 
+class ExerciseGroupChoice(Base):
+    """A user moving an exercise to another muscle group on the Custom workout page."""
+    __tablename__ = 'exercise_group_choices'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    exercise_key = Column(String(160), nullable=False)
+    group_name = Column(String(32), nullable=False)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
+
+    user = relationship("User", back_populates="exercise_groups")
+
+    __table_args__ = (
+        Index('idx_exercise_group_choice_user_exercise', 'user_id', 'exercise_key', unique=True),
+    )
+
+
 class AppIcon(Base):
     """The app icon an admin uploaded, stored here so every host serves the same one.
 
@@ -579,6 +596,9 @@ def migrate_schema():
 
             if 'app_icon' not in inspector.get_table_names():
                 AppIcon.__table__.create(bind=conn, checkfirst=True)
+
+            if 'exercise_group_choices' not in inspector.get_table_names():
+                ExerciseGroupChoice.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
