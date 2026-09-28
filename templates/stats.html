@@ -2174,6 +2174,10 @@
         const from = currentRange === 'all' ? '' : String(rangeStartLabel || '');
         let newBests = 0;
         let top = null;
+        // "Most improved" only looks at your main lifts (the heavier half, with a few sessions),
+        // so a light ab exercise or odd early logs can't claim +1000%.
+        const bases = exercises.map(ex => Number(ex.baseline) || 0).sort((a, b) => a - b);
+        const mainLift = bases.length ? bases[Math.floor((bases.length - 1) / 2)] : 0;
         exercises.forEach((ex) => {
             const days = Array.isArray(ex.days) ? ex.days : [];
             const vals = Array.isArray(ex.values) ? ex.values : [];
@@ -2192,7 +2196,8 @@
             // Best in the range vs. best before it (all time: vs. where you started), so one
             // light day never counts as a big jump.
             const ref = currentRange === 'all' ? Number(ex.baseline) : bestBefore;
-            if (bestIn && ref > 0) {
+            const isMain = (Number(ex.baseline) || 0) >= mainLift && days.length >= 4;
+            if (isMain && bestIn && ref > 0) {
                 const pct = ((bestIn / ref) - 1) * 100;
                 if (pct >= 0.5 && (!top || pct > top.pct)) top = { name: ex.name, pct };
             }
