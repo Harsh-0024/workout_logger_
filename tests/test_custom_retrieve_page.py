@@ -56,22 +56,17 @@ class TestCustomRetrievePage(unittest.TestCase):
         html = self.client.get("/retrieve/custom").get_data(as_text=True)
         self.assertIn('data-sets="4"', self._button(html, "Barbell Curl"))
 
-    def test_set_counts_follow_the_order_and_only_change_what_you_changed(self):
+    def test_set_counts_follow_the_order_and_are_always_written(self):
         self._user_with_plan("picker_sets")
         keys = [normalize_exercise_name(n) for n in ("Overhead Press", "Cable Fly", "Flat Barbell Press")]
-        page = self.client.post("/retrieve/custom", data={"exercise": keys, "set_count": ["4", "3", "5"]}).get_data(as_text=True)
-        self.assertIn("Overhead Press - [4, 6-8]", page)   # unchanged
-        self.assertIn("Cable Fly - [3, 12-20]", page)      # 2 -> 3
-        self.assertIn("Flat Barbell Press - [5, 5–8]", page)
+        page = self.client.post("/retrieve/custom", data={"exercise": keys, "set_count": ["4", "3", "3"]}).get_data(as_text=True)
+        self.assertIn("Overhead Press - [4, 6-8]", page)
+        self.assertIn("Cable Fly - [3, 12-20]", page)          # 2 -> 3
+        self.assertIn("Flat Barbell Press - [3, 5–8]", page)  # the 3 the page showed, spelled out
+        self.assertIn("3 × 5–8", page)
         self.assertLess(page.index("Overhead Press - ["), page.index("Cable Fly - ["))
         self.assertLess(page.index("Cable Fly - ["), page.index("Flat Barbell Press - ["))
         self.assertIn("3 exercises", page)
-
-    def test_default_sets_leave_the_plan_line_as_it_is(self):
-        self._user_with_plan("picker_defaults")
-        key = normalize_exercise_name("Flat Barbell Press")
-        page = self.client.post("/retrieve/custom", data={"exercise": [key], "set_count": ["3"]}).get_data(as_text=True)
-        self.assertIn("Flat Barbell Press - [5–8]", page)
 
     def test_bad_set_counts_are_refused(self):
         self._user_with_plan("picker_bad_sets")
@@ -80,6 +75,42 @@ class TestCustomRetrievePage(unittest.TestCase):
             response = self.client.post("/retrieve/custom", data={"exercise": [key], "set_count": [bad]})
             self.assertEqual(response.status_code, 302)
             self.assertTrue(response.headers["Location"].endswith("/retrieve/custom"))
+
+    def test_spelling_twins_in_the_history_join_the_plan_exercise(self):
+        user = self._create_logged_in_user(username="picker_twins")
+        self.session.add(Plan(user_id=user.id, text_content="Pull 1\nDumbbell Lat Row - [2, 8-12]\n"))
+        self.session.add(WorkoutLog(user_id=user.id, date=base.datetime(2026, 9, 1), workout_name="Back",
+                                    exercise="Lat Dumbbell Rows", exercise_string="x", sets_json={}))
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        self.assertIn('data-name="Dumbbell Lat Row"', html)
+        self.assertNotIn('data-name="Lat Dumbbell Rows"', html)
+        self.assertNotIn('data-name="Unknown Exercise"', html)
+
+    def test_an_exercise_with_no_target_of_its_own_still_gets_its_sets(self):
+        user = self._user_with_plan("picker_no_target")
+        self.session.add(WorkoutLog(user_id=user.id, date=base.datetime(2026, 9, 1), workout_name="Back",
+                                    exercise="Superman", exercise_string="x", sets_json={}))
+        self.session.commit()
+        page = self.client.post("/retrieve/custom", data={"exercise": ["superman"], "set_count": ["3"]}).get_data(as_text=True)
+        self.assertIn("Superman - [3]", page)
+
+    def test_names_that_say_nothing_follow_the_plan_only_when_it_is_clear(self):
+        user = self._create_logged_in_user(username="picker_plan_fallback")
+        self.session.add(Plan(user_id=user.id, text_content=(
+            "Session 1 - Legs\nMudgal\nLeg Press\n\n"
+            "Session 2 - Chest & Biceps\nDand\nBarbell Curl\n"
+        )))
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+
+        def group_of(name):
+            at = html.index('data-name="%s"' % name)
+            return re.findall(r'data-group="([^"]+)"', html[:at])[-1]
+
+        self.assertEqual(group_of("Mudgal"), "Legs")          # only ever on a Legs day
+        self.assertEqual(group_of("Dand"), "Other")           # Chest or Biceps? Can't tell
+        self.assertEqual(group_of("Barbell Curl"), "Biceps")  # the name decides, not the day
 
 
 if __name__ == "__main__":

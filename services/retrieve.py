@@ -335,7 +335,9 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     """Return selectable exercises from the plan, shared catalogue, and user history."""
     catalog = {}
 
-    def add_exercise(raw_exercise, *, preserve_plan_details=False, yours=False):
+    key_by_signature = {}
+
+    def add_exercise(raw_exercise, *, preserve_plan_details=False, yours=False, merge_twins=False):
         raw_value = str(raw_exercise or "").strip()
         if not raw_value:
             return
@@ -343,8 +345,18 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         parsed = _parse_plan_exercise_line(raw_value)
         display_name = str(parsed.get("name") or raw_value).strip()
         key = normalize_exercise_name(display_name)
-        if not key:
+        if not key or key == "unknown exercise":
             return
+        # "Lat Dumbbell Rows" in the history is the plan's "Dumbbell Lat Row": the same
+        # words in another order. Keep one row, under the name already in the list.
+        signature = token_signature(display_name)
+        twin = key_by_signature.get(signature) if signature else None
+        if merge_twins and twin and twin != key and key not in catalog:
+            if yours:
+                catalog[twin]["yours"] = True
+            return
+        if signature:
+            key_by_signature.setdefault(signature, key)
 
         # A plan item may carry inline set/rep targets, so it wins over the
         # generic catalogue or a logged-name variant for the same exercise.
@@ -372,7 +384,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
                     add_exercise(exercise, preserve_plan_details=True, yours=True)
 
     for exercise in list_of_exercises:
-        add_exercise(exercise)
+        add_exercise(exercise, merge_twins=True)
 
     logged_exercises = (
         db_session.query(WorkoutLog.exercise)
@@ -382,9 +394,9 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     )
     for row in logged_exercises or []:
         try:
-            add_exercise(row[0], yours=True)
+            add_exercise(row[0], yours=True, merge_twins=True)
         except (IndexError, KeyError, TypeError):
-            add_exercise(row, yours=True)
+            add_exercise(row, yours=True, merge_twins=True)
 
     cutoff = datetime.now() - timedelta(days=CUSTOM_RETRIEVAL_HISTORY_DAYS)
     usage_rows = (
@@ -408,6 +420,20 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         for row in usage_rows or []
     }
 
+    # For each plan exercise, the muscles named in the titles of the days it is on.
+    plan_parts = {}
+    session_titles = plan_data.get("session_titles", {}) if isinstance(plan_data, dict) else {}
+    if isinstance(workout_map, dict):
+        for category, day_map in workout_map.items():
+            if not isinstance(day_map, dict):
+                continue
+            for day_name, exercises in day_map.items():
+                day_id = str(day_name).rsplit(" ", 1)[-1]
+                parts = set(split_title(title_from_plan_day(category, day_name, (session_titles or {}).get(day_id))))
+                for exercise in exercises if isinstance(exercises, list) else []:
+                    name = str(_parse_plan_exercise_line(str(exercise)).get("name") or exercise)
+                    plan_parts.setdefault(normalize_exercise_name(name), []).append(parts)
+
     custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
     for key, item in catalog.items():
         usage = usage_by_key.get(key, {})
@@ -422,7 +448,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         item["rep_range"] = (
             custom_ranges.get(item["name"].lower()) or custom_ranges.get(key) or parsed.get("inline_range") or ""
         )
-        item["group"] = _picker_group(item["name"])
+        item["group"] = _picker_group(item["name"], plan_parts.get(key))
 
     mode = sort_mode if sort_mode in CUSTOM_RETRIEVAL_SORT_MODES else get_custom_retrieval_sort_preference(db_session, user)
     return _sort_custom_retrieval_catalog(list(catalog.values()), mode)
@@ -482,8 +508,19 @@ def _parse_rep_ranges_text(rep_text):
 CUSTOM_PICKER_GROUPS = ("Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms", "Legs", "Abs", "Other")
 
 
-def _picker_group(name) -> str:
+def _picker_group(name, plan_day_parts=None) -> str:
+    """The exercise's muscle, from its name first.
+
+    When the name doesn't say (a "Superman", a "Mudgal"), the plan decides, but only
+    when every day the exercise is on names the same single muscle; an exercise that
+    only sits on "Chest & Biceps" days could be either, so it stays in Other.
+    """
     muscles = classify_by_name(name)
+    if not muscles and plan_day_parts:
+        common = set.intersection(*[set(parts) for parts in plan_day_parts])
+        common &= set(CUSTOM_PICKER_GROUPS) - {"Other"}
+        if len(common) == 1:
+            muscles = common
     for group in CUSTOM_PICKER_GROUPS:
         if group in muscles:
             return group

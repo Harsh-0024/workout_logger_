@@ -210,9 +210,8 @@ def register_plan_routes(app):
             for name, items in groups.items() if items
         ]
 
-    def _custom_set_overrides(catalog, selected_keys, two_set_keys, set_counts):
-        """Sets per exercise that differ from what its plan or rep ranges already say."""
-        defaults = {item['key']: item.get('default_sets') or 3 for item in catalog}
+    def _custom_set_overrides(selected_keys, two_set_keys, set_counts):
+        """The sets shown on the page for each exercise, so the plan says exactly what the picker did."""
         overrides = {}
         if set_counts and len(set_counts) == len(selected_keys):
             for key, raw in zip(selected_keys, set_counts):
@@ -222,8 +221,7 @@ def register_plan_routes(app):
                     raise ValueError('Invalid set selection.')
                 if not 1 <= count <= 10:
                     raise ValueError('Invalid set selection.')
-                if count != defaults.get(key):
-                    overrides[key] = count
+                overrides[key] = count
             return overrides
         # Older pages sent only the exercises switched to two sets.
         for key in two_set_keys:
@@ -254,7 +252,7 @@ def register_plan_routes(app):
                     request.form.getlist('two_set_exercise'),
                 )
                 set_overrides = _custom_set_overrides(
-                    catalog, selected_keys, two_set_keys, request.form.getlist('set_count'),
+                    selected_keys, two_set_keys, request.form.getlist('set_count'),
                 )
             except ValueError as error:
                 flash(str(error), 'error')
@@ -268,7 +266,7 @@ def register_plan_routes(app):
             workout_title = workout_title or DEFAULT_CUSTOM_WORKOUT_TITLE
 
             # Give retrieve the full plan line so a plan-only rep range (e.g. "[4, 6-8]")
-            # still guides the output; set_overrides only carries the sets the user changed.
+            # still guides the output; set_overrides carries the sets chosen on the page.
             catalog_by_key = {item['key']: item for item in catalog}
             selected_lines = [
                 catalog_by_key[key].get('exercise_line') or catalog_by_key[key]['name']

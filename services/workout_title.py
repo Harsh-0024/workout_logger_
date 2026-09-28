@@ -40,17 +40,17 @@ _PART_ALIASES = {
 _KEYWORD_RULES: Sequence[Tuple[str, Set[str]]] = (
     (r"crunch|leg raise|knee raise|v ?tuck|\babs?\b|plank|pallof|oblique|sit ?up|ab wheel|ab roller"
      r"|hollow|dead ?bug|russian twist|toe touch|flutter kick|woodchop|mountain climber", {"Abs"}),
-    (r"wrist|forearm|farmer|reverse (?:\w+ )?curl|ulnar|radial|dead hang|gripper", {"Forearms"}),
+    (r"wrist|forearm|farmer|reverse (?:\w+ )?curl|ulnar|radial|dead hang|gripper|arm wrestl", {"Forearms"}),
     (r"squat|leg press|lunge|leg curl|leg extension|calf|hip thrust|adduct|abduct|romanian|\brdl\b"
      r"|glute|hack|step ?up|good morning|split squat|hamstring|quad", {"Legs"}),
-    (r"rear delt|lateral raise|face pull|overhead press|shoulder press|\boh press|military press"
+    (r"rear delt|lateral raise|face pull|overhead press|shoulder (?:\w+ )?press|\boh press|military press"
      r"|upright row|front raise|arnold|\bdelt|shrug", {"Shoulders"}),
     (r"\bdips?\b", {"Chest", "Triceps"}),
     (r"tricep|pushdown|push down|skull ?crusher|overhead extension|\boh extension|kickback|close ?grip (?:bench|press)"
      r"|french press|jm press", {"Triceps"}),
     (r"curl", {"Biceps"}),
     (r"\brows?\b|pull ?ups?|chin ?ups?|pulldown|pull down|pullover|deadlift|hyper ?extension"
-     r"|back extension|\blats?\b|\bt ?bar\b", {"Back"}),
+     r"|back extension|\blats?\b|\bt ?bar\b|superman", {"Back"}),
     (r"bench|chest press|\bpress\b|\bfly\b|\bflyes?\b|flies|push ?ups?|\bpec\b|crossover", {"Chest"}),
 )
 
