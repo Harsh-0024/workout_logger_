@@ -2182,6 +2182,7 @@
     const localToday = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
     const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
     const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+    const weeksOf = (a, b) => Math.max(1, (daysBetween(a, b) + 1) / 7);
 
     // Strength tiles: personal records set in the range, and the exercise that moved most.
     function strengthHighlights(data, rangeStartLabel) {
@@ -2282,7 +2283,6 @@
         changeEl.classList.remove('is-up', 'is-down');
         changeEl.replaceChildren();
 
-        const weeksOf = (a, b) => Math.max(1, (daysBetween(a, b) + 1) / 7);
         const perWeek = Number((countBetween(dayList, win.start, win.end) / weeksOf(win.start, win.end)).toFixed(1));
         valueEl.textContent = perWeek.toFixed(1);
         setText('heroCaption', `workouts a week in ${win.year}`);
@@ -2315,16 +2315,8 @@
         const workoutsText = (n) => `${n} workout${n === 1 ? '' : 's'}`;
         setTile(1, 'Workouts', String(inYear.length), `in ${win.year}`);
 
-        const byMonth = new Array(12).fill(0);
-        inYear.forEach((d) => { byMonth[Number(d.slice(5, 7)) - 1] += 1; });
-        const topMonth = Math.max(...byMonth);
-        if (topMonth > 0) {
-            const m = byMonth.indexOf(topMonth);
-            const name = new Date(win.year, m, 1).toLocaleDateString('en-US', { month: isPhoneChart() ? 'short' : 'long' });
-            setTile(2, 'Busiest month', name, workoutsText(topMonth));
-        } else {
-            setTile(2, 'Busiest month', '–', `in ${win.year}`);
-        }
+        const perWeek = Number((inYear.length / weeksOf(win.start, win.end)).toFixed(1));
+        setTile(2, 'Per week', perWeek.toFixed(1), 'on average');
 
         const byDay = [0, 0, 0, 0, 0, 0, 0];
         inYear.forEach((d) => { byDay[dateOf(d).getDay()] += 1; });
