@@ -10,6 +10,8 @@
     .cr-search { margin-bottom: 22px; }
     .cr .cr-search .form-control { height: 46px; }
     .cr-search input::-webkit-search-decoration { -webkit-appearance: none; }
+    /* While searching, leave room to lift the box to the top, above the keyboard. */
+    .cr.is-searching .cr-pick { min-height: 100vh; }
 
     /* ---- Muscle groups ---- */
     .cr-group > summary { -webkit-tap-highlight-color: transparent; }
@@ -171,7 +173,7 @@
 </style>
 
 <div class="st cr" id="crPage">
-    {{ st.head('Custom workout', 'Pick exercises in the order you’ll do them. Each comes with your best numbers.', back=url_for('retrieve_categories'), back_label='Retrieve') }}
+    {{ st.head('Custom workout', 'Each exercise comes with your best numbers.', back=url_for('retrieve_categories'), back_label='Retrieve') }}
 
     <form method="POST" action="{{ url_for('retrieve_custom') }}" id="crForm" data-no-loading="true" class="st-section">
         <div class="cr-layout">
@@ -572,6 +574,25 @@
                 openBeforeSearch = null;
             }
         });
+
+        // Phones: lift the search box to just under the top bar, so the results sit
+        // above the keyboard instead of behind it (in the browser as well as the app).
+        const liftSearch = () => {
+            if (wide.matches) return;
+            const header = document.querySelector('.mobile-header');
+            const headerBottom = header ? header.getBoundingClientRect().bottom : 0;
+            const top = window.scrollY + search.getBoundingClientRect().top - headerBottom - 12;
+            if (Math.abs(search.getBoundingClientRect().top - headerBottom - 12) > 4) window.scrollTo({ top, behavior: 'smooth' });
+        };
+        const markSearching = () => page.classList.toggle('is-searching', document.activeElement === search || !!search.value);
+        search.addEventListener('focus', () => {
+            markSearching();
+            requestAnimationFrame(liftSearch);
+            // The keyboard's own scroll can land after ours; settle once it has opened.
+            setTimeout(liftSearch, 350);
+        });
+        search.addEventListener('blur', markSearching);
+        search.addEventListener('input', markSearching);
 
         // Enter in the search box only closes the keyboard; it never sends the workout.
         search.addEventListener('keydown', (e) => {
