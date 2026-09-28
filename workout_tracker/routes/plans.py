@@ -1,11 +1,12 @@
 from datetime import datetime
 
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 
 from list_of_exercise import get_workout_days
 from models import Plan, RepRange, Session
 from services.retrieve import (
+    CUSTOM_PICKER_GROUPS,
     CUSTOM_RETRIEVAL_SORT_MODES,
     generate_custom_retrieve_output,
     describe_retrieve_output,
@@ -13,7 +14,6 @@ from services.retrieve import (
     DEFAULT_CUSTOM_WORKOUT_TITLE,
     get_custom_retrieval_exercise_catalog,
     infer_custom_workout_title,
-    get_custom_retrieval_sort_preference,
     get_admin_display_name,
     get_effective_plan_text,
     _own_plan_text,
@@ -26,7 +26,6 @@ from utils.logger import logger
 from utils.validators import sanitize_text_input
 
 
-CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY = 'custom_retrieval_draft'
 
 
 def _resolve_custom_retrieval_selection(catalog, selected_keys, two_set_keys):
@@ -201,38 +200,51 @@ def register_plan_routes(app):
             flash("Error generating workout plan.", "error")
             return redirect(url_for('retrieve_categories'))
 
+    def _custom_picker_groups(catalog):
+        """The picker's muscle groups: your own exercises first, then the rest, each A-Z."""
+        groups = {name: [] for name in CUSTOM_PICKER_GROUPS}
+        for item in catalog:
+            groups.setdefault(item.get('group') or 'Other', []).append(item)
+        return [
+            {'name': name, 'items': sorted(items, key=lambda i: (not i.get('yours'), i['name'].casefold()))}
+            for name, items in groups.items() if items
+        ]
+
+    def _custom_set_overrides(catalog, selected_keys, two_set_keys, set_counts):
+        """Sets per exercise that differ from what its plan or rep ranges already say."""
+        defaults = {item['key']: item.get('default_sets') or 3 for item in catalog}
+        overrides = {}
+        if set_counts and len(set_counts) == len(selected_keys):
+            for key, raw in zip(selected_keys, set_counts):
+                try:
+                    count = int(raw)
+                except (TypeError, ValueError):
+                    raise ValueError('Invalid set selection.')
+                if not 1 <= count <= 10:
+                    raise ValueError('Invalid set selection.')
+                if count != defaults.get(key):
+                    overrides[key] = count
+            return overrides
+        # Older pages sent only the exercises switched to two sets.
+        for key in two_set_keys:
+            overrides[key] = 2
+        return overrides
+
     @login_required
     def retrieve_custom():
         user = current_user
 
         try:
-            sort_mode = get_custom_retrieval_sort_preference(Session, user)
-            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode=sort_mode)
+            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode='alpha_asc')
             if not catalog:
                 flash("No exercises are available to retrieve yet.", "info")
                 return redirect(url_for('set_plan'))
 
             if request.method == 'GET':
-                draft = session.get(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, {})
-                draft_selected_keys = draft.get('selected_keys', []) if isinstance(draft, dict) else []
-                draft_two_set_keys = draft.get('two_set_keys', []) if isinstance(draft, dict) else []
-                if draft_selected_keys:
-                    try:
-                        draft_selected_keys, _, draft_two_set_keys = _resolve_custom_retrieval_selection(
-                            catalog,
-                            draft_selected_keys,
-                            draft_two_set_keys,
-                        )
-                    except ValueError:
-                        session.pop(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, None)
-                        draft_selected_keys = []
-                        draft_two_set_keys = []
                 return render_template(
                     'retrieve_custom.html',
+                    groups=_custom_picker_groups(catalog),
                     exercises=catalog,
-                    sort_mode=sort_mode,
-                    draft_selected_keys=draft_selected_keys,
-                    draft_two_set_keys=draft_two_set_keys,
                 )
 
             try:
@@ -241,19 +253,12 @@ def register_plan_routes(app):
                     request.form.getlist('exercise'),
                     request.form.getlist('two_set_exercise'),
                 )
+                set_overrides = _custom_set_overrides(
+                    catalog, selected_keys, two_set_keys, request.form.getlist('set_count'),
+                )
             except ValueError as error:
                 flash(str(error), 'error')
                 return redirect(url_for('retrieve_custom'))
-
-            if request.form.get('flow') == 'review':
-                session[CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY] = {
-                    'selected_keys': selected_keys,
-                    'two_set_keys': two_set_keys,
-                }
-                return redirect(url_for('retrieve_custom_review'))
-
-            two_set_keys_set = set(two_set_keys)
-            set_overrides = {key: (2 if key in two_set_keys_set else 3) for key in selected_keys}
 
             try:
                 workout_title = infer_custom_workout_title(Session, user, selected_exercises)
@@ -263,7 +268,7 @@ def register_plan_routes(app):
             workout_title = workout_title or DEFAULT_CUSTOM_WORKOUT_TITLE
 
             # Give retrieve the full plan line so a plan-only rep range (e.g. "[4, 6-8]")
-            # still guides the output; set_overrides keeps the UI set count authoritative.
+            # still guides the output; set_overrides only carries the sets the user changed.
             catalog_by_key = {item['key']: item for item in catalog}
             selected_lines = [
                 catalog_by_key[key].get('exercise_line') or catalog_by_key[key]['name']
@@ -281,7 +286,6 @@ def register_plan_routes(app):
             except Exception as e:
                 Session.rollback()
                 logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
-            session.pop(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, None)
 
             return render_template(
                 'retrieve_plan.html',
@@ -303,64 +307,8 @@ def register_plan_routes(app):
 
     @login_required
     def retrieve_custom_review():
-        user = current_user
-
-        try:
-            sort_mode = get_custom_retrieval_sort_preference(Session, user)
-            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode=sort_mode)
-            if not catalog:
-                flash('No exercises are available to retrieve yet.', 'info')
-                return redirect(url_for('set_plan'))
-
-            if request.method == 'POST':
-                selected_keys = request.form.getlist('exercise')
-                two_set_keys = request.form.getlist('two_set_exercise')
-                if not selected_keys and request.form.get('review_action') == 'add_more':
-                    session[CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY] = {
-                        'selected_keys': [],
-                        'two_set_keys': [],
-                    }
-                    return redirect(url_for('retrieve_custom'))
-                try:
-                    selected_keys, _, two_set_keys = _resolve_custom_retrieval_selection(
-                        catalog,
-                        selected_keys,
-                        two_set_keys,
-                    )
-                except ValueError as error:
-                    flash(str(error), 'error')
-                    return redirect(url_for('retrieve_custom_review'))
-
-                session[CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY] = {
-                    'selected_keys': selected_keys,
-                    'two_set_keys': two_set_keys,
-                }
-                return redirect(url_for('retrieve_custom'))
-
-            draft = session.get(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, {})
-            selected_keys = draft.get('selected_keys', []) if isinstance(draft, dict) else []
-            two_set_keys = draft.get('two_set_keys', []) if isinstance(draft, dict) else []
-            try:
-                selected_keys, _, two_set_keys = _resolve_custom_retrieval_selection(
-                    catalog,
-                    selected_keys,
-                    two_set_keys,
-                )
-            except ValueError as error:
-                session.pop(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, None)
-                flash(str(error), 'error')
-                return redirect(url_for('retrieve_custom'))
-
-            catalog_by_key = {item['key']: item for item in catalog}
-            return render_template(
-                'retrieve_custom_review.html',
-                exercises=[catalog_by_key[key] for key in selected_keys],
-                two_set_keys=two_set_keys,
-            )
-        except Exception as e:
-            logger.error(f'Error loading custom workout review: {e}', exc_info=True)
-            flash('Error loading your selected exercises.', 'error')
-            return redirect(url_for('retrieve_custom'))
+        # Picking, sets and order all happen on the one Custom workout page now.
+        return redirect(url_for('retrieve_custom'))
 
     @login_required
     def save_custom_retrieval_sort_preference():

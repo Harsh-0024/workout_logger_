@@ -31,7 +31,7 @@ from services.exercise_matching import (
     resolve_equivalent_names,
     token_signature,
 )
-from services.workout_title import infer_workout_title, split_title, title_from_plan_day
+from services.workout_title import classify_by_name, infer_workout_title, split_title, title_from_plan_day
 from parsers.workout import _parse_plan_exercise_line, parse_bw_weight
 
 
@@ -335,7 +335,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     """Return selectable exercises from the plan, shared catalogue, and user history."""
     catalog = {}
 
-    def add_exercise(raw_exercise, *, preserve_plan_details=False):
+    def add_exercise(raw_exercise, *, preserve_plan_details=False, yours=False):
         raw_value = str(raw_exercise or "").strip()
         if not raw_value:
             return
@@ -353,7 +353,10 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
                 "key": key,
                 "name": display_name,
                 "exercise_line": raw_value if preserve_plan_details else display_name,
+                "yours": bool(yours) or bool(catalog.get(key, {}).get("yours")),
             }
+        elif yours:
+            catalog[key]["yours"] = True
 
     plan_text = get_effective_plan_text(db_session, user)
     plan_data = get_workout_days(plan_text or "")
@@ -366,7 +369,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
                 if not isinstance(exercises, list):
                     continue
                 for exercise in exercises:
-                    add_exercise(exercise, preserve_plan_details=True)
+                    add_exercise(exercise, preserve_plan_details=True, yours=True)
 
     for exercise in list_of_exercises:
         add_exercise(exercise)
@@ -379,9 +382,9 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     )
     for row in logged_exercises or []:
         try:
-            add_exercise(row[0])
+            add_exercise(row[0], yours=True)
         except (IndexError, KeyError, TypeError):
-            add_exercise(row)
+            add_exercise(row, yours=True)
 
     cutoff = datetime.now() - timedelta(days=CUSTOM_RETRIEVAL_HISTORY_DAYS)
     usage_rows = (
@@ -405,10 +408,21 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         for row in usage_rows or []
     }
 
+    custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
     for key, item in catalog.items():
         usage = usage_by_key.get(key, {})
         item["retrieval_count"] = int(usage.get("count") or 0)
         item["last_retrieved_at"] = usage.get("last_retrieved_at")
+        # The same sets and reps a plan retrieve would give this exercise.
+        parsed = _parse_plan_exercise_line(item["exercise_line"])
+        declared = parsed.get("declared_sets")
+        if declared is None:
+            declared = custom_sets.get(item["name"].lower(), custom_sets.get(key))
+        item["default_sets"] = int(declared) if isinstance(declared, int) and declared > 0 else 3
+        item["rep_range"] = (
+            custom_ranges.get(item["name"].lower()) or custom_ranges.get(key) or parsed.get("inline_range") or ""
+        )
+        item["group"] = _picker_group(item["name"])
 
     mode = sort_mode if sort_mode in CUSTOM_RETRIEVAL_SORT_MODES else get_custom_retrieval_sort_preference(db_session, user)
     return _sort_custom_retrieval_catalog(list(catalog.values()), mode)
@@ -433,6 +447,49 @@ def _retrieve_date_string() -> str:
     return f"{today.day}/{today.month}/{today.year % 100:02d}"
 
 
+def _parse_rep_ranges_text(rep_text):
+    """Rep-range settings ("Bench Press: 3, 6-8") -> (ranges, set counts), keyed by lower and normalised name."""
+    custom_ranges = {}
+    custom_sets = {}
+    for line in (rep_text or "").split('\n'):
+        if ':' not in line:
+            continue
+        k, v = line.split(':', 1)
+        exercise_key_raw = k.strip()
+        exercise_key = exercise_key_raw.lower()
+        exercise_key_norm = normalize_exercise_name(exercise_key_raw)
+        value = v.strip()
+        m = re.match(r'^(\d+)\s*,\s*(.+)$', value)
+        if m:
+            try:
+                set_count = int(m.group(1))
+            except Exception:
+                set_count = None
+            range_value = m.group(2).strip()
+            custom_sets[exercise_key] = set_count
+            custom_ranges[exercise_key] = range_value
+            if exercise_key_norm:
+                custom_sets[exercise_key_norm] = set_count
+                custom_ranges[exercise_key_norm] = range_value
+        else:
+            custom_ranges[exercise_key] = value
+            if exercise_key_norm:
+                custom_ranges[exercise_key_norm] = value
+    return custom_ranges, custom_sets
+
+
+# Muscle groups for the custom workout picker, in the order they are shown.
+CUSTOM_PICKER_GROUPS = ("Chest", "Back", "Shoulders", "Biceps", "Triceps", "Forearms", "Legs", "Abs", "Other")
+
+
+def _picker_group(name) -> str:
+    muscles = classify_by_name(name)
+    for group in CUSTOM_PICKER_GROUPS:
+        if group in muscles:
+            return group
+    return "Other"
+
+
 def _generate_retrieve_output_for_exercises(db_session, user, exercises, *, header_line, set_overrides=None):
     exercise_lines = [str(exercise or "").strip() for exercise in exercises or []]
     exercise_lines = [exercise for exercise in exercise_lines if exercise]
@@ -449,33 +506,7 @@ def _generate_retrieve_output_for_exercises(db_session, user, exercises, *, head
     )
     logged_exercise_index = build_name_index([row[0] for row in distinct_logged or []])
 
-    rep_text = get_effective_rep_ranges_text(db_session, user)
-    custom_ranges = {}
-    custom_sets = {}
-    if rep_text:
-        for line in rep_text.split('\n'):
-            if ':' in line:
-                k, v = line.split(':', 1)
-                exercise_key_raw = k.strip()
-                exercise_key = exercise_key_raw.lower()
-                exercise_key_norm = normalize_exercise_name(exercise_key_raw)
-                value = v.strip()
-                m = re.match(r'^(\d+)\s*,\s*(.+)$', value)
-                if m:
-                    try:
-                        set_count = int(m.group(1))
-                    except Exception:
-                        set_count = None
-                    range_value = m.group(2).strip()
-                    custom_sets[exercise_key] = set_count
-                    custom_ranges[exercise_key] = range_value
-                    if exercise_key_norm:
-                        custom_sets[exercise_key_norm] = set_count
-                        custom_ranges[exercise_key_norm] = range_value
-                else:
-                    custom_ranges[exercise_key] = value
-                    if exercise_key_norm:
-                        custom_ranges[exercise_key_norm] = value
+    custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
 
     output_lines = [header_line, ""]
     bodyweight_line = _format_bodyweight_line(db_session, user)
