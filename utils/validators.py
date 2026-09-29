@@ -4,6 +4,7 @@ Input validation utilities.
 import re
 import html
 from typing import Optional
+from urllib.parse import urljoin, urlsplit
 from utils.errors import ValidationError
 
 
@@ -115,3 +116,16 @@ def validate_password(password: str) -> str:
         raise ValidationError("Password must contain at least one number")
     
     return password
+
+
+def is_safe_redirect_url(target: Optional[str], host_url: str) -> bool:
+    """True when ``target`` (e.g. a ``?next=`` value) stays on this site.
+
+    Browsers read a backslash like a slash, so ``/\\evil.com`` means
+    ``//evil.com``; backslashes and control characters are refused outright.
+    """
+    if not target or '\\' in target or any(ord(ch) < 32 or ord(ch) == 127 for ch in target):
+        return False
+    ref = urlsplit(host_url)
+    test = urlsplit(urljoin(host_url, target))
+    return test.scheme in ('http', 'https') and test.netloc == ref.netloc

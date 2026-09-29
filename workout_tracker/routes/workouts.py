@@ -39,7 +39,7 @@ from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
 from utils.profile_images import get_profile_image_url
 from utils.rich_text import to_plain_text
-from utils.validators import sanitize_text_input, validate_username
+from utils.validators import is_safe_redirect_url, sanitize_text_input, validate_username
 
 
 SHORTCUT_KEY_HELP = (
@@ -3402,9 +3402,12 @@ def register_workout_routes(app):
         choice = (request.args.get('is_timed') or '').strip().lower()
         next_url = (request.args.get('next') or '').strip()
 
+        if not is_safe_redirect_url(next_url, request.host_url):
+            next_url = url_for('log_workout')
+
         if not exercise_name or choice not in {'yes', 'no'}:
             flash("Invalid timed exercise preference request.", "error")
-            return redirect(next_url or url_for('log_workout'))
+            return redirect(next_url)
 
         try:
             set_timed_exercise_preference(Session, user.id, exercise_name, choice == 'yes')
@@ -3420,9 +3423,7 @@ def register_workout_routes(app):
             logger.error(f"Error saving timed preference: {e}", exc_info=True)
             flash("Could not save timed preference. Please try again.", "error")
 
-        if next_url.startswith('/'):
-            return redirect(next_url)
-        return redirect(url_for('log_workout'))
+        return redirect(next_url)
 
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
     app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])

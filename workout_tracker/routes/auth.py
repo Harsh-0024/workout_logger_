@@ -3,7 +3,6 @@ import re
 import json
 import secrets
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
 
 from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import login_required, login_user, logout_user, current_user
@@ -38,7 +37,7 @@ from utils.profile_images import (
     has_r2_profile_image_storage,
     normalize_profile_image_key,
 )
-from utils.validators import sanitize_text_input, validate_username
+from utils.validators import is_safe_redirect_url, sanitize_text_input, validate_username
 
 from .decorators import dev_only, require_admin
 
@@ -119,11 +118,7 @@ def _infer_bulk_import_dates(headers, today: date | None = None):
 
 def register_auth_routes(app, email_service):
     def _is_safe_redirect_url(target: str) -> bool:
-        if not target:
-            return False
-        ref_url = urlparse(request.host_url)
-        test_url = urlparse(urljoin(request.host_url, target))
-        return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+        return is_safe_redirect_url(target, request.host_url)
 
     def _get_client_ip() -> str:
         forwarded = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()

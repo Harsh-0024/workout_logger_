@@ -103,6 +103,17 @@ class TestRouteRegressions(unittest.TestCase):
             sess["_id"] = "route-test-session"
         return user
 
+    def test_timed_preference_only_redirects_within_the_site(self):
+        self._create_logged_in_user(username="timed_redirect_user")
+        for next_url in ("//evil.com", "/\\evil.com", "https://evil.com/"):
+            for query in (f"exercise=Plank&is_timed=yes&next={next_url}", f"next={next_url}"):
+                response = self.client.get(f"/timed-preference/set?{query}")
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.headers["Location"], "/log", query)
+
+        response = self.client.get("/timed-preference/set?exercise=Plank&is_timed=no&next=/workout/2026-09-30")
+        self.assertEqual(response.headers["Location"], "/workout/2026-09-30")
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 
