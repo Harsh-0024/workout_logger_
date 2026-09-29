@@ -444,6 +444,27 @@ class TestWorkoutQualityScorer(unittest.TestCase):
 
 
 
+class TestWorkoutDates(unittest.TestCase):
+    NOW = __import__("datetime").datetime(2026, 9, 30, 18, 0)
+
+    def _date(self, title):
+        parsed = workout_parser(f"{title}\nSquat\n100, 5", now=self.NOW)
+        return parsed["date"].date().isoformat(), parsed["date_found"], parsed["workout_name"]
+
+    def test_a_written_year_is_kept(self):
+        # A workout from last year pasted from Notes stays on its own day.
+        self.assertEqual(self._date("15/3/25 Push"), ("2025-03-15", True, "Push"))
+        self.assertEqual(self._date("30/9/25 Push"), ("2025-09-30", True, "Push"))
+        self.assertEqual(self._date("15/3/2024 Push"), ("2024-03-15", True, "Push"))
+        self.assertEqual(self._date("15.3.25 Push"), ("2025-03-15", True, "Push"))
+        self.assertEqual(self._date("30/9/26 Push"), ("2026-09-30", True, "Push"))
+
+    def test_without_a_year_the_nearest_past_date_is_used(self):
+        self.assertEqual(self._date("15/3 Push"), ("2026-03-15", True, "Push"))
+        self.assertEqual(self._date("28/12 Push"), ("2025-12-28", True, "Push"))
+
+
+
 class TestSetLinesWrittenInCommonWays(unittest.TestCase):
     """Set lines people type or paste from Notes, read as sets rather than as exercise names."""
 

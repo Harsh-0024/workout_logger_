@@ -550,6 +550,9 @@ def workout_parser(
     if len(date_nums) >= 2:
         parsed_month = int(date_nums[1])
         year = current_year - 1 if parsed_month > now.month + 1 else current_year
+        # A written year wins ("15/3/25" is 2025, not this year's 15 March).
+        if len(date_nums) >= 3 and len(date_nums[2]) in (2, 4):
+            year = int(date_nums[2]) + (2000 if len(date_nums[2]) == 2 else 0)
         try:
             date_obj = datetime.strptime(f"{date_nums[0]}-{date_nums[1]}-{year}", "%d-%m-%Y")
             date_found = True
