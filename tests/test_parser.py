@@ -459,6 +459,17 @@ class TestWorkoutDates(unittest.TestCase):
         self.assertEqual(self._date("15.3.25 Push"), ("2025-03-15", True, "Push"))
         self.assertEqual(self._date("30/9/26 Push"), ("2026-09-30", True, "Push"))
 
+    def test_dates_with_month_names(self):
+        self.assertEqual(self._date("30 Sep Push"), ("2026-09-30", True, "Push"))
+        self.assertEqual(self._date("Sep 30 Push"), ("2026-09-30", True, "Push"))
+        self.assertEqual(self._date("30 Sep 25 Push"), ("2025-09-30", True, "Push"))
+        self.assertEqual(self._date("30 September 2024 - Push"), ("2024-09-30", True, "Push"))
+        self.assertEqual(self._date("Oct 1st, 2025: Legs"), ("2025-10-01", True, "Legs"))
+        self.assertEqual(self._date("28 Dec Push"), ("2025-12-28", True, "Push"))
+        # Titles that only look like it stay titles.
+        for title in ("30 Min Cardio", "3 Sets Of Squats", "May Day Workout", "31 Feb Push"):
+            self.assertEqual(self._date(title), ("2026-09-30", False, title), title)
+
     def test_without_a_year_the_nearest_past_date_is_used(self):
         self.assertEqual(self._date("15/3 Push"), ("2026-03-15", True, "Push"))
         self.assertEqual(self._date("28/12 Push"), ("2025-12-28", True, "Push"))

@@ -484,6 +484,44 @@ def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_r
     return weights, reps
 
 
+_MONTHS = {
+    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+    'jul': 7, 'aug': 8, 'sep': 9, 'sept': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+}
+_MONTH_WORD = r'([A-Za-z]{3,9})\.?'
+_DAY_WORD = r'(\d{1,2})(?:st|nd|rd|th)?'
+_YEAR_WORD = r'(?:,?\s+(\d{4}|\d{2}))?'
+_TITLE_END = r'(?=\s|$|[-–—:,])'
+
+
+def _month_number(word: str) -> Optional[int]:
+    word = (word or '').lower()
+    if word in _MONTHS:
+        return _MONTHS[word]
+    full = {'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6, 'july': 7, 'august': 8,
+            'september': 9, 'october': 10, 'november': 11, 'december': 12}
+    return full.get(word)
+
+
+def _month_name_date(title_line: str):
+    """"30 Sep Push", "Sep 30 Push", "30 Sep 25 Push", "1st Oct - Legs": (day, month, year or None,
+    rest of the title). None when the title doesn't start with a date written that way."""
+    line = title_line or ''
+    for pattern, day_at, month_at in (
+        (rf'^\s*{_DAY_WORD}\s+{_MONTH_WORD}{_YEAR_WORD}{_TITLE_END}', 1, 2),
+        (rf'^\s*{_MONTH_WORD}\s+{_DAY_WORD}{_YEAR_WORD}{_TITLE_END}', 2, 1),
+    ):
+        m = re.match(pattern, line)
+        if not m:
+            continue
+        month = _month_number(m.group(month_at))
+        if not month:
+            continue
+        year = m.group(3)
+        return int(m.group(day_at)), month, (int(year) + (2000 if len(year) == 2 else 0)) if year else None, line[m.end():]
+    return None
+
+
 def _title_case(name: str) -> str:
     """Capitalise the first letter of each word and leave every other letter as typed:
     "oh" -> "Oh", "oH" -> "OH", "EZ-bar" -> "EZ-Bar", "LEG PRESS" stays. A word starts after
@@ -547,7 +585,17 @@ def workout_parser(
     now = now or datetime.now()
     current_year = now.year
 
-    if len(date_nums) >= 2:
+    month_name_date = None if len(date_nums) >= 2 else _month_name_date(title_line)
+    if month_name_date:
+        day, month, written_year, rest = month_name_date
+        year = written_year or (current_year - 1 if month > now.month + 1 else current_year)
+        try:
+            date_obj = datetime(year, month, day)
+            date_found = True
+        except ValueError:
+            date_obj = now
+            date_found = False
+    elif len(date_nums) >= 2:
         parsed_month = int(date_nums[1])
         year = current_year - 1 if parsed_month > now.month + 1 else current_year
         # A written year wins ("15/3/25" is 2025, not this year's 15 March).
@@ -564,12 +612,14 @@ def workout_parser(
         date_found = False
 
     workout_name = title_line
-    if len(date_nums) >= 2:
+    if month_name_date and date_found:
+        workout_name = month_name_date[3].strip()
+    elif len(date_nums) >= 2:
         parts = title_line.split(' ', 1)
         if len(parts) > 1:
             workout_name = parts[1].strip()
     workout_name = html.unescape(workout_name)
-    workout_name = workout_name.lstrip('-–—').strip()
+    workout_name = workout_name.lstrip('-–—:,').strip()
 
     effective_bodyweight = None if preserve_bodyweight_offsets else (
         parsed_bodyweight if parsed_bodyweight is not None else bodyweight
