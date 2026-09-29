@@ -453,6 +453,41 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertTrue(rules)
         self.assertTrue(all("padding-right: 48px" in rule for rule in rules))
 
+    def test_exports_give_every_logged_set_in_the_chosen_range(self):
+        import csv
+        import io
+        import json
+
+        user = self._create_logged_in_user(username="exporter")
+        self.client.post("/log", data={"workout_text": "10/9/26 Push\nBench Press\n80 75, 8 10"})
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        other = User(username="someone_else", role=UserRole.USER, is_verified=True)
+        self.session.add(other)
+        self.session.commit()
+        self.session.add(WorkoutLog(user_id=other.id, date=datetime(2026, 9, 15), exercise="Secret Lift",
+                                    top_weight=1, top_reps=1))
+        self.session.commit()
+
+        response = self.client.get("/export_csv")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment; filename=workout_history_exporter_", response.headers["Content-Disposition"])
+        rows = list(csv.DictReader(io.StringIO(response.get_data(as_text=True))))
+        self.assertEqual([r["Exercise"] for r in rows], ["Squat", "Bench Press"])  # newest first
+        self.assertEqual(rows[1]["Weights"], "80.0,75.0,75.0")
+        self.assertEqual(rows[1]["Reps"], "8,10,10")
+
+        body = json.loads(self.client.get("/export_json?start_date=2026-09-01&end_date=2026-09-12").get_data(as_text=True))
+        self.assertEqual(body["user"], "exporter")
+        self.assertEqual([w["date"] for w in body["workouts"]], ["2026-09-10"])
+        self.assertNotIn("Secret Lift", json.dumps(body))
+
+        # Nothing in range, or a bad range: back to the data page with a message.
+        for query in ("start_date=2025-01-01&end_date=2025-01-31", "start_date=2026-09-20",
+                      "start_date=2026-09-20&end_date=2026-09-01", "start_date=bad&end_date=2026-09-01"):
+            response = self.client.get(f"/export_csv?{query}")
+            self.assertEqual(response.status_code, 302, query)
+            self.assertEqual(urlsplit(response.headers["Location"]).path, "/settings/data", query)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

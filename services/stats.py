@@ -333,7 +333,7 @@ def _get_peak_1rm_for_log(db_session, log=None) -> float:
     return float(quality.get('peak_1rm') or 0.0)
 
 
-def _query_logs_for_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
+def _export_query(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
     query = db_session.query(WorkoutLog).filter_by(user_id=user.id)
 
     if start_date is not None:
@@ -344,12 +344,16 @@ def _query_logs_for_export(db_session, user, start_date: Optional[date] = None, 
         end_dt_exclusive = datetime.combine(end_date + timedelta(days=1), time.min)
         query = query.filter(WorkoutLog.date < end_dt_exclusive)
 
-    return query.order_by(desc(WorkoutLog.date)).all()
+    return query
+
+
+def _query_logs_for_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
+    return _export_query(db_session, user, start_date, end_date).order_by(desc(WorkoutLog.date)).all()
 
 
 def get_export_log_count(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None) -> int:
-    logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
-    return len(logs)
+    # Counted by the database: loading the whole history just to count it doubled an export's work.
+    return _export_query(db_session, user, start_date, end_date).count()
 
 
 def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
