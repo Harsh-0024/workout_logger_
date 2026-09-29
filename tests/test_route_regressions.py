@@ -296,6 +296,18 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertIn(f"{date.today().year} Workout Tracker", self.client.get("/log").get_data(as_text=True))
 
+    def test_log_and_edit_bars_keep_the_count_readable_on_phones(self):
+        # The check count sits beside the buttons; on narrow phones it stacks onto two
+        # lines instead of being cut off, and Edit's button is as short as Log's.
+        self._create_logged_in_user(username="bar_user")
+        self.client.post("/log", data={"workout_text": "20/9/26 Leg Day\nSquat 120x5"})
+        log_page = self.client.get("/log").get_data(as_text=True)
+        edit_page = self.client.get("/workout/2026-09-20/edit").get_data(as_text=True)
+        for page in (log_page, edit_page):
+            self.assertIn(".lg-meta.is-stacked .lg-meta-part", page)
+            self.assertIn("function fitMeta(el)", page)
+        self.assertIn('id="saveBtn">Save</button>', edit_page)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

@@ -46,6 +46,9 @@
     }
     .lg-meta.is-error { color: var(--st-down); font-weight: 600; }
     .lg-meta.is-warn { color: var(--st-warn); }
+    .lg-meta.is-stacked { white-space: normal; line-height: 1.3; }
+    .lg-meta.is-stacked .lg-meta-part { display: block; }
+    .lg-meta.is-stacked .lg-meta-sep { display: none; }
     .lg-meta-sub { display: block; margin-top: 2px; font-size: 0.74rem; font-weight: 600; color: var(--st-warn); }
 
     /* Name suggestions float just under the line being typed. */
@@ -482,8 +485,20 @@
 
         function paintMeta(el, view) {
             el.className = 'lg-meta' + (view.metaClass ? ' ' + view.metaClass : '');
-            el.innerHTML = esc(view.metaText) + (view.metaSub ? `<span class="lg-meta-sub">${esc(view.metaSub)}</span>` : '');
+            const parts = String(view.metaText || '').split(' · ').map((part) => `<span class="lg-meta-part">${esc(part)}</span>`);
+            el.innerHTML = parts.join('<span class="lg-meta-sep"> · </span>')
+                + (view.metaSub ? `<span class="lg-meta-sub">${esc(view.metaSub)}</span>` : '');
+            fitMeta(el);
         }
+
+        // On a narrow phone "12 exercises · 36 sets" doesn't fit beside the buttons:
+        // put the parts on two lines instead of cutting the count off.
+        function fitMeta(el) {
+            el.classList.remove('is-stacked');
+            if (!el.querySelector('.lg-meta-sep') || el.querySelector('.lg-meta-sub')) return;
+            if (el.scrollWidth > el.clientWidth + 1) el.classList.add('is-stacked');
+        }
+        window.addEventListener('resize', () => document.querySelectorAll('.lg-meta').forEach(fitMeta));
 
         return { paintMeta, autoGrow, attachSuggestions, attachPasteTidy, tidyPaste, showFromTop, previewer, renderCheck, insertAtCursor, jumpToLine, replaceLine };
     })();
