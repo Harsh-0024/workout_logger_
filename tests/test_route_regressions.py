@@ -588,6 +588,13 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("That page doesn&#39;t exist, or it has moved.", page)
         self.assertNotIn("Something went wrong. Please try again", page)
 
+    def test_theme_is_set_before_the_page_is_drawn(self):
+        # Light mode drew dark first and faded to light on every page when only the end of the page set it.
+        page = self.client.get("/login").get_data(as_text=True)
+        head = page.split("</head>", 1)[0]
+        self.assertIn("document.documentElement.setAttribute('data-theme'", head)
+        self.assertLess(head.index("data-theme"), head.index("<link"))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

@@ -4,6 +4,18 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>{% block title %}Workout Tracker | Elite Performance{% endblock %}</title>
+    <script>
+        // The theme before anything is drawn (the full theme code is at the end of the page):
+        // otherwise light mode drew dark first and faded to light on every page.
+        (function () {
+            try {
+                var pref = localStorage.getItem('workout-tracker-theme-preference');
+                var saved = localStorage.getItem('workout-tracker-theme');
+                var system = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', pref !== 'system' && saved ? saved : system);
+            } catch (e) { /* storage off: the full theme code decides */ }
+        })();
+    </script>
     {% block head_meta %}{% endblock %}
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -66,7 +78,7 @@
             --text-primary: #FFFFFF;
             --text-secondary: #E5E5E5;
             --text-muted: #A1A1AA;
-            --text-subtle: #71717A;
+            --text-subtle: #82828B;   /* 4.5:1+ on every dark surface (was #71717A, ~4:1) */
             
             /* Borders & Dividers */
             --border-primary: rgba(212, 175, 55, 0.2);
@@ -124,7 +136,7 @@
             --text-primary: #1A1A1A;            /* Rich Black */
             --text-secondary: #2D2D2D;          /* Charcoal */
             --text-muted: #707070;              /* Medium Gray */
-            --text-subtle: #9A9A9A;             /* Light Gray */
+            --text-subtle: #757575;             /* Light Gray, ~4.5:1 on cards (was #9A9A9A, ~2.7:1) */
             
             /* Refined Borders */
             --border-primary: rgba(201, 169, 97, 0.3);
