@@ -296,6 +296,22 @@ class TestRouteRegressions(unittest.TestCase):
         pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
         self.assertEqual(self.client.get(f"{pick_path}?list=1").get_json()["sessions"], ["Session 1 - Owner Push"])
 
+    def test_rep_ranges_save_as_clean_lines_and_stay_on_the_page(self):
+        from models import RepRange
+
+        user = self._create_logged_in_user(username="rep_editor")
+        response = self.client.post("/set_exercises", data={
+            "form_type": "save_exercises",
+            "rep_text": "bench press 6-10\nDips: 3x6-12\nbench press: 5 - 8\nPlank",
+        })
+        self.assertEqual(urlsplit(response.headers["Location"]).path, "/set_exercises")
+        saved = self.session.query(RepRange).filter_by(user_id=user.id).one().text_content
+        self.assertEqual(saved, "Bench Press: 5–8\nDips: 3, 6–12")
+
+        # The page lists them as rows to edit in place.
+        page = self.client.get("/set_exercises").get_data(as_text=True)
+        self.assertIn('id="rr-data">[["Bench Press", "5\\u20138"], ["Dips", "3, 6\\u201312"]]', page)
+
     def test_plan_owner_has_no_follow_switch(self):
         owner_id = self._plan_owner_with_plan()
         with self.client.session_transaction() as sess:

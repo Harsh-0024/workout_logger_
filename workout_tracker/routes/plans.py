@@ -23,6 +23,7 @@ from services.retrieve import (
     set_exercise_group_choice,
 )
 from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
+from services.rep_ranges import canonical_rep_text, merge_rep_entries, parse_rep_entries
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
@@ -416,18 +417,17 @@ def register_plan_routes(app):
                         flash("Switched to your own rep ranges.", "success")
                     return redirect(url_for('set_exercises'))
 
-                rep_text = request.form.get('rep_text', '').strip()
-                reps.text_content = rep_text
+                reps.text_content = canonical_rep_text(request.form.get('rep_text', ''))
                 user.follow_admin_exercises = False
                 reps.updated_at = datetime.now()
                 Session.commit()
-                flash("Rep ranges updated successfully!", "success")
-                return redirect(url_for('user_dashboard', username=user.username))
+                flash("Rep ranges saved.", "success")
+                return redirect(url_for('set_exercises'))
 
             can_follow = not is_plan_owner(Session, user)
             return render_template(
                 'set_exercises.html',
-                current_reps=reps.text_content or "",
+                entries=merge_rep_entries(parse_rep_entries(reps.text_content or "")),
                 follow_admin_exercises=can_follow and getattr(user, 'follow_admin_exercises', False),
                 admin_display_name=get_admin_display_name(Session),
                 can_follow=can_follow,
