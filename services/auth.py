@@ -385,8 +385,9 @@ class AuthService:
             session.close()
 
     @staticmethod
-    def verify_otp(user_id: int, otp_code: str, purpose: str, mark_verified: bool = False) -> bool:
-        """Verify a one-time code for a given purpose."""
+    def verify_otp(user_id: int, otp_code: str, purpose: str, mark_verified: bool = False, use: bool = True) -> bool:
+        """Verify a one-time code for a given purpose. With use=False the code is only checked,
+        not spent (for steps that need two codes to be right before either is used)."""
         session = session_factory()
         try:
             user = session.get(User, user_id)
@@ -415,6 +416,8 @@ class AuthService:
                 )
                 return False
 
+            if not use:
+                return True
             verification.verified_at = datetime.now()
             if mark_verified and not user.is_verified:
                 user.is_verified = True

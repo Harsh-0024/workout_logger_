@@ -141,6 +141,29 @@ class TestAuthFlow(unittest.TestCase):
         if self.sent[-1]["code"] != code["code"]:
             self.assertNotEqual(self._path(response), "/settings/account")
 
+    def test_changing_email_needs_both_codes_and_a_typo_spends_neither(self):
+        self._sign_up()
+        response = self.client.post("/settings", data={
+            "form_type": "profile", "full_name": "", "username": "alice",
+            "email": "alice.new@example.com", "current_password": "secret123",
+        })
+        self.assertEqual(self._path(response), "/settings/email/verify-otp")
+        codes = {c["purpose"]: c["code"] for c in self.sent[-2:]}
+        old, new = codes["change_email_old"], codes["change_email_new"]
+        wrong = "000000" if new != "000000" else "111111"
+
+        page = self.client.post("/settings/email/verify-otp", data={"otp_code_old": old, "otp_code_new": wrong},
+                                follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Invalid codes", page)
+        self.session.expire_all()
+        self.assertEqual(self.session.query(User).filter_by(username="alice").one().email, "alice@example.com")
+
+        # The right pair still works: the typo didn't use up the old address's code.
+        response = self.client.post("/settings/email/verify-otp", data={"otp_code_old": old, "otp_code_new": new})
+        self.assertEqual(self._path(response), "/settings")
+        self.session.expire_all()
+        self.assertEqual(self.session.query(User).filter_by(username="alice").one().email, "alice.new@example.com")
+
 
 if __name__ == "__main__":
     unittest.main()

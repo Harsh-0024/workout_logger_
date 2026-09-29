@@ -1410,8 +1410,13 @@ def register_auth_routes(app, email_service):
                     flash("Please enter both codes.", "error")
                     return redirect(url_for('verify_email_change_otp'))
 
-                old_valid = AuthService.verify_otp(user.id, otp_old, 'change_email_old')
-                new_valid = AuthService.verify_otp(user.id, otp_new, 'change_email_new')
+                # Check both before spending either: a typo in one code used to spend the other,
+                # so the retry with both right was refused until new codes were sent.
+                old_valid = AuthService.verify_otp(user.id, otp_old, 'change_email_old', use=False)
+                new_valid = AuthService.verify_otp(user.id, otp_new, 'change_email_new', use=False)
+                if old_valid and new_valid:
+                    old_valid = AuthService.verify_otp(user.id, otp_old, 'change_email_old')
+                    new_valid = AuthService.verify_otp(user.id, otp_new, 'change_email_new')
 
                 if old_valid and new_valid:
                     full_name = pending_change.get('full_name')
