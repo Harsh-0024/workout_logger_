@@ -356,7 +356,7 @@ def get_export_log_count(db_session, user, start_date: Optional[date] = None, en
     return _export_query(db_session, user, start_date, end_date).count()
 
 
-def _timed_checker(db_session, user):
+def timed_checker(db_session, user):
     """Whether a log's reps are seconds (Plank, Dead Hang, a "[30-60s]" target), asking the
     database once per exercise name."""
     by_name: Dict[str, bool] = {}
@@ -372,7 +372,7 @@ def _timed_checker(db_session, user):
     return is_timed
 
 
-def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
+def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None, is_timed=None):
     """Generates a CSV string of all workout history."""
     logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
 
@@ -396,7 +396,7 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
         # For timed exercises the reps are seconds.
         'Timed',
     ])
-    is_timed = _timed_checker(db_session, user)
+    is_timed = is_timed or timed_checker(db_session, user)
 
     for log in logs:
         sets_json = log.sets_json if isinstance(log.sets_json, dict) else {}
@@ -421,12 +421,12 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
     return output.getvalue()
 
 
-def get_json_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None) -> Dict:
+def get_json_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None, is_timed=None) -> Dict:
     """Generate full JSON export payload for workout history."""
     logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
 
     workouts_by_date: Dict[str, Dict] = {}
-    is_timed = _timed_checker(db_session, user)
+    is_timed = is_timed or timed_checker(db_session, user)
     for log in logs:
         date_key = log.date.strftime('%Y-%m-%d') if log.date else ""
         entry = {

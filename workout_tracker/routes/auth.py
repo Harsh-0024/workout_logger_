@@ -24,7 +24,7 @@ from services.bodyweight import (
     set_bodyweight_preference,
 )
 from services.logging import refresh_best_lift_pointers
-from services.stats import get_csv_export, get_json_export
+from services.stats import get_csv_export, get_json_export, timed_checker
 from sqlalchemy import desc
 from services.auth import AuthService, AuthenticationError
 from utils.errors import ValidationError
@@ -1067,11 +1067,13 @@ def register_auth_routes(app, email_service):
                 .all()
             )
             if logs:
-                csv_data = get_csv_export(Session, user)
+                # Both exports ask "is this exercise timed?" once per name between them.
+                is_timed = timed_checker(Session, user)
+                csv_data = get_csv_export(Session, user, is_timed=is_timed)
                 csv_bytes = csv_data.encode('utf-8')
                 csv_size_kb = (len(csv_bytes) + 1023) // 1024
 
-                json_payload = get_json_export(Session, user)
+                json_payload = get_json_export(Session, user, is_timed=is_timed)
                 json_bytes = json.dumps(json_payload, ensure_ascii=False, indent=2).encode('utf-8')
                 json_size_kb = (len(json_bytes) + 1023) // 1024
         except Exception as e:
