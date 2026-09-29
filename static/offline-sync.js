@@ -102,9 +102,10 @@
       return 'uploaded';
     }
     if (response.ok && body.status === 'already_there') {
-      await store.remove(item.id);
-      notice('info', `${day} already had a workout, so the one saved offline wasn't added.`, { href: body.url, label: 'View' });
-      return 'uploaded';
+      // Kept, not dropped: on the Log page it can be added to that day (or given another date).
+      await store.put({ ...item, status: 'failed', error: `${day} already has a workout. Add this to it, or change the date.` });
+      notice('warning', `${day} already has a workout, so the one saved offline is waiting.`, { href: `/log#fix-${item.id}`, label: 'Add it' });
+      return 'kept';
     }
     if (response.status === 422) {
       await store.put({ ...item, status: 'failed', error: body.error || '' });

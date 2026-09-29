@@ -124,6 +124,13 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn(b"addEventListener('fetch'", response.data)
         response.close()
 
+        # A workout kept offline for a day that already has one waits to be added, never dropped.
+        sync = self.client.get("/static/offline-sync.js")
+        script = sync.get_data(as_text=True)
+        sync.close()
+        self.assertIn("already has a workout, so the one saved offline is waiting", script)
+        self.assertNotIn("wasn't added", script)
+
         # What the worker fetches on install must not need a login either.
         for path in ("/static/offline.html", "/static/manifest.json"):
             response = self.client.get(path)
