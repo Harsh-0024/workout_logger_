@@ -34,6 +34,7 @@ from services.exercise_matching import (
 )
 from services.workout_title import classify_by_name, infer_workout_title, split_title, title_from_plan_day
 from parsers.workout import _parse_plan_exercise_line, parse_bw_weight
+from utils.dates import utc_now
 
 
 CUSTOM_RETRIEVAL_SORT_MODES = {
@@ -459,7 +460,7 @@ def _sort_custom_retrieval_catalog(catalog, sort_mode):
 
 def _retrieve_date_string() -> str:
     ist_offset = timedelta(hours=5, minutes=30)
-    today = datetime.utcnow() + ist_offset
+    today = utc_now() + ist_offset
     return f"{today.day}/{today.month}/{today.year % 100:02d}"
 
 

@@ -42,6 +42,7 @@ from utils.logger import logger
 from utils.profile_images import get_profile_image_url
 from utils.rich_text import to_plain_text
 from utils.validators import is_safe_redirect_url, sanitize_text_input, validate_username
+from utils.dates import utc_now
 
 
 SHORTCUT_KEY_HELP = (
@@ -1465,7 +1466,7 @@ def register_workout_routes(app):
                     }
                 )
 
-            today = datetime.utcnow().date()
+            today = utc_now().date()
             matched_items: list[tuple[datetime.date, str, int]] = []
             category_trained: dict[str, datetime.date] = {}
             session_evidence_items: list[tuple[datetime.date, dict]] = []
@@ -2091,7 +2092,7 @@ def register_workout_routes(app):
                     if key_id:
                         key_row = Session.query(UserApiKey).filter_by(id=key_id, user_id=user.id).first()
                         if key_row:
-                            key_row.last_used_at = datetime.utcnow()
+                            key_row.last_used_at = utc_now()
                             Session.commit()
                     source = "gemini"
                 except GeminiServiceError as e:
@@ -3087,6 +3088,9 @@ def register_workout_routes(app):
                     WorkoutLog.date >= start_dt,
                     WorkoutLog.date < end_dt,
                 ).delete(synchronize_session=False)
+                # The rows are gone; forget the loaded copies so the new rows never meet them.
+                for log in logs:
+                    Session.expunge(log)
 
                 handle_workout_log(Session, user, parsed)
                 refresh_best_lift_pointers(Session, user, old_exercises)

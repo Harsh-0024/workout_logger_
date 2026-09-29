@@ -7,6 +7,7 @@ import requests
 
 from config import Config
 from utils.logger import logger
+from utils.dates import utc_now
 
 
 class GeminiServiceError(Exception):
@@ -87,7 +88,7 @@ class GeminiService:
         recent_workouts: list[dict],
     ) -> list[str]:
         cat_key = str(category or "").strip().lower()
-        today = datetime.utcnow().date()
+        today = utc_now().date()
 
         def _norm_ex_name(name: str) -> str:
             if not name:
@@ -714,7 +715,7 @@ class GeminiService:
                         "day_id": int(obj["day_id"]),
                         "reasons": obj["reasons"],
                         "model": model,
-                        "generated_at": datetime.utcnow().isoformat() + "Z",
+                        "generated_at": utc_now().isoformat() + "Z",
                         "key_id": key_entry.get("id"),
                     }
                 except requests.HTTPError as e:

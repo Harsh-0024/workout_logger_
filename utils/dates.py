@@ -1,6 +1,6 @@
 """Date helpers for consistent local timezone handling."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from config import Config
@@ -19,3 +19,8 @@ def local_datetime(dt: Optional[datetime]) -> Optional[datetime]:
 def local_date(dt: Optional[datetime]):
     local_dt = local_datetime(dt)
     return local_dt.date() if local_dt else None
+
+
+def utc_now() -> datetime:
+    """The current UTC time without a timezone, as datetime.utcnow() gave (now deprecated)."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
