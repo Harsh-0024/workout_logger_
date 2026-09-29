@@ -184,7 +184,7 @@ class AuthService:
         """Generate and store a one-time code for password changes."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise AuthenticationError("User not found")
 
@@ -226,7 +226,7 @@ class AuthService:
         """Generate OTPs for confirming an email change on both old and new addresses."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise AuthenticationError("User not found")
 
@@ -271,7 +271,7 @@ class AuthService:
         """Set a user's password without verifying the current password."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
 
             if not user:
                 return False
@@ -346,7 +346,7 @@ class AuthService:
         """Generate and store a one-time code for profile updates."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise AuthenticationError("User not found")
 
@@ -383,7 +383,7 @@ class AuthService:
         """Verify a one-time code for a given purpose."""
         session = session_factory()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 logger.info(
                     "OTP verification failed: user missing",
@@ -435,7 +435,7 @@ class AuthService:
         """
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             
             if not user:
                 return False
@@ -481,7 +481,7 @@ class AuthService:
         """
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             
             if not user:
                 raise AuthenticationError("User not found")
@@ -554,7 +554,7 @@ class AuthService:
         """
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             
             if not user:
                 return False

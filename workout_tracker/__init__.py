@@ -85,7 +85,7 @@ def create_app(config_object=Config, init_db: bool = True):
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            return Session.query(User).get(int(user_id))
+            return Session.get(User, int(user_id))
         except Exception:
             return None
 

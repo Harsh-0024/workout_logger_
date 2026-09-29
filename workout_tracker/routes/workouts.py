@@ -2620,7 +2620,7 @@ def register_workout_routes(app):
             user_id = payload.get("user_id")
             if not user_id:
                 raise BadSignature("Missing user")
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
@@ -2658,7 +2658,7 @@ def register_workout_routes(app):
             user_id = payload.get("user_id")
             if not user_id:
                 raise BadSignature("Missing user")
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
@@ -2695,7 +2695,7 @@ def register_workout_routes(app):
             user_id = payload.get("user_id")
             if not user_id:
                 raise BadSignature("Missing user")
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:

@@ -284,7 +284,7 @@ def register_auth_routes(app, email_service):
                     return render_template('login.html')
 
                 if user.email and user.email.lower() in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
-                    db_user = Session.query(User).get(user.id)
+                    db_user = Session.get(User, user.id)
                     if db_user and not db_user.is_admin():
                         db_user.role = UserRole.ADMIN
                         db_user.updated_at = datetime.now()
@@ -375,7 +375,7 @@ def register_auth_routes(app, email_service):
             flash("No login code requested. Please request a new code.", "error")
             return redirect(url_for('login_otp_request'))
 
-        user = Session.query(User).get(user_id)
+        user = Session.get(User, user_id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -393,7 +393,7 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_otp_identifier', None)
                     session.pop('pending_otp_purpose', None)
 
-                    verified_user = Session.query(User).get(user_id)
+                    verified_user = Session.get(User, user_id)
                     if verified_user and verified_user.email:
                         if verified_user.email.lower() in Config.ADMIN_EMAIL_ALLOWLIST and not verified_user.is_admin():
                             verified_user.role = UserRole.ADMIN
@@ -474,7 +474,7 @@ def register_auth_routes(app, email_service):
                 flash("No pending verification found.", "error")
                 return redirect(url_for('login'))
 
-        user = Session.query(User).get(user_id)
+        user = Session.get(User, user_id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('register'))
@@ -505,7 +505,7 @@ def register_auth_routes(app, email_service):
                         flash("Email verified successfully!", "success")
                         return redirect(url_for('user_dashboard', username=redirect_username))
 
-                    verified_user = Session.query(User).get(user_id)
+                    verified_user = Session.get(User, user_id)
                     if verified_user:
                         login_user(
                             verified_user,
@@ -542,7 +542,7 @@ def register_auth_routes(app, email_service):
                 return redirect(url_for('login'))
 
         try:
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 flash("User not found.", "error")
                 return redirect(url_for('register'))
@@ -1180,7 +1180,7 @@ def register_auth_routes(app, email_service):
             return redirect(url_for('user_settings'))
 
         user_id = current_user.id
-        user = Session.query(User).get(user_id)
+        user = Session.get(User, user_id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -1266,7 +1266,7 @@ def register_auth_routes(app, email_service):
                         flash("Unable to send email change codes. Please try again.", "error")
                         return redirect(url_for('user_settings'))
 
-                    user = Session.query(User).get(user_id)
+                    user = Session.get(User, user_id)
                     if not user:
                         flash("User not found.", "error")
                         return redirect(url_for('login'))
@@ -1316,7 +1316,7 @@ def register_auth_routes(app, email_service):
             flash("Password change verification mismatch.", "error")
             return redirect(url_for('user_settings'))
 
-        user = Session.query(User).get(current_user.id)
+        user = Session.get(User, current_user.id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -1388,7 +1388,7 @@ def register_auth_routes(app, email_service):
             flash("Email change verification mismatch.", "error")
             return redirect(url_for('user_settings'))
 
-        user = Session.query(User).get(current_user.id)
+        user = Session.get(User, current_user.id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -1418,7 +1418,7 @@ def register_auth_routes(app, email_service):
                         flash("Missing email change details.", "error")
                         return redirect(url_for('user_settings'))
 
-                    user = Session.query(User).get(current_user.id)
+                    user = Session.get(User, current_user.id)
                     if not user:
                         flash("User not found.", "error")
                         return redirect(url_for('login'))

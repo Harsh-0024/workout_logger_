@@ -59,7 +59,7 @@ class AdminService:
         """Merge duplicate users by email, keeping the account with logs."""
         session = Session()
         try:
-            admin = session.query(User).get(admin_user_id)
+            admin = session.get(User, admin_user_id)
             if not admin or not admin.is_admin():
                 raise AdminError("Unauthorized: Only admins can clean up users")
 
@@ -234,12 +234,12 @@ class AdminService:
         session = Session()
         try:
             # Verify admin user
-            admin = session.query(User).get(admin_user_id)
+            admin = session.get(User, admin_user_id)
             if not admin or not admin.is_admin():
                 raise AdminError("Unauthorized: Only admins can delete users")
             
             # Get target user
-            target_user = session.query(User).get(target_user_id)
+            target_user = session.get(User, target_user_id)
             if not target_user:
                 raise AdminError("User not found")
             
@@ -330,12 +330,12 @@ class AdminService:
         session = Session()
         try:
             # Verify admin user
-            admin = session.query(User).get(admin_user_id)
+            admin = session.get(User, admin_user_id)
             if not admin or not admin.is_admin():
                 raise AdminError("Unauthorized: Only admins can promote users")
             
             # Get target user
-            target_user = session.query(User).get(target_user_id)
+            target_user = session.get(User, target_user_id)
             if not target_user:
                 raise AdminError("User not found")
             
