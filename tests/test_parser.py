@@ -443,5 +443,49 @@ class TestWorkoutQualityScorer(unittest.TestCase):
         )
 
 
+
+class TestSetLinesWrittenInCommonWays(unittest.TestCase):
+    """Set lines people type or paste from Notes, read as sets rather than as exercise names."""
+
+    def _exercises(self, body):
+        parsed = workout_parser("30/9/26 Push\n" + body, bodyweight=80, preserve_bodyweight_offsets=True)
+        return [(e["name"], e["weights"], e["reps"]) for e in parsed["exercises"]]
+
+    def test_spaces_around_x(self):
+        self.assertEqual(self._exercises("Squat\n100 x 5\n90 x 8"), [("Squat", [100.0, 90.0, 90.0], [5, 8, 8])])
+        self.assertEqual(self._exercises("Squat\n100 x5"), [("Squat", [100.0] * 3, [5] * 3)])
+        # A word after the x is still a name, not a set.
+        self.assertEqual([name for name, _, _ in self._exercises("Squat\n5 x Something")], ["Squat", "X Something"])
+
+    def test_one_set_per_line_reads_every_set(self):
+        self.assertEqual(
+            self._exercises("Squat\n100x5\n90x8\n80x10\n\nLeg Press\n200x10"),
+            [("Squat", [100.0, 90.0, 80.0], [5, 8, 10]), ("Leg Press", [200.0] * 3, [10] * 3)],
+        )
+        self.assertEqual(
+            self._exercises("Squat - [3]\n100 x 5\n90 x 5\n80 x 5\n70 x 5"),
+            [("Squat", [100.0, 90.0, 80.0, 70.0], [5] * 4)],
+        )
+        # A note under the sets stays a note.
+        self.assertEqual(self._exercises("Squat\n100x5\n90x8\nfelt good")[0], ("Squat", [100.0, 90.0, 90.0], [5, 8, 8]))
+
+    def test_units_after_a_space(self):
+        self.assertEqual(self._exercises("Squat\n100 kg, 5"), [("Squat", [100.0] * 3, [5] * 3)])
+        self.assertEqual(self._exercises("Lat Pulldown\n50 lbs, 10"), [("Lat Pulldown", [50.0] * 3, [10] * 3)])
+        self.assertEqual(self._exercises("Squat\n100 kg\n5"), [("Squat", [100.0] * 3, [5] * 3)])
+
+    def test_sets_x_reps_at_a_weight(self):
+        self.assertEqual(self._exercises("Squat\n3x5 @ 100"), [("Squat", [100.0] * 3, [5] * 3)])
+        self.assertEqual(self._exercises("Squat\n2 x 10 @ 60kg"), [("Squat", [60.0] * 2, [10] * 2)])
+        self.assertEqual(self._exercises("Squat\n4x6@100"), [("Squat", [100.0] * 4, [6] * 4)])
+        self.assertEqual(self._exercises("Dips\n3x8 @ BW+10"), [("Dips", [10.0] * 3, [8] * 3)])
+
+    def test_list_bullets_are_not_part_of_the_name(self):
+        for bullet in ("•", "◦", "▪", "‣", "*", "·", "-"):
+            self.assertEqual(self._exercises(f"{bullet} Squat\n100, 5")[0][0], "Squat", bullet)
+        # Numbered lists were already handled.
+        self.assertEqual(self._exercises("1. Squat\n100, 5")[0][0], "Squat")
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -275,6 +275,41 @@ def extract_weights(segment, base_weight=None):
     return numbers
 
 
+# What may follow a number on a set line without it being read as "1 Squat": the "x" of
+# "100 x 5" and a unit ("100 kg, 5").
+_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?)[,;]?$', re.IGNORECASE)
+
+_WEIGHT = r'(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)'
+_SETS_LINE = re.compile(rf'^(?:\s*(?:{_WEIGHT})?\s*x\s*\d+\s*[,;]?)+\s*$')
+# "3x5 @ 100": sets x reps at a weight.
+_SETS_AT_WEIGHT = re.compile(rf'^\s*(\d+)\s*x\s*(\d+)\s*@\s*({_WEIGHT})\s*$')
+
+
+def _set_text(line: str) -> str:
+    text = (line or '').lower().replace('×', 'x').replace('*', 'x')
+    text = re.sub(r'\bbody\s*weight\b', 'bw', text)
+    return re.sub(r'\s*(?:kgs?|lbs?)\b', '', text)
+
+
+def is_sets_line(line: str) -> bool:
+    """A line of "weight x reps" sets only: "100x5", "100 x 5, 90 x 8", "BW+10 x 8"."""
+    return bool(_SETS_LINE.match(_set_text(line)))
+
+
+def parse_sets_at_weight(segment, base_weight=None):
+    """"3x5 @ 100" -> three sets of 5 at 100. None when the segment isn't written that way."""
+    m = _SETS_AT_WEIGHT.match(_set_text(segment))
+    if not m:
+        return None
+    sets, reps, weight_token = int(m.group(1)), int(m.group(2)), m.group(3)
+    if sets <= 0 or reps <= 0:
+        return None
+    weight = parse_bw_weight(weight_token, base_weight)
+    if weight is None:
+        weight = float(weight_token)
+    return sets, [weight] * sets, [reps] * sets
+
+
 def is_data_line(line):
     if not line:
         return False
@@ -283,7 +318,11 @@ def is_data_line(line):
         return False
     tokens = stripped.split()
     if len(tokens) > 1 and re.match(r'^\d+(?:[.)\-:])?$', tokens[0]) and re.match(r'^[A-Za-z]', tokens[1]):
-        return False
+        set_word = bool(_SET_WORD.match(tokens[1]))
+        if set_word and tokens[1].lower() == 'x':
+            set_word = len(tokens) > 2 and bool(re.match(r'^\d', tokens[2]))
+        if not set_word:
+            return False
     return bool(re.match(r'^(?:,|-?\d|bw|body\s*weight|bodyweight)', stripped.lower()))
 
 
@@ -429,9 +468,10 @@ def _title_case(name: str) -> str:
 
 
 def clean_exercise_name(name: str) -> str:
-    """Drop stray separators and tabs around a typed name ("Forearm Roller -" -> "Forearm Roller")."""
+    """Drop stray separators, list bullets and tabs around a typed name
+    ("Forearm Roller -" -> "Forearm Roller", "• Squat" -> "Squat")."""
     name = re.sub(r'\s+', ' ', name or '').strip()
-    return name.strip('-–—:,.; ').strip()
+    return name.strip('-–—:,.; •◦▪‣*·').strip()
 
 
 def workout_parser(
@@ -587,10 +627,21 @@ def workout_parser(
                 data_part = f"{data_part}, {reps_line}"
                 consumed += 1
 
+        # One set per line ("100x5" / "90x8" / "80x10"): keep reading set lines.
+        if data_part and is_sets_line(data_part):
+            while i + consumed < len(list_of_lines) and is_sets_line(list_of_lines[i + consumed]):
+                extra = list_of_lines[i + consumed].strip()
+                exercise_lines.append(extra)
+                data_part = f"{data_part}, {extra}"
+                consumed += 1
+
         if data_part and not is_probable_data_segment(data_part):
             data_part = ""
 
-        if data_part:
+        sets_at_weight = parse_sets_at_weight(data_part, effective_bodyweight) if data_part else None
+        if sets_at_weight:
+            declared_sets, weights, reps = sets_at_weight
+        elif data_part:
             w_list, r_list = parse_weight_x_reps(data_part, effective_bodyweight)
             if w_list:
                 weights, reps = w_list, r_list
