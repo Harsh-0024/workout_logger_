@@ -8,6 +8,8 @@ import sys
 import tempfile
 import types
 
+import pytest
+
 sys.modules["dotenv"] = types.SimpleNamespace(load_dotenv=lambda *args, **kwargs: False,
                                               find_dotenv=lambda *args, **kwargs: "")
 
@@ -20,3 +22,13 @@ for _key in (
     "ADMIN_PASSWORD", "ADMIN_EMAILS",
 ):
     os.environ[_key] = ""
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _default_database_has_tables():
+    # Code a test doesn't point at its own database (e.g. the app icon check on every page)
+    # uses the throwaway one above; give it tables so it works quietly instead of logging errors.
+    from models import Base, engine
+
+    Base.metadata.create_all(engine)
+    yield
