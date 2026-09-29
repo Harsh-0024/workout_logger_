@@ -118,6 +118,7 @@
     <form action="/set_exercises" method="POST" id="rr-form">
         <input type="hidden" name="form_type" value="save_exercises">
         <input type="hidden" name="rep_text" id="rr-text">
+        <input type="hidden" name="rep_text_ready" id="rr-ready" value="">
 
         <section class="st-section">
             <div class="st-group rr-add">
@@ -523,6 +524,7 @@
         if (nameless) return stop(nameless, nameOf(nameless), 'Name this exercise, or remove it.');
         if (dup) return stop(dup, nameOf(dup), `${nameOf(dup).value.trim()} is listed twice.`);
         $('rr-text').value = serialize();
+        $('rr-ready').value = '1';
         saving = true;
     });
     window.addEventListener('beforeunload', (e) => {

@@ -553,6 +553,22 @@ class TestRouteRegressions(unittest.TestCase):
         page = self.client.get("/set_exercises").get_data(as_text=True)
         self.assertIn('id="rr-data">[["Bench Press", "5\\u20138", "Chest"], ["Dips", "3, 6\\u201312", "Chest"]]', page)
 
+    def test_rep_ranges_are_not_wiped_when_the_page_script_never_ran(self):
+        from models import RepRange
+
+        user = self._create_logged_in_user(username="rep_keeper")
+        self.client.post("/set_exercises", data={"form_type": "save_exercises", "rep_text": "Bench Press: 5-8"})
+
+        # The rows are drawn and rep_text is filled by the page's script; without it Save sends nothing.
+        response = self.client.post("/set_exercises", data={"form_type": "save_exercises", "rep_text": ""})
+        self.assertEqual(urlsplit(response.headers["Location"]).path, "/set_exercises")
+        self.assertEqual(self.session.query(RepRange).filter_by(user_id=user.id).one().text_content, "Bench Press: 5–8")
+
+        # Removing every range on purpose still works: the script marks the form it filled.
+        self.client.post("/set_exercises", data={"form_type": "save_exercises", "rep_text": "", "rep_text_ready": "1"})
+        self.session.expire_all()
+        self.assertEqual(self.session.query(RepRange).filter_by(user_id=user.id).one().text_content, "")
+
     def test_plan_owner_has_no_follow_switch(self):
         owner_id = self._plan_owner_with_plan()
         with self.client.session_transaction() as sess:

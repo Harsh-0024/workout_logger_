@@ -418,7 +418,13 @@ def register_plan_routes(app):
                         flash("Switched to your own rep ranges.", "success")
                     return redirect(url_for('set_exercises'))
 
-                reps.text_content = canonical_rep_text(request.form.get('rep_text', ''))
+                new_text = canonical_rep_text(request.form.get('rep_text', ''))
+                if not new_text and (reps.text_content or '').strip() and request.form.get('rep_text_ready') != '1':
+                    # The page's script fills rep_text when Save is pressed. An empty one without its
+                    # mark means the script never ran, not that every range was removed.
+                    flash("Rep ranges weren't saved. Reload the page and try again.", "error")
+                    return redirect(url_for('set_exercises'))
+                reps.text_content = new_text
                 user.follow_admin_exercises = False
                 reps.updated_at = datetime.now()
                 Session.commit()
