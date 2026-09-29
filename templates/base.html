@@ -1003,6 +1003,12 @@
             word-break: break-word;
         }
 
+        /* Room for the close button, which sits over the right edge (Bootstrap gives it 3rem,
+           the padding above took it away, so long messages ran under the ×). */
+        .alert.alert-dismissible {
+            padding-right: 48px;
+        }
+
         .alert::before {
             content: '';
             position: absolute;
@@ -2000,6 +2006,10 @@
                 padding: 16px 18px;
                 border-radius: 14px;
                 margin-bottom: var(--space-md);
+            }
+
+            .alert.alert-dismissible {
+                padding-right: 48px;
             }
 
             /* Mobile Icons */

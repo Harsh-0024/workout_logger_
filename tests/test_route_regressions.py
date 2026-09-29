@@ -440,6 +440,14 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertNotIn("Password updated successfully", page)
         self.assertIn("wasn&#39;t changed", page)
 
+    def test_messages_leave_room_for_their_close_button(self):
+        # The app's .alert padding replaced Bootstrap's room for the ×, so long messages ran under it.
+        self._create_logged_in_user(username="alert_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        rules = re.findall(r"\.alert\.alert-dismissible\s*\{([^}]*)\}", page)
+        self.assertTrue(rules)
+        self.assertTrue(all("padding-right: 48px" in rule for rule in rules))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 
