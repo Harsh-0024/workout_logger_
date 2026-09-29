@@ -941,6 +941,54 @@
             margin-right: auto;
         }
 
+        .offline-status {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: var(--space-md);
+        }
+
+        .offline-status:empty {
+            display: none;
+        }
+
+        .offline-status__item {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 999px;
+            background: var(--gold-subtle);
+            color: var(--text-muted);
+            font-size: var(--fs-xs);
+            text-decoration: none;
+        }
+
+        .offline-status__item--fix,
+        .offline-status__item--fix:hover {
+            color: var(--gold-bright);
+        }
+
+        .offline-fix {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: var(--space-md);
+            color: var(--text-muted);
+            font-size: var(--fs-xs);
+        }
+
+        .offline-fix__discard {
+            background: none;
+            border: 0;
+            padding: 0;
+            color: var(--text-muted);
+            text-decoration: underline;
+            flex-shrink: 0;
+        }
+
         .alert {
             border-radius: 14px;
             border: 1px solid transparent;
@@ -2308,6 +2356,7 @@
         {% endblock %}
 
         <div id="client-alerts" class="flash-stack" aria-live="assertive"></div>
+        <div id="offline-status" class="offline-status" aria-live="polite"></div>
 
         {% block content %}{% endblock %}
     </div>
@@ -2701,13 +2750,31 @@
     <script>
         (function() {
             if (!('serviceWorker' in navigator)) return;
+            // Signed out: the worker forgets this device's saved pages, so the next
+            // person can't open them offline. Signed in: it learns where '/' leads.
+            {% if current_user.is_authenticated %}
+            const message = {
+                type: 'signed-in',
+                home: {{ url_for('user_dashboard', username=current_user.username)|tojson }},
+                user: {{ current_user.username|tojson }},
+            };
+            {% else %}
+            const message = { type: 'signed-out' };
+            {% endif %}
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js').catch((err) => {
                     console.warn('Service worker registration failed', err);
                 });
+                navigator.serviceWorker.ready.then((registration) => {
+                    if (registration.active) registration.active.postMessage(message);
+                });
             });
         })();
     </script>
+    {% if current_user.is_authenticated %}
+    <script src="{{ url_for('static', filename='offline-workouts.js') }}"></script>
+    <script src="{{ url_for('static', filename='offline-sync.js') }}" data-user="{{ current_user.username }}"></script>
+    {% endif %}
     <script>
         (function() {
             window.addEventListener('error', (event) => {

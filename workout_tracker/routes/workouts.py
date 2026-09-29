@@ -8,6 +8,7 @@ from urllib.parse import urlsplit
 
 from flask import Response, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import login_required, current_user
+from flask_wtf.csrf import generate_csrf
 from itsdangerous import URLSafeSerializer, BadSignature
 from sqlalchemy import desc, func
 
@@ -26,6 +27,7 @@ from services.logging import (
     refresh_best_lift_pointers,
 )
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
+from parsers.workout import workout_parser
 from services.log_check import check_workout_text, public_check
 from services import workout_insights as insights
 from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names
@@ -50,6 +52,7 @@ SHORTCUT_KEY_INVALID = "Your shortcut key isn't valid. " + SHORTCUT_KEY_HELP
 SHORTCUT_KEY_MISSING = "Your shortcut key is missing. " + SHORTCUT_KEY_HELP
 # What the workout page says after a save from the Log page (timed questions, skipped lines).
 LOG_SAVED_SESSION_KEY = 'log_saved'
+SAVE_WORKOUT_FAILED = "Error saving workout. Please try again."
 
 
 def deployment_name(host: str) -> str:
@@ -3232,13 +3235,14 @@ def register_workout_routes(app):
             message += f" ({len(errors) - 1} more like this.)"
         return message
 
-    def _parse_and_save_workout_text(user, raw_text: str, *, append: bool = False):
+    def _parse_and_save_workout_text(user, raw_text: str, *, append: bool = False, saved_at=None):
         text = to_plain_text(raw_text)
         if not text:
             return None, "Please enter workout data."
 
         try:
-            check = check_workout_text(Session, user, text, append=append)
+            # saved_at: a workout kept on the phone offline is dated the day it was kept.
+            check = check_workout_text(Session, user, text, append=append, now=saved_at)
         except Exception as e:
             logger.error(f"Parsing error: {e}", exc_info=True)
             return None, "Error parsing workout data. Please check the format."
@@ -3300,7 +3304,80 @@ def register_workout_routes(app):
         except Exception as e:
             Session.rollback()
             logger.error(f"Error saving workout: {e}", exc_info=True)
-            return None, "Error saving workout. Please try again."
+            return None, SAVE_WORKOUT_FAILED
+
+    def _client_saved_at(value):
+        """When a workout kept on the phone offline was saved (milliseconds since
+        the epoch), as server time; None if missing or implausible."""
+        try:
+            saved_at = datetime.fromtimestamp(float(value) / 1000)
+        except (TypeError, ValueError, OverflowError, OSError):
+            return None
+        now = datetime.now()
+        if saved_at > now + timedelta(minutes=5) or saved_at < now - timedelta(days=365):
+            return None
+        return saved_at
+
+    def _same_workout_already_saved(user, raw_text, day):
+        """True when the day's workout already holds every exercise in raw_text:
+        an upload that got through before the phone gave up waiting."""
+        try:
+            parsed = workout_parser(to_plain_text(raw_text), bodyweight=user.bodyweight, preserve_bodyweight_offsets=True)
+        except Exception:
+            return False
+        names = {normalize_exercise_name(item.get('name') or '') for item in (parsed or {}).get('exercises') or []}
+        names.discard('')
+        if not names:
+            return False
+        _, start_dt, end_dt = _workout_day_bounds(day)
+        logged = {
+            normalize_exercise_name(row[0] or '')
+            for row in Session.query(WorkoutLog.exercise)
+            .filter(WorkoutLog.user_id == user.id, WorkoutLog.date >= start_dt, WorkoutLog.date < end_dt)
+            .all()
+        }
+        return names <= logged
+
+    def upload_offline_workout():
+        """Takes a workout the phone kept while offline. Always answers in JSON,
+        so the phone knows whether to drop it, keep it, or ask for a fix."""
+        if not current_user.is_authenticated:
+            return jsonify({'ok': False, 'status': 'signed_out'}), 401
+        user = current_user
+        payload = request.get_json(silent=True) or {}
+        owner = str(payload.get('user') or '').strip().lower()
+        if owner and owner != (user.username or '').strip().lower():
+            return jsonify({'ok': False, 'status': 'wrong_user'}), 409
+
+        raw_text = str(payload.get('text') or '').strip()
+        saved_at = _client_saved_at(payload.get('saved_at'))
+        result, error = _parse_and_save_workout_text(user, raw_text, saved_at=saved_at)
+        if error == SAVE_WORKOUT_FAILED:
+            return jsonify({'ok': False, 'status': 'retry'}), 503
+        if error:
+            return jsonify({'ok': False, 'status': 'invalid', 'error': str(error)}), 422
+
+        date_str = result.get('date_str')
+        body = {
+            'ok': True,
+            'date': date_str,
+            'url': url_for('workout_summary', date_str=date_str),
+        }
+        if result.get('already_exists'):
+            day = datetime.strptime(date_str, '%Y-%m-%d')
+            if not _same_workout_already_saved(user, raw_text, day):
+                body['status'] = 'already_there'
+                body['url'] = url_for('view_workout', date_str=date_str)
+                return jsonify(body)
+        body['status'] = 'saved'
+        return jsonify(body)
+
+    @login_required
+    def csrf_token_api():
+        # For a page opened offline whose own token has gone stale.
+        response = jsonify({'token': generate_csrf()})
+        response.headers['Cache-Control'] = 'no-store'
+        return response
 
     def _log_name_suggestions(user):
         # The user's own exercises first (most logged first). Spellings of one exercise
@@ -3325,6 +3402,15 @@ def register_workout_routes(app):
         own_keys = set(groups)
         return own + [name for name in list_of_exercises if (normalize_exercise_name(name) or name.lower()) not in own_keys]
 
+    def _offline_fix_fields():
+        """A workout kept offline being fixed and sent again: its id on the phone and
+        when it was kept, so a failed try can be sent again as the same workout."""
+        offline_id = (request.form.get('offline_id') or '').strip()
+        if not re.fullmatch(r'[A-Za-z0-9-]{1,64}', offline_id):
+            return None
+        saved_at = (request.form.get('saved_at') or '').strip()
+        return {"id": offline_id, "saved_at": saved_at if saved_at.isdigit() else ''}
+
     def _render_log_page(text='', *, error=None, errors=None, existing=None, status=200):
         return render_template(
             'log.html',
@@ -3333,6 +3419,7 @@ def register_workout_routes(app):
             error=error,
             errors=errors or [],
             existing=existing,
+            offline_fix=_offline_fix_fields() if request.method == 'POST' else None,
         ), status
 
     @login_required
@@ -3344,7 +3431,9 @@ def register_workout_routes(app):
 
         raw_text = request.form.get('workout_text', '').strip()
         append = 'append' in request.form.getlist('mode')
-        result, error = _parse_and_save_workout_text(user, raw_text, append=append)
+        # Set when a workout kept offline is being fixed and sent again.
+        saved_at = _client_saved_at(request.form.get('saved_at'))
+        result, error = _parse_and_save_workout_text(user, raw_text, append=append, saved_at=saved_at)
         if error:
             # Keep the text so it can be fixed in place.
             try:
@@ -3367,7 +3456,10 @@ def register_workout_routes(app):
             "appended": bool(result.get("appended")),
             "needs_bodyweight": bool(result.get("needs_bodyweight_info")),
         }
-        return redirect(url_for('view_workout', date_str=result.get("date_str"), saved=1))
+        offline_fix = _offline_fix_fields()
+        # The phone forgets its kept copy once it lands here (see offline-sync.js).
+        offline_saved = offline_fix["id"] if offline_fix else None
+        return redirect(url_for('view_workout', date_str=result.get("date_str"), saved=1, offline_saved=offline_saved))
 
     @login_required
     def log_preview():
@@ -3384,7 +3476,10 @@ def register_workout_routes(app):
                 return jsonify({"ok": False, "errors": [{"line": None, "message": "Pick a valid date."}]}), 400
             header = f"{header_date.day}/{header_date.month}/{header_date.strftime('%y')} {title or 'Workout'}"
         try:
-            check = check_workout_text(Session, current_user, text, header=header, append=append)
+            check = check_workout_text(
+                Session, current_user, text, header=header, append=append,
+                now=_client_saved_at(request.form.get('saved_at')),
+            )
         except Exception as e:
             logger.error(f"Log preview failed: {e}", exc_info=True)
             return jsonify({"ok": False, "errors": [{"line": None, "message": "Couldn't read this right now."}]}), 500
@@ -3451,4 +3546,6 @@ def register_workout_routes(app):
     app.add_url_rule('/log/preview', endpoint='log_preview', view_func=log_preview, methods=['POST'])
     app.add_url_rule('/timed-preference/set', endpoint='set_timed_preference', view_func=set_timed_preference, methods=['GET'])
     app.add_url_rule('/api/recommend-workout', endpoint='recommend_workout_api', view_func=recommend_workout_api, methods=['GET'])
+    app.add_url_rule('/api/csrf-token', endpoint='csrf_token_api', view_func=csrf_token_api, methods=['GET'])
+    app.add_url_rule('/api/offline-workouts', endpoint='upload_offline_workout', view_func=upload_offline_workout, methods=['POST'])
     app.add_url_rule('/api/history-qa', endpoint='history_qa_api', view_func=history_qa_api, methods=['POST'])

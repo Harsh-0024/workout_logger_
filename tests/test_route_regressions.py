@@ -114,6 +114,156 @@ class TestRouteRegressions(unittest.TestCase):
         response = self.client.get("/timed-preference/set?exercise=Plank&is_timed=no&next=/workout/2026-09-30")
         self.assertEqual(response.headers["Location"], "/workout/2026-09-30")
 
+    def test_service_worker_is_served_from_root_without_login(self):
+        # Browsers refuse a service worker behind a redirect, so '/<username>'
+        # must not catch /sw.js and send it to the login page.
+        response = self.client.get("/sw.js")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.mimetype, "application/javascript")
+        self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
+        self.assertIn(b"addEventListener('fetch'", response.data)
+        response.close()
+
+        # What the worker fetches on install must not need a login either.
+        for path in ("/static/offline.html", "/static/manifest.json"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200, path)
+            response.close()
+
+    def test_pages_tell_the_service_worker_who_is_signed_in(self):
+        # Signed out, the worker drops saved pages; signed in, it learns where '/' leads.
+        login_page = self.client.get("/login").get_data(as_text=True)
+        self.assertIn("{ type: 'signed-out' }", login_page)
+        self.assertNotIn("type: 'signed-in'", login_page)
+
+        self._create_logged_in_user(username="sw_owner")
+        log_page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn('home: "/sw_owner",', log_page)
+        self.assertIn('user: "sw_owner",', log_page)
+        # Signed in, pages upload workouts kept offline.
+        self.assertIn('offline-sync.js', log_page)
+        self.assertNotIn('offline-sync.js', login_page)
+
+    def _upload_offline(self, text, saved_at=None, user=None):
+        payload = {"text": text}
+        if saved_at is not None:
+            payload["saved_at"] = int(saved_at.timestamp() * 1000)
+        if user is not None:
+            payload["user"] = user
+        return self.client.post("/api/offline-workouts", json=payload)
+
+    def test_offline_workout_uploads_on_the_day_it_was_saved(self):
+        user = self._create_logged_in_user(username="offline_owner")
+        saved_at = datetime.now().replace(microsecond=0) - timedelta(days=3)
+
+        response = self._upload_offline("Push Day\nBench Press 100x5", saved_at, "Offline_Owner")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        self.assertEqual(body["status"], "saved")
+        self.assertEqual(body["date"], saved_at.strftime("%Y-%m-%d"))
+        self.assertEqual(body["url"], f"/summary/{saved_at:%Y-%m-%d}")
+        log = self.session.query(WorkoutLog).filter_by(user_id=user.id).one()
+        self.assertEqual(log.date, saved_at)
+
+        # Sent again (the phone gave up waiting, but the first try got through).
+        body = self._upload_offline("Push Day\nBench Press 100x5", saved_at).get_json()
+        self.assertEqual(body["status"], "saved")
+        # A different workout for that day is not added.
+        body = self._upload_offline("Pull Day\nPull Ups 10", saved_at).get_json()
+        self.assertEqual(body["status"], "already_there")
+        self.assertEqual(body["url"], f"/workout/{saved_at:%Y-%m-%d}")
+        self.assertEqual(self.session.query(WorkoutLog).filter_by(user_id=user.id).count(), 1)
+
+    def test_offline_workout_upload_keeps_what_it_cannot_take(self):
+        response = self._upload_offline("Push Day\nBench Press 100x5")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.get_json()["status"], "signed_out")
+
+        self._create_logged_in_user(username="offline_owner")
+        response = self._upload_offline("Push Day\nBench Press 100x5", user="someone_else")
+        self.assertEqual(response.status_code, 409)
+
+        response = self._upload_offline("# nothing to read")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.get_json()["status"], "invalid")
+        self.assertTrue(response.get_json()["error"])
+        self.assertEqual(self.session.query(WorkoutLog).count(), 0)
+
+    def test_csrf_token_refresh_for_pages_opened_offline(self):
+        self.assertEqual(self.client.get("/api/csrf-token").status_code, 302)
+        self._create_logged_in_user(username="token_user")
+        response = self.client.get("/api/csrf-token")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["token"])
+        self.assertIn("no-store", response.headers["Cache-Control"])
+
+    def test_fixed_offline_workout_keeps_its_saved_day(self):
+        user = self._create_logged_in_user(username="offline_fixer")
+        saved_at = datetime.now().replace(microsecond=0) - timedelta(days=2)
+        response = self.client.post("/log", data={
+            "workout_text": "Leg Day\nSquat 120x5",
+            "saved_at": str(int(saved_at.timestamp() * 1000)),
+            "offline_id": "kept-1",
+        })
+        self.assertEqual(response.status_code, 302)
+        # The workout page it lands on tells the phone to forget its kept copy.
+        location = urlsplit(response.headers["Location"])
+        self.assertEqual(location.path, f"/workout/{saved_at:%Y-%m-%d}")
+        self.assertIn("offline_saved=kept-1", location.query)
+        log = self.session.query(WorkoutLog).filter_by(user_id=user.id).one()
+        self.assertEqual(log.date, saved_at)
+
+        # A time far in the future is ignored: the workout is saved as of now.
+        self.client.post("/log", data={
+            "workout_text": "Arm Day\nCurl 20x10",
+            "saved_at": str(int((datetime.now() + timedelta(days=30)).timestamp() * 1000)),
+        })
+        newest = self.session.query(WorkoutLog).filter_by(user_id=user.id).order_by(WorkoutLog.id.desc()).first()
+        self.assertEqual(newest.date.date(), date.today())
+
+    def test_offline_workout_that_fails_again_keeps_its_place_on_the_phone(self):
+        self._create_logged_in_user(username="offline_retry")
+        saved_at = datetime.now().replace(microsecond=0) - timedelta(days=4)
+        stamp = str(int(saved_at.timestamp() * 1000))
+        response = self.client.post("/log", data={
+            "workout_text": "# nothing to read",
+            "saved_at": stamp,
+            "offline_id": "kept-2",
+        })
+        self.assertEqual(response.status_code, 422)
+        page = response.get_data(as_text=True)
+        # Sent again from this page, it is still the same kept workout, dated the same day.
+        self.assertIn('name="offline_id" value="kept-2"', page)
+        self.assertIn(f'name="saved_at" value="{stamp}"', page)
+
+        # An id that isn't one the phone makes is not echoed back.
+        page = self.client.post("/log", data={
+            "workout_text": "# nothing to read",
+            "offline_id": '"><script>',
+        }).get_data(as_text=True)
+        self.assertNotIn('name="offline_id"', page)
+
+        # A normal save doesn't mention the phone at all.
+        response = self.client.post("/log", data={"workout_text": "Leg Day\nSquat 120x5"})
+        self.assertNotIn("offline_saved", response.headers["Location"])
+
+    def test_log_preview_checks_an_offline_workout_against_the_day_it_was_kept(self):
+        user = self._create_logged_in_user(username="offline_preview")
+        saved_at = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(days=5)
+        self.session.add(WorkoutLog(
+            user_id=user.id, date=saved_at, workout_name="Leg Day", exercise="Squat",
+            top_weight=100, top_reps=5,
+        ))
+        self.session.commit()
+
+        body = self.client.post("/log/preview", data={
+            "workout_text": "Leg Day\nLeg Press 200x10",
+            "mode": "append",
+            "saved_at": str(int(saved_at.timestamp() * 1000)),
+        }).get_json()
+        self.assertEqual(body["date_str"], saved_at.strftime("%Y-%m-%d"))
+        self.assertEqual(body["existing"]["date_str"], saved_at.strftime("%Y-%m-%d"))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

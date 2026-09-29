@@ -146,12 +146,15 @@ def _quote(text: str, limit: int = 40) -> str:
     return f"“{text[:limit - 1]}…”" if len(text) > limit else f"“{text}”"
 
 
-def check_workout_text(db_session, user, text: str, *, header: Optional[str] = None, append: bool = False) -> Dict:
+def check_workout_text(
+    db_session, user, text: str, *, header: Optional[str] = None, append: bool = False, now: Optional[datetime] = None
+) -> Dict:
     """
     Parse `text` like saving would and describe the result.
 
     `header` is a first line to put in front (the Edit page keeps title and date in their own fields);
     line numbers still refer to `text`. With `append`, exercises already logged that day are flagged.
+    `now` stands in for today when the text has no date (a workout kept offline is dated when it was kept).
     """
     offset = 0
     source = text or ""
@@ -171,14 +174,15 @@ def check_workout_text(db_session, user, text: str, *, header: Optional[str] = N
         "existing": None,
     }
 
-    parsed = workout_parser(source, bodyweight=getattr(user, "bodyweight", None), preserve_bodyweight_offsets=True) \
-        if source.strip() else None
+    parsed = workout_parser(
+        source, bodyweight=getattr(user, "bodyweight", None), preserve_bodyweight_offsets=True, now=now,
+    ) if source.strip() else None
     if not parsed:
         result["errors"].append({"line": None, "message": "Paste or type a workout first."})
         return result
     result["parsed"] = parsed
 
-    parsed_date = parsed.get("date") or datetime.now()
+    parsed_date = parsed.get("date") or now or datetime.now()
     result.update({
         "title": parsed.get("workout_name") or "Workout",
         "date_str": parsed_date.strftime("%Y-%m-%d"),

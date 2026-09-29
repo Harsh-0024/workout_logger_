@@ -32,6 +32,10 @@
     {% endif %}
 
     <form action="{{ url_for('log_workout') }}" method="POST" id="logForm" class="st-section lg-flow" data-no-loading="true">
+        {% if offline_fix %}
+        <input type="hidden" name="offline_id" value="{{ offline_fix.id }}">
+        <input type="hidden" name="saved_at" value="{{ offline_fix.saved_at }}">
+        {% endif %}
         <input type="hidden" name="mode" id="logMode" value="">
         <div class="st-group lg-editor-group">
             <label for="workoutTextarea" class="visually-hidden">Workout</label>
@@ -122,6 +126,9 @@
             const body = new FormData();
             body.append('workout_text', textarea.value);
             body.append('mode', 'append');
+            // A workout kept offline is checked against the day it was kept.
+            const savedAt = form.querySelector('input[name="saved_at"]');
+            if (savedAt && savedAt.value) body.append('saved_at', savedAt.value);
             return body;
         }, render);
 

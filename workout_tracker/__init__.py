@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import date, datetime
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_from_directory
 from flask_login import LoginManager
 from flask_mail import Mail
 from flask_wtf.csrf import CSRFProtect, CSRFError
@@ -96,6 +96,16 @@ def create_app(config_object=Config, init_db: bool = True):
 
     if not app.config.get('TESTING'):  # Don't start background thread in tests
         threading.Thread(target=process_email_queue, daemon=True).start()
+
+    # The service worker has to be served from the site root (its scope is '/')
+    # and without a redirect, so it gets its own public route; otherwise
+    # '/<username>' catches it and sends it to the login page.
+    def service_worker():
+        response = send_from_directory(app.static_folder, 'sw.js', mimetype='application/javascript')
+        response.headers['Cache-Control'] = 'no-cache'
+        return response
+
+    app.add_url_rule('/sw.js', endpoint='service_worker', view_func=service_worker)
 
     register_auth_routes(app, email_service)
     register_app_icon_routes(app)

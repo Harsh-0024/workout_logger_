@@ -431,6 +431,17 @@ class TestWorkoutQualityScorer(unittest.TestCase):
         self.assertAlmostEqual(score_10["peak_1rm"], 50 * (1 + 10 / 30), places=6)
         self.assertAlmostEqual(score_20["peak_1rm"], 50 * (1 + 20 / 30), places=6)
 
+    def test_saved_time_dates_the_workout(self):
+        """A workout kept offline is dated by when it was saved, not when it uploads."""
+        from datetime import datetime
+        saved = datetime(2027, 1, 3, 21, 15)
+        self.assertEqual(workout_parser("Push Day\nBench Press 100x5", now=saved)["date"], saved)
+        # A dated title in late December, saved in early January, is last year's.
+        self.assertEqual(
+            workout_parser("28/12 Push Day\nBench Press 100x5", now=saved)["date"],
+            datetime(2026, 12, 28),
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
