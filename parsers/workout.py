@@ -277,7 +277,23 @@ def extract_weights(segment, base_weight=None):
 
 # What may follow a number on a set line without it being read as "1 Squat": the "x" of
 # "100 x 5" and a unit ("100 kg, 5").
-_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?)[,;]?$', re.IGNORECASE)
+_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?|bw\S*)[,;]?$', re.IGNORECASE)
+
+# Words that follow a number inside an exercise name ("1 Arm Row", "45 Degree Back
+# Extension"), so the number isn't dropped as a list number.
+_NAME_NUMBER_WORDS = r'(?:arms?|legs?|hands?|handed|degrees?|deg|ways?|point|count|inch(?:es)?)\b'
+
+
+def strip_list_number(line: str) -> str:
+    """Drop a list number in front of a name ("1. Squat", "2) Row", "3 - Curl", "4 Dips"),
+    keeping numbers that are part of it ("1-Arm Row", "45 Degree Hyperextension", "21s Curl")."""
+    line = (line or '').strip()
+    stripped = re.sub(r'^\d+\s*[.)]\s*', '', line)
+    if stripped == line:
+        stripped = re.sub(r'^\d+\s*[:\-–—]\s+', '', line)
+    if stripped == line:
+        stripped = re.sub(rf'^\d+\s+(?!{_NAME_NUMBER_WORDS})(?=[A-Za-z])', '', line, flags=re.IGNORECASE)
+    return stripped
 
 _WEIGHT = r'(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)'
 _SETS_LINE = re.compile(rf'^(?:\s*(?:{_WEIGHT})?\s*x\s*\d+\s*[,;]?)+\s*$')
@@ -317,7 +333,16 @@ def is_data_line(line):
     if re.match(r'^\d+(?:[.)\-:])\s*[A-Za-z]', stripped):
         return False
     tokens = stripped.split()
-    if len(tokens) > 1 and re.match(r'^\d+(?:[.)\-:])?$', tokens[0]) and re.match(r'^[A-Za-z]', tokens[1]):
+    # "1. 3/4 Squat": a list number, then the name.
+    if len(tokens) > 1 and re.match(r'^\d+[.)]$', tokens[0]) and re.search(r'[A-Za-z]', stripped):
+        return False
+    # "2 - Squat": a list number, then the name.
+    if len(tokens) > 2 and re.match(r'^\d+$', tokens[0]) and tokens[1] in ('-', '–', '—', ':') \
+            and re.match(r'^[A-Za-z]', tokens[2]):
+        return False
+    # A number followed by a word is a name ("1 Squat", "45 Degree ...", "21s Curl", "3/4 Squat"),
+    # unless the word belongs to the sets ("100 x 5", "100 kg, 5", "60 sec").
+    if len(tokens) > 1 and re.match(r'^\d', tokens[0]) and re.match(r'^[A-Za-z]', tokens[1]):
         set_word = bool(_SET_WORD.match(tokens[1]))
         if set_word and tokens[1].lower() == 'x':
             set_word = len(tokens) > 2 and bool(re.match(r'^\d', tokens[2]))
@@ -562,7 +587,7 @@ def workout_parser(
         if is_data_line(stripped):
             list_of_lines.append(stripped)
         else:
-            list_of_lines.append(re.sub(r'^\s*\d+\s*(?:[.)\-:]?)\s*', '', stripped))
+            list_of_lines.append(strip_list_number(stripped))
     i = 1
     while i < len(list_of_lines):
         clean_line = list_of_lines[i]
@@ -598,7 +623,17 @@ def workout_parser(
         else:
             tokens = clean_line.split()
             first_num_idx = -1
+            # Numbers inside the name ("45 Degree Hyperextension 20, 12") aren't the sets:
+            # the sets start after the first word.
+            first_word = next(
+                (idx for idx, token in enumerate(tokens)
+                 if re.match(r'^[A-Za-z]', token) and not _SET_WORD.match(token)
+                 and not re.match(r'^body', token, re.IGNORECASE)),
+                -1,
+            )
             for idx, token in enumerate(tokens):
+                if 0 <= first_word and idx <= first_word:
+                    continue
                 token_lower = token.lower()
                 if (
                     re.match(r'^-?\d', token)

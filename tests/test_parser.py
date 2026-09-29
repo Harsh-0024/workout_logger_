@@ -487,5 +487,20 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertEqual(self._exercises("1. Squat\n100, 5")[0][0], "Squat")
 
 
+    def test_numbers_that_are_part_of_the_name_stay(self):
+        for name in ("1-Arm Dumbbell Row", "1 Arm Dumbbell Row", "45 Degree Hyperextension", "45° Hyperextension",
+                     "21s Curl", "3/4 Squat", "90/90 Hip Switch"):
+            self.assertEqual(self._exercises(f"{name}\n20, 10")[0][0], name, name)
+        # List numbers in front still go, even before a name that starts with a number.
+        for line, name in (("1. Squat", "Squat"), ("2) Row", "Row"), ("3 - Curl", "Curl"), ("4 Dips", "Dips"),
+                           ("10. Squat", "Squat"), ("1. 3/4 Squat", "3/4 Squat"), ("3. 1-Arm Row", "1-Arm Row")):
+            self.assertEqual(self._exercises(f"{line}\n20, 10")[0][0], name, line)
+        # A number inside the name isn't read as a set.
+        self.assertEqual(self._exercises("45 Degree Hyperextension 20, 12"),
+                         [("45 Degree Hyperextension", [20.0] * 3, [12] * 3)])
+        # Timed sets written with "sec" are not weights and reps.
+        self.assertNotIn(("Plank", [60.0] * 3, [45] * 3), self._exercises("Plank\n60 sec, 45 sec"))
+
+
 if __name__ == '__main__':
     unittest.main()
