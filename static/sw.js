@@ -1,6 +1,6 @@
 importScripts('/static/offline-workouts.js');
 
-const VERSION = 'v5';
+const VERSION = 'v6';
 // Files that are the same for everyone (styles, icons, the offline page).
 const SHARED_CACHE = `workout-tracker-shared-${VERSION}`;
 // The signed-in person's pages and data; emptied when nobody is signed in.

@@ -2,16 +2,44 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Workout Tracker | Offline</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>You're offline - Workout Tracker</title>
+  <script>
+    // Settings → Appearance on this device: Dark or Light as chosen; Auto follows the phone.
+    try {
+      var theme = localStorage.getItem('workout-tracker-theme-preference');
+      if (theme === 'light' || theme === 'dark') document.documentElement.setAttribute('data-theme', theme);
+    } catch (e) { /* storage off */ }
+  </script>
   <style>
     :root {
       color-scheme: dark;
-      --bg-primary: #000000;
-      --bg-secondary: #0a0a0a;
-      --gold-primary: #d4af37;
-      --text-primary: #ffffff;
-      --text-muted: #a1a1aa;
+      --bg: #000000;
+      --text: #ffffff;
+      --muted: #a1a1aa;
+      --gold: #d4af37;
+      --btn-text: #0b0b0c;
+      --quiet-border: rgba(255, 255, 255, 0.14);
+    }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        color-scheme: light;
+        --bg: #f5f3ee;
+        --text: #1c1917;
+        --muted: #6b7280;
+        --gold: #a8841f;
+        --btn-text: #ffffff;
+        --quiet-border: rgba(0, 0, 0, 0.14);
+      }
+    }
+    :root[data-theme="light"] {
+      color-scheme: light;
+      --bg: #f5f3ee;
+      --text: #1c1917;
+      --muted: #6b7280;
+      --gold: #a8841f;
+      --btn-text: #ffffff;
+      --quiet-border: rgba(0, 0, 0, 0.14);
     }
 
     body {
@@ -20,50 +48,42 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
-      color: var(--text-primary);
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
       text-align: center;
-      padding: 24px;
+      padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
     }
-
-    .card {
-      max-width: 480px;
-      background: rgba(15, 15, 17, 0.9);
-      border-radius: 20px;
-      border: 1px solid rgba(212, 175, 55, 0.2);
-      padding: 32px;
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-    }
-
+    main { max-width: 360px; }
     h1 {
-      margin: 0 0 12px;
-      font-size: 2rem;
-      color: var(--gold-primary);
+      margin: 0 0 10px;
+      font-family: Georgia, 'Times New Roman', serif;
+      font-weight: 500;
+      font-size: 1.9rem;
     }
-
-    p {
-      margin: 0 0 20px;
-      color: var(--text-muted);
-      line-height: 1.6;
-    }
-
-    button {
-      background: linear-gradient(135deg, #d4af37 0%, #f4d03f 100%);
-      color: #000;
-      border: none;
-      border-radius: 12px;
-      padding: 12px 22px;
+    p { margin: 0 0 28px; color: var(--muted); line-height: 1.55; }
+    .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    a, button {
+      font: inherit;
+      font-size: 0.9rem;
       font-weight: 600;
+      border-radius: 12px;
+      padding: 10px 18px;
       cursor: pointer;
+      text-decoration: none;
     }
+    a { background: var(--gold); color: var(--btn-text); border: 1px solid var(--gold); }
+    button { background: none; color: var(--text); border: 1px solid var(--quiet-border); }
   </style>
 </head>
 <body>
-  <div class="card">
-    <h1>You're Offline</h1>
-    <p>Workout Tracker needs an internet connection to sync your data. Please reconnect and try again.</p>
-    <button onclick="window.location.reload()">Try Again</button>
-  </div>
+  <main>
+    <h1>You're offline</h1>
+    <p>This page isn't saved on this device yet. You can still log a workout: it's kept here and uploads when you're back online.</p>
+    <div class="actions">
+      <a href="/log">Log a workout</a>
+      <button type="button" onclick="window.location.reload()">Try again</button>
+    </div>
+  </main>
 </body>
 </html>

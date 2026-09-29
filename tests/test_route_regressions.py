@@ -131,6 +131,11 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("already has a workout, so the one saved offline is waiting", script)
         self.assertNotIn("wasn't added", script)
 
+        # The offline page says logging still works, and offers it.
+        offline = self.client.get("/static/offline.html")
+        self.assertIn('href="/log"', offline.get_data(as_text=True))
+        offline.close()
+
         # What the worker fetches on install must not need a login either.
         for path in ("/static/offline.html", "/static/manifest.json"):
             response = self.client.get(path)
