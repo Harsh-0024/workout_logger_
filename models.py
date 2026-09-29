@@ -730,7 +730,8 @@ def _bootstrap_admin_user(session):
         if not user.is_admin():
             user.role = UserRole.ADMIN
         if created or not user.password_hash:
-            user.password_hash = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            # bcrypt reads 72 bytes at most (and bcrypt 5 refuses more), as in AuthService.
+            user.password_hash = bcrypt.hashpw(admin_password.encode('utf-8')[:72], bcrypt.gensalt()).decode('utf-8')
         if not user.is_verified:
             user.is_verified = True
         if user.verification_token or user.verification_token_expires:

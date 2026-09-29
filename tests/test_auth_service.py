@@ -160,5 +160,22 @@ class TestPasswords(AuthServiceTestCase):
         self.assertFalse(AuthService.verify_password("b2" * 35, old_hash))
 
 
+class TestAdminBootstrap(AuthServiceTestCase):
+    def test_a_long_admin_password_still_creates_the_admin(self):
+        from models import _bootstrap_admin_user
+
+        long_password = "c3" * 50
+        with patch("models.Config.ADMIN_PASSWORD", long_password), \
+                patch("models.Config.ADMIN_USERNAME", "boss"), \
+                patch("models.Config.ADMIN_EMAIL", "boss@example.com"):
+            session = self.factory()
+            _bootstrap_admin_user(session)
+            session.commit()
+            session.close()
+        admin = self.session.query(User).filter_by(username="boss").one()
+        self.assertTrue(admin.is_admin())
+        self.assertTrue(AuthService.verify_password(long_password, admin.password_hash))
+
+
 if __name__ == "__main__":
     unittest.main()
