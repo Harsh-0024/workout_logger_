@@ -642,6 +642,12 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("clip: rect(0 0 0 0)", narrow)
         self.assertNotIn("display: none", narrow)
 
+    def test_unsent_drafts_belong_to_one_account(self):
+        # Someone else signing in on the same phone must not see your unsent workout.
+        user = self._create_logged_in_user(username="draft_owner")
+        self.assertIn(f"const DRAFT_KEY = 'wt-log-draft:{user.id}';", self.client.get("/log").get_data(as_text=True))
+        self.assertIn(f"const DRAFT_KEY = 'wt-custom-draft:{user.id}';", self.client.get("/retrieve/custom").get_data(as_text=True))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

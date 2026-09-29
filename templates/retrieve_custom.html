@@ -242,7 +242,9 @@
         document.addEventListener('touchstart', () => {}, { passive: true });
 
         const MAX = 30;
-        const DRAFT_KEY = 'wt-custom-draft';
+        // Per account, so someone else signing in on this phone never sees these picks.
+        const DRAFT_KEY = 'wt-custom-draft:{{ current_user.id }}';
+        try { localStorage.removeItem('wt-custom-draft'); } catch (e) { /* storage off */ }
         const DRAFT_HOURS = 12;
         const page = document.getElementById('crPage');
         const form = document.getElementById('crForm');

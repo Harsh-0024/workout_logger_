@@ -79,7 +79,9 @@
         const checkNotes = document.getElementById('checkNotes');
         const checkList = document.getElementById('checkList');
         const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
-        const DRAFT_KEY = 'wt-log-draft';
+        // Per account, so someone else signing in on this phone never sees it.
+        const DRAFT_KEY = 'wt-log-draft:{{ current_user.id }}';
+        const OLD_DRAFT_KEY = 'wt-log-draft';
 
         const LogEditor = window.LogEditor;
         LogEditor.autoGrow(textarea);
@@ -93,7 +95,15 @@
 
         // Keep an unsaved draft on this device (the server keeps the text after a failed save anyway).
         if (!textarea.value) {
-            try { textarea.value = localStorage.getItem(DRAFT_KEY) || ''; } catch (e) { /* storage off */ }
+            try {
+                // A draft kept before drafts were per account is taken over once.
+                const old = localStorage.getItem(OLD_DRAFT_KEY);
+                if (old !== null) {
+                    if (!localStorage.getItem(DRAFT_KEY)) localStorage.setItem(DRAFT_KEY, old);
+                    localStorage.removeItem(OLD_DRAFT_KEY);
+                }
+                textarea.value = localStorage.getItem(DRAFT_KEY) || '';
+            } catch (e) { /* storage off */ }
             textarea._fit();
         }
         const saveDraft = () => {
