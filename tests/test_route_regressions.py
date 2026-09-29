@@ -427,6 +427,19 @@ class TestRouteRegressions(unittest.TestCase):
         self.session.expire_all()
         self.assertEqual(self.session.get(User, user.id).bodyweight, 76.5)
 
+    def test_password_change_that_fails_does_not_say_it_worked(self):
+        from services.auth import AuthService
+
+        user = self._create_logged_in_user(username="pw_changer")
+        self.session.query(User).filter_by(id=user.id).update({"password_hash": AuthService.hash_password("secret123")})
+        self.session.commit()
+        form = {"form_type": "password", "current_password": "secret123",
+                "new_password": "newsecret1", "confirm_password": "newsecret1"}
+        with patch("workout_tracker.routes.auth.AuthService.set_password", return_value=False):
+            page = self.client.post("/settings", data=form, follow_redirects=True).get_data(as_text=True)
+        self.assertNotIn("Password updated successfully", page)
+        self.assertIn("wasn&#39;t changed", page)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

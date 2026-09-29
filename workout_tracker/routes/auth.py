@@ -116,6 +116,10 @@ def _infer_bulk_import_dates(headers, today: date | None = None):
     return resolved
 
 
+# set_password reports failure by returning False; the page used to say "updated" regardless.
+PASSWORD_NOT_CHANGED = "Your password wasn't changed. Please try again."
+
+
 def register_auth_routes(app, email_service):
     def _is_safe_redirect_url(target: str) -> bool:
         return is_safe_redirect_url(target, request.host_url)
@@ -923,7 +927,8 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('account_settings') + '#change-password')
 
                     if otp_login_verified or password_change_verified:
-                        AuthService.set_password(user.id, new_password)
+                        if not AuthService.set_password(user.id, new_password):
+                            raise AuthenticationError(PASSWORD_NOT_CHANGED)
                         session.pop('otp_login_verified', None)
                         session.pop('otp_login_user_id', None)
                         session.pop('password_change_verified', None)
@@ -938,7 +943,8 @@ def register_auth_routes(app, email_service):
                     if not AuthService.verify_password(current_password, user.password_hash):
                         raise AuthenticationError("Current password is incorrect")
 
-                    AuthService.set_password(user.id, new_password)
+                    if not AuthService.set_password(user.id, new_password):
+                        raise AuthenticationError(PASSWORD_NOT_CHANGED)
                     flash("Password updated successfully!", "success")
                     return redirect(url_for('account_settings'))
 
@@ -978,7 +984,8 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('account_settings') + '#change-password')
 
                     if AuthService.verify_otp(user.id, otp_code, 'change_password'):
-                        AuthService.set_password(user.id, new_password)
+                        if not AuthService.set_password(user.id, new_password):
+                            raise AuthenticationError(PASSWORD_NOT_CHANGED)
                         session.pop('pending_password_change', None)
                         session.pop('password_change_user_id', None)
                         session.pop('otp_login_verified', None)
