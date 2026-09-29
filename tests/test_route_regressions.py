@@ -779,6 +779,21 @@ class TestRouteRegressions(unittest.TestCase):
         self.session.expire_all()
         self.assertEqual(self.session.query(RepRange).filter_by(user_id=user.id).one().text_content, "")
 
+    def test_saving_the_plan_keeps_it_and_stays_on_the_page(self):
+        from models import Plan
+
+        user = self._create_logged_in_user(username="plan_writer", follow_admin=True)
+        response = self.client.post("/set_plan", data={"plan_text": "  Day 1 - Push\nBench Press - [3, 6-8]\n  "})
+        self.assertEqual(urlsplit(response.headers["Location"]).path, "/set_plan")
+        self.session.expire_all()
+        self.assertEqual(self.session.query(Plan).filter_by(user_id=user.id).one().text_content,
+                         "Day 1 - Push\nBench Press - [3, 6-8]")
+        # Writing your own plan stops following the admin's.
+        self.assertFalse(self.session.get(User, user.id).follow_admin_plan)
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertIn("Workout plan saved.", page)
+        self.assertIn("Bench Press - [3, 6-8]", page)
+
     def test_plan_owner_has_no_follow_switch(self):
         owner_id = self._plan_owner_with_plan()
         with self.client.session_transaction() as sess:

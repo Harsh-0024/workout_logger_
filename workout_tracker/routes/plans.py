@@ -402,8 +402,9 @@ def register_plan_routes(app):
                 user.follow_admin_plan = False
                 plan.updated_at = datetime.now()
                 Session.commit()
-                flash("Workout plan updated successfully!", "success")
-                return redirect(url_for('user_dashboard', username=user.username))
+                flash("Workout plan saved.", "success")
+                # Stay on the plan, as Rep ranges does, so the saved text is right there to check.
+                return redirect(url_for('set_plan'))
 
             can_follow = not is_plan_owner(Session, user)
             return render_template(
