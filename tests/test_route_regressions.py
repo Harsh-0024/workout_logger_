@@ -526,6 +526,9 @@ class TestRouteRegressions(unittest.TestCase):
         page = self.client.get("/stats").get_data(as_text=True)
         self.assertIn('<canvas id="progressChart" role="img" aria-label=', page)
         self.assertIn("document.getElementById('progressChart').setAttribute('aria-label'", page)
+        # Consistency counts weeks from your first workout in the year you started.
+        self.assertIn("const from = startedThisYear ? firstDay : win.start;", page)
+        self.assertIn("workouts a week since ${", page)
         # Enter in the exercise search takes the first match and puts the list and keyboard away.
         self.assertIn("items[pick].click();", page)
         self.assertIn("event.target.blur();", page)

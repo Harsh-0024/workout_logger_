@@ -2173,7 +2173,7 @@
 
     // ================= Consistency: the days you trained =================
     const VIEW_KEY = 'wt-stats-view';
-    const CONSISTENCY_INFO = 'A square for every day of the year. Gold days are days you trained; the deeper the gold, the more sets you did. The big number is how many workouts you averaged a week that year.';
+    const CONSISTENCY_INFO = 'A square for every day of the year. Gold days are days you trained; the deeper the gold, the more sets you did. The big number is how many workouts you averaged a week that year (from your first one, in the year you started).';
     const YEAR_KEY = 'wt-stats-year';
     const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2290,9 +2290,16 @@
         changeEl.replaceChildren();
 
         const weeksOf = (a, b) => Math.max(1, (daysBetween(a, b) + 1) / 7);
-        const perWeek = Number((countBetween(dayList, win.start, win.end) / weeksOf(win.start, win.end)).toFixed(1));
+        // In the year you started, weeks count from your first workout: from 1 January, someone
+        // who started in July and trains 3 times a week read as "0.9 a week".
+        const firstDay = dayList.length ? dateOf(dayList[0]) : null;
+        const startedThisYear = firstDay && firstDay > win.start && firstDay <= win.end;
+        const from = startedThisYear ? firstDay : win.start;
+        const perWeek = Number((countBetween(dayList, win.start, win.end) / weeksOf(from, win.end)).toFixed(1));
         valueEl.textContent = perWeek.toFixed(1);
-        setText('heroCaption', `workouts a week in ${win.year}`);
+        setText('heroCaption', startedThisYear
+            ? `workouts a week since ${firstDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+            : `workouts a week in ${win.year}`);
 
         // Compared with the same stretch of the year before, if you were training then.
         const prevStart = new Date(win.year - 1, 0, 1);
@@ -2339,7 +2346,9 @@
         if (most > 0) {
             // Ties go to the earlier day of the week (Monday first).
             const fav = [1, 2, 3, 4, 5, 6, 0].find(i => byDay[i] === most);
-            setTile(3, 'Favourite day', WEEKDAYS[fav], workoutsText(most));
+            // Short on phones, like the month, so "6 workouts" beside it isn't cut off.
+            const dayName = isPhoneChart() ? WEEKDAYS[fav].slice(0, 3) : WEEKDAYS[fav];
+            setTile(3, 'Favourite day', dayName, workoutsText(most));
         } else {
             setTile(3, 'Favourite day', '–', `in ${win.year}`);
         }
