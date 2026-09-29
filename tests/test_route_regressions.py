@@ -521,6 +521,9 @@ class TestRouteRegressions(unittest.TestCase):
         page = self.client.get("/stats").get_data(as_text=True)
         self.assertIn('<canvas id="progressChart" role="img" aria-label=', page)
         self.assertIn("document.getElementById('progressChart').setAttribute('aria-label'", page)
+        # Enter in the exercise search takes the first match and puts the list and keyboard away.
+        self.assertIn("items[pick].click();", page)
+        self.assertIn("event.target.blur();", page)
 
     def test_bodyweight_line_only_moves_the_setting_for_the_newest_workout(self):
         user = self._create_logged_in_user(username="bw_line_user")  # bodyweight 80

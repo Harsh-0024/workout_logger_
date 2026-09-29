@@ -1707,9 +1707,11 @@
             updateSelectedSuggestion(items);
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < items.length) {
-                items[selectedSuggestionIndex].click();
-            }
+            // Enter (or "Go" on a phone keyboard) takes the highlighted match, else the first one,
+            // and puts the list and keyboard away so the chart can be seen.
+            const pick = selectedSuggestionIndex >= 0 && selectedSuggestionIndex < items.length ? selectedSuggestionIndex : 0;
+            items[pick].click();
+            event.target.blur();
         } else if (event.key === 'Escape') {
             hideSuggestions();
         }
