@@ -358,6 +358,24 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertFalse(_has_time_history(self.session, user.id, "Squat"))
         self.assertFalse(_has_time_history(self.session, user.id, "Plank"))
 
+    def test_log_check_shows_seconds_like_the_workout_page(self):
+        self._create_logged_in_user(username="timed_check")
+        text = "29/9/26 Grip\nDead Hang\nBW, 40 35\n\nWrist Curl\n15, 15 12\n\nFarmer Walk - [20-60s]\n30, 40"
+
+        def labels():
+            body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+            return {row["name"]: row["sets_label"] for row in body["exercises"]}
+
+        # Known timed exercises and written time targets read as seconds; others as reps.
+        self.assertEqual(labels(), {
+            "Dead Hang": "BW×40s · BW×35s · BW×35s",
+            "Wrist Curl": "15×15 · 15×12 · 15×12",
+            "Farmer Walk": "30×40s · 30×40s · 30×40s",
+        })
+        # Once the user says Dead Hang is counted in reps, the check follows that answer.
+        self.client.get("/timed-preference/set?exercise=Dead+Hang&is_timed=no&next=/log")
+        self.assertEqual(labels()["Dead Hang"], "BW×40 · BW×35 · BW×35")
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

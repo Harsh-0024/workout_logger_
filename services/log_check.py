@@ -34,6 +34,32 @@ def _has_seconds_target(exercise_string: str) -> bool:
     return bool(match and re.search(r"\d\s*s(?:ec(?:onds?)?)?\s*$", match.group(1), flags=re.IGNORECASE))
 
 
+class _TimedNames:
+    """Which exercises the user times in seconds, as the workout page will show them: their own
+    answer to "timed, in seconds?", else the known timed list (Dead Hang, Plank, ...). One query."""
+
+    def __init__(self, db_session, user):
+        from models import TimedExercisePreference
+
+        self.answers = {}
+        user_id = getattr(user, "id", None)
+        if db_session is not None and user_id is not None:
+            rows = (
+                db_session.query(TimedExercisePreference.exercise_key, TimedExercisePreference.is_timed)
+                .filter(TimedExercisePreference.user_id == user_id)
+                .all()
+            )
+            self.answers = {key: bool(is_timed) for key, is_timed in rows}
+
+    def is_timed(self, name: str) -> bool:
+        from services.logging import _KNOWN_TIMED_EXERCISE_KEYS, _timed_lookup_key
+
+        key = _timed_lookup_key(name)
+        if key in self.answers:
+            return self.answers[key]
+        return key in _KNOWN_TIMED_EXERCISE_KEYS
+
+
 def _sets_label(weights, reps, *, bodyweight: bool, seconds: bool = False) -> str:
     parts = []
     for weight, rep in zip(weights or [], reps or []):
@@ -202,6 +228,7 @@ def check_workout_text(
         result["existing"] = {k: v for k, v in existing.items() if k not in {"exercises", "date"}}
 
     known = _KnownNames(db_session, user)
+    timed = _TimedNames(db_session, user)
     needs_bodyweight = False
     for item in parsed.get("exercises") or []:
         line_no = item.get("line")
@@ -249,7 +276,8 @@ def check_workout_text(
 
         weights, reps = item.get("weights") or [], item.get("reps") or []
         entry["sets_label"] = _sets_label(
-            weights, reps, bodyweight=uses_bw, seconds=_has_seconds_target(item.get("exercise_string") or ""),
+            weights, reps, bodyweight=uses_bw,
+            seconds=_has_seconds_target(item.get("exercise_string") or "") or timed.is_timed(item.get("name") or ""),
         )
         entry["set_count"] = len(reps)
         result["exercise_count"] += 1
