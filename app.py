@@ -52,7 +52,9 @@ def health_check():
             {
                 "status": "ok",
                 "db_ready": bool(app.config.get("DB_READY")),
-                "db_init_last_error": app.config.get("DB_INIT_LAST_ERROR"),
+                # Only the kind of error: the full text (in the log) can name the database host,
+                # its address and user, and this answer is public.
+                "db_init_last_error": (app.config.get("DB_INIT_LAST_ERROR") or "").split(":", 1)[0] or None,
                 "git_sha": git_sha,
                 "app_py_sha256": app_py_hash,
                 "services_gemini_py_sha256": gemini_py_hash,
