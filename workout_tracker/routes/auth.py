@@ -228,6 +228,10 @@ def register_auth_routes(app, email_service):
                 username = request.form.get('username', '').strip()
                 email = request.form.get('email', '').strip()
                 password = request.form.get('password', '')
+                # The page checks this too, but only when its script runs.
+                confirm_password = request.form.get('confirm_password')
+                if confirm_password is not None and confirm_password != password:
+                    raise AuthenticationError("Passwords don't match.")
 
                 user, verification_code = AuthService.register_user(
                     username=username,

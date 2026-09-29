@@ -105,6 +105,8 @@ class TestAuthFlow(unittest.TestCase):
             ({"username": "alice", "email": "new@example.com", "password": "secret123"}, "Username already taken"),
             ({"username": "carol", "email": "alice@example.com", "password": "secret123"}, "Email already registered"),
             ({"username": "carol", "email": "carol@example.com", "password": "lettersonly"}, "Password must contain at least one number"),
+            ({"username": "carol", "email": "carol@example.com", "password": "secret123", "confirm_password": "secret124"},
+             "Passwords don&#39;t match."),
         ):
             page = self.client.post("/register", data=data).get_data(as_text=True)
             self.assertIn(message, page)
