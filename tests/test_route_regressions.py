@@ -503,6 +503,14 @@ class TestRouteRegressions(unittest.TestCase):
         entry = body["workouts"][0]["entries"][0]
         self.assertEqual((entry["exercise"], entry["uses_bodyweight"], entry["bodyweight"]), ("Pull Ups", True, 80.0))
         self.assertEqual(entry["sets_json"]["weights"][0], 10.0)
+        self.assertFalse(entry["timed"])
+
+        # A timed exercise says its reps are seconds.
+        self.client.post("/log", data={"workout_text": "13/9/26 Core\nPlank - [30-60s]\n0, 45"})
+        body = json.loads(self.client.get("/export_json?start_date=2026-09-13&end_date=2026-09-13").get_data(as_text=True))
+        self.assertTrue(body["workouts"][0]["entries"][0]["timed"])
+        rows = list(csv.DictReader(io.StringIO(self.client.get("/export_csv?start_date=2026-09-13&end_date=2026-09-13").get_data(as_text=True))))
+        self.assertEqual(rows[0]["Timed"], "yes")
         self.assertNotIn("Secret Lift", json.dumps(body))
 
         # Nothing in range, or a bad range: back to the data page with a message.

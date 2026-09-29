@@ -356,6 +356,22 @@ def get_export_log_count(db_session, user, start_date: Optional[date] = None, en
     return _export_query(db_session, user, start_date, end_date).count()
 
 
+def _timed_checker(db_session, user):
+    """Whether a log's reps are seconds (Plank, Dead Hang, a "[30-60s]" target), asking the
+    database once per exercise name."""
+    by_name: Dict[str, bool] = {}
+
+    def is_timed(log) -> bool:
+        if _has_time_hint_in_exercise_string(log.exercise_string or ''):
+            return True
+        name = log.exercise or ''
+        if name not in by_name:
+            by_name[name] = bool(resolve_timed_exercise_status(db_session, user.id, name, '').get('is_timed'))
+        return by_name[name]
+
+    return is_timed
+
+
 def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
     """Generates a CSV string of all workout history."""
     logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
@@ -377,7 +393,10 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
         # For bodyweight exercises the weights above are added to (or taken off) bodyweight.
         'Uses Bodyweight',
         'Bodyweight (kg)',
+        # For timed exercises the reps are seconds.
+        'Timed',
     ])
+    is_timed = _timed_checker(db_session, user)
 
     for log in logs:
         sets_json = log.sets_json if isinstance(log.sets_json, dict) else {}
@@ -396,6 +415,7 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
             f"{log.estimated_1rm:.2f}" if log.estimated_1rm is not None else "",
             "yes" if log.uses_bodyweight else ("no" if log.uses_bodyweight is not None else ""),
             log.bodyweight if log.bodyweight is not None else "",
+            "yes" if is_timed(log) else "no",
         ])
 
     return output.getvalue()
@@ -406,6 +426,7 @@ def get_json_export(db_session, user, start_date: Optional[date] = None, end_dat
     logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
 
     workouts_by_date: Dict[str, Dict] = {}
+    is_timed = _timed_checker(db_session, user)
     for log in logs:
         date_key = log.date.strftime('%Y-%m-%d') if log.date else ""
         entry = {
@@ -421,6 +442,8 @@ def get_json_export(db_session, user, start_date: Optional[date] = None, end_dat
             # For bodyweight exercises the weights are added to (or taken off) bodyweight.
             'uses_bodyweight': log.uses_bodyweight,
             'bodyweight': log.bodyweight,
+            # For timed exercises the reps are seconds.
+            'timed': is_timed(log),
         }
         workouts_by_date.setdefault(date_key, {'date': date_key, 'entries': []})['entries'].append(entry)
 
