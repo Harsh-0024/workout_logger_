@@ -1,6 +1,7 @@
 import unittest
 
-from utils.validators import is_safe_redirect_url
+from utils.errors import ValidationError
+from utils.validators import is_safe_redirect_url, parse_bodyweight
 
 HOST = "http://localhost/"
 
@@ -23,6 +24,20 @@ class TestIsSafeRedirectUrl(unittest.TestCase):
             "/\r\nSet-Cookie:x",
         ):
             self.assertFalse(is_safe_redirect_url(target, HOST), repr(target))
+
+
+
+class TestParseBodyweight(unittest.TestCase):
+    def test_sensible_weights(self):
+        self.assertEqual(parse_bodyweight("78.5"), 78.5)
+        self.assertEqual(parse_bodyweight(" 80 "), 80.0)
+        self.assertIsNone(parse_bodyweight(""))
+        self.assertIsNone(parse_bodyweight(None))
+
+    def test_nonsense_is_refused(self):
+        for raw in ("nan", "inf", "-inf", "1e5", "780.5", "0", "-70", "0.5", "seventy"):
+            with self.assertRaises(ValidationError, msg=raw):
+                parse_bodyweight(raw)
 
 
 if __name__ == "__main__":

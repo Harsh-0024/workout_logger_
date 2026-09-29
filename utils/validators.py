@@ -3,6 +3,7 @@ Input validation utilities.
 """
 import re
 import html
+import math
 from typing import Optional
 from urllib.parse import urljoin, urlsplit
 from utils.errors import ValidationError
@@ -129,3 +130,23 @@ def is_safe_redirect_url(target: Optional[str], host_url: str) -> bool:
     ref = urlsplit(host_url)
     test = urlsplit(urljoin(host_url, target))
     return test.scheme in ('http', 'https') and test.netloc == ref.netloc
+
+
+MAX_BODYWEIGHT_KG = 500
+
+
+def parse_bodyweight(raw) -> Optional[float]:
+    """A bodyweight typed in kg: None when blank, else a number from 1 to 500.
+
+    float() also takes "nan", "inf" and "1e5"; any of those would be used for every
+    bodyweight exercise (and NaN can't even be sent to the Stats page as JSON)."""
+    text = str(raw if raw is not None else '').strip()
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        raise ValidationError("Bodyweight must be a number.")
+    if not math.isfinite(value) or value < 1 or value > MAX_BODYWEIGHT_KG:
+        raise ValidationError(f"Bodyweight must be between 1 and {MAX_BODYWEIGHT_KG} kg.")
+    return value

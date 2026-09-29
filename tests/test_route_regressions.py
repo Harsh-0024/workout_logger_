@@ -417,6 +417,16 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Nothing was saved", response.get_data(as_text=True))
 
+    def test_settings_refuse_a_bodyweight_that_is_not_a_weight(self):
+        user = self._create_logged_in_user(username="bw_setter")
+        for raw in ("nan", "inf", "780"):
+            self.client.post("/settings", data={"form_type": "bodyweight", "bodyweight": raw})
+            self.session.expire_all()
+            self.assertEqual(self.session.get(User, user.id).bodyweight, 80.0, raw)
+        self.client.post("/settings", data={"form_type": "bodyweight", "bodyweight": "76.5"})
+        self.session.expire_all()
+        self.assertEqual(self.session.get(User, user.id).bodyweight, 76.5)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

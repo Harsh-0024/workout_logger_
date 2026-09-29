@@ -37,7 +37,7 @@ from utils.profile_images import (
     has_r2_profile_image_storage,
     normalize_profile_image_key,
 )
-from utils.validators import is_safe_redirect_url, sanitize_text_input, validate_username
+from utils.validators import is_safe_redirect_url, parse_bodyweight, sanitize_text_input, validate_username
 
 from .decorators import dev_only, require_admin
 
@@ -688,21 +688,13 @@ def register_auth_routes(app, email_service):
                     return redirect(url_for('account_settings'))
 
                 if form_type == 'bodyweight':
-                    bodyweight_raw = request.form.get('bodyweight', '').strip()
                     try:
-                        if bodyweight_raw:
-                            bodyweight = float(bodyweight_raw)
-                            if bodyweight < 1:
-                                flash("Bodyweight must be at least 1 kg.", "error")
-                                return redirect(url_for('user_settings'))
-                            user.bodyweight = bodyweight
-                        else:
-                            user.bodyweight = None
+                        user.bodyweight = parse_bodyweight(request.form.get('bodyweight', ''))
                         user.updated_at = datetime.now()
                         Session.commit()
                         flash("Bodyweight updated successfully!", "success")
-                    except ValueError:
-                        flash("Invalid bodyweight value.", "error")
+                    except ValidationError as e:
+                        flash(str(e), "error")
                     except Exception as e:
                         Session.rollback()
                         logger.error(f"Bodyweight update failed: {e}", exc_info=True)
@@ -798,19 +790,14 @@ def register_auth_routes(app, email_service):
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
                     current_password = request.form.get('current_password', '')
-                    bodyweight_raw = request.form.get('bodyweight', '').strip()
                     bodyweight = user.bodyweight
-
-                    if bodyweight_raw:
-                        try:
-                            bodyweight = float(bodyweight_raw)
-                        except ValueError:
-                            flash("Bodyweight must be a number.", "error")
-                            return redirect(url_for('account_settings'))
-
-                        if bodyweight <= 0:
-                            flash("Bodyweight must be greater than 0.", "error")
-                            return redirect(url_for('account_settings'))
+                    try:
+                        typed_bodyweight = parse_bodyweight(request.form.get('bodyweight', ''))
+                    except ValidationError as e:
+                        flash(str(e), "error")
+                        return redirect(url_for('account_settings'))
+                    if typed_bodyweight is not None:
+                        bodyweight = typed_bodyweight
 
                     if not username or not email:
                         flash("Username and email are required.", "error")
