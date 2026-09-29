@@ -141,6 +141,16 @@ class TestAuthFlow(unittest.TestCase):
         if self.sent[-1]["code"] != code["code"]:
             self.assertNotEqual(self._path(response), "/settings/account")
 
+    def test_a_mistyped_new_email_is_caught_before_sending_codes(self):
+        self._sign_up()
+        sent_before = len(self.sent)
+        page = self.client.post("/settings", data={
+            "form_type": "profile", "full_name": "", "username": "alice",
+            "email": "alice@@example", "current_password": "secret123",
+        }, follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Invalid email format", page)
+        self.assertEqual(len(self.sent), sent_before)
+
     def test_changing_email_needs_both_codes_and_a_typo_spends_neither(self):
         self._sign_up()
         response = self.client.post("/settings", data={
