@@ -37,6 +37,9 @@ class Config:
     
     # Feature Flags
     ENABLE_CSRF = True
+    # A form stays good for as long as the page is open: with the default one hour, a workout
+    # typed at the gym and saved later was refused. The token still belongs to the session.
+    WTF_CSRF_TIME_LIMIT = None
     ENABLE_RATE_LIMITING = os.environ.get('ENABLE_RATE_LIMITING', 'True').lower() == 'true'
     
     # Pagination

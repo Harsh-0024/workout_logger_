@@ -175,7 +175,12 @@ def create_app(config_object=Config, init_db: bool = True):
                 )
         except Exception:
             pass
-        return render_template('error.html', error_code=400, error_message="Invalid request"), 400
+        return render_template(
+            'error.html',
+            error_code=400,
+            error_message="This page is out of date",
+            error_detail="Nothing was saved. Go back, refresh the page and try again.",
+        ), 400
 
     @app.errorhandler(500)
     def internal_error(error):

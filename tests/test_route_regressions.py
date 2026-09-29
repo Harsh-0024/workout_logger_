@@ -391,6 +391,32 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn('class="mobile-bottom-nav', page)
         self.assertNotRegex(page, r'<body class="[^"]*is-signed-out')
 
+    def test_a_page_left_open_for_hours_can_still_save(self):
+        # A workout typed over a long gym session is saved hours after the Log page loaded.
+        import time as time_module
+
+        class _CsrfConfig(_RouteTestConfig):
+            WTF_CSRF_ENABLED = True
+
+        app = create_app(config_object=_CsrfConfig, init_db=False)
+        self.assertIsNone(app.config["WTF_CSRF_TIME_LIMIT"])
+        client = app.test_client()
+        user = self._create_logged_in_user(username="slow_logger")
+        with client.session_transaction() as sess:
+            sess["_user_id"] = str(user.id)
+            sess["_fresh"] = True
+        page = client.get("/log").get_data(as_text=True)
+        token = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
+        three_hours_later = time_module.time() + 3 * 3600
+        with patch("time.time", return_value=three_hours_later):
+            response = client.post("/log", data={"csrf_token": token, "workout_text": "20/9/26 Legs\nSquat 100x5"})
+        self.assertEqual(response.status_code, 302)
+
+        # A page that really is out of date says so, and that nothing was saved.
+        response = client.post("/log", data={"csrf_token": "stale", "workout_text": "20/9/26 Legs\nSquat 100x5"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Nothing was saved", response.get_data(as_text=True))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 
