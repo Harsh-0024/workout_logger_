@@ -374,6 +374,9 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
         'Top Weight (kg)',
         'Top Reps',
         'Estimated 1RM (kg)',
+        # For bodyweight exercises the weights above are added to (or taken off) bodyweight.
+        'Uses Bodyweight',
+        'Bodyweight (kg)',
     ])
 
     for log in logs:
@@ -391,6 +394,8 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
             log.top_weight if log.top_weight is not None else "",
             log.top_reps if log.top_reps is not None else "",
             f"{log.estimated_1rm:.2f}" if log.estimated_1rm is not None else "",
+            "yes" if log.uses_bodyweight else ("no" if log.uses_bodyweight is not None else ""),
+            log.bodyweight if log.bodyweight is not None else "",
         ])
 
     return output.getvalue()
@@ -413,6 +418,9 @@ def get_json_export(db_session, user, start_date: Optional[date] = None, end_dat
             'top_weight': log.top_weight,
             'top_reps': log.top_reps,
             'estimated_1rm': log.estimated_1rm,
+            # For bodyweight exercises the weights are added to (or taken off) bodyweight.
+            'uses_bodyweight': log.uses_bodyweight,
+            'bodyweight': log.bodyweight,
         }
         workouts_by_date.setdefault(date_key, {'date': date_key, 'entries': []})['entries'].append(entry)
 

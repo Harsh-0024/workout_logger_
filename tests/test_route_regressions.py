@@ -489,10 +489,20 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual([r["Exercise"] for r in rows], ["Squat", "Bench Press"])  # newest first
         self.assertEqual(rows[1]["Weights"], "80.0,75.0,75.0")
         self.assertEqual(rows[1]["Reps"], "8,10,10")
+        self.assertEqual((rows[1]["Uses Bodyweight"], rows[1]["Bodyweight (kg)"]), ("no", "80.0"))
 
         body = json.loads(self.client.get("/export_json?start_date=2026-09-01&end_date=2026-09-12").get_data(as_text=True))
         self.assertEqual(body["user"], "exporter")
         self.assertEqual([w["date"] for w in body["workouts"]], ["2026-09-10"])
+        self.assertEqual(body["workouts"][0]["entries"][0]["bodyweight"], 80.0)
+        self.assertIn("uses_bodyweight", body["workouts"][0]["entries"][0])
+
+        # A bodyweight exercise says so, so "10" reads as BW+10 kg rather than 10 kg.
+        self.client.post("/log", data={"workout_text": "12/9/26 Pull\nPull Ups\nBW+10, 8"})
+        body = json.loads(self.client.get("/export_json?start_date=2026-09-12&end_date=2026-09-12").get_data(as_text=True))
+        entry = body["workouts"][0]["entries"][0]
+        self.assertEqual((entry["exercise"], entry["uses_bodyweight"], entry["bodyweight"]), ("Pull Ups", True, 80.0))
+        self.assertEqual(entry["sets_json"]["weights"][0], 10.0)
         self.assertNotIn("Secret Lift", json.dumps(body))
 
         # Nothing in range, or a bad range: back to the data page with a message.
