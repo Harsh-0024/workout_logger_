@@ -50,6 +50,14 @@ def create_app(config_object=Config, init_db: bool = True):
     if app.config.get('WTF_CSRF_ENABLED'):
         csrf = CSRFProtect(app)
 
+    @app.after_request
+    def security_headers(response):
+        # Browsers take files only as the type they're sent as, and no other site can
+        # show these pages inside a frame (a disguised "Delete" button, say).
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+        return response
+
     @app.context_processor
     def inject_feature_flags():
         return {

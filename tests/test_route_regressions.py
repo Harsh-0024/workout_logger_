@@ -488,6 +488,25 @@ class TestRouteRegressions(unittest.TestCase):
             self.assertEqual(response.status_code, 302, query)
             self.assertEqual(urlsplit(response.headers["Location"]).path, "/settings/data", query)
 
+    def test_pages_are_not_framed_or_sniffed_and_cookies_stay_same_site(self):
+        from config import Config
+
+        response = self.client.get("/login")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertEqual(self.app.config["SESSION_COOKIE_SAMESITE"], "Lax")
+        self.assertEqual(self.app.config["REMEMBER_COOKIE_SAMESITE"], "Lax")
+        self.assertTrue(self.app.config["SESSION_COOKIE_HTTPONLY"])
+        # Secure (HTTPS-only) where deployed; a local http run can still sign in.
+        self.assertEqual(self.app.config["SESSION_COOKIE_SECURE"], Config.DEPLOYED)
+        self.assertEqual(self.app.config["REMEMBER_COOKIE_SECURE"], Config.DEPLOYED)
+
+        self._create_logged_in_user(username="cookie_user")
+        cookie = self.client.get("/log").headers.get("Set-Cookie", "")
+        if cookie:
+            self.assertIn("SameSite=Lax", cookie)
+            self.assertIn("HttpOnly", cookie)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 
