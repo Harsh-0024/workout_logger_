@@ -250,14 +250,48 @@ def register_plan_routes(app):
                 )
 
             try:
-                selected_keys, selected_exercises, two_set_keys = _resolve_custom_retrieval_selection(
+                selected_keys, _, two_set_keys = _resolve_custom_retrieval_selection(
                     catalog,
                     request.form.getlist('exercise'),
                     request.form.getlist('two_set_exercise'),
                 )
-                set_overrides = _custom_set_overrides(
-                    selected_keys, two_set_keys, request.form.getlist('set_count'),
+                set_counts = request.form.getlist('set_count')
+                _custom_set_overrides(selected_keys, two_set_keys, set_counts)
+            except ValueError as error:
+                flash(str(error), 'error')
+                return redirect(url_for('retrieve_custom'))
+
+            try:
+                record_custom_retrieval(Session, user, selected_keys)
+            except Exception as e:
+                Session.rollback()
+                logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
+
+            # The plan is its own page, so refreshing or coming back to it doesn't ask to
+            # send the form again (or count the pick twice).
+            return redirect(url_for(
+                'retrieve_custom_plan',
+                e=selected_keys,
+                s=set_counts or None,
+                t=two_set_keys or None,
+            ))
+        except Exception as e:
+            logger.error(f"Error generating custom workout: {e}", exc_info=True)
+            flash("Error generating custom workout.", "error")
+            return redirect(url_for('retrieve_custom'))
+
+    @login_required
+    def retrieve_custom_plan():
+        """The plan for a custom pick: exercises (e), their sets (s) or, from older pages, the
+        ones switched to two sets (t), in the address."""
+        user = current_user
+        try:
+            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode='alpha_asc')
+            try:
+                selected_keys, selected_exercises, two_set_keys = _resolve_custom_retrieval_selection(
+                    catalog, request.args.getlist('e'), request.args.getlist('t'),
                 )
+                set_overrides = _custom_set_overrides(selected_keys, two_set_keys, request.args.getlist('s'))
             except ValueError as error:
                 flash(str(error), 'error')
                 return redirect(url_for('retrieve_custom'))
@@ -283,12 +317,6 @@ def register_plan_routes(app):
                 set_overrides=set_overrides,
                 title=workout_title,
             )
-            try:
-                record_custom_retrieval(Session, user, selected_keys)
-            except Exception as e:
-                Session.rollback()
-                logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
-
             return render_template(
                 'retrieve_plan.html',
                 output=output,
@@ -477,6 +505,12 @@ def register_plan_routes(app):
         endpoint='retrieve_custom',
         view_func=retrieve_custom,
         methods=['GET', 'POST'],
+    )
+    app.add_url_rule(
+        '/retrieve/custom/plan',
+        endpoint='retrieve_custom_plan',
+        view_func=retrieve_custom_plan,
+        methods=['GET'],
     )
     app.add_url_rule(
         '/retrieve/custom/review',

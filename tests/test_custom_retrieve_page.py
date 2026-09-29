@@ -59,7 +59,7 @@ class TestCustomRetrievePage(unittest.TestCase):
     def test_set_counts_follow_the_order_and_are_always_written(self):
         self._user_with_plan("picker_sets")
         keys = [normalize_exercise_name(n) for n in ("Overhead Press", "Cable Fly", "Flat Barbell Press")]
-        page = self.client.post("/retrieve/custom", data={"exercise": keys, "set_count": ["4", "3", "3"]}).get_data(as_text=True)
+        page = self.client.post("/retrieve/custom", data={"exercise": keys, "set_count": ["4", "3", "3"]}, follow_redirects=True).get_data(as_text=True)
         self.assertIn("Overhead Press - [4, 6-8]", page)
         self.assertIn("Cable Fly - [3, 12-20]", page)          # 2 -> 3
         self.assertIn("Flat Barbell Press - [3, 5–8]", page)  # the 3 the page showed, spelled out
@@ -92,7 +92,7 @@ class TestCustomRetrievePage(unittest.TestCase):
         self.session.add(WorkoutLog(user_id=user.id, date=base.datetime(2026, 9, 1), workout_name="Back",
                                     exercise="Superman", exercise_string="x", sets_json={}))
         self.session.commit()
-        page = self.client.post("/retrieve/custom", data={"exercise": ["superman"], "set_count": ["3"]}).get_data(as_text=True)
+        page = self.client.post("/retrieve/custom", data={"exercise": ["superman"], "set_count": ["3"]}, follow_redirects=True).get_data(as_text=True)
         self.assertIn("Superman - [3]", page)
 
     def test_names_that_say_nothing_follow_the_plan_only_when_it_is_clear(self):

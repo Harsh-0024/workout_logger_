@@ -894,7 +894,13 @@ class TestRouteRegressions(unittest.TestCase):
             },
         )
 
+        # The plan is its own page: refreshing it doesn't resend the form or count the pick again.
+        self.assertEqual(response.status_code, 302)
+        plan_url = response.headers["Location"]
+        self.assertEqual(urlsplit(plan_url).path, "/retrieve/custom/plan")
+        response = self.client.get(plan_url)
         self.assertEqual(response.status_code, 200)
+        self.client.get(plan_url)
         page = response.get_data(as_text=True)
         self.assertIn("Custom Workout", page)
         # With no sets chosen on the page, the plan's own "[4, 6-8]" stands.
@@ -907,6 +913,16 @@ class TestRouteRegressions(unittest.TestCase):
             .count(),
             2,
         )
+
+    def test_custom_plan_address_with_unknown_exercises_goes_back_to_the_picker(self):
+        self._create_logged_in_user(username="custom_plan_bad_link")
+        self.session.add(Plan(user_id=self.session.query(User).filter_by(username="custom_plan_bad_link").one().id,
+                              text_content="Day 1\nCustom Lift - [4, 6-8]"))
+        self.session.commit()
+        for query in ("", "e=not-an-exercise", f"e={normalize_exercise_name('Custom Lift')}&s=99"):
+            response = self.client.get(f"/retrieve/custom/plan?{query}")
+            self.assertEqual(response.status_code, 302, query)
+            self.assertTrue(response.headers["Location"].endswith("/retrieve/custom"), query)
 
     def test_custom_retrieve_review_page_now_lives_on_the_picker(self):
         self._create_logged_in_user(username="custom_retrieve_review_user")
@@ -932,6 +948,7 @@ class TestRouteRegressions(unittest.TestCase):
                 "exercise": [custom_lift_key],
                 "two_set_exercise": [custom_lift_key],
             },
+            follow_redirects=True,
         )
 
         self.assertEqual(response.status_code, 200)
