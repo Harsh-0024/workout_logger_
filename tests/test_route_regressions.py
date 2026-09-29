@@ -578,6 +578,11 @@ class TestRouteRegressions(unittest.TestCase):
         tiny = self.client.get("/api/csrf-token", headers={"Accept-Encoding": "gzip"})
         self.assertNotIn("Content-Encoding", tiny.headers)
 
+    def test_error_pages_say_what_happened(self):
+        page = self.client.get("/no-such-page/really").get_data(as_text=True)
+        self.assertIn("That page doesn&#39;t exist, or it has moved.", page)
+        self.assertNotIn("Something went wrong. Please try again", page)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

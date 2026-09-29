@@ -195,7 +195,12 @@ def create_app(config_object=Config, init_db: bool = True):
                 'error': SHORTCUT_KEY_MISSING,
                 'server': deployment_name(request.host),
             }), 404
-        return render_template('error.html', error_code=404, error_message="Page not found"), 404
+        return render_template(
+            'error.html',
+            error_code=404,
+            error_message="Page not found",
+            error_detail="That page doesn't exist, or it has moved.",
+        ), 404
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(error):
@@ -222,7 +227,12 @@ def create_app(config_object=Config, init_db: bool = True):
         logger.error(f"Internal server error: {error}", exc_info=True)
         Session.rollback()
         return (
-            render_template('error.html', error_code=500, error_message="Internal server error"),
+            render_template(
+                'error.html',
+                error_code=500,
+                error_message="Something went wrong",
+                error_detail="That didn't work on our side. Please try again in a moment.",
+            ),
             500,
         )
 
