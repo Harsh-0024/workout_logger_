@@ -3355,7 +3355,16 @@ def register_workout_routes(app):
         if error == SAVE_WORKOUT_FAILED:
             return jsonify({'ok': False, 'status': 'retry'}), 503
         if error:
-            return jsonify({'ok': False, 'status': 'invalid', 'error': str(error)}), 422
+            body = {'ok': False, 'status': 'invalid', 'error': str(error)}
+            # The phone names the workout by the date written in it ("Your Thu 25 Sept
+            # workout couldn't be read"), not the day it happened to be kept.
+            try:
+                parsed = workout_parser(to_plain_text(raw_text), now=saved_at)
+                if parsed and parsed.get('date_found'):
+                    body['date'] = parsed['date'].strftime('%Y-%m-%d')
+            except Exception:
+                pass
+            return jsonify(body), 422
 
         date_str = result.get('date_str')
         body = {

@@ -187,6 +187,11 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.get_json()["status"], "invalid")
         self.assertTrue(response.get_json()["error"])
+        self.assertNotIn("date", response.get_json())
+        # A dated one that can't be read says which day it is, for "Your Thu 25 Sept workout...".
+        response = self._upload_offline("25/9/26 Legs\n100, 5")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.get_json()["date"], "2026-09-25")
         self.assertEqual(self.session.query(WorkoutLog).count(), 0)
 
     def test_csrf_token_refresh_for_pages_opened_offline(self):
