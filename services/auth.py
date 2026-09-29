@@ -14,20 +14,39 @@ class AuthenticationError(Exception):
     pass
 
 
+def _password_bytes(password: str) -> bytes:
+    """bcrypt only reads the first 72 bytes. Older bcrypt cut longer passwords there quietly;
+    bcrypt 5 refuses them instead, which broke sign-up and password changes for long passwords
+    (a password manager's, or ~40 accented letters) and locked out accounts made with one.
+    Cutting here keeps every existing hash matching."""
+    return (password or '').encode('utf-8')[:72]
+
+
+def _checked_new_password(new_password: str) -> str:
+    """The same rules as sign-up, for a password change."""
+    from utils.errors import ValidationError
+    from utils.validators import validate_password
+
+    try:
+        return validate_password(new_password)
+    except ValidationError as e:
+        raise AuthenticationError(str(e))
+
+
 class AuthService:
     
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt."""
         salt = bcrypt.gensalt()
-        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+        hashed = bcrypt.hashpw(_password_bytes(password), salt)
         return hashed.decode('utf-8')
     
     @staticmethod
     def verify_password(password: str, password_hash: str) -> bool:
         """Verify a password against its hash."""
         try:
-            return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+            return bcrypt.checkpw(_password_bytes(password), password_hash.encode('utf-8'))
         except Exception:
             return False
     
@@ -257,9 +276,7 @@ class AuthService:
             if not user:
                 return False
 
-            if len(new_password) < 8:
-                raise AuthenticationError("New password must be at least 8 characters")
-
+            new_password = _checked_new_password(new_password)
             user.password_hash = AuthService.hash_password(new_password)
             user.updated_at = datetime.now()
             session.commit()
@@ -546,9 +563,7 @@ class AuthService:
             if not AuthService.verify_password(old_password, user.password_hash):
                 raise AuthenticationError("Current password is incorrect")
             
-            # Validate new password
-            if len(new_password) < 8:
-                raise AuthenticationError("New password must be at least 8 characters")
+            new_password = _checked_new_password(new_password)
             
             # Update password
             user.password_hash = AuthService.hash_password(new_password)
