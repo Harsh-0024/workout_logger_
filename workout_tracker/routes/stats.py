@@ -126,25 +126,13 @@ def register_stats_routes(app):
                     or 'bw' in (log.sets_display or '').lower()
                 })
 
-            csv_size_kb = 0
-            json_size_kb = 0
-
-            if logs:
-                csv_data = get_csv_export(Session, user)
-                csv_bytes = csv_data.encode('utf-8')
-                csv_size_kb = (len(csv_bytes) + 1023) // 1024
-
-                json_payload = get_json_export(Session, user)
-                json_bytes = json.dumps(json_payload, ensure_ascii=False, indent=2).encode('utf-8')
-                json_size_kb = (len(json_bytes) + 1023) // 1024
-
+            # (The export sizes are shown on Settings > Your data, which works them out itself;
+            # building both exports here on every visit was wasted work.)
             return render_template(
                 'stats.html',
                 exercise_options=exercise_options,
                 initial_exercise=initial_exercise,
                 initial_exercise_label=initial_exercise_label,
-                csv_size_kb=csv_size_kb,
-                json_size_kb=json_size_kb,
                 bw_exercises=bw_exercises,
                 bw_warning_enabled=user.bodyweight is None,
                 stats_preferences=get_stats_preferences(Session, user),

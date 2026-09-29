@@ -368,6 +368,15 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertFalse(body["is_timed"])
         self.assertLess(len(queries), 25)
 
+        # The Stats page itself doesn't build whole exports (it used to, twice, on every visit).
+        queries.clear()
+        event.listen(self.engine, "before_cursor_execute", listener)
+        try:
+            self.assertEqual(self.client.get("/stats").status_code, 200)
+        finally:
+            event.remove(self.engine, "before_cursor_execute", listener)
+        self.assertLess(len(queries), 15)
+
     def test_header_buttons_show_keyboard_focus(self):
         # Bootstrap hides the outline on a plain .btn; the header's Settings and Log out are plain .btn.
         self._create_logged_in_user(username="focus_user")
