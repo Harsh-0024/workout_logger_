@@ -208,6 +208,17 @@ def parse_weight_x_reps(segment, base_weight=None):
     return weights, reps
 
 
+# A number as people write one. float() also takes "nan", "inf", "1e5" and other scripts'
+# digits: "nan" crashed the parser and "1e5" would have been a 100,000 kg set.
+_PLAIN_NUMBER = re.compile(r'^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$')
+
+
+def _plain_float(token: str) -> float:
+    if not _PLAIN_NUMBER.match(token or ''):
+        raise ValueError(f"not a plain number: {token!r}")
+    return float(token)
+
+
 def extract_numbers(segment):
     segment = re.sub(r'(kg|lbs|lb)', '', segment.lower())
     numbers = []
@@ -215,7 +226,7 @@ def extract_numbers(segment):
     segment = segment.replace(',', ' ')
     for t in segment.split():
         try:
-            numbers.append(float(t))
+            numbers.append(_plain_float(t))
         except ValueError:
             continue
     return numbers
@@ -249,7 +260,7 @@ def parse_bw_weight(token, base_weight=None):
         return effective_base
 
     try:
-        adjustment = float(token)
+        adjustment = _plain_float(token)
     except ValueError:
         return effective_base
 
@@ -269,7 +280,7 @@ def extract_weights(segment, base_weight=None):
             numbers.append(bw_weight)
             continue
         try:
-            numbers.append(float(t))
+            numbers.append(_plain_float(t))
         except ValueError:
             continue
     return numbers
@@ -398,7 +409,7 @@ def parse_weight_reps_pairs(segment, base_weight: Optional[float] = None, max_re
         if bw_weight is not None:
             return bw_weight
         try:
-            return float(token)
+            return _plain_float(token)
         except ValueError:
             return None
 
@@ -477,7 +488,7 @@ def parse_weight_reps_halves(segment, base_weight: Optional[float] = None, max_r
             weights.append(bw_weight)
             continue
         try:
-            weights.append(float(tok))
+            weights.append(_plain_float(tok))
         except ValueError:
             return None, None
 

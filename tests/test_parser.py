@@ -534,5 +534,29 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertNotIn(("Plank", [60.0] * 3, [45] * 3), self._exercises("Plank\n60 sec, 45 sec"))
 
 
+class TestParserNeverCrashes(unittest.TestCase):
+    def test_words_that_python_reads_as_numbers_are_not_numbers(self):
+        # float() takes "nan", "inf" and "1e5"; "nan" used to crash the parser.
+        for text in ("30/9/26 Push\nSquat\nnan, 5", "30/9/26 Push\nSquat\n100, nan", "30/9/26 Push\nSquat\ninf 1e5, 5 6",
+                     "30/9/26 Push\nSquat , nan felt good\n100 90"):
+            parsed = workout_parser(text, bodyweight=80, preserve_bodyweight_offsets=True)
+            for exercise in parsed["exercises"]:
+                self.assertNotIn(1e5, exercise["weights"], text)
+                for value in exercise["weights"] + exercise["reps"]:
+                    self.assertEqual(value, value, text)  # not NaN
+
+    def test_random_text_never_raises(self):
+        import random
+
+        rng = random.Random(7)
+        tokens = ["Squat", "-", "[3]", "[5-8]", "[30-60s]", "x", "×", "@", ",", "100", "90.5", "0", "-20", "BW",
+                  "bw+10", "bw/2", "kg", "Body Weight - 80 kg", "30/9/26", "Sep 30", "1.", "•", "3 sets", "nan",
+                  "1e5", "5x5", "3x10@60", "60s", "45 sec", "21s", "3/4", "é", "💪", "", "10 8 6"]
+        for _ in range(500):
+            text = "\n".join(" ".join(rng.choice(tokens) for _ in range(rng.randint(0, 6)))
+                             for _ in range(rng.randint(1, 10)))
+            workout_parser(text, bodyweight=80, preserve_bodyweight_offsets=True)
+
+
 if __name__ == '__main__':
     unittest.main()
