@@ -63,22 +63,20 @@
     .rr-row.is-missing .rr-val::placeholder { color: var(--st-warn); opacity: 1; }
     .rr-row.is-dup .rr-name { color: var(--st-warn); }
 
-    /* "Edit as text" sits beside the first heading. */
-    .rr-lists { position: relative; margin-top: 18px; }
-    .rr-mode { position: absolute; top: -1px; right: 4px; font-size: 0.8rem; font-weight: 500; }
-    .rr-lists.is-raw .rr-raw-wrap, .rr-empty { margin-top: 30px; }
+    .rr-lists { margin-top: 18px; }
     .rr-row[hidden], .rr-group[hidden], .rr-empty[hidden], .rr-raw-wrap[hidden], .rr-groups[hidden] { display: none; }
 
-    /* ---- One card per muscle group, A–Z inside ---- */
-    .rr-group + .rr-group { margin-top: 22px; }
-    .rr-group-head {
-        display: flex; align-items: baseline; gap: 8px;
-        margin: 0 4px 9px;
-        font: 600 0.84rem/1.2 'Inter', system-ui, sans-serif;
-        color: var(--text-muted);
-    }
-    .rr-group-count { font-weight: 500; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
-    .rr-group[data-group="New"] .rr-group-head { color: var(--st-accent); }
+    /* ---- Muscle groups that open on a tap, as on Custom workout; A–Z inside ---- */
+    .rr-group > summary { -webkit-tap-highlight-color: transparent; }
+    .rr-group + .rr-group { border-top: 1px solid var(--st-hair); }
+    .rr-group > summary .st-chev { transition: transform var(--transition-fast); }
+    .rr-group[open] > summary .st-chev { transform: rotate(90deg); }
+    .rr-group > summary:hover { background: var(--st-row-hover); }
+    .rr-group > summary:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-glow); }
+    .rr-group-count { flex: none; font-size: 0.82rem; font-weight: 500; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    .rr-group[data-group="New"] .st-row-title { color: var(--st-accent); }
+    .rr-group .rr-list { border-top: 1px solid var(--st-hair); }
+    .rr-group .rr-row { padding-left: 34px; }
 
     /* ---- Save bar floats under the last card ---- */
     .rr-bar.st-editor-bar {
@@ -91,7 +89,7 @@
     .st-editor-meta.is-dirty { color: var(--st-accent); }
 
     @media (max-width: 576px) {
-        .rr-row { padding-left: 16px; }
+        .rr-group .rr-row { padding-left: 30px; }
         .rr-add { padding-left: 16px; }
     }
 </style>
@@ -132,8 +130,11 @@
         </section>
 
         <section class="st-section rr-lists" id="rr-lists">
-            <button type="button" class="st-link rr-mode" id="rr-mode">Edit as text</button>
-            <div class="rr-groups" id="rr-groups"></div>
+            <div class="st-label">
+                <span>Exercises</span>
+                <button type="button" class="st-link st-label-aside" id="rr-mode">Edit as text</button>
+            </div>
+            <div class="st-group rr-groups" id="rr-groups"></div>
             <div class="st-group st-empty rr-empty" id="rr-empty" hidden></div>
             <div class="st-group rr-raw-wrap" id="rr-raw-wrap" hidden>
                 <textarea class="st-editor" id="rr-raw" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Rep ranges as text"></textarea>
@@ -219,14 +220,34 @@
     const groupByKey = new Map();
     const byName = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
 
+    // Which groups are open is remembered for this visit, so saving comes back the same.
+    const OPEN_KEY = 'rr-open-groups';
+    let remembered = [];
+    try { remembered = JSON.parse(sessionStorage.getItem(OPEN_KEY) || '[]'); } catch (e) { /* fine */ }
+    let searching = false;
+    const rememberOpen = () => {
+        if (searching) return;
+        remembered = [...groupsEl.querySelectorAll('.rr-group[open]')].map((g) => g.dataset.group).filter((g) => g !== 'New');
+        try { sessionStorage.setItem(OPEN_KEY, JSON.stringify(remembered)); } catch (e) { /* fine */ }
+    };
+
     function groupList(name) {
         let group = groupsEl.querySelector(`.rr-group[data-group="${CSS.escape(name)}"]`);
         if (!group) {
-            group = document.createElement('div');
+            group = document.createElement('details');
             group.className = 'rr-group';
             group.dataset.group = name;
-            group.innerHTML = '<div class="rr-group-head"><span></span><span class="rr-group-count"></span></div><ul class="st-group rr-list"></ul>';
-            group.querySelector('.rr-group-head span').textContent = name;
+            group.innerHTML = `
+                <summary class="st-row">
+                    <span class="st-row-main"><span class="st-row-title"></span></span>
+                    <span class="rr-group-count"></span>
+                    <i class="bi bi-chevron-right st-chev" aria-hidden="true"></i>
+                </summary>
+                <ul class="rr-list"></ul>`;
+            group.querySelector('.st-row-title').textContent = name;
+            // What was just added stays in view until it's saved.
+            group.open = name === 'New' || remembered.includes(name);
+            group.addEventListener('toggle', rememberOpen);
             const rank = (g) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
             const after = [...groupsEl.children].find((g) => rank(g.dataset.group) > rank(name));
             groupsEl.insertBefore(group, after || null);
@@ -294,16 +315,22 @@
             r.hidden = !match;
             if (match) shown++;
         });
+        // Searching opens the groups with a match; clearing it puts them back as they were.
+        const wasSearching = searching;
+        searching = !!q;
         groupsEl.querySelectorAll('.rr-group').forEach((g) => {
             const total = g.querySelectorAll('.rr-row').length;
             const visible = g.querySelectorAll('.rr-row:not([hidden])').length;
             if (!total) { g.remove(); return; }
             g.hidden = !visible;
             g.querySelector('.rr-group-count').textContent = q ? `${visible} of ${total}` : total;
+            if (q) g.open = visible > 0;
+            else if (wasSearching) g.open = g.dataset.group === 'New' || remembered.includes(g.dataset.group);
         });
         const exact = q && findRow(addName.value);
         addBtn.textContent = exact ? 'Update' : 'Add';
         empty.hidden = rawMode || shown > 0;
+        groupsEl.hidden = rawMode || shown === 0;
         empty.textContent = all.length ? `No exercise named “${addName.value.trim()}” yet.` : 'No exercises yet.';
         const text = rawMode ? raw.value.trim() : serialize();
         const dirty = text !== original;
@@ -422,7 +449,7 @@
         const row = e.target.closest('.rr-row');
         if (e.target.classList.contains('rr-name')) { valOf(row).focus(); valOf(row).select(); return; }
         // On to the next range, across groups.
-        const visible = rows().filter((r) => !r.hidden);
+        const visible = rows().filter((r) => !r.hidden && r.closest('.rr-group').open);
         const next = visible[visible.indexOf(row) + 1];
         if (next) { valOf(next).focus(); valOf(next).select(); } else e.target.blur();
     });
@@ -480,12 +507,13 @@
         const stop = (row, focusEl, text) => {
             e.preventDefault();
             e.stopImmediatePropagation();
+            row.closest('.rr-group').open = true;
             row.scrollIntoView({ block: 'center', behavior: 'smooth' });
             focusEl.focus({ preventScroll: true });
             say(text, 'is-warn');
         };
         if (missing.length) {
-            missing.forEach((r) => r.classList.add('is-missing'));
+            missing.forEach((r) => { r.classList.add('is-missing'); r.closest('.rr-group').open = true; });
             const n = missing.length;
             return stop(missing[0], valOf(missing[0]), n === 1
                 ? `Add a range for ${nameOf(missing[0]).value.trim()}.`
