@@ -507,6 +507,12 @@ class TestRouteRegressions(unittest.TestCase):
             self.assertIn("SameSite=Lax", cookie)
             self.assertIn("HttpOnly", cookie)
 
+    def test_stats_chart_is_described_for_screen_readers(self):
+        self._create_logged_in_user(username="chart_reader")
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn('<canvas id="progressChart" role="img" aria-label=', page)
+        self.assertIn("document.getElementById('progressChart').setAttribute('aria-label'", page)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

@@ -69,7 +69,7 @@
                     <div class="stats-range stats-years" id="yearControls" role="group" aria-label="Year" hidden></div>
                 </div>
                 <div class="stats-chart stats-swap">
-                    <canvas id="progressChart"></canvas>
+                    <canvas id="progressChart" role="img" aria-label="Progress chart"></canvas>
                     <div id="chartTip" class="chart-tip" role="status" hidden>
                         <div class="chart-tip-date"></div>
                         <div class="chart-tip-title"></div>
@@ -1966,6 +1966,10 @@
         const view = { isOverall, data, labels, values, trend, startIdx, loggedIndices, metricInfo };
 
         updateHero(view);
+        // Screen readers get the chart as the sentence above it ("Overall strength: +14% stronger since Jul 2026").
+        const heroText = (id) => (document.getElementById(id)?.textContent || '').trim();
+        document.getElementById('progressChart').setAttribute('aria-label',
+            `${heroText('heroLabel')}: ${heroText('heroValue')} ${heroText('heroCaption')} ${heroText('heroChange')}`.replace(/\s+/g, ' ').trim());
         updateTiles(view);
 
         // Dots = individual workouts, line = trend.
