@@ -633,6 +633,15 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("document.documentElement.setAttribute('data-theme'", head)
         self.assertLess(head.index("data-theme"), head.index("<link"))
 
+    def test_desktop_bar_fits_between_phone_and_desktop_widths(self):
+        self._create_logged_in_user(username="tablet_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn("@media (min-width: 576px) and (max-width: 991.98px)", page)
+        # Icons only on the narrowest of these, words kept for screen readers (not display:none).
+        narrow = page.split("@media (min-width: 576px) and (max-width: 767.98px)", 1)[1][:400]
+        self.assertIn("clip: rect(0 0 0 0)", narrow)
+        self.assertNotIn("display: none", narrow)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

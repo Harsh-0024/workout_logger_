@@ -896,6 +896,32 @@
             position: relative;
             padding: 8px 16px !important;
             border-radius: 8px;
+            white-space: nowrap;  /* "Log out" stays on one line */
+        }
+
+        /* Between phone and desktop widths the full bar needs tighter spacing to fit. */
+        @media (min-width: 576px) and (max-width: 991.98px) {
+            .navbar .nav-link {
+                padding: 8px 8px !important;
+                letter-spacing: 1px;
+                font-size: 0.78rem;
+            }
+            .navbar .navbar-nav { gap: 2px !important; }
+        }
+
+        /* Narrower still (before the phone layout): icons only, with the words kept for
+           screen readers. */
+        @media (min-width: 576px) and (max-width: 767.98px) {
+            .navbar .nav-link span {
+                position: absolute !important;
+                width: 1px; height: 1px;
+                margin: -1px; padding: 0;
+                overflow: hidden;
+                clip: rect(0 0 0 0);
+                white-space: nowrap;
+                border: 0;
+            }
+            .navbar .nav-link i { font-size: 1.1rem; }
         }
 
         .nav-link::after {
