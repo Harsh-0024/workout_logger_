@@ -121,6 +121,8 @@
         const groups = Array.from(list.querySelectorAll('.wh-month'));
         const rows = Array.from(list.querySelectorAll('.wh-row'));
         const input = document.getElementById('historySearch');
+        // "Search" on a phone keyboard only puts the keyboard away: results already filter as you type.
+        if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); input.blur(); } });
         const empty = document.getElementById('historyEmpty');
         const more = document.getElementById('whMore');
 
