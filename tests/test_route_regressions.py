@@ -334,6 +334,15 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertFalse(body["is_timed"])
         self.assertLess(len(queries), 25)
 
+    def test_header_buttons_show_keyboard_focus(self):
+        # Bootstrap hides the outline on a plain .btn; the header's Settings and Log out are plain .btn.
+        self._create_logged_in_user(username="focus_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn('class="btn btn-sm mobile-header-btn"', page)
+        rule = re.search(r"\.btn:focus-visible\s*\{([^}]*)\}", page)
+        self.assertIsNotNone(rule)
+        self.assertIn("outline: 2px solid", rule.group(1))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

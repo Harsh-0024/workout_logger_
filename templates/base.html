@@ -2112,6 +2112,13 @@
             border-radius: 4px;
         }
 
+        /* Bootstrap's .btn:focus-visible drops the outline for a colour plain .btn never sets,
+           so header buttons (Settings, Log out) showed no focus at all. */
+        .btn:focus-visible {
+            outline: 2px solid var(--gold-primary);
+            outline-offset: 2px;
+        }
+
         /* --- MOBILE-SPECIFIC ENHANCEMENTS --- */
         
         /* Touch-friendly interactions */
