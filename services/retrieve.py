@@ -421,20 +421,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         for row in usage_rows or []
     }
 
-    # For each plan exercise, the muscles named in the titles of the days it is on.
-    plan_parts = {}
-    session_titles = plan_data.get("session_titles", {}) if isinstance(plan_data, dict) else {}
-    if isinstance(workout_map, dict):
-        for category, day_map in workout_map.items():
-            if not isinstance(day_map, dict):
-                continue
-            for day_name, exercises in day_map.items():
-                day_id = str(day_name).rsplit(" ", 1)[-1]
-                parts = set(split_title(title_from_plan_day(category, day_name, (session_titles or {}).get(day_id))))
-                for exercise in exercises if isinstance(exercises, list) else []:
-                    name = str(_parse_plan_exercise_line(str(exercise)).get("name") or exercise)
-                    plan_parts.setdefault(normalize_exercise_name(name), []).append(parts)
-
+    plan_parts = _plan_parts_by_exercise(plan_data)
     custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
     moved = get_exercise_group_choices(db_session, user)
     for key, item in catalog.items():
@@ -539,6 +526,36 @@ def set_exercise_group_choice(db_session, user, exercise_key, group, auto_group)
         choice.group_name = group
         choice.updated_at = datetime.now()
     db_session.commit()
+
+
+def _plan_parts_by_exercise(plan_data) -> Dict[str, list]:
+    """For each plan exercise, the muscles named in the titles of the days it is on."""
+    plan_parts = {}
+    workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
+    session_titles = plan_data.get("session_titles", {}) if isinstance(plan_data, dict) else {}
+    if isinstance(workout_map, dict):
+        for category, day_map in workout_map.items():
+            if not isinstance(day_map, dict):
+                continue
+            for day_name, exercises in day_map.items():
+                day_id = str(day_name).rsplit(" ", 1)[-1]
+                parts = set(split_title(title_from_plan_day(category, day_name, (session_titles or {}).get(day_id))))
+                for exercise in exercises if isinstance(exercises, list) else []:
+                    name = str(_parse_plan_exercise_line(str(exercise)).get("name") or exercise)
+                    plan_parts.setdefault(normalize_exercise_name(name), []).append(parts)
+    return plan_parts
+
+
+def exercise_groups_for(db_session, user, names) -> Dict[str, str]:
+    """{name: muscle group} for these exercises, the same groups the Custom workout page shows
+    (including any the user moved there)."""
+    plan_parts = _plan_parts_by_exercise(get_workout_days(get_effective_plan_text(db_session, user) or ""))
+    moved = get_exercise_group_choices(db_session, user)
+    out = {}
+    for name in names:
+        key = normalize_exercise_name(name)
+        out[name] = moved.get(key) or _picker_group(name, plan_parts.get(key))
+    return out
 
 
 def _picker_group(name, plan_day_parts=None) -> str:

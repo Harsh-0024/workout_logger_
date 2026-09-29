@@ -8,6 +8,7 @@ from models import Plan, RepRange, Session
 from services.retrieve import (
     CUSTOM_PICKER_GROUPS,
     CUSTOM_RETRIEVAL_SORT_MODES,
+    exercise_groups_for,
     generate_custom_retrieve_output,
     describe_retrieve_output,
     generate_retrieve_output,
@@ -425,9 +426,12 @@ def register_plan_routes(app):
                 return redirect(url_for('set_exercises'))
 
             can_follow = not is_plan_owner(Session, user)
+            entries = merge_rep_entries(parse_rep_entries(reps.text_content or ""))
+            groups = exercise_groups_for(Session, user, [name for name, _ in entries])
             return render_template(
                 'set_exercises.html',
-                entries=merge_rep_entries(parse_rep_entries(reps.text_content or "")),
+                entries=[[name, value, groups[name]] for name, value in entries],
+                group_order=CUSTOM_PICKER_GROUPS,
                 follow_admin_exercises=can_follow and getattr(user, 'follow_admin_exercises', False),
                 admin_display_name=get_admin_display_name(Session),
                 can_follow=can_follow,

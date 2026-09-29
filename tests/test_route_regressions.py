@@ -308,9 +308,10 @@ class TestRouteRegressions(unittest.TestCase):
         saved = self.session.query(RepRange).filter_by(user_id=user.id).one().text_content
         self.assertEqual(saved, "Bench Press: 5–8\nDips: 3, 6–12")
 
-        # The page lists them as rows to edit in place.
+        # The page lists them as rows to edit in place, each with the muscle group the
+        # Custom workout page would put it in.
         page = self.client.get("/set_exercises").get_data(as_text=True)
-        self.assertIn('id="rr-data">[["Bench Press", "5\\u20138"], ["Dips", "3, 6\\u201312"]]', page)
+        self.assertIn('id="rr-data">[["Bench Press", "5\\u20138", "Chest"], ["Dips", "3, 6\\u201312", "Chest"]]', page)
 
     def test_plan_owner_has_no_follow_switch(self):
         owner_id = self._plan_owner_with_plan()

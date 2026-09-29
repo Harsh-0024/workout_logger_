@@ -63,8 +63,31 @@
     .rr-row.is-missing .rr-val::placeholder { color: var(--st-warn); opacity: 1; }
     .rr-row.is-dup .rr-name { color: var(--st-warn); }
 
-    .rr-count { margin-left: 6px; color: var(--text-subtle); font-weight: 600; letter-spacing: 0; }
-    .rr-row[hidden], .rr-empty[hidden], .rr-raw[hidden], .rr-list[hidden] { display: none; }
+    /* "Edit as text" sits beside the first heading. */
+    .rr-lists { position: relative; margin-top: 18px; }
+    .rr-mode { position: absolute; top: -1px; right: 4px; font-size: 0.8rem; font-weight: 500; }
+    .rr-lists.is-raw .rr-raw-wrap, .rr-empty { margin-top: 30px; }
+    .rr-row[hidden], .rr-group[hidden], .rr-empty[hidden], .rr-raw-wrap[hidden], .rr-groups[hidden] { display: none; }
+
+    /* ---- One card per muscle group, A–Z inside ---- */
+    .rr-group + .rr-group { margin-top: 22px; }
+    .rr-group-head {
+        display: flex; align-items: baseline; gap: 8px;
+        margin: 0 4px 9px;
+        font: 600 0.84rem/1.2 'Inter', system-ui, sans-serif;
+        color: var(--text-muted);
+    }
+    .rr-group-count { font-weight: 500; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    .rr-group[data-group="New"] .rr-group-head { color: var(--st-accent); }
+
+    /* ---- Save bar floats under the last card ---- */
+    .rr-bar.st-editor-bar {
+        margin-top: 22px;
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+    }
+    [data-theme="light"] .rr-bar.st-editor-bar { box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08); }
     .st-editor-meta.is-dirty { color: var(--st-accent); }
 
     @media (max-width: 576px) {
@@ -108,23 +131,21 @@
             <div class="rr-note" id="rr-note" aria-live="polite"></div>
         </section>
 
-        <section class="st-section" style="margin-top: 18px;">
-            <div class="st-label">
-                <span>Exercises<span class="rr-count" id="rr-count"></span></span>
-                <button type="button" class="st-link st-label-aside" id="rr-mode">Edit as text</button>
+        <section class="st-section rr-lists" id="rr-lists">
+            <button type="button" class="st-link rr-mode" id="rr-mode">Edit as text</button>
+            <div class="rr-groups" id="rr-groups"></div>
+            <div class="st-group st-empty rr-empty" id="rr-empty" hidden></div>
+            <div class="st-group rr-raw-wrap" id="rr-raw-wrap" hidden>
+                <textarea class="st-editor" id="rr-raw" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Rep ranges as text"></textarea>
             </div>
-            <div class="st-group">
-                <ul class="rr-list" id="rr-list"></ul>
-                <div class="st-empty rr-empty" id="rr-empty" hidden></div>
-                <textarea class="st-editor rr-raw" id="rr-raw" hidden spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Rep ranges as text"></textarea>
-                <div class="st-editor-bar">
-                    <span class="st-editor-meta" id="rr-state"></span>
-                    <button type="submit" class="st-btn st-btn-primary st-btn-sm" data-loading-text="Saving">Save</button>
-                </div>
+            <div class="st-editor-bar rr-bar">
+                <span class="st-editor-meta" id="rr-state"></span>
+                <button type="submit" class="st-btn st-btn-primary st-btn-sm" data-loading-text="Saving">Save</button>
             </div>
         </section>
     </form>
     <script type="application/json" id="rr-data">{{ entries|tojson }}</script>
+    <script type="application/json" id="rr-group-order">{{ group_order|list|tojson }}</script>
     {% else %}
     <div class="st-empty">
         <i class="bi bi-link-45deg"></i>
@@ -137,9 +158,9 @@
 <script>
 (() => {
     const $ = (id) => document.getElementById(id);
-    const form = $('rr-form'), list = $('rr-list'), raw = $('rr-raw'), empty = $('rr-empty');
+    const form = $('rr-form'), groupsEl = $('rr-groups'), raw = $('rr-raw'), rawWrap = $('rr-raw-wrap'), empty = $('rr-empty');
     const addName = $('rr-add-name'), addVal = $('rr-add-val'), addBtn = $('rr-add-btn');
-    const note = $('rr-note'), count = $('rr-count'), state = $('rr-state'), modeBtn = $('rr-mode');
+    const note = $('rr-note'), state = $('rr-state'), modeBtn = $('rr-mode'), lists = $('rr-lists');
 
     /* ---- Reading what people type or paste (same rules as services/rep_ranges.py) ---- */
     const VALUE = String.raw`(?:(\d+)\s*(?:,|x|×|\*)\s*)?(\d+)(?:\s*(?:-|–|—|to)\s*(\d+))?\s*(s|secs?|seconds)?`;
@@ -193,8 +214,37 @@
         return out;
     }
 
+    /* ---- Muscle groups: "New" first (added since the last save), then the Custom workout order ---- */
+    const ORDER = ['New', ...JSON.parse($('rr-group-order').textContent)];
+    const groupByKey = new Map();
+    const byName = (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base', numeric: true });
+
+    function groupList(name) {
+        let group = groupsEl.querySelector(`.rr-group[data-group="${CSS.escape(name)}"]`);
+        if (!group) {
+            group = document.createElement('div');
+            group.className = 'rr-group';
+            group.dataset.group = name;
+            group.innerHTML = '<div class="rr-group-head"><span></span><span class="rr-group-count"></span></div><ul class="st-group rr-list"></ul>';
+            group.querySelector('.rr-group-head span').textContent = name;
+            const rank = (g) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
+            const after = [...groupsEl.children].find((g) => rank(g.dataset.group) > rank(name));
+            groupsEl.insertBefore(group, after || null);
+        }
+        return group.querySelector('.rr-list');
+    }
+    // Saved exercises sit in their muscle group, A–Z; anything else is new.
+    function renderAll(entries) {
+        groupsEl.innerHTML = '';
+        const sorted = entries.map(([n, v]) => [n, v, groupByKey.get(keyOf(n)) || 'New']);
+        const rank = (g) => { const i = ORDER.indexOf(g); return i < 0 ? ORDER.length : i; };
+        // New ones keep the order they were written in.
+        sorted.sort((a, b) => (rank(a[2]) - rank(b[2])) || (a[2] === 'New' ? 0 : byName(a[0], b[0])));
+        sorted.forEach(([n, v, g]) => groupList(g).append(makeRow(n, v)));
+    }
+
     /* ---- Rows ---- */
-    const rows = () => [...list.querySelectorAll('.rr-row')];
+    const rows = () => [...groupsEl.querySelectorAll('.rr-row')];
     // Range fields grow with what's in them ("3 × 12–15" needs more room than "5–8").
     const fit = (el) => { el.style.width = `calc(${Math.max(4, (el.value || el.placeholder).length)}ch + 22px)`; };
     const nameOf = (row) => row.querySelector('.rr-name');
@@ -244,9 +294,15 @@
             r.hidden = !match;
             if (match) shown++;
         });
+        groupsEl.querySelectorAll('.rr-group').forEach((g) => {
+            const total = g.querySelectorAll('.rr-row').length;
+            const visible = g.querySelectorAll('.rr-row:not([hidden])').length;
+            if (!total) { g.remove(); return; }
+            g.hidden = !visible;
+            g.querySelector('.rr-group-count').textContent = q ? `${visible} of ${total}` : total;
+        });
         const exact = q && findRow(addName.value);
         addBtn.textContent = exact ? 'Update' : 'Add';
-        count.textContent = all.length ? (q ? `· ${shown} of ${all.length}` : `· ${all.length}`) : '';
         empty.hidden = rawMode || shown > 0;
         empty.textContent = all.length ? `No exercise named “${addName.value.trim()}” yet.` : 'No exercises yet.';
         const text = rawMode ? raw.value.trim() : serialize();
@@ -281,7 +337,8 @@
             fresh.push(row);
             added++;
         });
-        fresh.reverse().forEach((row) => { list.prepend(row); flashRow(row); });
+        const newList = fresh.length ? groupList('New') : null;
+        fresh.reverse().forEach((row) => { newList.prepend(row); flashRow(row); });
         refresh();
         const parts = [];
         if (added) parts.push(`Added ${added}`);
@@ -310,7 +367,7 @@
             say(`Updated ${nameOf(existing).value}.`);
         } else {
             const row = makeRow(name, value);
-            list.prepend(row);
+            groupList('New').prepend(row);
             flashRow(row);
             refresh();
             say(`Added ${name}.`);
@@ -347,11 +404,11 @@
     });
 
     /* ---- Editing rows in place ---- */
-    list.addEventListener('input', (e) => {
+    groupsEl.addEventListener('input', (e) => {
         if (e.target.classList.contains('rr-val')) fit(e.target);
         refresh();
     });
-    list.addEventListener('focusout', (e) => {
+    groupsEl.addEventListener('focusout', (e) => {
         const el = e.target;
         if (el.classList.contains('rr-val')) { el.value = formatValue(el.value); fit(el); }
         if (el.classList.contains('rr-name')) el.value = cleanName(el.value);
@@ -359,16 +416,17 @@
         if (row && valOf(row).value) row.classList.remove('is-missing');
         refresh();
     });
-    list.addEventListener('keydown', (e) => {
+    groupsEl.addEventListener('keydown', (e) => {
         if (e.key !== 'Enter') return;
         e.preventDefault();
         const row = e.target.closest('.rr-row');
         if (e.target.classList.contains('rr-name')) { valOf(row).focus(); valOf(row).select(); return; }
-        let next = row.nextElementSibling;
-        while (next && next.hidden) next = next.nextElementSibling;
+        // On to the next range, across groups.
+        const visible = rows().filter((r) => !r.hidden);
+        const next = visible[visible.indexOf(row) + 1];
         if (next) { valOf(next).focus(); valOf(next).select(); } else e.target.blur();
     });
-    list.addEventListener('click', (e) => {
+    groupsEl.addEventListener('click', (e) => {
         const del = e.target.closest('.rr-del');
         if (!del) return;
         const row = del.closest('.rr-row');
@@ -385,18 +443,19 @@
             return n || v ? `${n}: ${stored(v)}` : '';
         }).filter(Boolean).join('\n');
         rawMode = true;
-        list.hidden = true;
-        raw.hidden = false;
+        lists.classList.add('is-raw');
+        groupsEl.hidden = true;
+        rawWrap.hidden = false;
         addName.closest('.st-section').hidden = true;
         modeBtn.textContent = 'Edit as list';
         refresh();
     }
     function toList() {
-        list.innerHTML = '';
-        parseEntries(raw.value).forEach(([n, v]) => list.append(makeRow(n, v)));
+        renderAll(parseEntries(raw.value));
         rawMode = false;
-        raw.hidden = true;
-        list.hidden = false;
+        lists.classList.remove('is-raw');
+        rawWrap.hidden = true;
+        groupsEl.hidden = false;
         addName.closest('.st-section').hidden = false;
         modeBtn.textContent = 'Edit as text';
         refresh();
@@ -444,7 +503,9 @@
     });
 
     /* ---- Start ---- */
-    JSON.parse($('rr-data').textContent).forEach(([n, v]) => list.append(makeRow(n, v)));
+    const saved = JSON.parse($('rr-data').textContent);
+    saved.forEach(([n, , g]) => groupByKey.set(keyOf(n), g));
+    renderAll(saved);
     original = serialize();
     refresh();
 })();
