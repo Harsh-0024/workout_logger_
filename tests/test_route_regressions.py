@@ -539,6 +539,13 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(current(), 78.0)
         self.assertEqual(logged(25), {78.0})
 
+        # Editing the old workout (the edit box has no bodyweight line) keeps its 70 kg.
+        self.client.post("/workout/2026-09-05/edit", data={
+            "workout_title": "Pull A", "workout_date": "2026-09-05", "workout_text": "Pull Ups\nBW, 10"})
+        self.session.expire_all()
+        self.assertEqual(logged(5), {70.0})
+        self.assertEqual(current(), 78.0)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

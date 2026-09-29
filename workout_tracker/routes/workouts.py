@@ -3081,6 +3081,10 @@ def register_workout_routes(app):
 
                 parsed['date'] = new_start_dt
                 parsed['workout_name'] = title
+                # The edit box has no bodyweight line: keep the day's, not today's.
+                logged_bodyweight = next((log.bodyweight for log in logs if log.bodyweight), None)
+                if parsed.get('bodyweight') is None and logged_bodyweight:
+                    parsed['logged_bodyweight'] = logged_bodyweight
 
                 old_exercises = [log.exercise for log in logs]
 

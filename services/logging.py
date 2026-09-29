@@ -1046,7 +1046,8 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
     # A "Body Weight - 73 kg" line is that workout's bodyweight. It becomes the current
     # bodyweight only when this is the newest workout: pasting or editing an old one used to
     # reset today's setting to the old value.
-    workout_bodyweight = getattr(user, "bodyweight", None)
+    # An edited workout without the line keeps the bodyweight it was logged with.
+    workout_bodyweight = parsed_data.get('logged_bodyweight') or getattr(user, "bodyweight", None)
     parsed_bodyweight = parsed_data.get('bodyweight')
     if parsed_bodyweight is not None:
         try:
