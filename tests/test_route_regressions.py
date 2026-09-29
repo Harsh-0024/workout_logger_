@@ -343,6 +343,21 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIsNotNone(rule)
         self.assertIn("outline: 2px solid", rule.group(1))
 
+    def test_time_history_is_found_on_a_real_database(self):
+        # Only logs with brackets are fetched; a hint in one of them still marks the exercise timed.
+        from services.logging import _has_time_history
+
+        user = self._create_logged_in_user(username="time_history")
+        for day, text in ((1, "Dead Hang\nBW, 40"), (2, "Dead Hang - [30-60s]\nBW, 45"), (3, "Squat - [5-8]\n100, 5")):
+            self.session.add(WorkoutLog(user_id=user.id, date=datetime(2026, 9, day), exercise=text.split(" - ")[0].split("\n")[0],
+                                        exercise_string=text, top_weight=1, top_reps=1))
+        self.session.add(WorkoutLog(user_id=user.id, date=datetime(2026, 9, 4), exercise="Plank", exercise_string=None,
+                                    top_weight=1, top_reps=1))
+        self.session.commit()
+        self.assertTrue(_has_time_history(self.session, user.id, "Dead Hang"))
+        self.assertFalse(_has_time_history(self.session, user.id, "Squat"))
+        self.assertFalse(_has_time_history(self.session, user.id, "Plank"))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

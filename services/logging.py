@@ -802,16 +802,16 @@ def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_in
     if not candidates:
         return False
 
+    # A time hint always sits in brackets, so the database skips every log without one
+    # (this runs for each exercise on every workout page and save).
     logs = (
         db_session.query(WorkoutLog)
         .filter(WorkoutLog.user_id == user_id)
         .filter(WorkoutLog.exercise.in_(candidates))
+        .filter(WorkoutLog.exercise_string.like('%[%'))
         .all()
     )
-    for log in logs:
-        if _has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '')):
-            return True
-    return False
+    return any(_has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '')) for log in logs)
 
 
 def get_timed_exercise_preference(db_session, user_id: int, exercise_name: str) -> Optional[bool]:
