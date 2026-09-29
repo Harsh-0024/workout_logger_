@@ -376,6 +376,16 @@ class TestRouteRegressions(unittest.TestCase):
         self.client.get("/timed-preference/set?exercise=Dead+Hang&is_timed=no&next=/log")
         self.assertEqual(labels()["Dead Hang"], "BW×40 · BW×35 · BW×35")
 
+    def test_tab_bar_only_for_people_signed_in(self):
+        # Signed out, every tab leads to the sign-in page; the share page has its own invite instead.
+        page = self.client.get("/no-such-page/really").get_data(as_text=True)
+        self.assertNotIn('class="mobile-bottom-nav', page)
+        self.assertRegex(page, r'<body class="[^"]*is-signed-out')
+        self._create_logged_in_user(username="tab_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn('class="mobile-bottom-nav', page)
+        self.assertNotRegex(page, r'<body class="[^"]*is-signed-out')
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

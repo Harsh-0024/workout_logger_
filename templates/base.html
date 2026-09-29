@@ -1751,6 +1751,10 @@
                 padding-bottom: 80px;
             }
 
+            body.is-signed-out {
+                padding-bottom: 0;
+            }
+
             .mobile-bottom-nav {
                 position: fixed;
                 bottom: 0;
@@ -2217,7 +2221,7 @@
         }
     </style>
 </head>
-<body class="{% block body_class %}{% endblock %}" data-ai-admin="{{ 'true' if current_user.is_authenticated and current_user.is_admin() else 'false' }}">
+<body class="{% block body_class %}{% endblock %}{{ '' if current_user.is_authenticated else ' is-signed-out' }}" data-ai-admin="{{ 'true' if current_user.is_authenticated and current_user.is_admin() else 'false' }}">
     <div class="global-loader" id="globalLoader" aria-live="polite" aria-busy="true">
         <div class="global-loader-content">
             <div class="global-loader-ring"></div>
@@ -2321,7 +2325,8 @@
         </div>
     </nav>
 
-    <!-- Mobile Bottom Navigation -->
+    <!-- Mobile Bottom Navigation (signed in only: signed out, every tab leads to the sign-in page) -->
+    {% if current_user.is_authenticated %}
     <nav class="mobile-bottom-nav d-sm-none">
         <div class="container">
             <div class="d-flex justify-content-around align-items-center">
@@ -2344,6 +2349,7 @@
             </div>
         </div>
     </nav>
+    {% endif %}
 
     <div class="container mb-5 app-content">
         <!-- Flash Messages -->
