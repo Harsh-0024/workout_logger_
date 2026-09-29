@@ -513,6 +513,32 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn('<canvas id="progressChart" role="img" aria-label=', page)
         self.assertIn("document.getElementById('progressChart').setAttribute('aria-label'", page)
 
+    def test_bodyweight_line_only_moves_the_setting_for_the_newest_workout(self):
+        user = self._create_logged_in_user(username="bw_line_user")  # bodyweight 80
+
+        def current():
+            self.session.expire_all()
+            return self.session.get(User, user.id).bodyweight
+
+        def logged(day):
+            return {log.bodyweight for log in self.session.query(WorkoutLog).filter(
+                WorkoutLog.user_id == user.id, WorkoutLog.date >= datetime(2026, 9, day),
+                WorkoutLog.date < datetime(2026, 9, day + 1))}
+
+        self.client.post("/log", data={"workout_text": "20/9/26 Pull\nBody Weight - 78 kg\nPull Ups\nBW+5, 8"})
+        self.assertEqual(current(), 78.0)
+        self.assertEqual(logged(20), {78.0})
+
+        # An older workout keeps its own bodyweight, but today's setting stays.
+        self.client.post("/log", data={"workout_text": "5/9/26 Pull\nBody Weight - 70 kg\nPull Ups\nBW, 8"})
+        self.assertEqual(current(), 78.0)
+        self.assertEqual(logged(5), {70.0})
+
+        # A typo isn't a bodyweight.
+        self.client.post("/log", data={"workout_text": "25/9/26 Pull\nBody Weight - 7800 kg\nPull Ups\nBW, 9"})
+        self.assertEqual(current(), 78.0)
+        self.assertEqual(logged(25), {78.0})
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

@@ -4,6 +4,8 @@ Workout logging service for processing and saving workout data.
 from collections import Counter, defaultdict
 from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, date, timedelta
+from sqlalchemy import func
+import math
 import re
 
 from list_of_exercise import get_workout_days
@@ -1041,11 +1043,23 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
     summary = []
     workout_date = parsed_data.get('date', datetime.now())
     workout_name = parsed_data.get('workout_name')
+    # A "Body Weight - 73 kg" line is that workout's bodyweight. It becomes the current
+    # bodyweight only when this is the newest workout: pasting or editing an old one used to
+    # reset today's setting to the old value.
+    workout_bodyweight = getattr(user, "bodyweight", None)
     parsed_bodyweight = parsed_data.get('bodyweight')
     if parsed_bodyweight is not None:
         try:
             parsed_bodyweight = float(parsed_bodyweight)
-            if parsed_bodyweight > 0:
+            if not (math.isfinite(parsed_bodyweight) and 1 <= parsed_bodyweight <= 500):
+                raise ValueError("not a bodyweight")
+            workout_bodyweight = parsed_bodyweight
+            latest = (
+                db_session.query(func.max(WorkoutLog.date))
+                .filter(WorkoutLog.user_id == user.id)
+                .scalar()
+            )
+            if latest is None or workout_date >= latest:
                 user.bodyweight = parsed_bodyweight
                 db_session.flush()
         except (TypeError, ValueError):
@@ -1137,7 +1151,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             )
         effective_new_sets = effective_sets_for_current(
             new_sets,
-            getattr(user, "bodyweight", None),
+            workout_bodyweight,
             uses_bodyweight,
         )
 
@@ -1192,7 +1206,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                     exercise=ex_name,
                     exercise_string=new_str,
                     sets_json=new_sets,
-                    bodyweight=user.bodyweight,
+                    bodyweight=workout_bodyweight,
                     uses_bodyweight=uses_bodyweight,
                     top_weight=daily_max_weight if daily_max_weight > 0 else None,
                     top_reps=daily_max_reps if daily_max_reps > 0 else None,
