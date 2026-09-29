@@ -58,6 +58,14 @@ class TestRegistration(AuthServiceTestCase):
         for weak in ("short1", "lettersonly", "12345678"):
             with self.assertRaises(AuthenticationError, msg=weak):
                 AuthService.register_user("carol", "carol@example.com", weak)
+        # The rule is the whole message, and nothing technical leaks out.
+        with self.assertRaises(AuthenticationError) as caught:
+            AuthService.register_user("carol", "carol@example.com", "lettersonly")
+        self.assertEqual(str(caught.exception), "Password must contain at least one number")
+        with patch("services.auth._seed_user_data", side_effect=RuntimeError("db exploded")):
+            with self.assertRaises(AuthenticationError) as caught:
+                AuthService.register_user("carol", "carol@example.com", "secret123")
+        self.assertNotIn("exploded", str(caught.exception))
         self.assertEqual(self.session.query(User).count(), 1)
 
 

@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from models import User, UserRole, EmailVerification, Session, _seed_user_data, session_factory
+from utils.errors import ValidationError
 from utils.logger import logger
 from config import Config
 
@@ -173,9 +174,14 @@ class AuthService:
         except AuthenticationError:
             session.rollback()
             raise
+        except ValidationError as e:
+            # "Password must contain at least one number" is the whole message.
+            session.rollback()
+            raise AuthenticationError(str(e))
         except Exception as e:
             session.rollback()
-            raise AuthenticationError(f"Registration failed: {str(e)}")
+            logger.error(f"Registration failed: {e}", exc_info=True)
+            raise AuthenticationError("Couldn't create your account right now. Please try again.")
         finally:
             session.close()
 
