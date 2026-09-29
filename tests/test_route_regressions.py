@@ -264,6 +264,38 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(body["date_str"], saved_at.strftime("%Y-%m-%d"))
         self.assertEqual(body["existing"]["date_str"], saved_at.strftime("%Y-%m-%d"))
 
+    def test_every_page_has_its_own_title(self):
+        # Titles name the page in tabs, history and for screen readers.
+        self._create_logged_in_user(username="title_user")
+        self.client.post("/log", data={"workout_text": "20/9/26 Leg Day\nSquat 120x5"})
+        pages = {
+            "/log": "Log workout",
+            "/stats": "Stats",
+            "/workouts": "All workouts",
+            "/retrieve/categories": "Retrieve",
+            "/retrieve/custom": "Custom workout",
+            "/set_plan": "Workout plan",
+            "/set_exercises": "Rep ranges",
+            "/settings": "Settings",
+            "/settings/account": "Account",
+            "/settings/data": "Your data",
+            "/settings/integrations": "Integrations",
+            "/settings/more": "Bodyweight exercises",
+            "/bulk-import": "Bulk import",
+            "/shortcut/urls": "Apple Shortcuts",
+            "/shortcut/mapping": "Session names",
+            "/workout/2026-09-20": "Leg Day, Sun, 20 Sep 2026",
+            "/workout/2026-09-20/edit": "Edit workout",
+            "/no-such-page/really": "Page not found",
+        }
+        for path, title in pages.items():
+            page = self.client.get(path).get_data(as_text=True)
+            found = re.search(r"<title>(.*?)</title>", page, re.S)
+            self.assertIsNotNone(found, path)
+            self.assertEqual(found.group(1).strip(), f"{title} - Workout Tracker", path)
+
+        self.assertIn(f"{date.today().year} Workout Tracker", self.client.get("/log").get_data(as_text=True))
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

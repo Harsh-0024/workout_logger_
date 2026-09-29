@@ -54,6 +54,7 @@ def create_app(config_object=Config, init_db: bool = True):
     def inject_feature_flags():
         return {
             'ENABLE_CSRF': bool(app.config.get('WTF_CSRF_ENABLED')),
+            'current_year': datetime.now().year,
         }
 
     app.jinja_env.globals['iphone_launch_screens'] = [
