@@ -308,6 +308,32 @@ class TestRouteRegressions(unittest.TestCase):
             self.assertIn("function fitMeta(el)", page)
         self.assertIn('id="saveBtn">Save</button>', edit_page)
 
+    def test_exercise_chart_asks_the_database_a_fixed_number_of_times(self):
+        # One query per session made long histories slow to chart on a remote database.
+        from sqlalchemy import event
+
+        user = self._create_logged_in_user(username="chart_speed")
+        start = datetime(2026, 1, 1, 18, 0)
+        for i in range(40):
+            day = start + timedelta(days=2 * i)
+            handle_workout_log(self.session, user, {
+                "date": day, "workout_name": "Legs",
+                "exercises": [{"name": "Back Squat", "exercise_string": f"Back Squat\n{100 + i} 90, 5 6",
+                               "weights": [100.0 + i, 90.0, 90.0], "reps": [5, 6, 6], "valid": True}],
+            })
+        self.session.commit()
+
+        queries = []
+        listener = lambda *args, **kwargs: queries.append(1)
+        event.listen(self.engine, "before_cursor_execute", listener)
+        try:
+            body = self.client.get("/stats/data/Back%20Squat").get_json()
+        finally:
+            event.remove(self.engine, "before_cursor_execute", listener)
+        self.assertEqual(len(body["labels"]), 40)
+        self.assertFalse(body["is_timed"])
+        self.assertLess(len(queries), 25)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

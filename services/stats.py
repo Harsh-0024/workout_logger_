@@ -14,7 +14,7 @@ from models import WorkoutLog, RepRange, StatsExerciseView, StatsPreference
 from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweight
 from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
-from services.logging import resolve_timed_exercise_status
+from services.logging import _has_time_hint_in_exercise_string, resolve_timed_exercise_status
 from services.exercise_matching import token_signature
 from utils.dates import local_date
 
@@ -419,6 +419,19 @@ def get_json_export(db_session, user, start_date: Optional[date] = None, end_dat
     }
 
 
+def _any_log_is_timed(db_session, user, logs) -> bool:
+    """Whether any of these logs is a timed exercise. Apart from a time written in a log's own
+    text, the answer only depends on the exercise name, so the database is asked once per name
+    instead of once per session (a long history made the chart slow to load)."""
+    if any(_has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '') or '') for log in logs):
+        return True
+    names = dict.fromkeys(getattr(log, 'exercise', '') or '' for log in logs)
+    return any(
+        resolve_timed_exercise_status(db_session, user.id, name, '').get("is_timed")
+        for name in names
+    )
+
+
 def get_chart_data(db_session, user, exercise_name):
     """Fetches date vs 1RM data for a specific exercise with additional metrics."""
     aliases = _resolve_exercise_aliases(db_session, user, exercise_name)
@@ -442,17 +455,7 @@ def get_chart_data(db_session, user, exercise_name):
 
     target_rep_range = _get_target_rep_range(db_session, user, exercise_name)
 
-    exercise_is_timed = False
-    for log in logs:
-        timed_status = resolve_timed_exercise_status(
-            db_session,
-            user.id,
-            getattr(log, 'exercise', ''),
-            getattr(log, 'exercise_string', '') or '',
-        )
-        if timed_status.get("is_timed"):
-            exercise_is_timed = True
-            break
+    exercise_is_timed = _any_log_is_timed(db_session, user, logs)
 
     if exercise_is_timed:
         timed_target = _get_timed_target_range(db_session, user, exercise_name)
