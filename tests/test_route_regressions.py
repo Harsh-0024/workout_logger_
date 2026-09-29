@@ -206,6 +206,23 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.get_json()["date"], "2026-09-25")
         self.assertEqual(self.session.query(WorkoutLog).count(), 0)
 
+    def test_offline_workout_kept_under_an_old_username_still_uploads(self):
+        user = self._create_logged_in_user(username="renamed_now")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn(f'data-user-id="{user.id}"', page)
+        self.assertIn(f"userId: {user.id},", page)
+
+        # Kept before the rename: the old username, but this account's id.
+        response = self.client.post("/api/offline-workouts", json={
+            "text": "20/9/26 Legs\nSquat 100x5", "user": "old_name", "user_id": user.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "saved")
+
+        # Another account's workout is refused, whatever the name.
+        response = self.client.post("/api/offline-workouts", json={
+            "text": "21/9/26 Legs\nSquat 100x5", "user": "renamed_now", "user_id": user.id + 1})
+        self.assertEqual(response.status_code, 409)
+
     def test_csrf_token_refresh_for_pages_opened_offline(self):
         self.assertEqual(self.client.get("/api/csrf-token").status_code, 302)
         self._create_logged_in_user(username="token_user")

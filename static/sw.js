@@ -63,7 +63,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'signed-in' && typeof data.home === 'string' && typeof data.user === 'string') {
-    const who = JSON.stringify({ home: data.home, user: data.user });
+    // The account id too: a username can change while a workout waits to upload.
+    const who = JSON.stringify({ home: data.home, user: data.user, userId: data.userId ?? null });
     event.waitUntil(
       caches.open(USER_CACHE).then((cache) => cache.put(SIGNED_IN_KEY, new Response(who)))
     );
@@ -131,6 +132,7 @@ async function saveWorkout(request) {
     await offlineWorkouts.put({
       id: kept ? kept.id : newId(),
       user: who.user,
+      userId: who.userId ?? null,
       text,
       savedAt: kept ? kept.savedAt : Date.now(),
       status: 'pending',

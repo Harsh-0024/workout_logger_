@@ -3353,8 +3353,14 @@ def register_workout_routes(app):
             return jsonify({'ok': False, 'status': 'signed_out'}), 401
         user = current_user
         payload = request.get_json(silent=True) or {}
+        # Kept on the phone for this account: by id when the phone knows it (a username
+        # can change while a workout waits), else by the username it was kept under.
+        owner_id = payload.get('user_id')
         owner = str(payload.get('user') or '').strip().lower()
-        if owner and owner != (user.username or '').strip().lower():
+        if owner_id is not None and str(owner_id).strip():
+            if str(owner_id).strip() != str(user.id):
+                return jsonify({'ok': False, 'status': 'wrong_user'}), 409
+        elif owner and owner != (user.username or '').strip().lower():
             return jsonify({'ok': False, 'status': 'wrong_user'}), 409
 
         raw_text = str(payload.get('text') or '').strip()
