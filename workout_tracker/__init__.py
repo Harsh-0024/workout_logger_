@@ -1,3 +1,4 @@
+import gzip
 import os
 import secrets
 import urllib.parse
@@ -49,6 +50,32 @@ def create_app(config_object=Config, init_db: bool = True):
     csrf = None
     if app.config.get('WTF_CSRF_ENABLED'):
         csrf = CSRFProtect(app)
+
+    # Pages carry ~120-200 KB of inline styles; gzipped they are ~20-40 KB, which matters on a
+    # weak gym signal. Only text, only when the browser asks, never files or streams (and a proxy
+    # that compresses too leaves an already-compressed response alone).
+    compressible = ('text/', 'application/json', 'application/javascript', 'application/manifest+json', 'image/svg+xml')
+
+    @app.after_request
+    def gzip_response(response):
+        if (
+            response.direct_passthrough
+            or response.is_streamed
+            or response.status_code < 200
+            or response.status_code in (204, 304)
+            or 'Content-Encoding' in response.headers
+            or 'gzip' not in (request.headers.get('Accept-Encoding') or '').lower()
+            or not (response.mimetype or '').startswith(compressible)
+        ):
+            return response
+        body = response.get_data()
+        if len(body) < 1024:
+            return response
+        response.set_data(gzip.compress(body, compresslevel=6))
+        response.headers['Content-Encoding'] = 'gzip'
+        response.headers['Content-Length'] = str(len(response.get_data()))
+        response.vary.add('Accept-Encoding')
+        return response
 
     @app.after_request
     def security_headers(response):

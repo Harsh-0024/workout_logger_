@@ -555,6 +555,26 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(logged(5), {70.0})
         self.assertEqual(current(), 78.0)
 
+    def test_pages_are_gzipped_when_the_browser_asks(self):
+        import gzip
+
+        self._create_logged_in_user(username="gzip_user")
+        plain = self.client.get("/log")
+        self.assertNotIn("Content-Encoding", plain.headers)
+        packed = self.client.get("/log", headers={"Accept-Encoding": "gzip, deflate, br"})
+        self.assertEqual(packed.headers["Content-Encoding"], "gzip")
+        self.assertIn("Accept-Encoding", packed.headers["Vary"])
+        self.assertEqual(gzip.decompress(packed.data), plain.data)
+        self.assertLess(len(packed.data) * 3, len(plain.data))
+        self.assertEqual(int(packed.headers["Content-Length"]), len(packed.data))
+
+        # Files, tiny answers and images are left alone.
+        script = self.client.get("/static/offline-sync.js", headers={"Accept-Encoding": "gzip"})
+        self.assertNotIn("Content-Encoding", script.headers)
+        script.close()
+        tiny = self.client.get("/api/csrf-token", headers={"Accept-Encoding": "gzip"})
+        self.assertNotIn("Content-Encoding", tiny.headers)
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 
