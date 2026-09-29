@@ -339,6 +339,9 @@ class TestRouteRegressions(unittest.TestCase):
         self._create_logged_in_user(username="focus_user")
         page = self.client.get("/log").get_data(as_text=True)
         self.assertIn('class="btn btn-sm mobile-header-btn"', page)
+        # On phones the header buttons are icons only (their text is hidden), so they carry a name.
+        self.assertIn('mobile-header-btn" aria-label="Settings"', page)
+        self.assertIn('mobile-header-btn" aria-label="Log out"', page)
         rule = re.search(r"\.btn:focus-visible\s*\{([^}]*)\}", page)
         self.assertIsNotNone(rule)
         self.assertIn("outline: 2px solid", rule.group(1))
@@ -380,6 +383,8 @@ class TestRouteRegressions(unittest.TestCase):
         # Signed out, every tab leads to the sign-in page; the share page has its own invite instead.
         page = self.client.get("/no-such-page/really").get_data(as_text=True)
         self.assertNotIn('class="mobile-bottom-nav', page)
+        self.assertIn('mobile-header-btn" aria-label="Log in"', page)
+        self.assertIn('mobile-header-btn" aria-label="Create account"', page)
         self.assertRegex(page, r'<body class="[^"]*is-signed-out')
         self._create_logged_in_user(username="tab_user")
         page = self.client.get("/log").get_data(as_text=True)

@@ -2241,25 +2241,25 @@
             <div class="mobile-header-actions">
             {% if current_user.is_authenticated %}
                 {% if current_user.is_admin() %}
-                    <button type="button" class="btn btn-sm mobile-header-btn" id="openAiAssistantMobile" aria-keyshortcuts="K">
+                    <button type="button" class="btn btn-sm mobile-header-btn" id="openAiAssistantMobile" aria-keyshortcuts="K" aria-label="AI assistant">
                         <i class="bi bi-stars"></i>
                         <span>AI</span>
                     </button>
                 {% endif %}
-                <a href="{{ url_for('user_settings') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('user_settings') }}" class="btn btn-sm mobile-header-btn" aria-label="Settings">
                     <i class="bi bi-gear"></i>
                     <span>Settings</span>
                 </a>
-                <a href="{{ url_for('logout') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('logout') }}" class="btn btn-sm mobile-header-btn" aria-label="Log out">
                     <i class="bi bi-box-arrow-right"></i>
                     <span>Logout</span>
                 </a>
             {% else %}
-                <a href="{{ url_for('login') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('login') }}" class="btn btn-sm mobile-header-btn" aria-label="Log in">
                     <i class="bi bi-person"></i>
                     <span>Login</span>
                 </a>
-                <a href="{{ url_for('register') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('register') }}" class="btn btn-sm mobile-header-btn" aria-label="Create account">
                     <i class="bi bi-person-plus"></i>
                     <span>Register</span>
                 </a>
