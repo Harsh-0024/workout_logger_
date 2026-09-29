@@ -395,12 +395,14 @@ class TestRouteRegressions(unittest.TestCase):
         # Signed out, every tab leads to the sign-in page; the share page has its own invite instead.
         page = self.client.get("/no-such-page/really").get_data(as_text=True)
         self.assertNotIn('class="mobile-bottom-nav', page)
+        self.assertNotIn('<a class="nav-link" href="/stats">', page)  # nor the desktop links
         self.assertIn('mobile-header-btn" aria-label="Log in"', page)
         self.assertIn('mobile-header-btn" aria-label="Create account"', page)
         self.assertRegex(page, r'<body class="[^"]*is-signed-out')
         self._create_logged_in_user(username="tab_user")
         page = self.client.get("/log").get_data(as_text=True)
         self.assertIn('class="mobile-bottom-nav', page)
+        self.assertIn('<a class="nav-link" href="/stats">', page)
         self.assertNotRegex(page, r'<body class="[^"]*is-signed-out')
 
     def test_a_page_left_open_for_hours_can_still_save(self):
