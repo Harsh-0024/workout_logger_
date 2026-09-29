@@ -39,6 +39,24 @@ class TestStatsConsistencyData(unittest.TestCase):
         self.assertGreater(bench[0]["values"][-1], bench[0]["values"][0])
         self.assertGreater(bench[0]["baseline"], 0)
 
+    def test_day_gains_compare_each_lift_with_its_last_session(self):
+        user = self._create_logged_in_user(username="improver")
+        self._log(user, datetime(2026, 9, 1), "Push", "Bench Press", 100, 5)
+        self._log(user, datetime(2026, 9, 1), "Push", "Squat", 100, 5)
+        self._log(user, datetime(2026, 9, 3), "Push", "Bench Press", 102, 5)
+        self._log(user, datetime(2026, 9, 5), "Push", "Bench Press", 102, 5)
+        self._log(user, datetime(2026, 9, 5), "Push", "Squat", 96, 5)
+        self._log(user, datetime(2026, 9, 7), "Push", "Bench Press", 200, 5)
+
+        gains = self.client.get("/stats/data/average?mode=index").get_json()["day_gains"]
+        # Nothing to compare with on the first day.
+        self.assertNotIn("2026-09-01", gains)
+        self.assertAlmostEqual(gains["2026-09-03"], 2.0, delta=0.1)
+        # Bench held, squat fell 4%: the day averages both.
+        self.assertAlmostEqual(gains["2026-09-05"], -2.0, delta=0.1)
+        # A doubled number (a typo) is capped.
+        self.assertEqual(gains["2026-09-07"], 20.0)
+
     def test_days_still_listed_when_no_exercise_has_enough_sessions(self):
         user = self._create_logged_in_user(username="new_lifter")
         self._log(user, datetime(2026, 9, 1), "Legs", "Squat", 60, 5)

@@ -637,8 +637,8 @@
     }
 
     /* ---------- Consistency: one square per day, gold where you trained ---------- */
-    .stats-page { --cal-off: rgba(255, 255, 255, 0.06); --cal-future: rgba(255, 255, 255, 0.025); --cal-on: #E2BC45; --cal-on-rgb: 212, 175, 55; }
-    [data-theme="light"] .stats-page { --cal-off: rgba(0, 0, 0, 0.065); --cal-future: rgba(0, 0, 0, 0.03); --cal-on: #9E7A2F; --cal-on-rgb: 176, 138, 62; }
+    .stats-page { --cal-off: rgba(255, 255, 255, 0.06); --cal-future: rgba(255, 255, 255, 0.025); --cal-on-rgb: 212, 175, 55; }
+    [data-theme="light"] .stats-page { --cal-off: rgba(0, 0, 0, 0.065); --cal-future: rgba(0, 0, 0, 0.03); --cal-on-rgb: 176, 138, 62; }
     .stats-range[hidden] { display: none; }
     /* Years slide sideways when there are more than fit. */
     .stats-years { overflow-x: auto; scrollbar-width: none; }
@@ -646,7 +646,7 @@
     .stats-years button { flex: none; }
 
     /* A year like a contribution graph: weekday names on the left, months on top,
-       and a square per day that gets more golden with more sets. One row on a
+       and a square per day that glows brighter the more you improved. One row on a
        laptop; on a phone the months stack in blocks so the year fits on screen. */
     .stats-chart.is-cal { height: auto; }
     .stats-chart.is-cal canvas { display: none !important; }
@@ -692,11 +692,7 @@
     .cal-cell.is-future { background: var(--cal-future); }
     .cal-cell.is-out { visibility: hidden; }
     .cal-cell.is-on { cursor: pointer; }
-    .cal-cell.is-on[data-l="1"], .cal-swatch[data-l="1"] { background: rgba(var(--cal-on-rgb), 0.3); }
-    .cal-cell.is-on[data-l="2"], .cal-swatch[data-l="2"] { background: rgba(var(--cal-on-rgb), 0.52); }
-    .cal-cell.is-on[data-l="3"], .cal-swatch[data-l="3"] { background: rgba(var(--cal-on-rgb), 0.76); }
-    .cal-cell.is-on[data-l="4"], .cal-swatch[data-l="4"] { background: var(--cal-on); }
-    .cal-swatch[data-l="0"] { background: var(--cal-off); }
+    .cal-cell.is-on, .cal-swatch { background: rgba(var(--cal-on-rgb), var(--glow, 0.3)); }
     .cal-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--text-muted); }
     .cal-cell.is-hot { outline: 2px solid var(--text-primary); outline-offset: 1px; }
     @keyframes calIn { from { opacity: 0; } to { opacity: 1; } }
@@ -2169,7 +2165,7 @@
 
     // ================= Consistency: the days you trained =================
     const VIEW_KEY = 'wt-stats-view';
-    const CONSISTENCY_INFO = 'A square for every day of the year. Gold days are days you trained; the deeper the gold, the more sets you did. The big number is how many workouts you averaged a week that year.';
+    const CONSISTENCY_INFO = 'A square for every day of the year. Gold days are days you trained; the brighter the gold, the more you beat your last session of the same lifts (full gold at +5%). The big number is how many workouts you averaged a week that year.';
     const YEAR_KEY = 'wt-stats-year';
     const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
     const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -2342,14 +2338,15 @@
         document.getElementById('statsTiles').hidden = false;
     }
 
-    // Busier days (more sets) get deeper gold: four steps, split at your own quartiles.
-    function levelFor(daySets) {
-        const vals = Object.values(daySets || {}).map(Number).filter(v => v > 0).sort((x, y) => x - y);
-        if (vals.length < 4) return () => 3;
-        const q = (p) => vals[Math.floor(p * (vals.length - 1))];
-        const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
-        return (n) => (!(n > 0) ? 3 : n <= t1 ? 1 : n <= t2 ? 2 : n <= t3 ? 3 : 4);
-    }
+    // A day glows with how much stronger you were than last time: faint gold with no gain,
+    // brighter with each percent, full gold at +5% or more.
+    const FULL_GLOW_GAIN = 5;
+    const glowFor = (gain) => (gain > 0 ? 0.45 + 0.55 * Math.min(gain / FULL_GLOW_GAIN, 1) : 0.3);
+    const gainText = (gain) => {
+        if (!Number.isFinite(gain)) return '';
+        if (Math.abs(gain) < 0.05) return 'Same as last time';
+        return `${gain > 0 ? '+' : '−'}${Math.abs(gain).toFixed(1)}% vs last time`;
+    };
 
     function renderConsistency(data, { animate = true } = {}) {
         const grid = document.getElementById('consistencyGrid');
@@ -2388,7 +2385,7 @@
         chart.classList.add('is-cal');
         grid.hidden = false;
         grid.classList.toggle('no-anim', !animate);
-        drawYear(grid, new Set(dayList), (data && data.day_titles) || {}, (data && data.day_sets) || {}, win);
+        drawYear(grid, new Set(dayList), (data && data.day_titles) || {}, (data && data.day_sets) || {}, (data && data.day_gains) || {}, win);
     }
 
     // The year split into equal blocks of months (12, 6 or 4), each a row of week columns.
@@ -2404,7 +2401,7 @@
         });
     }
 
-    function drawYear(grid, trained, titles, daySets, win) {
+    function drawYear(grid, trained, titles, daySets, dayGains, win) {
         grid.replaceChildren();
         const box = grid.parentNode;
         const MIN_CELL = 11;
@@ -2430,7 +2427,6 @@
         grid.style.setProperty('--cal-gap', `${gap}px`);
         grid.style.setProperty('--cal-radius', `${cell >= 14 ? 3 : 2.5}px`);
         grid.style.setProperty('--cal-days-w', `${DAYS_W}px`);
-        const level = levelFor(daySets);
         const todayIso = isoOf(win.today);
         const yearFirst = mondayOf(win.start);
 
@@ -2479,9 +2475,11 @@
                         if (trained.has(iso)) {
                             const sets = Number(daySets[iso]) || 0;
                             el.classList.add('is-on');
-                            el.dataset.l = String(level(sets));
+                            const gain = Number(dayGains[iso]);
+                            el.style.setProperty('--glow', String(glowFor(gain)));
                             el.dataset.title = titles[iso] || 'Workout';
                             if (sets) el.dataset.sets = String(sets);
+                            if (Number.isFinite(gain)) el.dataset.gain = String(gain);
                         }
                         if (iso === todayIso) el.classList.add('is-today');
                     }
@@ -2496,7 +2494,7 @@
         const legend = document.createElement('div');
         legend.className = 'cal-legend';
         legend.setAttribute('aria-hidden', 'true');
-        legend.innerHTML = '<span>Less</span>' + [0, 1, 2, 3, 4].map(l => `<i class="cal-swatch" data-l="${l}"></i>`).join('') + '<span>More</span>';
+        legend.innerHTML = '<span>No gain</span>' + [0, 1.25, 2.5, 3.75, 5].map(g => `<i class="cal-swatch" style="--glow:${glowFor(g)}"></i>`).join('') + `<span>+${FULL_GLOW_GAIN}%</span>`;
         wrap.appendChild(legend);
         grid.appendChild(wrap);
         calendarSize = `${box.clientWidth}x${box.clientHeight}`;
@@ -2513,7 +2511,9 @@
         tip.querySelector('.chart-tip-date').textContent = longDate(cell.dataset.d);
         tip.querySelector('.chart-tip-title').textContent = '';
         tip.querySelector('.chart-tip-value').textContent = cell.dataset.title || 'Rest day';
-        tip.querySelector('.chart-tip-set').textContent = cell.dataset.title && sets ? `${sets} set${sets === 1 ? '' : 's'}` : '';
+        const setsText = cell.dataset.title && sets ? `${sets} set${sets === 1 ? '' : 's'}` : '';
+        const gain = cell.dataset.gain === undefined ? NaN : Number(cell.dataset.gain);
+        tip.querySelector('.chart-tip-set').textContent = [gainText(gain), setsText].filter(Boolean).join(' · ');
         tip.dataset.index = cell.dataset.title ? '0' : '-1';
         tip.dataset.date = cell.dataset.d;
         tip.classList.toggle('is-touch', pointerType !== 'mouse' && tip.dataset.index === '0');

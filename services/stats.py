@@ -692,8 +692,21 @@ def _fade_multiplier(days_since_last: int, fade_start_days: int, fade_end_days: 
     return max(0.0, min(1.0, (fade_end_days - float(days_since_last)) / span))
 
 
+def _day_gains(exercise_day_values: Dict[str, Dict]) -> Dict[str, float]:
+    """Each day's average change in estimated max, in percent, vs. the last session of the same lift."""
+    changes_by_day: Dict = {}
+    for day_map in exercise_day_values.values():
+        sessions = sorted(day_map.items())
+        for (_, before), (day, value) in zip(sessions, sessions[1:]):
+            if before > 0:
+                # Capped so a typo or a renamed lift can't swing the whole day.
+                change = max(-20.0, min(20.0, (value / before - 1.0) * 100.0))
+                changes_by_day.setdefault(day, []).append(change)
+    return {d.isoformat(): round(sum(c) / len(c), 1) for d, c in sorted(changes_by_day.items())}
+
+
 def _logged_set_count(log) -> int:
-    """How many sets a log holds (at least 1), for how full a day looks in Consistency."""
+    """How many sets a log holds (at least 1), for the day's note in Consistency."""
     data = getattr(log, 'sets_json', None)
     if isinstance(data, str):
         try:
@@ -809,6 +822,7 @@ def get_overall_progress_data(
     # Every day trained and what it was called, for the Consistency view.
     day_titles = {d.isoformat(): title_by_day.get(d, 'Workout') for d in workout_days_sorted}
     day_sets = {d.isoformat(): int(sets_by_day.get(d, 0)) for d in workout_days_sorted}
+    day_gains = _day_gains(exercise_day_values)
 
     if not universe:
         return {
@@ -818,6 +832,7 @@ def get_overall_progress_data(
             'workout_days': [d.isoformat() for d in workout_days_sorted],
             'day_titles': day_titles,
             'day_sets': day_sets,
+            'day_gains': day_gains,
             'exercises': [],
             'weight': [],
             'reps': [],
@@ -934,6 +949,7 @@ def get_overall_progress_data(
         'workout_days': [d.isoformat() for d in workout_days_sorted],
         'day_titles': day_titles,
         'day_sets': day_sets,
+        'day_gains': day_gains,
         # Each exercise's estimated max per session, for "New bests" and "Most improved".
         'exercises': [
             {
