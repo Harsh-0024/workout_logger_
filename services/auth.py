@@ -510,7 +510,8 @@ class AuthService:
             raise
         except Exception as e:
             session.rollback()
-            raise AuthenticationError(f"Failed to resend code: {str(e)}")
+            logger.error(f"Failed to resend verification code: {e}", exc_info=True)
+            raise AuthenticationError("Couldn't send a new code right now. Please try again.")
         finally:
             session.close()
     

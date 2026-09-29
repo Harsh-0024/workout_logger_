@@ -84,6 +84,20 @@ class TestSignIn(AuthServiceTestCase):
         self.assertIsNone(AuthService.authenticate_user("alice", "wrong-pass1"))
         self.assertIsNone(AuthService.authenticate_user("nobody", "secret123"))
 
+    def test_resending_the_email_code(self):
+        user_id, first = self._register()
+        second = AuthService.resend_verification_code(user_id)
+        if first != second:
+            self.assertFalse(AuthService.verify_email(user_id, first))
+        self.assertTrue(AuthService.verify_email(user_id, second))
+        with self.assertRaisesRegex(AuthenticationError, "already verified"):
+            AuthService.resend_verification_code(user_id)
+        other_id, _ = self._register("zed", "zed@example.com")
+        with patch("services.auth.AuthService._create_email_verification", side_effect=RuntimeError("smtp db boom")):
+            with self.assertRaises(AuthenticationError) as caught:
+                AuthService.resend_verification_code(other_id)
+        self.assertNotIn("boom", str(caught.exception))
+
     def test_an_expired_email_code_is_refused(self):
         user_id, code = self._register()
         self.session.query(EmailVerification).update({"expires_at": datetime.now() - timedelta(minutes=1)})
