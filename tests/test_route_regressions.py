@@ -1657,6 +1657,22 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("12-01-2026 – 12-01-2026", page)
         self.assertNotIn("Days that failed", page)
 
+    def test_bulk_import_reads_iso_dotted_and_weekday_dates(self):
+        user = self._create_logged_in_user(username="bulk_iso")
+        payload = "\n".join([
+            "2026-01-10 Push", "Flat Dumbbell Press", "30, 8", "",
+            "Monday 12/01/26 Pull", "Barbell Row", "12.5, 10", "",
+            "14.01.2026 Legs", "Leg Press", "200, 10",
+        ])
+        page = self.client.post("/bulk-import", data={"bulk_workouts_text": payload, "confirm_import": "1"},
+                                follow_redirects=True).get_data(as_text=True)
+        self.assertNotIn("No workout days found", page)
+        days = sorted({log.date.date().isoformat() for log in self.session.query(WorkoutLog).filter_by(user_id=user.id)})
+        # Three days: "12.5, 10" under Barbell Row is a set, not 12 May.
+        self.assertEqual(days, ["2026-01-10", "2026-01-12", "2026-01-14"])
+        titles = {log.date.date().isoformat(): log.workout_name for log in self.session.query(WorkoutLog).filter_by(user_id=user.id)}
+        self.assertEqual(titles["2026-01-12"], "Pull")
+
     def test_bulk_import_missing_year_rolls_forward_chronologically(self):
         inferred = _infer_bulk_import_dates(
             [

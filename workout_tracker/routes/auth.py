@@ -9,7 +9,7 @@ from flask_login import login_required, login_user, logout_user, current_user
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
-from parsers.workout import workout_parser
+from parsers.workout import _WEEKDAY_BEFORE_DATE, workout_parser
 from services.logging import handle_workout_log
 
 from config import Config
@@ -1596,6 +1596,22 @@ def register_auth_routes(app, email_service):
                 s = (line or "").strip()
                 if not s or s.startswith("#"):
                     return None
+                # "Monday 28/9 ...", "Tue, 29 Sep ...": the weekday in front of a date.
+                weekday = _WEEKDAY_BEFORE_DATE.match(s)
+                if weekday:
+                    s = s[weekday.end():]
+
+                # yyyy-mm-dd, as exports from other apps write it
+                m = re.match(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?=\s|$|[-–—:,])", s)
+                if m:
+                    return {"day": int(m.group(3)), "month": int(m.group(2)), "year": int(m.group(1)),
+                            "year_str": m.group(1)}
+
+                # dd.mm.yy / dd-mm-yyyy: only with a year, so a weight like "12.5" isn't 12 May
+                m = re.match(r"^(\d{1,2})[.\-](\d{1,2})[.\-](\d{2}|\d{4})(?=\s|$|[-–—:,])", s)
+                if m:
+                    return {"day": int(m.group(1)), "month": int(m.group(2)), "year": _parse_year(m.group(3)),
+                            "year_str": m.group(3)}
 
                 # dd/mm[/yy]
                 m = re.match(r"^\s*(\d{1,2})\s*/\s*(\d{1,2})(?:\s*/\s*(\d{2,4}))?", s)
