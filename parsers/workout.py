@@ -689,6 +689,9 @@ def workout_parser(
     now = now or datetime.now()
     current_year = now.year
 
+    # A date that was written but doesn't exist ("31/9", "29/2" outside a leap year), so the
+    # check can say so instead of quietly filing the workout under today.
+    invalid_date_text = None
     month_name_date = None if len(date_nums) >= 2 else _month_name_date(title_line)
     if month_name_date:
         day, month, written_year, rest = month_name_date
@@ -699,6 +702,7 @@ def workout_parser(
         except ValueError:
             date_obj = now
             date_found = False
+            invalid_date_text = title_line[:len(title_line) - len(rest)].strip()
     elif len(date_nums) >= 2:
         parsed_month = int(date_nums[1])
         year = current_year - 1 if parsed_month > now.month + 1 else current_year
@@ -711,6 +715,9 @@ def workout_parser(
         except ValueError:
             date_obj = now
             date_found = False
+            first_token = title_line.split()[0]
+            if re.fullmatch(r'\d{1,2}[/.\-]\d{1,2}(?:[/.\-]\d{2,4})?', first_token):
+                invalid_date_text = first_token
     else:
         date_obj = now
         date_found = False
@@ -731,6 +738,7 @@ def workout_parser(
     workout_day = {
         "date": date_obj,
         "date_found": date_found,
+        "invalid_date_text": invalid_date_text,
         "workout_name": workout_name,
         "bodyweight": parsed_bodyweight,
         "bodyweight_unit": parsed_bodyweight_unit,

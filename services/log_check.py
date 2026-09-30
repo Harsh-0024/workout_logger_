@@ -214,10 +214,16 @@ def check_workout_text(
         "date_str": parsed_date.strftime("%Y-%m-%d"),
         "date_label": _date_label(parsed_date),
         "date_found": bool(parsed.get("date_found")),
+        "date_invalid": bool(parsed.get("invalid_date_text")),
         "bodyweight": parsed.get("bodyweight"),
     })
 
-    if parsed_date.date() > datetime.now().date():
+    if parsed.get("invalid_date_text"):
+        result["errors"].append({
+            "line": 1,
+            "message": f"Line 1: {_quote(parsed['invalid_date_text'])} isn't a real date. Check the day and month.",
+        })
+    elif parsed_date.date() > datetime.now().date():
         result["warnings"].append({
             "line": None,
             "message": f"The date is in the future ({result['date_label']}). Check the first line if that's a typo.",

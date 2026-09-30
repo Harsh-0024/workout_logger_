@@ -470,6 +470,16 @@ class TestWorkoutDates(unittest.TestCase):
         for title in ("30 Min Cardio", "3 Sets Of Squats", "May Day Workout", "31 Feb Push"):
             self.assertEqual(self._date(title), ("2026-09-30", False, title), title)
 
+    def test_a_date_that_does_not_exist_is_marked(self):
+        for title, text in (("31/9 Push", "31/9"), ("29/2 Push", "29/2"), ("15/13 Push", "15/13"),
+                            ("31 Sep Push", "31 Sep"), ("31 Feb Push", "31 Feb")):
+            parsed = workout_parser(f"{title}\nSquat\n100, 5", now=self.NOW)
+            self.assertEqual((parsed["date_found"], parsed["invalid_date_text"]), (False, text), title)
+        # Real dates, no date, and titles with numbers in them aren't marked.
+        for title in ("29/2/24 Push", "30/9 Push", "Push", "W3D14 Upper", "30 Min Cardio"):
+            parsed = workout_parser(f"{title}\nSquat\n100, 5", now=self.NOW)
+            self.assertIsNone(parsed["invalid_date_text"], title)
+
     def test_without_a_year_the_nearest_past_date_is_used(self):
         self.assertEqual(self._date("15/3 Push"), ("2026-03-15", True, "Push"))
         self.assertEqual(self._date("28/12 Push"), ("2025-12-28", True, "Push"))

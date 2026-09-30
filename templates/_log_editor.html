@@ -399,7 +399,7 @@
 
             if (head) {
                 head.textContent = data && data.date_label
-                    ? `${data.date_label}${data.date_found ? '' : ' (no date written)'} · ${data.title || ''}`
+                    ? `${data.date_label}${data.date_found ? '' : (data.date_invalid ? ' (date not read)' : ' (no date written)')} · ${data.title || ''}`
                     : '';
             }
 
