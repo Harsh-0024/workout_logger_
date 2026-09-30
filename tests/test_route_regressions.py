@@ -370,6 +370,32 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(average["labels"], ["2026-06-01", "2026-06-03"])
         self.assertGreater(average["data"][1], 0)
 
+    def test_saving_a_workout_looks_each_exercise_up_once(self):
+        # Whether an exercise is timed was worked out twice per exercise on every save.
+        from sqlalchemy import event
+
+        user = self._create_logged_in_user(username="save_speed")
+        names = ["Flat Barbell Press", "Incline Dumbbell Press", "Cable Lateral Raise",
+                 "Tricep Pushdown", "Low Cable Fly", "Overhead Extension"]
+        for i in range(5):
+            handle_workout_log(self.session, user, {
+                "date": datetime(2026, 5, 1, 18) + timedelta(days=3 * i), "workout_name": "Push",
+                "exercises": [{"name": n, "exercise_string": f"{n}\n{50 + i} 45, 8 9",
+                               "weights": [50.0 + i, 45.0, 45.0], "reps": [8, 9, 9], "valid": True} for n in names],
+            })
+        self.session.commit()
+
+        queries = []
+        listener = lambda *args, **kwargs: queries.append(1)
+        event.listen(self.engine, "before_cursor_execute", listener)
+        try:
+            text = "30/9/26 Push\n" + "\n".join(f"{n}\n60 55, 8 9" for n in names)
+            response = self.client.post("/log", data={"workout_text": text})
+        finally:
+            event.remove(self.engine, "before_cursor_execute", listener)
+        self.assertEqual(response.status_code, 302)
+        self.assertLess(len(queries), 11 * len(names))
+
     def test_exercise_chart_asks_the_database_a_fixed_number_of_times(self):
         # One query per session made long histories slow to chart on a remote database.
         from sqlalchemy import event

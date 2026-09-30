@@ -382,6 +382,7 @@ def _resolve_pointer_target_context(
     rep_target_sets: Optional[Dict[str, int]] = None,
     plan_target_sets: Optional[Dict[str, int]] = None,
     log_ex_index=None,
+    is_timed: Optional[bool] = None,
 ) -> Tuple[int, bool, bool]:
     rep_targets = rep_target_sets
     if rep_targets is None:
@@ -398,14 +399,15 @@ def _resolve_pointer_target_context(
         inferred_set_count=inferred_set_count,
         default_sets=3,
     )
-    timed_status = resolve_timed_exercise_status(
-        db_session,
-        user.id,
-        exercise_name,
-        exercise_string,
-        log_ex_index=log_ex_index,
-    )
-    return target_sets, strict_target_sets, bool(timed_status.get("is_timed"))
+    if is_timed is None:
+        is_timed = bool(resolve_timed_exercise_status(
+            db_session,
+            user.id,
+            exercise_name,
+            exercise_string,
+            log_ex_index=log_ex_index,
+        ).get("is_timed"))
+    return target_sets, strict_target_sets, is_timed
 
 
 def refresh_best_lift_pointer(
@@ -419,7 +421,9 @@ def refresh_best_lift_pointer(
     plan_target_sets: Optional[Dict[str, int]] = None,
     log_ex_index=None,
     lift_ex_index=None,
+    is_timed: Optional[bool] = None,
 ) -> Optional[Lift]:
+    # is_timed: pass it when already worked out for this exercise, to skip looking it up again.
     target_sets, strict_target_sets, is_timed = _resolve_pointer_target_context(
         db_session,
         user,
@@ -429,6 +433,7 @@ def refresh_best_lift_pointer(
         rep_target_sets=rep_target_sets,
         plan_target_sets=plan_target_sets,
         log_ex_index=log_ex_index,
+        is_timed=is_timed,
     )
     best_log = _get_best_log(
         db_session,
@@ -1281,6 +1286,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 plan_target_sets=plan_target_sets,
                 log_ex_index=log_ex_index,
                 lift_ex_index=lift_ex_index,
+                is_timed=time_based,
             )
         else:
             row['status'] = "ERROR"
