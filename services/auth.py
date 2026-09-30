@@ -128,9 +128,13 @@ class AuthService:
         session = Session()
         try:
             # Validate inputs using centralized validators
-            from utils.validators import validate_username, validate_email, validate_password
+            from utils.validators import (
+                USERNAME_NOT_AVAILABLE, is_reserved_username, validate_email, validate_password, validate_username,
+            )
             
             username = validate_username(username)
+            if is_reserved_username(username):
+                raise AuthenticationError(USERNAME_NOT_AVAILABLE)
             email = validate_email(email)
             password = validate_password(password)
             

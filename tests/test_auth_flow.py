@@ -113,6 +113,23 @@ class TestAuthFlow(unittest.TestCase):
             self.assertNotIn("Registration failed", page)
         self.assertEqual(self.session.query(User).count(), 1)
 
+    def test_usernames_that_are_page_addresses_are_not_available(self):
+        # Home is /<username>: someone called "log" or "stats" never reached theirs.
+        for name in ("log", "stats", "Settings", "workouts", "sw.js", "admin"):
+            page = self.client.post("/register", data={"username": name, "email": f"{name}@example.com",
+                                                        "password": "secret123"}).get_data(as_text=True)
+            self.assertIn("That username isn&#39;t available", page, name)
+        self.assertEqual(self.session.query(User).count(), 0)
+
+        self._sign_up()
+        response = self.client.post("/settings", data={
+            "form_type": "profile", "full_name": "", "username": "stats",
+            "email": "alice@example.com", "current_password": "secret123",
+        }, follow_redirects=True)
+        self.assertIn("That username isn&#39;t available", response.get_data(as_text=True))
+        self.session.expire_all()
+        self.assertEqual(self.session.query(User).one().username, "alice")
+
     def test_sign_in_with_a_code(self):
         self._sign_up()
         self.client.get("/logout")

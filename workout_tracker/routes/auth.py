@@ -37,7 +37,10 @@ from utils.profile_images import (
     has_r2_profile_image_storage,
     normalize_profile_image_key,
 )
-from utils.validators import is_safe_redirect_url, parse_bodyweight, sanitize_text_input, validate_email, validate_username
+from utils.validators import (
+    USERNAME_NOT_AVAILABLE, is_reserved_username, is_safe_redirect_url, parse_bodyweight, sanitize_text_input,
+    validate_email, validate_username,
+)
 
 from .decorators import dev_only, require_admin
 
@@ -820,6 +823,9 @@ def register_auth_routes(app, email_service):
                             raise AuthenticationError("Current password is incorrect")
 
                     username = validate_username(username)
+                    if username != (user.username or '').lower() and is_reserved_username(username):
+                        flash(USERNAME_NOT_AVAILABLE, "error")
+                        return redirect(url_for('account_settings'))
                     # As at sign-up: a typo like "alice@@example" is caught here, not when the
                     # codes can't be sent.
                     email = validate_email(email)
@@ -1211,6 +1217,9 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('user_settings'))
 
                     username = validate_username(username)
+                    if username != (user.username or '').lower() and is_reserved_username(username):
+                        flash(USERNAME_NOT_AVAILABLE, "error")
+                        return redirect(url_for('user_settings'))
                     existing_username = (
                         Session.query(User)
                         .filter(User.username == username, User.id != user_id)

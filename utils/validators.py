@@ -28,6 +28,27 @@ def validate_username(username: str) -> str:
     return username
 
 
+# A username is also its home page's address (/<username>), so it can't be the first part of
+# one of the app's own addresses: someone named "log" or "stats" never reached their Home.
+_RESERVED_USERNAMES = {"admin", "api", "static", "share", "shortcut", "health", "login", "logout", "register"}
+USERNAME_NOT_AVAILABLE = "That username isn't available. Please pick another."
+
+
+def is_reserved_username(username: str) -> bool:
+    name = (username or "").strip().lower()
+    reserved = set(_RESERVED_USERNAMES)
+    try:
+        from flask import current_app
+
+        for rule in current_app.url_map.iter_rules():
+            first = rule.rule.strip("/").split("/", 1)[0].lower()
+            if first and "<" not in first:
+                reserved.add(first)
+    except RuntimeError:  # no app running
+        pass
+    return name in reserved
+
+
 def validate_exercise_name(exercise_name: str) -> str:
     """Validate exercise name."""
     if not exercise_name or not exercise_name.strip():
