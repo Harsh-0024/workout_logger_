@@ -667,6 +667,14 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(states[2][2], "Also at no. 1: saved as a second entry")
         self.assertTrue(body["ok"])  # a note, not a blocker
 
+    def test_log_check_says_when_numbers_could_not_be_read(self):
+        self._create_logged_in_user(username="unread_user")
+        text = "20/9/26 Legs\nSquat\n100/5, 105/4\n\nPlank"
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        notes = [(row["state"], row["note"]) for row in body["exercises"]]
+        self.assertEqual(notes, [("skip", "Couldn't read the sets, so this line won't be saved"),
+                                 ("skip", "No numbers, so this line won't be saved")])
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

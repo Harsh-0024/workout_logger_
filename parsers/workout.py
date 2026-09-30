@@ -321,8 +321,18 @@ _ONE_SET = re.compile(rf'^({_WEIGHT})?\s*x\s*(\d+)$')                           
 _MOST_SETS = 10
 
 
+# "3 sets of 8 at 60" / "3 sets x 8 reps @ 60" read as "3x8 at 60". Only with a weight after
+# it: a bare "3 sets of 8" is left alone rather than read as 3 kg for 8.
+_SETS_OF = re.compile(
+    r'\b(\d+)\s*sets?\s*(?:of|x|×)\s*(\d+)(?:\s*reps?\b)?(?=\s*(?:@|at\b|\d|bw|body))', re.IGNORECASE)
+
+
+def _sets_of(text: str) -> str:
+    return _SETS_OF.sub(r'\1x\2', text or '')
+
+
 def _set_text(line: str) -> str:
-    text = (line or '').lower().replace('×', 'x').replace('*', 'x')
+    text = _sets_of(line).lower().replace('×', 'x').replace('*', 'x')
     text = re.sub(r'\bbody\s*weight\b', 'bw', text)
     return re.sub(r'\s*(?:kgs?|lbs?)\b', '', text)
 
@@ -423,7 +433,7 @@ def _sets_with_bare_reps(segment, base_weight=None):
 def is_data_line(line):
     if not line:
         return False
-    stripped = line.strip()
+    stripped = _sets_of(line.strip())
     if re.match(r'^\d+(?:[.)\-:])\s*[A-Za-z]', stripped):
         return False
     tokens = stripped.split()
@@ -450,7 +460,7 @@ def is_probable_data_segment(segment: str) -> bool:
     if not segment:
         return False
 
-    lowered = re.sub(r'\bbody\s*weight\b', 'bw', segment.lower())
+    lowered = re.sub(r'\bbody\s*weight\b', 'bw', _sets_of(segment).lower())
     if re.search(r'[x×*]', lowered):
         return True
     if ',' in lowered:

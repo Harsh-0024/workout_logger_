@@ -522,6 +522,14 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         # Without a unit or "@" the numbers stay weight x reps: "5 x 10 8" may be 5 kg for 10 and 8.
         self.assertEqual(self._exercises("Squat\n20 x 10 8")[0][1], [20.0] * 3)
 
+    def test_sets_of_reps_in_words(self):
+        for line in ("3 sets of 8 at 60", "3 sets of 8 @ 60kg", "3 sets x 8 reps at 60", "Squat 3 sets of 8 at 60"):
+            body = line if line.startswith("Squat") else f"Squat\n{line}"
+            self.assertEqual(self._exercises(body), [("Squat", [60.0] * 3, [8] * 3)], line)
+        self.assertEqual(self._exercises("Pull Ups\n4 sets of 10 bw"), [("Pull Ups", [0.0] * 4, [10] * 4)])
+        # With no weight it isn't guessed at (it used to be read as 3 kg for 8, or a new exercise).
+        self.assertNotIn(("Squat", [3.0] * 3, [8] * 3), self._exercises("Squat\n3 sets of 8"))
+
     def test_more_reps_after_a_set_keep_its_weight(self):
         self.assertEqual(self._exercises("Squat\n100x5, 5, 4"), [("Squat", [100.0] * 3, [5, 5, 4])])
         self.assertEqual(self._exercises("Squat\n100 x 5, 90 x 8, 8"), [("Squat", [100.0, 90.0, 90.0], [5, 8, 8])])

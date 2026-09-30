@@ -266,11 +266,16 @@ def check_workout_text(
             continue
 
         if not item.get("valid"):
+            # Numbers after the name that still gave no sets were written some other way.
+            after_name = (item.get("exercise_string") or raw_line or "").replace(item.get("source_name") or "", "", 1)
+            unread = bool(re.search(r"\d", after_name))
             entry.update(state="skip", name=(raw_line.strip() or item.get("name")),
-                         note="No numbers, so this line won't be saved")
+                         note="Couldn't read the sets, so this line won't be saved" if unread
+                         else "No numbers, so this line won't be saved")
             result["warnings"].append({
                 "line": shown_line,
-                "message": f"Line {shown_line}: {_quote(raw_line or item.get('name'))} has no numbers, so it won't be saved.",
+                "message": f"Line {shown_line}: {_quote(raw_line or item.get('name'))} "
+                           + ("couldn't be read as sets" if unread else "has no numbers") + ", so it won't be saved.",
             })
             result["exercises"].append(entry)
             continue
