@@ -125,7 +125,7 @@ def register_admin_routes(app):
 
             logger.info(f"Admin delete request finished in {time.perf_counter() - start:.3f}s")
 
-            flash(f"User '{user_info['username']}' has been deleted successfully.", "success")
+            flash(f"Deleted {user_info['username']}.", "success")
 
         except AdminError as e:
             flash(str(e), "error")

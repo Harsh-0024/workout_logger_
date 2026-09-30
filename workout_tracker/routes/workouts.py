@@ -2809,7 +2809,7 @@ def register_workout_routes(app):
                 "input_source": source,
             })
         skipped = result.get("skipped") or []
-        success_message = "Workout logged successfully."
+        success_message = "Workout logged."
         if skipped:
             success_message += " Not saved: " + " ".join(skipped)
         return _shortcut_json(
@@ -3120,7 +3120,7 @@ def register_workout_routes(app):
                 refresh_best_lift_pointers(Session, user, old_exercises)
                 Session.commit()
 
-                flash("Workout updated successfully!", "success")
+                flash("Workout saved.", "success")
                 return redirect(url_for('view_workout', date_str=new_date.strftime('%Y-%m-%d')))
 
             return render_edit()[0]
@@ -3169,7 +3169,7 @@ def register_workout_routes(app):
             Session.commit()
 
             if deleted:
-                flash("Workout day deleted successfully.", "success")
+                flash("Workout deleted.", "success")
             else:
                 flash("Workout not found.", "error")
 

@@ -619,8 +619,21 @@ class TestRouteRegressions(unittest.TestCase):
                 "new_password": "newsecret1", "confirm_password": "newsecret1"}
         with patch("workout_tracker.routes.auth.AuthService.set_password", return_value=False):
             page = self.client.post("/settings", data=form, follow_redirects=True).get_data(as_text=True)
-        self.assertNotIn("Password updated successfully", page)
+        self.assertNotIn("Password updated", page)
         self.assertIn("wasn&#39;t changed", page)
+
+    def test_messages_are_short_and_calm(self):
+        # "…updated successfully!" didn't match the redesign's tone ("Saved").
+        self._create_logged_in_user(username="calm_user")
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        page = self.client.post("/workout/2026-09-20/edit", data={
+            "workout_title": "Legs", "workout_date": "2026-09-20", "workout_text": "Squat\n100, 6",
+        }, follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Workout saved.", page)
+        self.assertNotIn("successfully", page)
+        page = self.client.post("/settings", data={"form_type": "bodyweight", "bodyweight": "77"},
+                                follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Bodyweight updated.", page)
 
     def test_messages_leave_room_for_their_close_button(self):
         # The app's .alert padding replaced Bootstrap's room for the ×, so long messages ran under it.

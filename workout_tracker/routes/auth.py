@@ -517,7 +517,7 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_verification_user_id', None)
 
                     if current_user.is_authenticated:
-                        flash("Email verified successfully!", "success")
+                        flash("Email confirmed.", "success")
                         return redirect(url_for('user_dashboard', username=redirect_username))
 
                     verified_user = Session.get(User, user_id)
@@ -527,10 +527,10 @@ def register_auth_routes(app, email_service):
                             remember=True,
                             duration=timedelta(days=Config.REMEMBER_COOKIE_DURATION),
                         )
-                        flash("Email verified successfully! You're now signed in.", "success")
+                        flash("Email confirmed. You're signed in.", "success")
                         return redirect(url_for('user_dashboard', username=verified_user.username))
 
-                    flash("Email verified successfully! Please log in.", "success")
+                    flash("Email confirmed. Please sign in.", "success")
                     return redirect(url_for('login'))
 
                 flash("Invalid verification code. Please try again.", "error")
@@ -596,7 +596,7 @@ def register_auth_routes(app, email_service):
         # would drop that mark and the cookie would sign them straight back in).
         session.clear()
         logout_user()
-        flash("Logged out successfully.", "info")
+        flash("Logged out.", "info")
         return redirect(url_for('login'))
 
     @login_required
@@ -650,7 +650,7 @@ def register_auth_routes(app, email_service):
                         )
                     )
                     Session.commit()
-                    flash("API key added successfully!", "success")
+                    flash("Key added.", "success")
                     return redirect(url_for('integrations_settings'))
 
                 if form_type == 'delete_api_key':
@@ -689,7 +689,7 @@ def register_auth_routes(app, email_service):
                                 _delete_profile_image(old_image)
                             except Exception as e:
                                 logger.warning(f"Could not delete old profile photo {old_image}: {e}")
-                        flash("Profile photo updated successfully!", "success")
+                        flash("Photo updated.", "success")
                     except AuthenticationError as e:
                         Session.rollback()
                         flash(str(e), "error")
@@ -705,7 +705,7 @@ def register_auth_routes(app, email_service):
                         user.profile_image = None
                         user.updated_at = datetime.now()
                         Session.commit()
-                        flash("Profile photo removed successfully!", "success")
+                        flash("Photo removed.", "success")
                     except Exception as e:
                         Session.rollback()
                         logger.error(f"Profile photo removal failed: {e}", exc_info=True)
@@ -717,7 +717,7 @@ def register_auth_routes(app, email_service):
                         user.bodyweight = parse_bodyweight(request.form.get('bodyweight', ''))
                         user.updated_at = datetime.now()
                         Session.commit()
-                        flash("Bodyweight updated successfully!", "success")
+                        flash("Bodyweight updated.", "success")
                     except ValidationError as e:
                         flash(str(e), "error")
                     except Exception as e:
@@ -945,7 +945,7 @@ def register_auth_routes(app, email_service):
 
                     Session.commit()
 
-                    flash("Profile updated successfully!", "success")
+                    flash("Profile updated.", "success")
                     return redirect(url_for('account_settings'))
 
                 if form_type == 'password':
@@ -964,7 +964,7 @@ def register_auth_routes(app, email_service):
                         session.pop('otp_login_user_id', None)
                         session.pop('password_change_verified', None)
                         session.pop('password_change_user_id', None)
-                        flash("Password updated successfully!", "success")
+                        flash("Password updated.", "success")
                         return redirect(url_for('account_settings'))
 
                     if not current_password:
@@ -976,7 +976,7 @@ def register_auth_routes(app, email_service):
 
                     if not AuthService.set_password(user.id, new_password):
                         raise AuthenticationError(PASSWORD_NOT_CHANGED)
-                    flash("Password updated successfully!", "success")
+                    flash("Password updated.", "success")
                     return redirect(url_for('account_settings'))
 
                 if form_type == 'password_otp_request':
@@ -1025,7 +1025,7 @@ def register_auth_routes(app, email_service):
                         session.pop('otp_login_user_id', None)
                         session.pop('password_change_verified', None)
                         session.pop('password_change_user_id', None)
-                        flash("Password updated successfully!", "success")
+                        flash("Password updated.", "success")
                         return redirect(url_for('account_settings'))
 
                     flash("Invalid code. Please try again.", "error")
@@ -1326,7 +1326,7 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_profile_update', None)
                     session.pop('pending_profile_update_user_id', None)
 
-                    flash("Profile updated successfully!", "success")
+                    flash("Profile updated.", "success")
                     return redirect(url_for('user_settings'))
 
                 flash("Invalid code. Please try again.", "error")
@@ -1489,7 +1489,7 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_email_change', None)
                     session.pop('pending_email_change_user_id', None)
 
-                    flash("Email updated successfully!", "success")
+                    flash("Email updated.", "success")
                     return redirect(url_for('user_settings'))
 
                 flash("Invalid codes. Please try again.", "error")
