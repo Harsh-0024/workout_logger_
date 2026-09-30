@@ -291,7 +291,7 @@ def extract_weights(segment, base_weight=None):
 
 # What may follow a number on a set line without it being read as "1 Squat": the "x" of
 # "100 x 5", a unit ("100 kg, 5") and the "at" of "3x5 at 100".
-_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?|bw\S*|at|@|secs?|seconds?)[,;]?$', re.IGNORECASE)
+_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?|bw\S*|at|@|for|secs?|seconds?)[,;:]?$', re.IGNORECASE)
 
 # Words that follow a number inside an exercise name ("1 Arm Row", "45 Degree Back
 # Extension"), so the number isn't dropped as a list number.
@@ -453,6 +453,55 @@ def parse_sets_at_weight(segment, base_weight=None):
     return len(weights), weights, reps
 
 
+# One weight, then the reps done with it. The weight has to be marked (a unit right after it, or
+# ":", " - ", "for" before the reps, or "@" after them) and the reps evenly separated, so the
+# documented "weights, reps" form ("80 75, 8 10") is never read this way.
+_REPS_LIST = r'\d+(?:(?:\s*,\s*|\s+)\d+)+'
+_UNIT = r'(?:kgs?|lbs?)'
+_WEIGHT_THEN_REPS = (
+    re.compile(rf'^({_WEIGHT})\s*{_UNIT}\s*[:\-–—]?\s*({_REPS_LIST}|\d+)$', re.IGNORECASE),     # 100kg 5 5 5
+    re.compile(rf'^(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?)\s+(\d+(?:\s+\d+)+)$', re.IGNORECASE),  # BW 10 8 6
+    # Two reps or more here: "5 - 8" alone is a rep range.
+    re.compile(rf'^({_WEIGHT})\s*(?:{_UNIT})?\s*(?::|\s[-–—]|\sfor)\s*({_REPS_LIST})$', re.IGNORECASE),  # 100: 5 5 5
+)
+_REPS_THEN_WEIGHT = re.compile(rf'^({_REPS_LIST}|\d+)\s*(?:reps?)?\s*(?:@|\bat\b)\s*({_WEIGHT})\s*(?:{_UNIT})?$', re.IGNORECASE)
+
+
+def parse_reps_at_weight(segment, base_weight=None, max_rep_value: int = 30):
+    """"100kg 5 5 5", "100 kg: 5, 5, 5", "100 - 5 5 5", "100 for 5, 5, 5", "5 5 5 @ 100":
+    (weights, reps), or None when the segment isn't written that way."""
+    text = re.sub(r'\bbody\s*weight\b', 'bw', (segment or '').strip().replace('×', 'x'), flags=re.IGNORECASE)
+    if not text:
+        return None
+    found = None
+    for pattern in _WEIGHT_THEN_REPS:
+        m = pattern.match(text)
+        if m:
+            found = (m.group(1), m.group(2))
+            break
+    if not found:
+        m = _REPS_THEN_WEIGHT.match(text)
+        if m:
+            found = (m.group(2), m.group(1))
+    if not found:
+        return None
+    weight_token, reps_text = found
+    separators = set(re.findall(r'\s*,\s*|\s+', reps_text.strip()))
+    if len({',' if ',' in sep else ' ' for sep in separators}) > 1:
+        return None
+    reps = [int(value) for value in re.findall(r'\d+', reps_text)]
+    if not all(0 < value <= max_rep_value for value in reps):
+        return None
+    if ',' in reps_text and len(reps) < 3 and not re.search(r'[:\-–—@]|\bfor\b|\bat\b', text):
+        # "60kg 20, 12" is as likely the usual "weights, reps" (60 and 20 kg, 12 reps).
+        return None
+    try:
+        weight = _weight_value(weight_token.lower(), base_weight)
+    except ValueError:
+        return None
+    return [weight] * len(reps), reps
+
+
 def _sets_with_bare_reps(segment, base_weight=None):
     """"BW x 10, 10, 8" / "100x5, 5, 4": a set, then more reps at the same weight."""
     pieces = [piece.strip() for piece in re.split(r'[,;]', segment) if piece.strip()]
@@ -510,7 +559,7 @@ def is_probable_data_segment(segment: str) -> bool:
     if not segment:
         return False
 
-    if parse_time_sets(segment):
+    if parse_time_sets(segment) or parse_reps_at_weight(segment):
         return True
     lowered = re.sub(r'\bbody\s*weight\b', 'bw', _sets_of(segment).lower())
     if re.search(r'[x×*]', lowered):
@@ -913,6 +962,8 @@ def workout_parser(
                 declared_sets = counted_sets
         elif sets_at_weight:
             declared_sets, weights, reps = sets_at_weight
+        elif data_part and parse_reps_at_weight(data_part, effective_bodyweight, 600 if time_range_hint else 30):
+            weights, reps = parse_reps_at_weight(data_part, effective_bodyweight, 600 if time_range_hint else 30)
         elif data_part:
             w_list, r_list = parse_weight_x_reps(data_part, effective_bodyweight)
             if w_list:

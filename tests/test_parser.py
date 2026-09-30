@@ -545,6 +545,19 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertEqual(self._exercises("Squat\n100 x 5, 90 x 8, 8"), [("Squat", [100.0, 90.0, 90.0], [5, 8, 8])])
         self.assertEqual(self._exercises("Pull Ups\nBW+10 x 8, 7, 6, 6"), [("Pull Ups", [10.0] * 4, [8, 7, 6, 6])])
 
+    def test_one_weight_then_its_reps(self):
+        for line in ("100kg 5 5 5", "100kg 5,5,5", "100 kg: 5, 5, 5", "100: 5 5 5", "100 - 5 5 5", "100 - 5, 5, 5",
+                     "100 for 5, 5, 5", "5 5 5 @ 100", "5, 5, 5 at 100kg", "Squat: 100kg 5,5,5"):
+            body = line if line.startswith("Squat") else f"Squat\n{line}"
+            self.assertEqual(self._exercises(body), [("Squat", [100.0] * 3, [5] * 3)], line)
+        self.assertEqual(self._exercises("Pull Ups\nBW 10 8 6"), [("Pull Ups", [0.0] * 3, [10, 8, 6])])
+        self.assertEqual(self._exercises("Dips\nbw+10 8 8 6"), [("Dips", [10.0] * 3, [8, 8, 6])])
+        # The usual "weights, reps" keeps its reading, unit or not, and "5 - 8" stays a range.
+        self.assertEqual(self._exercises("Squat\n80kg 75, 8 10"), [("Squat", [80.0, 75.0, 75.0], [8, 10, 10])])
+        self.assertEqual(self._exercises("Squat\n60kg 20, 12"), [("Squat", [60.0, 20.0, 20.0], [12, 12, 12])])
+        self.assertEqual(self._exercises("Squat\n60 kg 50 40, 10 8 6"), [("Squat", [60.0, 50.0, 40.0], [10, 8, 6])])
+        self.assertEqual(self._exercises("Squat: 5 - 8")[0][1:], ([], []))
+
     def test_timed_sets_written_as_times(self):
         for line, reps in (("60s, 45s", [60, 45, 45]), ("60s 45s", [60, 45, 45]), ("60 sec, 45 sec", [60, 45, 45]),
                            ("1:00, 0:45", [60, 45, 45]), ("45s 40s 30s", [45, 40, 30]),
