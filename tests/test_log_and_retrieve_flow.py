@@ -195,6 +195,24 @@ class TestLogAndRetrieveFlow(unittest.TestCase):
         self.assertIn("/workout/2026-09-07", data["result_url"])
         self.assertIn("note to self", data["message"])
 
+    def test_shortcut_says_when_the_day_already_has_a_different_workout(self):
+        user = self._create_logged_in_user(username="shortcut_taken")
+        log_path = urlsplit(self.client.get("/shortcut/log").get_json()["url"]).path
+        first = "8/9/26 Push\nBench Press 60 x 8"
+        self.assertTrue(self.client.post(log_path, data={"workout_text": first}).get_json()["ok"])
+
+        # The same workout again (a re-run): fine, nothing doubled.
+        again = self.client.post(log_path, data={"workout_text": first}).get_json()
+        self.assertTrue(again["ok"])
+        self.assertEqual(again["message"], "Workout already there.")
+
+        # A different one for that day wasn't saved; it used to say "Workout already there." too.
+        other = self.client.post(log_path, data={"workout_text": "8/9/26 Pull\nBarbell Row 70 x 8"}).get_json()
+        self.assertFalse(other["ok"])
+        self.assertIn("nothing was saved", other["error"])
+        self.assertIn("/workout/2026-09-08", other["result_url"])
+        self.assertEqual(self._count_logs(user), 1)
+
     def test_old_summary_link_opens_the_workout_page(self):
         self._create_logged_in_user(username="summary_user")
         response = self.client.get("/summary/2026-09-08")

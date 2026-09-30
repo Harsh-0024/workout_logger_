@@ -51,6 +51,10 @@ SHORTCUT_KEY_HELP = (
 )
 SHORTCUT_KEY_INVALID = "Your shortcut key isn't valid. " + SHORTCUT_KEY_HELP
 SHORTCUT_KEY_MISSING = "Your shortcut key is missing. " + SHORTCUT_KEY_HELP
+SHORTCUT_DAY_TAKEN = (
+    "That day already has a workout, so nothing was saved. "
+    "To add these exercises to it, paste them on the Log page and choose Add to that day."
+)
 # What the workout page says after a save from the Log page (timed questions, skipped lines).
 LOG_SAVED_SESSION_KEY = 'log_saved'
 SAVE_WORKOUT_FAILED = "Error saving workout. Please try again."
@@ -2788,6 +2792,17 @@ def register_workout_routes(app):
 
         date_str = result.get("date_str")
         detail_url = url_for('view_workout', date_str=date_str, _external=True)
+        if result.get("already_exists") and not _same_workout_already_saved(
+                user, raw_text, datetime.strptime(date_str, '%Y-%m-%d')):
+            # A different workout for a day that has one: nothing was saved, so don't say it was.
+            return _shortcut_json({
+                "ok": False,
+                "error": SHORTCUT_DAY_TAKEN,
+                "date": date_str,
+                "result_url": detail_url,
+                "already_exists": True,
+                "input_source": source,
+            })
         skipped = result.get("skipped") or []
         success_message = "Workout logged successfully."
         if skipped:
