@@ -558,6 +558,11 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertEqual(self._exercises("Squat\n60 kg 50 40, 10 8 6"), [("Squat", [60.0, 50.0, 40.0], [10, 8, 6])])
         self.assertEqual(self._exercises("Squat: 5 - 8")[0][1:], ([], []))
 
+    def test_seconds_after_the_weights(self):
+        self.assertEqual(self._exercises("Plank\nBW, 60s 45s"), [("Plank", [0.0] * 3, [60, 45, 45])])
+        self.assertEqual(self._exercises("Farmer Walk - [2, 20-60s]\n30 25, 45s 40s"), [("Farmer Walk", [30.0, 25.0], [45, 40])])
+        self.assertEqual(self._exercises("Dead Hang\nbw x 45s, 40s"), [("Dead Hang", [0.0] * 3, [45, 40, 40])])
+
     def test_timed_sets_written_as_times(self):
         for line, reps in (("60s, 45s", [60, 45, 45]), ("60s 45s", [60, 45, 45]), ("60 sec, 45 sec", [60, 45, 45]),
                            ("1:00, 0:45", [60, 45, 45]), ("45s 40s 30s", [45, 40, 30]),

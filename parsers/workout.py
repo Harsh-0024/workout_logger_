@@ -185,7 +185,7 @@ def parse_bodyweight_line(line: str) -> Tuple[Optional[float], Optional[str]]:
 
 
 def parse_weight_x_reps(segment, base_weight=None):
-    segment = (segment or '').replace('×', 'x').replace('*', 'x').lower()
+    segment = _drop_seconds_suffix(segment).replace('×', 'x').replace('*', 'x').lower()
     segment = re.sub(r'\bbody\s*weight\b', 'bw', segment)
     segment = re.sub(r'(kg|lbs|lb)', '', segment)
     bare_reps = _sets_with_bare_reps(segment, base_weight)
@@ -222,7 +222,16 @@ def _plain_float(token: str) -> float:
     return float(token)
 
 
+# "45s", "60 sec": a time is its number of seconds wherever reps are read.
+_SECONDS_SUFFIX = re.compile(r'(\d)\s*(?:seconds?|secs?|s)\b', re.IGNORECASE)
+
+
+def _drop_seconds_suffix(segment: str) -> str:
+    return _SECONDS_SUFFIX.sub(r'\1', segment or '')
+
+
 def extract_numbers(segment):
+    segment = _drop_seconds_suffix(segment)
     segment = re.sub(r'(kg|lbs|lb)', '', segment.lower())
     numbers = []
     # FIX: Replace comma with space to ensure "16,16" parses as two numbers
