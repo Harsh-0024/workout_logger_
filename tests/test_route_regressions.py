@@ -342,6 +342,27 @@ class TestRouteRegressions(unittest.TestCase):
             self.assertIn("function fitMeta(el)", page)
         self.assertIn('id="saveBtn">Save</button>', edit_page)
 
+    def test_an_exercise_done_twice_in_a_day_is_one_chart_point(self):
+        user = self._create_logged_in_user(username="chart_twice")
+        for day, sets in ((datetime(2026, 6, 1, 18), [(100.0, 5)]), (datetime(2026, 6, 3, 18), [(110.0, 5), (60.0, 12)])):
+            handle_workout_log(self.session, user, {
+                "date": day, "workout_name": "Legs",
+                "exercises": [{"name": "Zercher Squat", "exercise_string": f"Zercher Squat\n{w}, {r}",
+                               "weights": [w] * 3, "reps": [r] * 3, "valid": True} for w, r in sets],
+            })
+        self.session.commit()
+
+        body = self.client.get("/stats/data/Zercher%20Squat").get_json()
+        self.assertEqual(body["labels"], ["2026-06-01", "2026-06-03"])
+        # The day's stronger entry is the point, not the lighter back-off after it.
+        self.assertEqual(body["weight"], [100.0, 110.0])
+        self.assertGreater(body["stats"]["improvement_pct"], 0)
+        self.assertEqual(body["series"]["tonnage"][1], 110.0 * 5 * 3 + 60.0 * 12 * 3)
+
+        average = self.client.get("/stats/data/average").get_json()
+        self.assertEqual(average["labels"], ["2026-06-01", "2026-06-03"])
+        self.assertGreater(average["data"][1], 0)
+
     def test_exercise_chart_asks_the_database_a_fixed_number_of_times(self):
         # One query per session made long histories slow to chart on a remote database.
         from sqlalchemy import event

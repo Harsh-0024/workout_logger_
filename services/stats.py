@@ -498,8 +498,8 @@ def get_chart_data(db_session, user, exercise_name):
         timed_target = None
 
     for log in logs:
-        labels.append(local_date(log.date).isoformat() if log.date else "")
-        workout_titles.append(_clean_workout_title(getattr(log, 'workout_name', None)))
+        label = local_date(log.date).isoformat() if log.date else ""
+        title = _clean_workout_title(getattr(log, 'workout_name', None))
 
         sets_for_quality = _normalize_sets_for_log(db_session, log)
 
@@ -523,13 +523,27 @@ def get_chart_data(db_session, user, exercise_name):
         eff_vol = quality.get('effective_volume') or 0
         q_index = quality.get('quality_index') or 0
 
-        data_1rm.append(float(e1rm or 0))
-        data_weight.append(float(top_weight or 0))
-        data_reps.append(int(top_reps or 0))
-        data_volume.append(float(total_vol or 0))
-        data_effective_volume.append(float(eff_vol or 0))
-        data_quality.append(float(q_index) * 100.0)
-        data_quality_adjusted_1rm.append(float(e1rm or 0) * float(q_index or 0))
+        point = (float(e1rm or 0), float(top_weight or 0), int(top_reps or 0),
+                 float(q_index) * 100.0, float(e1rm or 0) * float(q_index or 0))
+        if label and labels and labels[-1] == label:
+            # The same exercise twice in a day (or under two of its names) is one point:
+            # the stronger entry, with the day's volume added up.
+            data_volume[-1] += float(total_vol or 0)
+            data_effective_volume[-1] += float(eff_vol or 0)
+            if point[0] <= data_1rm[-1]:
+                continue
+            for series in (data_1rm, data_weight, data_reps, data_quality, data_quality_adjusted_1rm):
+                series.pop()
+        else:
+            labels.append(label)
+            workout_titles.append(title)
+            data_volume.append(float(total_vol or 0))
+            data_effective_volume.append(float(eff_vol or 0))
+        data_1rm.append(point[0])
+        data_weight.append(point[1])
+        data_reps.append(point[2])
+        data_quality.append(point[3])
+        data_quality_adjusted_1rm.append(point[4])
 
     # Calculate statistics
     stats = {}
@@ -635,33 +649,26 @@ def get_average_growth_data(db_session, user) -> Dict:
 
     by_date = {}
     for exercise_logs in logs_by_exercise.values():
-        exercise_logs.sort(key=lambda l: l.date or datetime.min)
-        base = None
-        per_day_values = {}
-
+        # A day's best for the exercise, so a lighter second entry that day doesn't pull it down.
+        best_by_day = {}
         for log in exercise_logs:
             if not log.date:
                 continue
             one_rm = _get_peak_1rm_for_log(db_session, log)
             if not one_rm or one_rm <= 0:
                 continue
-            if base is None:
-                base = one_rm
-            if not base:
-                continue
+            date_key = local_date(log.date)
+            best_by_day[date_key] = max(best_by_day.get(date_key, 0.0), float(one_rm))
+
+        if not best_by_day:
+            continue
+        base = best_by_day[min(best_by_day)]
+
+        for date_key, one_rm in best_by_day.items():
             pct_change = ((one_rm - base) / base) * 100.0
             pct_change = max(-300.0, min(300.0, pct_change))
-            per_day_values.setdefault(local_date(log.date), []).append(pct_change)
-
-        if not base:
-            continue
-
-        for date_key, values in per_day_values.items():
-            if not values:
-                continue
-            day_avg = sum(values) / len(values)
             entry = by_date.setdefault(date_key, {'weighted_sum': 0.0, 'weight_sum': 0.0})
-            entry['weighted_sum'] += day_avg * base
+            entry['weighted_sum'] += pct_change * base
             entry['weight_sum'] += base
 
     if not by_date:
