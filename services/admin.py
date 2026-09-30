@@ -255,6 +255,7 @@ class AdminService:
             # can raise ObjectDeletedError)
             target_username = target_user.username
             target_email = target_user.email
+            target_photo = getattr(target_user, 'profile_image', None)
             admin_username = admin.username
 
             # Store user info for email notification
@@ -262,7 +263,9 @@ class AdminService:
                 'username': target_username,
                 'email': target_email,
                 'deletion_reason': deletion_reason,
-                'admin_username': admin_username
+                'admin_username': admin_username,
+                # The photo file is removed after the rows are gone (it's in storage, not the DB).
+                'profile_image': target_photo,
             }
             
             start = time.perf_counter()

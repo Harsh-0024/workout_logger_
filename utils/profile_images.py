@@ -62,3 +62,15 @@ def get_profile_image_url(profile_image: str | None) -> str | None:
         return url_for("static", filename=f"uploads/{key}")
 
     return f"{R2_PUBLIC_BASE_URL}/{key}"
+
+
+def delete_profile_image(profile_image: str | None) -> None:
+    """Remove a stored profile photo, wherever it's kept (local disk or R2)."""
+    if not profile_image:
+        return
+    key = normalize_profile_image_key(profile_image)
+    local_path = get_local_profile_image_path(key)
+    if local_path and os.path.exists(local_path):
+        os.remove(local_path)
+    elif has_r2_profile_image_storage():
+        get_r2_profile_image_client().delete_object(Bucket=get_r2_bucket_name(), Key=key)

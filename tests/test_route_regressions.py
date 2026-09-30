@@ -1528,6 +1528,34 @@ class TestRouteRegressions(unittest.TestCase):
         stored_user = self.session.query(User).filter_by(id=user.id).one()
         self.assertEqual(stored_user.profile_image, put_kwargs["Key"])
 
+    def test_deleting_an_account_removes_its_photo_too(self):
+        # The photo lives in storage at a public address; it outlived the account.
+        admin = self._create_logged_in_user(username="photo_admin")
+        self.session.query(User).filter_by(id=admin.id).update({"role": UserRole.ADMIN})
+        target = User(username="leaving", email="leaving@example.com", is_verified=True,
+                      profile_image="avatars/user_99_abcd1234.png")
+        self.session.add(target)
+        self.session.commit()
+        with patch("workout_tracker.routes.admin.delete_profile_image") as delete_photo, \
+             patch("workout_tracker.routes.admin.email_queue"), \
+             patch("services.admin.Session", self.session):
+            self.client.post("/admin/delete-user", data={"user_id": target.id, "deletion_reason": "Asked to leave"})
+        delete_photo.assert_called_once_with("avatars/user_99_abcd1234.png")
+        self.assertIsNone(self.session.query(User).filter_by(username="leaving").first())
+
+    def test_delete_profile_image_removes_a_local_photo(self):
+        import os
+        import tempfile
+        from utils import profile_images
+
+        path = os.path.join(tempfile.mkdtemp(), "user_1_abcd1234.png")
+        with open(path, "wb") as f:
+            f.write(b"png")
+        with patch("utils.profile_images.get_local_profile_image_path", return_value=path):
+            profile_images.delete_profile_image("avatars/user_1_abcd1234.png")
+        self.assertFalse(os.path.exists(path))
+        profile_images.delete_profile_image(None)  # nothing to do
+
     def test_oversized_uploads_are_refused_politely(self):
         user = self._create_logged_in_user(username="big_upload_user")
         # A small file that unpacks into a 48-megapixel image isn't decoded.

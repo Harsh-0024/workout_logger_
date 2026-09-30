@@ -6,6 +6,7 @@ from PIL import Image
 
 from services.admin import AdminError, AdminService
 from services.email_queue import email_queue
+from utils.profile_images import delete_profile_image
 from utils.logger import logger
 
 from .decorators import require_admin
@@ -122,6 +123,11 @@ def register_admin_routes(app):
             )
 
             send_deletion_email_async(user_info)
+            # Their photo sits in storage at a public address: remove it with the account.
+            try:
+                delete_profile_image(user_info.get('profile_image'))
+            except Exception as exc:
+                logger.warning(f"Could not delete profile photo of deleted user: {exc}")
 
             logger.info(f"Admin delete request finished in {time.perf_counter() - start:.3f}s")
 
