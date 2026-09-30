@@ -330,6 +330,13 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertIn(f"{date.today().year} Workout Tracker", self.client.get("/log").get_data(as_text=True))
 
+    def test_log_page_sends_a_workout_once(self):
+        # "Add to that day" skipped the Save button's guard, so a double tap added the exercises twice.
+        self._create_logged_in_user(username="once_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn("if (sending) {", page)
+        self.assertIn("addBtn.el.textContent = 'Adding…';", page)
+
     def test_log_and_edit_bars_keep_the_count_readable_on_phones(self):
         # The check count sits beside the buttons; on narrow phones it stacks onto two
         # lines instead of being cut off, and Edit's button is as short as Log's.

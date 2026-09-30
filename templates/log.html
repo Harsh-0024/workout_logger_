@@ -193,15 +193,35 @@
             }
         });
 
+        // Once only: a second tap on "Add to that day" used to add the exercises twice.
+        let sending = false;
+        let addBtn = null;
         form.addEventListener('submit', (e) => {
-            if (saveBtn.disabled && !(e.submitter && e.submitter.name === 'mode')) {
+            if (sending) {
+                e.preventDefault();
+                return;
+            }
+            const adding = !!(e.submitter && e.submitter.name === 'mode');
+            if (saveBtn.disabled && !adding) {
                 e.preventDefault();
                 check.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 return;
             }
+            sending = true;
             try { localStorage.removeItem(DRAFT_KEY); } catch (err) { /* storage off */ }
             saveBtn.disabled = true;
             saveBtn.textContent = 'Saving…';
+            if (adding) {
+                addBtn = { el: e.submitter, text: e.submitter.textContent };
+                addBtn.el.textContent = 'Adding…';
+            }
+        });
+        // Back to this page from the browser's cache: ready to save again.
+        window.addEventListener('pageshow', (e) => {
+            if (!e.persisted || !sending) return;
+            sending = false;
+            if (addBtn) addBtn.el.textContent = addBtn.text;
+            render(textarea.value.trim() ? latest : null);
         });
 
         document.addEventListener('keydown', (e) => {
