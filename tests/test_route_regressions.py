@@ -348,6 +348,17 @@ class TestRouteRegressions(unittest.TestCase):
         self.session.commit()
         self.assertIn("Admin panel</span>", self.client.get("/log").get_data(as_text=True))
 
+    def test_edits_that_did_not_reach_the_server_come_back(self):
+        # A save that ended on the sign-in page lost the edits; the page now keeps what was
+        # sent and puts it back, and the workout page forgets it once saved.
+        self._create_logged_in_user(username="edit_keeper")
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        edit = self.client.get("/workout/2026-09-20/edit").get_data(as_text=True)
+        self.assertIn('id="editRestored" role="status" hidden', edit)
+        self.assertIn("sessionStorage.setItem(SENT_KEY, JSON.stringify(", edit)
+        workout = self.client.get("/workout/2026-09-20").get_data(as_text=True)
+        self.assertIn("k.startsWith('wt-edit-sent:", workout)
+
     def test_log_draft_is_kept_until_the_save_is_confirmed(self):
         # The draft was cleared as Save was pressed: a save that ended on the sign-in page
         # (session expired) lost the typed workout.

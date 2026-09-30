@@ -417,6 +417,13 @@
         <h1 class="wd-title">{{ workout_name }}</h1>
         <p class="wd-meta">{{ date_label }}<span class="sep">·</span>{{ exercise_count or 0 }} exercise{{ '' if exercise_count == 1 else 's' }}<span class="sep">·</span>{{ set_count or 0 }} set{{ '' if set_count == 1 else 's' }}</p>
 
+        {# Edits sent from the Edit page reached the server: nothing to bring back. #}
+        <script>
+            try {
+                Object.keys(sessionStorage).filter((k) => k.startsWith('wt-edit-sent:{{ current_user.id }}:'))
+                    .forEach((k) => sessionStorage.removeItem(k));
+            } catch (e) { /* storage off */ }
+        </script>
         {% if saved %}
         {# The Log page keeps its draft until here, where the save is confirmed: cleared if it's
            still the text that was sent (not a newer one, when coming back here later). #}

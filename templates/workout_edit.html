@@ -17,6 +17,14 @@
 <div class="st lg" id="editPage" data-preview-url="{{ url_for('log_preview') }}" data-original-date="{{ date }}">
     {{ st.head('Edit workout', 'Fix names or numbers.', back=url_for('view_workout', date_str=date), back_label='Back to workout') }}
 
+    <div class="lg-callout" id="editRestored" role="status" hidden>
+        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+        <div>
+            <strong>Your changes weren't saved.</strong>
+            <p>They're back below: check them and save again.</p>
+        </div>
+    </div>
+
     {% if errors %}
     <div class="lg-callout is-error" role="alert">
         <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
@@ -88,6 +96,20 @@
         const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
         const LogEditor = window.LogEditor;
 
+        // What was sent with Save. If the save ended on the sign-in page, the page comes back
+        // with the old text; put the edits back. A saved workout's page forgets them.
+        const SENT_KEY = 'wt-edit-sent:{{ current_user.id }}:{{ date }}';
+        try {
+            const sent = JSON.parse(sessionStorage.getItem(SENT_KEY) || 'null');
+            sessionStorage.removeItem(SENT_KEY);
+            if (sent && (sent.text !== textarea.value || sent.title !== titleInput.value || sent.date !== dateInput.value)) {
+                textarea.value = sent.text;
+                titleInput.value = sent.title;
+                dateInput.value = sent.date;
+                document.getElementById('editRestored').hidden = false;
+            }
+        } catch (e) { /* storage off */ }
+
         LogEditor.autoGrow(textarea);
         LogEditor.attachPasteTidy(textarea);
         LogEditor.attachSuggestions(textarea, document.getElementById('exerciseSuggestions'),
@@ -129,6 +151,9 @@
                 return;
             }
             saveBtn.textContent = 'Saving…';
+            try {
+                sessionStorage.setItem(SENT_KEY, JSON.stringify({ text: textarea.value, title: titleInput.value, date: dateInput.value }));
+            } catch (err) { /* storage off */ }
         });
 
         document.addEventListener('keydown', (e) => {
