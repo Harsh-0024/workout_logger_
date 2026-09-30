@@ -158,6 +158,26 @@ class TestAuthFlow(unittest.TestCase):
         if self.sent[-1]["code"] != code["code"]:
             self.assertNotEqual(self._path(response), "/settings/account")
 
+    def test_signing_out_ends_everything(self):
+        self._sign_up()
+        self.client.get("/logout")
+        # "Remember me" doesn't sign them straight back in.
+        self.client.post("/login", data={"username_or_email": "alice", "password": "secret123", "remember_me": "on"})
+        self.client.get("/logout")
+        self.assertEqual(self._path(self.client.get("/log")), "/login")
+
+        # A code sign-in lets Settings skip the current password, but only until signing out.
+        self.client.post("/login/otp", data={"username_or_email": "alice"})
+        self.client.post("/login/otp/verify", data={"otp_code": self.sent[-1]["code"]})
+        self.client.get("/logout")
+        self.client.post("/login", data={"username_or_email": "alice", "password": "secret123"})
+        page = self.client.post("/settings", data={
+            "form_type": "profile", "full_name": "Changed", "username": "alice", "email": "alice@example.com",
+        }, follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Please enter your current password", page)
+        self.session.expire_all()
+        self.assertNotEqual(self.session.query(User).filter_by(username="alice").one().full_name, "Changed")
+
     def test_a_mistyped_new_email_is_caught_before_sending_codes(self):
         self._sign_up()
         sent_before = len(self.sent)

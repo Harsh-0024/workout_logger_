@@ -590,6 +590,11 @@ def register_auth_routes(app, email_service):
 
     @login_required
     def logout():
+        # Everything this browser held for the account goes: a code sign-in's "no current
+        # password needed" pass, pending email or password changes, save notes. Cleared before
+        # logout_user(), which then marks the remember-me cookie for removal (clearing after it
+        # would drop that mark and the cookie would sign them straight back in).
+        session.clear()
         logout_user()
         flash("Logged out successfully.", "info")
         return redirect(url_for('login'))
