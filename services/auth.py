@@ -148,6 +148,9 @@ class AuthService:
                     raise AuthenticationError("Username already taken")
                 else:
                     raise AuthenticationError("Email already registered")
+            # A username that is someone's email address would be mistaken for them at sign-in.
+            if session.query(User).filter(User.email == username).first():
+                raise AuthenticationError(USERNAME_NOT_AVAILABLE)
             
             # Create user
             role = UserRole.ADMIN if is_admin or email in Config.ADMIN_EMAIL_ALLOWLIST else UserRole.USER
@@ -312,9 +315,14 @@ class AuthService:
 
             identifier_type = 'email' if '@' in identifier else 'username'
 
-            user = session.query(User).filter(
+            # An address means its owner (the code goes to that inbox), a name its account.
+            matches = session.query(User).filter(
                 (User.username == identifier) | (User.email == identifier)
-            ).first()
+            ).all()
+            by_email = [m for m in matches if (m.email or '').lower() == identifier]
+            user = (by_email if identifier_type == 'email' and by_email else matches or [None])[0]
+            if identifier_type == 'username':
+                user = next((m for m in matches if (m.username or '').lower() == identifier), user)
 
             if not user:
                 logger.info(
@@ -532,17 +540,17 @@ class AuthService:
         """
         session = Session()
         try:
-            # Try to find user by username or email
-            user = session.query(User).filter(
-                (User.username == username_or_email.lower()) | 
-                (User.email == username_or_email.lower())
-            ).first()
-            
+            # Username or email. One person's username can be another's email address, so each
+            # match is tried: taking whichever came first could check the wrong password.
+            identifier = (username_or_email or '').strip().lower()
+            candidates = session.query(User).filter(
+                (User.username == identifier) | (User.email == identifier)
+            ).all()
+            user = next(
+                (c for c in candidates if AuthService.verify_password(password, c.password_hash)),
+                None,
+            )
             if not user:
-                return None
-            
-            # Verify password
-            if not AuthService.verify_password(password, user.password_hash):
                 return None
             
             # Check if verified

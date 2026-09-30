@@ -837,7 +837,9 @@ def register_auth_routes(app, email_service):
                             raise AuthenticationError("Current password is incorrect")
 
                     username = validate_username(username)
-                    if username != (user.username or '').lower() and is_reserved_username(username):
+                    if username != (user.username or '').lower() and (
+                            is_reserved_username(username)
+                            or Session.query(User).filter(User.email == username, User.id != user_id).first()):
                         flash(USERNAME_NOT_AVAILABLE, "error")
                         return redirect(url_for('account_settings'))
                     # As at sign-up: a typo like "alice@@example" is caught here, not when the
@@ -1236,7 +1238,9 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('user_settings'))
 
                     username = validate_username(username)
-                    if username != (user.username or '').lower() and is_reserved_username(username):
+                    if username != (user.username or '').lower() and (
+                            is_reserved_username(username)
+                            or Session.query(User).filter(User.email == username, User.id != user_id).first()):
                         flash(USERNAME_NOT_AVAILABLE, "error")
                         return redirect(url_for('user_settings'))
                     existing_username = (

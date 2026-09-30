@@ -178,6 +178,28 @@ class TestAuthFlow(unittest.TestCase):
         self.session.expire_all()
         self.assertNotEqual(self.session.query(User).filter_by(username="alice").one().full_name, "Changed")
 
+    def test_a_username_that_is_someone_elses_email(self):
+        # bob's username is alice's address (possible for old accounts): each signs in as themselves.
+        from services.auth import AuthService
+        self._sign_up()
+        self.client.get("/logout")
+        self.session.add(User(username="alice@example.com", email="bob@example.com", is_verified=True,
+                              password_hash=AuthService.hash_password("bobsecret1")))
+        self.session.commit()
+        self.client.post("/login", data={"username_or_email": "alice@example.com", "password": "secret123"})
+        self.assertEqual(self._path(self.client.get("/")), "/alice")
+        self.client.get("/logout")
+        self.client.post("/login", data={"username_or_email": "alice@example.com", "password": "bobsecret1"})
+        self.assertEqual(self._path(self.client.get("/")), "/alice@example.com")
+        self.client.get("/logout")
+        # A code asked for with that address goes to its owner.
+        self.client.post("/login/otp", data={"username_or_email": "alice@example.com"})
+        self.assertEqual(self.sent[-1]["email"], "alice@example.com")
+        # New accounts can't take someone's address as a username.
+        page = self.client.post("/register", data={"username": "bob@example.com", "email": "carol@example.com",
+                                                   "password": "secret123"}).get_data(as_text=True)
+        self.assertIn("That username isn&#39;t available", page)
+
     def test_a_mistyped_new_email_is_caught_before_sending_codes(self):
         self._sign_up()
         sent_before = len(self.sent)
