@@ -637,10 +637,15 @@ def _title_case(name: str) -> str:
 _UNSPACED_TARGET = re.compile(r'^(.*?[A-Za-z)])\s*[-–—]?\s*(\[[\d\s,.\-–—sS]*\].*)$')
 
 
+# Emoji and pictographs ("Squat 💪", "Deadlift 🔥"): flair, not part of the exercise's name.
+_EMOJI = re.compile('[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B00-\u2BFF\uFE0E\uFE0F\u200D]')
+
+
 def clean_exercise_name(name: str) -> str:
-    """Drop stray separators, list bullets and tabs around a typed name
-    ("Forearm Roller -" -> "Forearm Roller", "• Squat" -> "Squat")."""
-    name = re.sub(r'\s+', ' ', name or '').strip()
+    """Drop stray separators, list bullets, emoji and tabs around a typed name
+    ("Forearm Roller -" -> "Forearm Roller", "• Squat" -> "Squat", "Squat 💪" -> "Squat")."""
+    name = _EMOJI.sub(' ', name or '')
+    name = re.sub(r'\s+', ' ', name).strip()
     return name.strip('-–—:,.; •◦▪‣*·').strip()
 
 
