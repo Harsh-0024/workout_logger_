@@ -82,6 +82,7 @@
         // Per account, so someone else signing in on this phone never sees it.
         const DRAFT_KEY = 'wt-log-draft:{{ current_user.id }}';
         const OLD_DRAFT_KEY = 'wt-log-draft';
+        const SENT_KEY = 'wt-log-sent:{{ current_user.id }}';
 
         const LogEditor = window.LogEditor;
         LogEditor.autoGrow(textarea);
@@ -94,7 +95,11 @@
         textarea.placeholder = textarea.placeholder.replace('28/9/26', `${now.getDate()}/${now.getMonth() + 1}/${String(now.getFullYear()).slice(2)}`);
 
         // Keep an unsaved draft on this device (the server keeps the text after a failed save anyway).
-        if (!textarea.value) {
+        // It stays until the save is confirmed (the workout page clears it), so a save that ends
+        // on the sign-in page doesn't lose the text. One kept offline is safe on the phone already.
+        if (location.hash === '#saved-offline') {
+            try { localStorage.removeItem(DRAFT_KEY); } catch (e) { /* storage off */ }
+        } else if (!textarea.value) {
             try {
                 // A draft kept before drafts were per account is taken over once.
                 const old = localStorage.getItem(OLD_DRAFT_KEY);
@@ -208,7 +213,8 @@
                 return;
             }
             sending = true;
-            try { localStorage.removeItem(DRAFT_KEY); } catch (err) { /* storage off */ }
+            // What was sent, so the workout page clears the draft only if it's still this text.
+            try { sessionStorage.setItem(SENT_KEY, textarea.value); } catch (err) { /* storage off */ }
             saveBtn.disabled = true;
             saveBtn.textContent = 'Saving…';
             if (adding) {

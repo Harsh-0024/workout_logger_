@@ -418,6 +418,18 @@
         <p class="wd-meta">{{ date_label }}<span class="sep">·</span>{{ exercise_count or 0 }} exercise{{ '' if exercise_count == 1 else 's' }}<span class="sep">·</span>{{ set_count or 0 }} set{{ '' if set_count == 1 else 's' }}</p>
 
         {% if saved %}
+        {# The Log page keeps its draft until here, where the save is confirmed: cleared if it's
+           still the text that was sent (not a newer one, when coming back here later). #}
+        <script>
+            try {
+                const draftKey = 'wt-log-draft:{{ current_user.id }}', sentKey = 'wt-log-sent:{{ current_user.id }}';
+                const sent = sessionStorage.getItem(sentKey);
+                if (sent !== null) {
+                    if (localStorage.getItem(draftKey) === sent) localStorage.removeItem(draftKey);
+                    sessionStorage.removeItem(sentKey);
+                }
+            } catch (e) { /* storage off */ }
+        </script>
         <div class="wd-callout saved" role="status">
             <i class="bi bi-check-circle-fill" aria-hidden="true"></i>
             <div class="wd-callout-main">

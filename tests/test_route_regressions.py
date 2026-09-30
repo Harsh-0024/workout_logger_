@@ -348,6 +348,18 @@ class TestRouteRegressions(unittest.TestCase):
         self.session.commit()
         self.assertIn("Admin panel</span>", self.client.get("/log").get_data(as_text=True))
 
+    def test_log_draft_is_kept_until_the_save_is_confirmed(self):
+        # The draft was cleared as Save was pressed: a save that ended on the sign-in page
+        # (session expired) lost the typed workout.
+        self._create_logged_in_user(username="draft_keeper")
+        page = self.client.get("/log").get_data(as_text=True)
+        submit = page[page.index("form.addEventListener('submit'"):page.index("window.addEventListener('pageshow'")]
+        self.assertNotIn("removeItem(DRAFT_KEY)", submit)
+        self.assertIn("sessionStorage.setItem(SENT_KEY, textarea.value)", submit)
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        saved_page = self.client.get("/workout/2026-09-20?saved=1").get_data(as_text=True)
+        self.assertIn("if (localStorage.getItem(draftKey) === sent) localStorage.removeItem(draftKey);", saved_page)
+
     def test_log_page_sends_a_workout_once(self):
         # "Add to that day" skipped the Save button's guard, so a double tap added the exercises twice.
         self._create_logged_in_user(username="once_user")
