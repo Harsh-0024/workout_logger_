@@ -2579,6 +2579,28 @@
         }, reduce ? 0 : 180);
     }
 
+    // Only the latest request draws: picking one exercise and then another quickly could draw
+    // the first one's data under the second one's name. A failed load says so instead of
+    // leaving the previous chart up under the new name.
+    let chartTicket = 0;
+    function fetchChart(url) {
+        const ticket = ++chartTicket;
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
+            .then(data => { if (ticket === chartTicket) renderChart(data); })
+            .catch(error => {
+                if (ticket !== chartTicket) return;
+                console.error('Error loading chart:', error);
+                if (myChart) { myChart.destroy(); myChart = null; }
+                showEmptyState(true);
+                setText('heroLabel', currentExercise || (currentView === 'consistency' ? 'Consistency' : 'Overall strength'));
+                setText('chartEmptyText', "Couldn't load this chart. Check your connection and try again.");
+            });
+    }
+
     function loadAverageChart() {
         const params = new URLSearchParams({
             mode: 'index',
@@ -2587,10 +2609,7 @@
             fade_start_days: '60',
             fade_end_days: '90'
         });
-        fetch(`/stats/data/average?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => renderChart(data))
-            .catch(error => console.error('Error loading average chart:', error));
+        fetchChart(`/stats/data/average?${params.toString()}`);
     }
 
     function loadChart() {
@@ -2613,10 +2632,7 @@
             return;
         }
 
-        fetch(`/stats/data/${encodeURIComponent(exercise)}`)
-            .then(response => response.json())
-            .then(data => renderChart(data))
-            .catch(error => console.error('Error loading chart:', error));
+        fetchChart(`/stats/data/${encodeURIComponent(exercise)}`);
     }
 
     document.querySelectorAll('.range-pill').forEach(btn => {

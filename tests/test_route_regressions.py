@@ -388,6 +388,13 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(average["labels"], ["2026-06-01", "2026-06-03"])
         self.assertGreater(average["data"][1], 0)
 
+    def test_stats_chart_draws_only_the_latest_request_and_says_when_it_fails(self):
+        self._create_logged_in_user(username="chart_net")
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn("if (ticket === chartTicket) renderChart(data);", page)
+        self.assertIn("Couldn't load this chart. Check your connection and try again.", page)
+        self.assertNotIn(".then(response => response.json())\n            .then(data => renderChart(data))", page)
+
     def test_bodyweight_exercise_chart_keeps_the_load_as_logged(self):
         # Stats showed "Last session 90 kg × 8" for pull-ups logged as BW+10.
         self._create_logged_in_user(username="chart_bw")
