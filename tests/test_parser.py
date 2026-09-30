@@ -551,6 +551,11 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
             self.assertEqual(self._exercises(f"{line}\n100, 5"), [("Squat", [100.0] * 3, [5] * 3)], line)
         self.assertEqual(self._exercises("Squat 4 sets\n100 90, 5 6"), [("Squat", [100.0] + [90.0] * 3, [5] + [6] * 3)])
         self.assertEqual(self._exercises("45 Degree Hyperextension 3 sets\n20, 12")[0][0], "45 Degree Hyperextension")
+        # The count on a line of its own belongs to the name above (it made an exercise "Sets").
+        self.assertEqual(self._exercises("Squat\n4 sets\n100 90, 5 6\n\nLeg Press\n200, 10"),
+                         [("Squat", [100.0] + [90.0] * 3, [5] + [6] * 3), ("Leg Press", [200.0] * 3, [10] * 3)])
+        parsed = workout_parser("30/9/26 Legs\nSquat\n3 sets\n100, 5\nLeg Press\n200, 10", bodyweight=80)
+        self.assertEqual([e["line"] for e in parsed["exercises"]], [2, 5])  # lines still point at the text
 
     def test_one_weight_then_its_reps(self):
         for line in ("100kg 5 5 5", "100kg 5,5,5", "100 kg: 5, 5, 5", "100: 5 5 5", "100 - 5 5 5", "100 - 5, 5, 5",

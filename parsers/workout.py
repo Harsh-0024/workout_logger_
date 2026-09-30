@@ -865,12 +865,21 @@ def workout_parser(
 
     # Exercises
     list_of_lines = []
-    for line in raw_lines:
+    kept_numbers: List[int] = []
+    for line, line_no in zip(raw_lines, line_numbers):
         stripped = line.strip()
+        # "Squat" then "3 sets" on a line of its own: the count belongs to the name above.
+        if (len(list_of_lines) > 1 and re.fullmatch(r'\d+\s*sets?', stripped, flags=re.IGNORECASE)
+                and not is_data_line(list_of_lines[-1])
+                and _extract_declared_sets(list_of_lines[-1])[0] is None):
+            list_of_lines[-1] = f"{list_of_lines[-1]} {stripped}"
+            continue
         if is_data_line(stripped):
             list_of_lines.append(stripped)
         else:
             list_of_lines.append(strip_list_number(stripped))
+        kept_numbers.append(line_no)
+    line_numbers = kept_numbers
     i = 1
     while i < len(list_of_lines):
         clean_line = list_of_lines[i]
