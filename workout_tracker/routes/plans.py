@@ -186,8 +186,13 @@ def register_plan_routes(app):
             category = sanitize_text_input(category, max_length=100)
             category = html.unescape(category)
             
+            plan_days = get_workout_days(get_effective_plan_text(Session, user) or "")
+            if f"{category} {day_id}" not in ((plan_days.get("workout") or {}).get(category) or {}):
+                # An old link after the plan changed: say so, rather than offering to copy an error.
+                flash(f"{category} {day_id} isn't in your plan any more.", "error")
+                return redirect(url_for('retrieve_categories'))
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
-            kicker, title = _session_place(get_workout_days(get_effective_plan_text(Session, user) or ""), category, day_id)
+            kicker, title = _session_place(plan_days, category, day_id)
             return render_template(
                 'retrieve_plan.html',
                 output=output,

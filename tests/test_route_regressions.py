@@ -1124,6 +1124,15 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertTrue(picked["ok"], picked)
         self.assertIn("Pull Ups", picked["text"])
 
+    def test_retrieve_day_that_is_not_in_the_plan_says_so(self):
+        # It showed "Day 'Session 999' not found in plan." as the workout, with Copy and Share.
+        self._create_logged_in_user(username="stale_link")
+        response = self.client.get("/retrieve/final/Session/999", follow_redirects=True)
+        page = response.get_data(as_text=True)
+        self.assertIn("Session 999 isn&#39;t in your plan any more.", page)
+        self.assertNotIn("not found in plan", page)
+        self.assertEqual(self.client.get("/retrieve/final/Session/1").status_code, 200)
+
     def test_shortcut_pick_by_number_with_ten_or_more_sessions(self):
         # "1" was ambiguous (Session 1, 10, 11...) and "0" picked Session 10.
         from list_of_exercise import DEFAULT_PLAN
