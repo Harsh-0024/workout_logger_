@@ -512,6 +512,21 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertEqual(self._exercises("Squat\n4x6@100"), [("Squat", [100.0] * 4, [6] * 4)])
         self.assertEqual(self._exercises("Dips\n3x8 @ BW+10"), [("Dips", [10.0] * 3, [8] * 3)])
 
+    def test_sets_at_a_weight_written_other_ways(self):
+        # These used to save the set count as the weight ("3x8 100kg" was three sets of 3 kg).
+        for line in ("3x5 at 100", "3x5 100kg", "3 x 5 100 kg", "100kg 3x5", "100 kg 3 x 5", "100x5x3", "3x5x100"):
+            self.assertEqual(self._exercises(f"Squat\n{line}"), [("Squat", [100.0] * 3, [5] * 3)], line)
+        self.assertEqual(self._exercises("Squat 5x5 100kg"), [("Squat", [100.0] * 5, [5] * 5)])
+        self.assertEqual(self._exercises("Squat\n2x10 @ 60, 1x8 @ 70"), [("Squat", [60.0, 60.0, 70.0], [10, 10, 8])])
+        self.assertEqual(self._exercises("Squat\n3x5 @ 100, 90x8"), [("Squat", [100.0] * 3 + [90.0], [5, 5, 5, 8])])
+        # Without a unit or "@" the numbers stay weight x reps: "5 x 10 8" may be 5 kg for 10 and 8.
+        self.assertEqual(self._exercises("Squat\n20 x 10 8")[0][1], [20.0] * 3)
+
+    def test_more_reps_after_a_set_keep_its_weight(self):
+        self.assertEqual(self._exercises("Squat\n100x5, 5, 4"), [("Squat", [100.0] * 3, [5, 5, 4])])
+        self.assertEqual(self._exercises("Squat\n100 x 5, 90 x 8, 8"), [("Squat", [100.0, 90.0, 90.0], [5, 8, 8])])
+        self.assertEqual(self._exercises("Pull Ups\nBW+10 x 8, 7, 6, 6"), [("Pull Ups", [10.0] * 4, [8, 7, 6, 6])])
+
     def test_list_bullets_are_not_part_of_the_name(self):
         for bullet in ("•", "◦", "▪", "‣", "*", "·", "-"):
             self.assertEqual(self._exercises(f"{bullet} Squat\n100, 5")[0][0], "Squat", bullet)

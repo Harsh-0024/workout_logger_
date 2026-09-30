@@ -188,6 +188,9 @@ def parse_weight_x_reps(segment, base_weight=None):
     segment = (segment or '').replace('×', 'x').replace('*', 'x').lower()
     segment = re.sub(r'\bbody\s*weight\b', 'bw', segment)
     segment = re.sub(r'(kg|lbs|lb)', '', segment)
+    bare_reps = _sets_with_bare_reps(segment, base_weight)
+    if bare_reps:
+        return bare_reps
     matches = re.findall(
         r'(?:(bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)\s*)?x\s*(\d+)',
         segment,
@@ -287,8 +290,8 @@ def extract_weights(segment, base_weight=None):
 
 
 # What may follow a number on a set line without it being read as "1 Squat": the "x" of
-# "100 x 5" and a unit ("100 kg, 5").
-_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?|bw\S*)[,;]?$', re.IGNORECASE)
+# "100 x 5", a unit ("100 kg, 5") and the "at" of "3x5 at 100".
+_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?|bw\S*|at|@)[,;]?$', re.IGNORECASE)
 
 # Words that follow a number inside an exercise name ("1 Arm Row", "45 Degree Back
 # Extension"), so the number isn't dropped as a list number.
@@ -308,8 +311,14 @@ def strip_list_number(line: str) -> str:
 
 _WEIGHT = r'(?:bw(?:/\d+(?:\.\d+)?)?(?:[+-]\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)'
 _SETS_LINE = re.compile(rf'^(?:\s*(?:{_WEIGHT})?\s*x\s*\d+\s*[,;]?)+\s*$')
-# "3x5 @ 100": sets x reps at a weight.
-_SETS_AT_WEIGHT = re.compile(rf'^\s*(\d+)\s*x\s*(\d+)\s*@\s*({_WEIGHT})\s*$')
+# Several sets at one weight, as people write them. The forms without "@"/"at" need the
+# weight to carry a unit or be BW, since "5 x 10 8" could as well be 5 kg for 10 and 8 reps.
+_SETS_AT_WEIGHT = re.compile(rf'^(\d+)\s*x\s*(\d+)\s*(?:@|\bat\b)\s*({_WEIGHT})$')   # 3x5 @ 100
+_SETS_THEN_WEIGHT = re.compile(rf'^(\d+)\s*x\s*(\d+)\s+({_WEIGHT})$')                  # 3x5 100kg
+_WEIGHT_THEN_SETS = re.compile(rf'^({_WEIGHT})\s+(\d+)\s*x\s*(\d+)$')                  # 100kg 3x5
+_THREE_NUMBERS = re.compile(rf'^({_WEIGHT})\s*x\s*(\d+)\s*x\s*({_WEIGHT})$')           # 100x5x3, 3x5x100
+_ONE_SET = re.compile(rf'^({_WEIGHT})?\s*x\s*(\d+)$')                                   # 100x5, x5
+_MOST_SETS = 10
 
 
 def _set_text(line: str) -> str:
@@ -323,18 +332,92 @@ def is_sets_line(line: str) -> bool:
     return bool(_SETS_LINE.match(_set_text(line)))
 
 
+def _weight_value(token, base_weight):
+    weight = parse_bw_weight(token, base_weight)
+    return weight if weight is not None else _plain_float(token)
+
+
+def _set_group(piece: str, has_unit: bool):
+    """(sets, reps, weight token) for one "3x5 @ 100"-style piece, else None."""
+    m = _SETS_AT_WEIGHT.match(piece)
+    if m:
+        return int(m.group(1)), int(m.group(2)), m.group(3)
+    m = _SETS_THEN_WEIGHT.match(piece)
+    if m and (has_unit or m.group(3).startswith('bw')):
+        return int(m.group(1)), int(m.group(2)), m.group(3)
+    m = _WEIGHT_THEN_SETS.match(piece)
+    if m and (has_unit or m.group(1).startswith('bw')):
+        return int(m.group(2)), int(m.group(3)), m.group(1)
+    m = _THREE_NUMBERS.match(piece)
+    if m:
+        first, reps, last = m.group(1), int(m.group(2)), m.group(3)
+        # Weight x reps x sets ("100x5x3") unless only the first number can be the sets ("3x5x100").
+        if re.fullmatch(r'\d+', last) and int(last) <= _MOST_SETS:
+            return int(last), reps, first
+        if re.fullmatch(r'\d+', first) and int(first) <= _MOST_SETS:
+            return int(first), reps, last
+    return None
+
+
 def parse_sets_at_weight(segment, base_weight=None):
-    """"3x5 @ 100" -> three sets of 5 at 100. None when the segment isn't written that way."""
-    m = _SETS_AT_WEIGHT.match(_set_text(segment))
-    if not m:
+    """Sets written as a count at a weight: "3x5 @ 100", "3x5 at 100", "3x5 100kg", "100kg 3x5",
+    "100x5x3" (weight x reps x sets), or several such parts: "2x10 @ 60, 1x8 @ 70".
+    Returns (number of sets, weights, reps), or None when the segment isn't written that way."""
+    pieces = [piece.strip() for piece in re.split(r'[,;]', segment or '') if piece.strip()]
+    if not pieces:
         return None
-    sets, reps, weight_token = int(m.group(1)), int(m.group(2)), m.group(3)
-    if sets <= 0 or reps <= 0:
+    weights, reps, grouped = [], [], False
+    for raw_piece in pieces:
+        has_unit = bool(re.search(r'\d\s*(?:kgs?|lbs?)\b', raw_piece, re.IGNORECASE))
+        piece = _set_text(raw_piece).strip()
+        group = _set_group(piece, has_unit)
+        if group:
+            sets, rep_count, weight_token = group
+            if not 0 < sets <= _MOST_SETS or rep_count <= 0:
+                return None
+            grouped = True
+        else:
+            # A plain "90x8" next to a group ("3x5 @ 100, 90x8") is one more set.
+            m = _ONE_SET.match(piece)
+            if not m or not m.group(1):
+                return None
+            sets, rep_count, weight_token = 1, int(m.group(2)), m.group(1)
+        try:
+            weight = _weight_value(weight_token, base_weight)
+        except ValueError:
+            return None
+        weights += [weight] * sets
+        reps += [rep_count] * sets
+    if not grouped:
         return None
-    weight = parse_bw_weight(weight_token, base_weight)
-    if weight is None:
-        weight = float(weight_token)
-    return sets, [weight] * sets, [reps] * sets
+    return len(weights), weights, reps
+
+
+def _sets_with_bare_reps(segment, base_weight=None):
+    """"BW x 10, 10, 8" / "100x5, 5, 4": a set, then more reps at the same weight."""
+    pieces = [piece.strip() for piece in re.split(r'[,;]', segment) if piece.strip()]
+    if len(pieces) < 2:
+        return None
+    weights, reps, last_weight, bare = [], [], None, False
+    for piece in pieces:
+        m = _ONE_SET.match(piece)
+        if m:
+            if m.group(1):
+                try:
+                    last_weight = _weight_value(m.group(1), base_weight)
+                except ValueError:
+                    return None
+            if last_weight is None:
+                return None
+            weights.append(last_weight)
+            reps.append(int(m.group(2)))
+        elif re.fullmatch(r'\d+', piece) and last_weight is not None:
+            weights.append(last_weight)
+            reps.append(int(piece))
+            bare = True
+        else:
+            return None
+    return (weights, reps) if bare else None
 
 
 def is_data_line(line):
