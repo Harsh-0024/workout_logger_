@@ -873,6 +873,8 @@ class TestRouteRegressions(unittest.TestCase):
         body = self.client.post("/log/preview", data={"workout_text": "29/9/26 Legs\nA1 Zercher Squat\n100, 5"}).get_json()
         row = body["exercises"][0]
         self.assertEqual((row["state"], row["suggestion"], row["fix_line"]), ("suggest", "Zercher Squat", "Zercher Squat"))
+        # The fix button's name says what it does, beyond its visible "Use it".
+        self.assertIn('aria-label="Use it: ${esc(ex.suggestion)} on line ${ex.line}"', self.client.get("/log").get_data(as_text=True))
 
     def test_log_check_says_when_numbers_could_not_be_read(self):
         self._create_logged_in_user(username="unread_user")

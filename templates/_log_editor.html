@@ -437,7 +437,7 @@
                     : TAGS[ex.state] || '';
                 let note = '';
                 if (ex.state === 'suggest') {
-                    note = `<span class="lg-note"><span>Did you mean <strong>${esc(ex.suggestion)}</strong>?</span>${ex.fix_line != null ? ` <button type="button" class="lg-fix" data-fix-line="${ex.line}" data-fix-text="${esc(ex.fix_line)}">Use it</button>` : ''}</span>`;
+                    note = `<span class="lg-note"><span>Did you mean <strong>${esc(ex.suggestion)}</strong>?</span>${ex.fix_line != null ? ` <button type="button" class="lg-fix" data-fix-line="${ex.line}" data-fix-text="${esc(ex.fix_line)}" aria-label="Use it: ${esc(ex.suggestion)} on line ${ex.line}">Use it</button>` : ''}</span>`;
                 } else if (ex.note && ex.state !== 'ok' && ex.state !== 'new') {
                     note = `<span class="lg-note">${esc(ex.note)}</span>`;
                 }
