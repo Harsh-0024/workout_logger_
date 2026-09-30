@@ -348,6 +348,14 @@ class TestRouteRegressions(unittest.TestCase):
         self.session.commit()
         self.assertIn("Admin panel</span>", self.client.get("/log").get_data(as_text=True))
 
+    def test_plan_changes_that_did_not_reach_the_server_come_back(self):
+        self._create_logged_in_user(username="plan_keeper")
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertIn("data-editor data-editor-keep>", page)
+        self.assertIn("Not saved yet: your changes are back", page)
+        # Bulk import shares the editor but not this (it shows other text after an import).
+        self.assertNotIn("data-editor-keep>", self.client.get("/bulk-import").get_data(as_text=True))
+
     def test_edits_that_did_not_reach_the_server_come_back(self):
         # A save that ended on the sign-in page lost the edits; the page now keeps what was
         # sent and puts it back, and the workout page forgets it once saved.
