@@ -330,6 +330,13 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertIn(f"{date.today().year} Workout Tracker", self.client.get("/log").get_data(as_text=True))
 
+    def test_integrations_page_does_not_overstate_how_keys_are_kept(self):
+        # Keys are saved as written (not encrypted), so the page mustn't say "stored securely".
+        self._create_logged_in_user(username="keys_page")
+        page = self.client.get("/settings/integrations").get_data(as_text=True)
+        self.assertNotIn("stored securely", page)
+        self.assertIn("only ever shown by their last four characters", page)
+
     def test_keyboard_shortcut_list_shows_admin_panel_to_admins_only(self):
         user = self._create_logged_in_user(username="keys_user")
         page = self.client.get("/log").get_data(as_text=True)
