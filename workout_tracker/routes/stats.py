@@ -244,7 +244,7 @@ def register_stats_routes(app):
             return redirect(url_for('data_settings'))
         except Exception as e:
             logger.error(f"Error exporting CSV: {e}", exc_info=True)
-            flash("Error exporting data.", "error")
+            flash("Couldn't make the export. Please try again.", "error")
             return redirect(url_for('data_settings'))
 
     @login_required
@@ -273,7 +273,7 @@ def register_stats_routes(app):
             return redirect(url_for('data_settings'))
         except Exception as e:
             logger.error(f"Error exporting JSON: {e}", exc_info=True)
-            flash("Error exporting data.", "error")
+            flash("Couldn't make the export. Please try again.", "error")
             return redirect(url_for('data_settings'))
 
     app.add_url_rule('/stats', endpoint='stats_index', view_func=stats_index, methods=['GET'])

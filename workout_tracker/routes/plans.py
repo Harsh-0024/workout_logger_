@@ -205,7 +205,7 @@ def register_plan_routes(app):
             )
         except Exception as e:
             logger.error(f"Error in retrieve_final: {e}", exc_info=True)
-            flash("Error generating workout plan.", "error")
+            flash("Couldn't make that workout. Please try again.", "error")
             return redirect(url_for('retrieve_categories'))
 
     def _custom_picker_groups(catalog):
@@ -282,7 +282,7 @@ def register_plan_routes(app):
             ))
         except Exception as e:
             logger.error(f"Error generating custom workout: {e}", exc_info=True)
-            flash("Error generating custom workout.", "error")
+            flash("Couldn't make that workout. Please try again.", "error")
             return redirect(url_for('retrieve_custom'))
 
     @login_required
@@ -337,7 +337,7 @@ def register_plan_routes(app):
             )
         except Exception as e:
             logger.error(f"Error generating custom workout: {e}", exc_info=True)
-            flash("Error generating custom workout.", "error")
+            flash("Couldn't make that workout. Please try again.", "error")
             return redirect(url_for('retrieve_custom'))
 
     @login_required
@@ -423,7 +423,7 @@ def register_plan_routes(app):
         except Exception as e:
             Session.rollback()
             logger.error(f"Error in set_plan: {e}", exc_info=True)
-            flash("Error saving workout plan.", "error")
+            flash("Couldn't save the plan. Please try again.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
 
     @login_required

@@ -931,7 +931,7 @@ def register_auth_routes(app, email_service):
                         if email_sent:
                             flash("One-time code sent to your email.", "info")
                             return redirect(url_for('verify_profile_update_otp'))
-                        flash("Unable to send OTP. Please try again.", "error")
+                        flash("Couldn't send the code. Please try again.", "error")
                         return redirect(url_for('account_settings'))
 
                     user.full_name = full_name if full_name else None
@@ -968,7 +968,7 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('account_settings'))
 
                     if not current_password:
-                        flash("Please enter your current password or use the OTP option.", "error")
+                        flash("Enter your current password, or sign in with a code instead.", "error")
                         return redirect(url_for('account_settings') + '#change-password')
 
                     if not AuthService.verify_password(current_password, user.password_hash):
@@ -1004,7 +1004,7 @@ def register_auth_routes(app, email_service):
                     confirm_password = request.form.get('confirm_password', '')
 
                     if not pending_password_change:
-                        flash("Request a code first to use OTP password change.", "error")
+                        flash("Ask for a code first, then enter it here.", "error")
                         return redirect(url_for('account_settings') + '#change-password')
 
                     if not otp_code:

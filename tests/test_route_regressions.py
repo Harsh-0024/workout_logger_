@@ -635,6 +635,12 @@ class TestRouteRegressions(unittest.TestCase):
                                 follow_redirects=True).get_data(as_text=True)
         self.assertIn("Bodyweight updated.", page)
 
+    def test_error_messages_skip_jargon(self):
+        self._create_logged_in_user(username="plain_words")
+        page = self.client.get("/workout/2026-02-30", follow_redirects=True).get_data(as_text=True)
+        self.assertIn("That link doesn&#39;t point to a workout.", page)
+        self.assertNotIn("Invalid date format", page)
+
     def test_messages_leave_room_for_their_close_button(self):
         # The app's .alert padding replaced Bootstrap's room for the ×, so long messages ran under it.
         self._create_logged_in_user(username="alert_user")

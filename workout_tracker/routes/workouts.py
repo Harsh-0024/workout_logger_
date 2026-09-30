@@ -770,7 +770,7 @@ def register_workout_routes(app):
                 missing_name_count=sum(1 for row in rows if row.get("missing_name")),
             )
         except ValueError:
-            flash("Invalid date format.", "error")
+            flash("That link doesn't point to a workout.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
         except Exception as e:
             logger.error(f"Error viewing workout: {e}", exc_info=True)
@@ -3125,7 +3125,7 @@ def register_workout_routes(app):
 
             return render_edit()[0]
         except ValueError:
-            flash("Invalid date format.", "error")
+            flash("That link doesn't point to a workout.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
         except ParsingError as e:
             Session.rollback()
@@ -3134,7 +3134,7 @@ def register_workout_routes(app):
         except Exception as e:
             Session.rollback()
             logger.error(f"Error editing workout: {e}", exc_info=True)
-            flash("Error updating workout.", "error")
+            flash("Couldn't save the workout. Please try again.", "error")
             return redirect(url_for('edit_workout', date_str=date_str))
 
     @login_required
@@ -3175,7 +3175,7 @@ def register_workout_routes(app):
 
             return redirect(url_for('user_dashboard', username=user.username))
         except ValueError:
-            flash("Invalid date format.", "error")
+            flash("That link doesn't point to a workout.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
         except Exception as e:
             Session.rollback()
