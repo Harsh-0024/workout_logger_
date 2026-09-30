@@ -228,6 +228,7 @@ def check_workout_text(
         result["existing"] = {k: v for k, v in existing.items() if k not in {"exercises", "date"}}
 
     known = _KnownNames(db_session, user)
+    first_number_of = {}  # exercise -> its number in the check list (1, 2, 3...), to point out a second entry
     timed = _TimedNames(db_session, user)
     needs_bodyweight = False
     for item in parsed.get("exercises") or []:
@@ -286,8 +287,15 @@ def check_workout_text(
             needs_bodyweight = True
 
         name = item.get("name") or ""
+        name_key = normalize_exercise_name(name) or name.lower()
+        # The list numbers every row but skipped lines, as the Log page shows them.
+        number = sum(1 for e in result["exercises"] if e["state"] != "skip") + 1
+        earlier_number = first_number_of.setdefault(name_key, number)
         if append and existing and normalize_exercise_name(name) in existing["exercises"]:
             entry.update(state="dup", note="Already logged that day, would be added again")
+        elif earlier_number != number:
+            # Often a paste slip; sometimes meant. Either way it's saved as its own entry.
+            entry.update(state="twice", note=f"Also at no. {earlier_number}: saved as a second entry")
         elif not known.is_known(name):
             suggestion = known.suggestion(name)
             if suggestion:

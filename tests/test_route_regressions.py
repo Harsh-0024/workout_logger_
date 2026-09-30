@@ -657,6 +657,16 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn(f"const DRAFT_KEY = 'wt-log-draft:{user.id}';", self.client.get("/log").get_data(as_text=True))
         self.assertIn(f"const DRAFT_KEY = 'wt-custom-draft:{user.id}';", self.client.get("/retrieve/custom").get_data(as_text=True))
 
+    def test_log_check_points_out_an_exercise_written_twice(self):
+        self._create_logged_in_user(username="twice_user")
+        text = "20/9/26 Legs\nSquat\n100, 5\n\nLeg Press\n200, 10\n\nsquat\n80, 8"
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        states = [(row["name"], row["state"], row["note"]) for row in body["exercises"]]
+        self.assertEqual(states[0][1], "new")
+        self.assertEqual(states[2][1], "twice")
+        self.assertEqual(states[2][2], "Also at no. 1: saved as a second entry")
+        self.assertTrue(body["ok"])  # a note, not a blocker
+
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
 

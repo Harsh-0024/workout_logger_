@@ -114,7 +114,7 @@
     .lg-note { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin-top: 5px; font-size: 0.8rem; line-height: 1.45; color: var(--text-muted); }
     .lg-tag { flex: none; padding-top: 2px; font-size: 0.74rem; font-weight: 600; color: var(--text-subtle); white-space: nowrap; font-variant-numeric: tabular-nums; }
     .lg-row.is-new .lg-tag { color: var(--st-accent); }
-    .lg-row.is-suggest .lg-tag, .lg-row.is-dup .lg-tag { color: var(--st-warn); }
+    .lg-row.is-suggest .lg-tag, .lg-row.is-dup .lg-tag, .lg-row.is-twice .lg-tag { color: var(--st-warn); }
     .lg-row.is-missing .lg-tag, .lg-row.is-missing .lg-name { color: var(--st-down); }
     .lg-row.is-skip .lg-name { color: var(--text-muted); font-weight: 500; text-decoration: line-through; text-decoration-color: var(--text-subtle); }
     .lg-fix {
@@ -387,7 +387,7 @@
             };
         }
 
-        const TAGS = { ok: '', new: 'New', suggest: 'Check name', skip: 'Skipped', missing: 'No name', dup: 'Already logged' };
+        const TAGS = { ok: '', new: 'New', suggest: 'Check name', skip: 'Skipped', missing: 'No name', dup: 'Already logged', twice: 'Twice' };
 
         // Draw the check. Returns what the save bar should say.
         function renderCheck(data, opts) {
@@ -474,7 +474,7 @@
             } else if (data && !data.soft) {
                 const n = data.exercise_count || 0;
                 const s = data.set_count || 0;
-                const flagged = exercises.filter((e) => e.state === 'suggest' || e.state === 'skip' || e.state === 'dup').length + loose.length;
+                const flagged = exercises.filter((e) => ['suggest', 'skip', 'dup', 'twice'].includes(e.state)).length + loose.length;
                 view.metaText = `${n} exercise${n === 1 ? '' : 's'} · ${s} set${s === 1 ? '' : 's'}`;
                 view.metaSub = flagged ? `${flagged} to look at` : '';
             } else {
