@@ -2501,6 +2501,8 @@ def register_workout_routes(app):
                     f"{cat_name} {day_id}",
                     f"{cat_name}:{day_id}",
                     f"{cat_name}-{day_id}",
+                    # The day's number alone ("1" is Session 1, not every session with a 1 in it).
+                    str(day_id),
                 }
                 if cat_name.lower() == "session":
                     aliases.add(f"session {day_id}")
@@ -2551,6 +2553,9 @@ def register_workout_routes(app):
 
         partial_candidates: list[dict] = []
         for alias, items in alias_map.items():
+            # A number only ever matches a day's own number (above): "0" isn't part of Session 10.
+            if key.isdigit() or alias.isdigit():
+                continue
             if key in alias or alias in key:
                 partial_candidates.extend(items)
         partial = _unique_entries(partial_candidates)

@@ -1124,6 +1124,20 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertTrue(picked["ok"], picked)
         self.assertIn("Pull Ups", picked["text"])
 
+    def test_shortcut_pick_by_number_with_ten_or_more_sessions(self):
+        # "1" was ambiguous (Session 1, 10, 11...) and "0" picked Session 10.
+        from list_of_exercise import DEFAULT_PLAN
+        user = self._create_logged_in_user(username="numbers_user")
+        self.session.add(Plan(user_id=user.id, text_content=DEFAULT_PLAN))
+        self.session.commit()
+        pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
+        for key, title in (("1", "Session 1 - Chest & Biceps"), ("10", "Session 10"), ("s1", "Session 1 - Chest & Biceps")):
+            picked = self.client.get(pick_path, query_string={"format": "json", "key": key}).get_json()
+            self.assertTrue(picked["ok"], (key, picked))
+            self.assertIn(title, picked["text"], key)
+        for key in ("0", "17"):
+            self.assertFalse(self.client.get(pick_path, query_string={"format": "json", "key": key}).get_json()["ok"], key)
+
     def test_shortcut_key_problems_explain_themselves_to_the_shortcut(self):
         # Empty key (the "paste your key" question was skipped): the app's JSON, not a
         # "not found" web page, so the shortcut shows the message instead of "not reachable".
