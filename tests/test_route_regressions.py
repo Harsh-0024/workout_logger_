@@ -330,6 +330,17 @@ class TestRouteRegressions(unittest.TestCase):
 
         self.assertIn(f"{date.today().year} Workout Tracker", self.client.get("/log").get_data(as_text=True))
 
+    def test_keyboard_shortcut_list_shows_admin_panel_to_admins_only(self):
+        user = self._create_logged_in_user(username="keys_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertNotIn("Admin panel</span>", page)
+        self.assertIn("key === 'a' && isAdminShortcutEnabled", page)
+        self.assertIn(".modal.show:not(#shortcutsModal)", page)
+
+        self.session.query(User).filter_by(id=user.id).update({"role": UserRole.ADMIN})
+        self.session.commit()
+        self.assertIn("Admin panel</span>", self.client.get("/log").get_data(as_text=True))
+
     def test_log_page_sends_a_workout_once(self):
         # "Add to that day" skipped the Save button's guard, so a double tap added the exercises twice.
         self._create_logged_in_user(username="once_user")
