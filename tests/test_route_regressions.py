@@ -828,6 +828,18 @@ class TestRouteRegressions(unittest.TestCase):
         body = self.client.post("/log/preview", data={"workout_text": "21/9/26 Legs\nLeg Press\n1, 1"}).get_json()
         self.assertFalse(body["ok"])
 
+    def test_log_check_suggests_the_name_behind_a_superset_label(self):
+        user = self._create_logged_in_user(username="superset_user")
+        handle_workout_log(self.session, user, {
+            "date": datetime(2026, 9, 20, 18), "workout_name": "Legs",
+            "exercises": [{"name": "Zercher Squat", "exercise_string": "Zercher Squat\n100, 5",
+                           "weights": [100.0] * 3, "reps": [5] * 3, "valid": True}],
+        })
+        self.session.commit()
+        body = self.client.post("/log/preview", data={"workout_text": "29/9/26 Legs\nA1 Zercher Squat\n100, 5"}).get_json()
+        row = body["exercises"][0]
+        self.assertEqual((row["state"], row["suggestion"], row["fix_line"]), ("suggest", "Zercher Squat", "Zercher Squat"))
+
     def test_log_check_says_when_numbers_could_not_be_read(self):
         self._create_logged_in_user(username="unread_user")
         text = "20/9/26 Legs\nSquat\n100/5, 105/4\n\nPlank"

@@ -311,6 +311,8 @@ def strip_list_number(line: str) -> str:
     """Drop a list number in front of a name ("1. Squat", "2) Row", "3 - Curl", "4 Dips"),
     keeping numbers that are part of it ("1-Arm Row", "45 Degree Hyperextension", "21s Curl")."""
     line = (line or '').strip()
+    # A superset label written with a mark ("A1. Squat", "A2) Row", "B1: Curl", "B2 - Row").
+    line = re.sub(r'^[A-Ha-h][1-9]\s*(?:[.):]|\s[-–—])\s*(?=[A-Za-z])', '', line)
     stripped = re.sub(r'^\d+\s*[.)]\s*', '', line)
     if stripped == line:
         stripped = re.sub(r'^\d+\s*[:\-–—]\s+', '', line)

@@ -620,6 +620,12 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         # Other brackets are part of the name.
         self.assertEqual(self._exercises("Squat [paused]\n100, 5")[0][0], "Squat [Paused]")
 
+    def test_superset_labels_with_a_mark_are_not_part_of_the_name(self):
+        for line in ("A1. Squat", "A2) Squat", "b1: Squat", "B2 - Squat", "A1.Squat"):
+            self.assertEqual(self._exercises(f"{line}\n100, 5")[0][0], "Squat", line)
+        # Without a mark it may be part of the name ("C2 Rower"), so it stays; the check suggests.
+        self.assertEqual(self._exercises("C2 Rower\n0, 500")[0][0], "C2 Rower")
+
     def test_list_bullets_are_not_part_of_the_name(self):
         for bullet in ("•", "◦", "▪", "‣", "*", "·", "-"):
             self.assertEqual(self._exercises(f"{bullet} Squat\n100, 5")[0][0], "Squat", bullet)

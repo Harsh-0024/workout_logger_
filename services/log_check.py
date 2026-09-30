@@ -142,6 +142,10 @@ class _KnownNames:
         return normalize_exercise_name(name) in self.plan_norms
 
     def suggestion(self, name: str) -> Optional[str]:
+        # "A1 Back Squat": a superset label in front of a name you know.
+        labelled = re.match(r"^[A-Ha-h][1-9]\s+(\S.*)$", name or "")
+        if labelled and self.is_known(labelled.group(1)):
+            return self.candidates.get(_plain(labelled.group(1))) or labelled.group(1)
         key = _plain(name)
         if not key:
             return None
