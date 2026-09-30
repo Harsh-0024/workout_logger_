@@ -241,7 +241,10 @@
         if (deleteBtn) deleteBtn.addEventListener('click', () => {
             const n = picked.size;
             if (!n) return;
-            if (!window.confirm(`Delete ${n} workout${n === 1 ? '' : 's'}? This can't be undone.`)) return;
+            const title = `Delete ${n} workout${n === 1 ? '' : 's'}?`;
+            // The app's own confirm box (as for deleting one workout); the browser's plain one only
+            // where a form can't be submitted through it.
+            if (!form.requestSubmit && !window.confirm(`${title} This can't be undone.`)) return;
             form.querySelectorAll('input[name="selected_dates"]').forEach((el) => el.remove());
             picked.forEach((iso) => {
                 const field = document.createElement('input');
@@ -250,8 +253,16 @@
                 field.value = iso;
                 form.appendChild(field);
             });
-            deleteBtn.disabled = true;
-            form.requestSubmit ? form.requestSubmit() : form.submit();
+            if (form.requestSubmit) {
+                Object.assign(form.dataset, {
+                    confirm: 'true', confirmTitle: title, confirmMessage: "This can't be undone.",
+                    confirmCta: 'Delete', confirmDestructive: 'true',
+                });
+                form.requestSubmit();
+            } else {
+                deleteBtn.disabled = true;
+                form.submit();
+            }
         });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && selecting) setSelecting(false);

@@ -360,6 +360,14 @@ class TestRouteRegressions(unittest.TestCase):
         saved_page = self.client.get("/workout/2026-09-20?saved=1").get_data(as_text=True)
         self.assertIn("if (localStorage.getItem(draftKey) === sent) localStorage.removeItem(draftKey);", saved_page)
 
+    def test_deleting_several_workouts_uses_the_app_confirm_box(self):
+        self._create_logged_in_user(username="bulk_confirm")
+        page = self.client.get("/workouts").get_data(as_text=True)
+        self.assertIn("confirm: 'true', confirmTitle: title", page)
+        self.assertIn("confirmDestructive: 'true'", page)
+        # The browser's own box only where the form can't go through the app's one.
+        self.assertIn("if (!form.requestSubmit && !window.confirm(", page)
+
     def test_log_page_sends_a_workout_once(self):
         # "Add to that day" skipped the Save button's guard, so a double tap added the exercises twice.
         self._create_logged_in_user(username="once_user")
