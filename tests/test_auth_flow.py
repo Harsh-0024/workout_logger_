@@ -223,6 +223,15 @@ class TestCodeGuessing(TestAuthFlow):
         self.assertIn("Too many attempts", page)
         self.assertFalse(self.session.query(User).filter_by(username="guess").one().is_verified)
 
+    def test_code_emails_are_limited(self):
+        self.client.post("/register", data={"username": "spam", "email": "spam@example.com", "password": "secret123"})
+        for _ in range(10):
+            self.client.post("/resend-verification")
+        sent = len(self.sent)
+        page = self.client.post("/resend-verification", follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Too many attempts", page)
+        self.assertEqual(len(self.sent), sent)
+
     # The inherited journeys run with the limit on too: normal use stays well under it.
 
 

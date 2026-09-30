@@ -235,6 +235,8 @@ def register_auth_routes(app, email_service):
                 username = request.form.get('username', '').strip()
                 email = request.form.get('email', '').strip()
                 password = request.form.get('password', '')
+                # Each sign-up emails a code to the address given: not a way to fill an inbox.
+                _enforce_rate_limit('register', email, limit=10, window_seconds=3600)
                 # The page checks this too, but only when its script runs.
                 confirm_password = request.form.get('confirm_password')
                 if confirm_password is not None and confirm_password != password:
@@ -563,6 +565,7 @@ def register_auth_routes(app, email_service):
             user_email = user.email
             user_username = user.username
 
+            _enforce_rate_limit('email_codes', str(user_id), limit=10, window_seconds=600)
             verification_code = AuthService.resend_verification_code(user_id)
 
             email_sent = email_service.send_otp_email(
@@ -877,6 +880,7 @@ def register_auth_routes(app, email_service):
                         }
                         session['pending_email_change_user_id'] = user_id
 
+                        _enforce_rate_limit('email_codes', str(user_id), limit=10, window_seconds=600)
                         otp_payload = AuthService.request_email_change_otps(
                             user_id,
                             current_email=user_email,
@@ -909,6 +913,7 @@ def register_auth_routes(app, email_service):
                             'email': email,
                             'bodyweight': bodyweight,
                         }
+                        _enforce_rate_limit('email_codes', str(user.id), limit=10, window_seconds=600)
                         otp_payload = AuthService.request_profile_update_otp(user.id)
                         email_sent = email_service.send_otp_email(
                             email=otp_payload['email'],
@@ -968,6 +973,7 @@ def register_auth_routes(app, email_service):
                     return redirect(url_for('account_settings'))
 
                 if form_type == 'password_otp_request':
+                    _enforce_rate_limit('email_codes', str(user.id), limit=10, window_seconds=600)
                     otp_payload = AuthService.request_password_change_otp(user.id)
                     email_sent = email_service.send_otp_email(
                         email=otp_payload['email'],
@@ -1265,6 +1271,7 @@ def register_auth_routes(app, email_service):
                         }
                         session['pending_email_change_user_id'] = user_id
 
+                        _enforce_rate_limit('email_codes', str(user_id), limit=10, window_seconds=600)
                         otp_payload = AuthService.request_email_change_otps(
                             user_id,
                             current_email=user_email,
@@ -1382,6 +1389,7 @@ def register_auth_routes(app, email_service):
     @login_required
     def resend_password_change_otp():
         try:
+            _enforce_rate_limit('email_codes', str(current_user.id), limit=10, window_seconds=600)
             otp_payload = AuthService.request_password_change_otp(current_user.id)
             email_sent = email_service.send_otp_email(
                 email=otp_payload['email'],
@@ -1500,6 +1508,7 @@ def register_auth_routes(app, email_service):
             return redirect(url_for('user_settings'))
 
         try:
+            _enforce_rate_limit('email_codes', str(current_user.id), limit=10, window_seconds=600)
             otp_payload = AuthService.request_email_change_otps(
                 current_user.id,
                 current_email=pending_change.get('current_email'),
@@ -1539,6 +1548,7 @@ def register_auth_routes(app, email_service):
             return redirect(url_for('user_settings'))
 
         try:
+            _enforce_rate_limit('email_codes', str(current_user.id), limit=10, window_seconds=600)
             otp_payload = AuthService.request_profile_update_otp(current_user.id)
             email_sent = email_service.send_otp_email(
                 email=otp_payload['email'],
