@@ -167,6 +167,17 @@ def _existing_day(db_session, user_id: int, day: datetime) -> Optional[Dict]:
     }
 
 
+# What Retrieve writes under an exercise with no history, for the user to fill in.
+_RETRIEVE_PLACEHOLDERS = {"1,1", "111,111", "bw/4,1"}
+
+
+def _is_retrieve_placeholder(exercise_string: str) -> bool:
+    lines = [line.strip() for line in (exercise_string or "").splitlines() if line.strip()]
+    if len(lines) != 2:
+        return False
+    return re.sub(r"\s+", "", lines[1].lower()) in _RETRIEVE_PLACEHOLDERS
+
+
 def _quote(text: str, limit: int = 40) -> str:
     text = re.sub(r"\s+", " ", text or "").strip()
     return f"“{text[:limit - 1]}…”" if len(text) > limit else f"“{text}”"
@@ -268,6 +279,20 @@ def check_workout_text(
                 )
             entry.update(state="missing", name="No exercise name", note="Add the exercise name above these numbers")
             result["errors"].append({"line": shown_line, "message": message})
+            result["exercises"].append(entry)
+            continue
+
+        if item.get("valid") and _is_retrieve_placeholder(item.get("exercise_string") or ""):
+            # Retrieve writes "1, 1" (or "bw/4, 1") for an exercise with no history yet. Left as it
+            # is, it would be saved as real 1 kg x 1 sets, so it's skipped like an empty line.
+            item["valid"] = False
+            entry.update(state="skip", name=item.get("name"),
+                         note="Still Retrieve's 1, 1: fill in your sets, or it won't be saved")
+            result["warnings"].append({
+                "line": shown_line,
+                "message": f"Line {shown_line}: {_quote(item.get('name'))} still has Retrieve's placeholder sets, "
+                           "so it won't be saved.",
+            })
             result["exercises"].append(entry)
             continue
 

@@ -760,6 +760,27 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(self.session.query(WorkoutLog).filter_by(user_id=user.id).count(), 0)
 
+    def test_retrieve_placeholder_sets_left_as_they_are_are_not_saved(self):
+        # Retrieve writes "1, 1" under an exercise with no history; pasted back untouched it
+        # was saved as real 1 kg x 1 sets.
+        user = self._create_logged_in_user(username="placeholder_user")
+        text = ("20/9/26 - Session 4 - Legs\n\nLeg Press - [10–20]\n1, 1\n\n"
+                "Pull Ups\nbw/4, 1\n\nLeg Extension - [2, 12–20]\n60, 12")
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        states = [(row["name"], row["state"]) for row in body["exercises"]]
+        self.assertEqual(states[:2], [("Leg Press", "skip"), ("Pull Ups", "skip")])
+        self.assertNotEqual(states[2][1], "skip")
+        self.assertTrue(body["ok"])
+        self.assertIn("Retrieve's 1, 1", body["exercises"][0]["note"])
+
+        self.client.post("/log", data={"workout_text": text})
+        saved = [row.exercise for row in self.session.query(WorkoutLog).filter_by(user_id=user.id)]
+        self.assertEqual(saved, ["Leg Extension"])
+
+        # All still placeholders: nothing to save, and it says so.
+        body = self.client.post("/log/preview", data={"workout_text": "21/9/26 Legs\nLeg Press\n1, 1"}).get_json()
+        self.assertFalse(body["ok"])
+
     def test_log_check_says_when_numbers_could_not_be_read(self):
         self._create_logged_in_user(username="unread_user")
         text = "20/9/26 Legs\nSquat\n100/5, 105/4\n\nPlank"
