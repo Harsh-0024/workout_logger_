@@ -4,13 +4,15 @@ Workout logging service for processing and saving workout data.
 from collections import Counter, defaultdict
 from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, date, timedelta
-from sqlalchemy import func
+from sqlalchemy import func, or_
 import math
 import re
 
 from list_of_exercise import get_workout_days
 from models import Lift, RepRange, TimedExercisePreference, WorkoutLog
 from parsers.workout import (
+    TIME_TOKEN,
+    is_time_only_exercise,
     align_sets,
     extract_numbers,
     _extract_declared_sets,
@@ -799,7 +801,9 @@ def _has_time_hint_in_exercise_string(exercise_string: str) -> bool:
             continue
         if re.search(r"(?:\b(?:s|sec|secs|second|seconds)\b|\d+\s*s(?:ec(?:onds?)?)?\b)", token):
             return True
-    return False
+    # Sets written as times ("60s, 45s", "1:00"), on the lines under the name (a name like
+    # "21s Curl" isn't a time).
+    return any(TIME_TOKEN.search(line) for line in text.splitlines()[1:])
 
 
 def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_index=None) -> bool:
@@ -809,13 +813,16 @@ def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_in
     if not candidates:
         return False
 
-    # A time hint always sits in brackets, so the database skips every log without one
-    # (this runs for each exercise on every workout page and save).
+    # A time hint is a bracket, a digit followed by "s" (60s, 45 sec) or a colon (1:00), so the
+    # database skips every log without one (this runs for each exercise on every page and save).
+    maybe_timed = [WorkoutLog.exercise_string.like('%[%'), WorkoutLog.exercise_string.like('%:%')]
+    maybe_timed += [WorkoutLog.exercise_string.ilike(f'%{digit}s%') for digit in range(10)]
+    maybe_timed += [WorkoutLog.exercise_string.ilike(f'%{digit} s%') for digit in range(10)]
     logs = (
         db_session.query(WorkoutLog)
         .filter(WorkoutLog.user_id == user_id)
         .filter(WorkoutLog.exercise.in_(candidates))
-        .filter(WorkoutLog.exercise_string.like('%[%'))
+        .filter(or_(*maybe_timed))
         .all()
     )
     return any(_has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '')) for log in logs)
@@ -1140,12 +1147,10 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             if aligned_new_sets:
                 new_sets = aligned_new_sets
         
-        uses_bodyweight = bool(is_bodyweight_enabled(
-            db_session,
-            user.id,
-            ex_name,
-            exercise_text=new_str,
-        )) if is_valid else False
+        uses_bodyweight = bool(
+            is_bodyweight_enabled(db_session, user.id, ex_name, exercise_text=new_str)
+            or is_time_only_exercise(new_str, item.get('source_name') or ex_name)
+        ) if is_valid else False
         if is_valid and has_bodyweight_token(new_str):
             set_bodyweight_preference(
                 db_session,

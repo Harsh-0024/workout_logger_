@@ -48,6 +48,8 @@ def format_pct(value: Optional[float], *, signed: bool = True) -> str:
 
 
 def format_set(weight: float, reps: int, *, uses_bodyweight: bool, is_timed: bool) -> str:
+    if is_timed and not uses_bodyweight and not float(weight):
+        return f"{int(reps)}s"  # a time with nothing added (a wall sit): just the time
     if uses_bodyweight:
         offset = float(weight)
         load = "BW" if offset == 0 else (f"BW+{_num(offset)}" if offset > 0 else f"BW−{_num(-offset)}")
@@ -83,6 +85,8 @@ def readable_set(weight: float, reps: int, *, uses_bodyweight: bool, is_timed: b
     'Bodyweight + 2.5 kg × 20', '30 kg × 45 s'. No app shorthand.
     """
     offset = float(weight)
+    if is_timed and not uses_bodyweight and offset == 0:
+        return f"{int(reps)} s"
     if uses_bodyweight:
         if offset == 0:
             load = "Bodyweight"

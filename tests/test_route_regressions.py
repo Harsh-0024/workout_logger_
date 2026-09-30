@@ -760,6 +760,25 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(self.session.query(WorkoutLog).filter_by(user_id=user.id).count(), 0)
 
+    def test_timed_sets_written_as_times(self):
+        # "Plank\n60s, 45s" used to be skipped ("couldn't read"), and "3 x 60s" was 3 kg for 60.
+        user = self._create_logged_in_user(username="times_user")
+        text = "20/9/26 Core\nPlank\n60s, 45s\n\nDead Hang\n3 x 40s\n\nWall Sit\n1:30 1:00"
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        labels = {row["name"]: row["sets_label"] for row in body["exercises"]}
+        # Only times written: the load is bodyweight, as with "BW, 60 45".
+        self.assertEqual(labels["Plank"], "BW×60s · BW×45s · BW×45s")
+        self.assertEqual(labels["Dead Hang"], "BW×40s · BW×40s · BW×40s")
+        self.assertEqual(labels["Wall Sit"], "BW×90s · BW×60s · BW×60s")
+
+        self.client.post("/log", data={"workout_text": text})
+        logs = {log.exercise: log for log in self.session.query(WorkoutLog).filter_by(user_id=user.id)}
+        self.assertEqual(logs["Wall Sit"].sets_json["reps"], [90, 60, 60])
+        self.assertTrue(logs["Wall Sit"].uses_bodyweight)
+        self.assertGreater(logs["Wall Sit"].estimated_1rm or 0, 0)  # scored at bodyweight, so it charts
+        page = self.client.get("/workout/2026-09-20").get_data(as_text=True)
+        self.assertIn("90s", page)
+
     def test_retrieve_placeholder_sets_left_as_they_are_are_not_saved(self):
         # Retrieve writes "1, 1" under an exercise with no history; pasted back untouched it
         # was saved as real 1 kg x 1 sets.

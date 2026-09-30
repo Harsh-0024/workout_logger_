@@ -14,7 +14,7 @@ from sqlalchemy import func
 
 from list_of_exercise import get_workout_days
 from models import WorkoutLog
-from parsers.workout import workout_parser
+from parsers.workout import TIME_TOKEN, is_time_only_exercise, workout_parser
 from services.bodyweight import has_bodyweight_token
 from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names
 from services.retrieve import _parse_plan_exercise_line, get_effective_plan_text
@@ -29,9 +29,12 @@ def _fmt_num(value) -> str:
 
 
 def _has_seconds_target(exercise_string: str) -> bool:
-    """A bracket like "[2, 20-60s]" means the second numbers are seconds (not "Max reps")."""
+    """A bracket like "[2, 20-60s]" means the second numbers are seconds (not "Max reps"),
+    as do sets written as times ("60s, 45s", "1:00") under the name."""
     match = re.search(r"\[([^\]]*)\]", exercise_string or "")
-    return bool(match and re.search(r"\d\s*s(?:ec(?:onds?)?)?\s*$", match.group(1), flags=re.IGNORECASE))
+    if match and re.search(r"\d\s*s(?:ec(?:onds?)?)?\s*$", match.group(1), flags=re.IGNORECASE):
+        return True
+    return any(TIME_TOKEN.search(line) for line in (exercise_string or "").splitlines()[1:])
 
 
 class _TimedNames:
@@ -66,6 +69,9 @@ def _sets_label(weights, reps, *, bodyweight: bool, seconds: bool = False) -> st
         if bodyweight:
             w = float(weight or 0)
             load = "BW" if abs(w) < 1e-9 else f"BW{'+' if w > 0 else '−'}{_fmt_num(abs(w))}"
+        elif seconds and not float(weight or 0):
+            parts.append(f"{rep}s")  # a time with nothing added: just the time
+            continue
         else:
             load = _fmt_num(weight)
         parts.append(f"{load}×{rep}{'s' if seconds else ''}")
@@ -252,7 +258,8 @@ def check_workout_text(
         line_no = item.get("line")
         shown_line = (line_no - offset) if isinstance(line_no, int) else None
         raw_line = lines[line_no - 1] if isinstance(line_no, int) and 0 < line_no <= len(lines) else ""
-        uses_bw = has_bodyweight_token(item.get("exercise_string") or "")
+        uses_bw = has_bodyweight_token(item.get("exercise_string") or "") or is_time_only_exercise(
+            item.get("exercise_string") or "", item.get("source_name") or "")
         entry = {
             "line": shown_line,
             "name": item.get("name"),

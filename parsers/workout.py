@@ -291,7 +291,7 @@ def extract_weights(segment, base_weight=None):
 
 # What may follow a number on a set line without it being read as "1 Squat": the "x" of
 # "100 x 5", a unit ("100 kg, 5") and the "at" of "3x5 at 100".
-_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?|bw\S*|at|@)[,;]?$', re.IGNORECASE)
+_SET_WORD = re.compile(r'^(?:x\d*|kgs?|lbs?|bw\S*|at|@|secs?|seconds?)[,;]?$', re.IGNORECASE)
 
 # Words that follow a number inside an exercise name ("1 Arm Row", "45 Degree Back
 # Extension"), so the number isn't dropped as a list number.
@@ -340,6 +340,56 @@ def _set_text(line: str) -> str:
 def is_sets_line(line: str) -> bool:
     """A line of "weight x reps" sets only: "100x5", "100 x 5, 90 x 8", "BW+10 x 8"."""
     return bool(_SETS_LINE.match(_set_text(line)))
+
+
+# Times written as times: "60s", "45 sec", "1:00". A line of only those is a timed exercise's sets.
+_SECONDS_WORD = r'(?:seconds?|secs?|s)'
+TIME_TOKEN = re.compile(rf'\b\d+:[0-5]\d\b|\b\d+(?:\.\d+)?\s*{_SECONDS_WORD}\b', re.IGNORECASE)
+_SETS_OF_SECONDS = re.compile(rf'^(\d+)\s*x\s*(\d+)\s*{_SECONDS_WORD}$', re.IGNORECASE)   # 3 x 60s
+_SECONDS_TIMES_SETS = re.compile(rf'^(\d+)\s*{_SECONDS_WORD}\s*x\s*(\d+)$', re.IGNORECASE)  # 60 sec x 3
+
+
+def _token_seconds(token: str) -> int:
+    token = token.strip().lower()
+    if ':' in token:
+        minutes, seconds = token.split(':', 1)
+        return int(minutes) * 60 + int(seconds)
+    return int(round(float(re.match(r'\d+(?:\.\d+)?', token).group(0))))
+
+
+def parse_time_sets(segment) -> Optional[Tuple[Optional[int], List[int]]]:
+    """Sets written only as times: "60s, 45s", "60s 45s", "1:00, 0:45", "3 x 60s", "60 sec x 3".
+    Returns (sets written as a count, or None; seconds per set), else None."""
+    text = (segment or '').strip().lower().replace('×', 'x').replace('*', 'x')
+    if not text:
+        return None
+    for pattern, sets_at, seconds_at in ((_SETS_OF_SECONDS, 1, 2), (_SECONDS_TIMES_SETS, 2, 1)):
+        m = pattern.match(text)
+        if m:
+            sets, seconds = int(m.group(sets_at)), int(m.group(seconds_at))
+            if 0 < sets <= _MOST_SETS and seconds > 0:
+                return sets, [seconds] * sets
+            return None
+    times = TIME_TOKEN.findall(text)
+    if not times or re.sub(r'[\s,;]+', '', TIME_TOKEN.sub('', text)):
+        return None
+    seconds = [_token_seconds(token) for token in times]
+    return (None, seconds) if all(value > 0 for value in seconds) else None
+
+
+def is_time_only_exercise(exercise_string: str, name: str = "") -> bool:
+    """True when the sets under (or after) the name are only times ("Plank\n60s, 45s"): nothing
+    is added, so the load is bodyweight, as if "BW, 60 45" had been written."""
+    lines = [line.strip() for line in (exercise_string or "").splitlines() if line.strip()]
+    if not lines:
+        return False
+    if len(lines) == 1:
+        if not name or not lines[0].lower().startswith(name.lower()):
+            return False
+        data = lines[0][len(name):]
+    else:
+        data = ", ".join(lines[1:])
+    return bool(parse_time_sets(data.strip(" -–—:")))
 
 
 def _weight_value(token, base_weight):
@@ -460,6 +510,8 @@ def is_probable_data_segment(segment: str) -> bool:
     if not segment:
         return False
 
+    if parse_time_sets(segment):
+        return True
     lowered = re.sub(r'\bbody\s*weight\b', 'bw', _sets_of(segment).lower())
     if re.search(r'[x×*]', lowered):
         return True
@@ -850,8 +902,16 @@ def workout_parser(
         if data_part and not is_probable_data_segment(data_part):
             data_part = ""
 
-        sets_at_weight = parse_sets_at_weight(data_part, effective_bodyweight) if data_part else None
-        if sets_at_weight:
+        time_sets = parse_time_sets(data_part) if data_part else None
+        sets_at_weight = None if time_sets else (
+            parse_sets_at_weight(data_part, effective_bodyweight) if data_part else None)
+        if time_sets:
+            # No weight written: none added (bodyweight exercises still count bodyweight).
+            counted_sets, reps = time_sets
+            weights = [0.0] * len(reps)
+            if counted_sets:
+                declared_sets = counted_sets
+        elif sets_at_weight:
             declared_sets, weights, reps = sets_at_weight
         elif data_part:
             w_list, r_list = parse_weight_x_reps(data_part, effective_bodyweight)

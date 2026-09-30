@@ -545,6 +545,25 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertEqual(self._exercises("Squat\n100 x 5, 90 x 8, 8"), [("Squat", [100.0, 90.0, 90.0], [5, 8, 8])])
         self.assertEqual(self._exercises("Pull Ups\nBW+10 x 8, 7, 6, 6"), [("Pull Ups", [10.0] * 4, [8, 7, 6, 6])])
 
+    def test_timed_sets_written_as_times(self):
+        for line, reps in (("60s, 45s", [60, 45, 45]), ("60s 45s", [60, 45, 45]), ("60 sec, 45 sec", [60, 45, 45]),
+                           ("1:00, 0:45", [60, 45, 45]), ("45s 40s 30s", [45, 40, 30]),
+                           ("3 x 60s", [60, 60, 60]), ("60 sec x 3", [60, 60, 60]), ("2x45s", [45, 45])):
+            self.assertEqual(self._exercises(f"Plank\n{line}"), [("Plank", [0.0] * len(reps), reps)], line)
+        self.assertEqual(self._exercises("Plank 60s, 45s"), [("Plank", [0.0] * 3, [60, 45, 45])])
+        # A weight next to the time is still a weight, and a name with "21s" in it isn't a time.
+        self.assertEqual(self._exercises("Farmer Walk - [2, 20-60s]\n30 25, 45 40"),
+                         [("Farmer Walk", [30.0, 25.0], [45, 40])])
+        self.assertEqual(self._exercises("21s Curl\n20, 7")[0][0], "21s Curl")
+
+    def test_time_only_entries_are_bodyweight(self):
+        from parsers.workout import is_time_only_exercise
+        self.assertTrue(is_time_only_exercise("Plank\n60s, 45s"))
+        self.assertTrue(is_time_only_exercise("Plank 60s 45s", "Plank"))
+        self.assertFalse(is_time_only_exercise("Plank - [30-60s]\nBW, 60 45"))
+        self.assertFalse(is_time_only_exercise("21s Curl\n20, 7"))
+        self.assertFalse(is_time_only_exercise("Squat\n100, 5"))
+
     def test_emoji_are_not_part_of_the_name(self):
         for line in ("Squat 💪", "🏋️ Squat", "Squat 🔥🔥", "Squat ⭐"):
             self.assertEqual(self._exercises(f"{line}\n100, 5")[0][0], "Squat", line)
