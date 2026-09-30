@@ -405,6 +405,7 @@ class TestRouteRegressions(unittest.TestCase):
         page = self.client.get("/stats").get_data(as_text=True)
         self.assertIn("if (ticket === chartTicket) renderChart(data);", page)
         self.assertIn("Couldn't load this chart. Check your connection and try again.", page)
+        self.assertIn('id="chartEmptyText" role="status"', page)  # read out when it changes
         self.assertNotIn(".then(response => response.json())\n            .then(data => renderChart(data))", page)
 
     def test_bodyweight_exercise_chart_keeps_the_load_as_logged(self):
