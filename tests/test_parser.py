@@ -545,6 +545,13 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertEqual(self._exercises("Squat\n100 x 5, 90 x 8, 8"), [("Squat", [100.0, 90.0, 90.0], [5, 8, 8])])
         self.assertEqual(self._exercises("Pull Ups\nBW+10 x 8, 7, 6, 6"), [("Pull Ups", [10.0] * 4, [8, 7, 6, 6])])
 
+    def test_a_set_count_on_the_name_line(self):
+        # "Squat 3 sets" left Squat empty and saved its sets as "Unknown Exercise".
+        for line in ("Squat 3 sets", "Squat - 3 sets", "Squat: 3 sets"):
+            self.assertEqual(self._exercises(f"{line}\n100, 5"), [("Squat", [100.0] * 3, [5] * 3)], line)
+        self.assertEqual(self._exercises("Squat 4 sets\n100 90, 5 6"), [("Squat", [100.0] + [90.0] * 3, [5] + [6] * 3)])
+        self.assertEqual(self._exercises("45 Degree Hyperextension 3 sets\n20, 12")[0][0], "45 Degree Hyperextension")
+
     def test_one_weight_then_its_reps(self):
         for line in ("100kg 5 5 5", "100kg 5,5,5", "100 kg: 5, 5, 5", "100: 5 5 5", "100 - 5 5 5", "100 - 5, 5, 5",
                      "100 for 5, 5, 5", "5 5 5 @ 100", "5, 5, 5 at 100kg", "Squat: 100kg 5,5,5"):

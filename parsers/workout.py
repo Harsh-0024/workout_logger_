@@ -908,7 +908,8 @@ def workout_parser(
                     data_part = f"{data_part}, {reps_line}"
                     consumed += 1
         else:
-            tokens = clean_line.split()
+            # The line without a written set count ("Squat 3 sets" is Squat, with its sets below).
+            tokens = cleaned_line.split()
             first_num_idx = -1
             # Numbers inside the name ("45 Degree Hyperextension 20, 12") aren't the sets:
             # the sets start after the first word.
@@ -935,7 +936,7 @@ def workout_parser(
                 name = " ".join(tokens[:first_num_idx]).strip()
                 data_part = " ".join(tokens[first_num_idx:]).strip()
             else:
-                name, data_part = clean_line, ""
+                name, data_part = cleaned_line, ""
 
         if not data_part and i + 1 < len(list_of_lines) and is_data_line(list_of_lines[i + 1]):
             data_line = list_of_lines[i + 1].strip()
