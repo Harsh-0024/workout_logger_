@@ -1453,6 +1453,27 @@ class TestRouteRegressions(unittest.TestCase):
         stored_user = self.session.query(User).filter_by(id=user.id).one()
         self.assertEqual(stored_user.profile_image, put_kwargs["Key"])
 
+    def test_oversized_uploads_are_refused_politely(self):
+        user = self._create_logged_in_user(username="big_upload_user")
+        # A small file that unpacks into a 48-megapixel image isn't decoded.
+        image_bytes = BytesIO()
+        Image.new("1", (8000, 6000)).save(image_bytes, format="PNG")
+        image_bytes.seek(0)
+        s3 = Mock()
+        with patch("workout_tracker.routes.auth.has_r2_profile_image_storage", return_value=True), \
+             patch("workout_tracker.routes.auth.get_r2_profile_image_client", return_value=s3):
+            response = self.client.post("/settings", data={"form_type": "profile_photo",
+                                                           "profile_image": (image_bytes, "huge.png")},
+                                        content_type="multipart/form-data", follow_redirects=True)
+        self.assertIn("That photo is too large", response.get_data(as_text=True))
+        s3.put_object.assert_not_called()
+        self.assertIsNone(self.session.query(User).filter_by(id=user.id).one().profile_image)
+
+        # A request over the limit gets a page that says so, not a bare error.
+        too_big = self.client.post("/settings", data={"form_type": "profile", "full_name": "x" * (17 * 1024 * 1024)})
+        self.assertEqual(too_big.status_code, 413)
+        self.assertIn("That file is too large", too_big.get_data(as_text=True))
+
     def test_profile_photo_reupload_gets_new_url_and_deletes_old_photo(self):
         user = self._create_logged_in_user(username="avatar_reupload_user")
         self.session.get(User, user.id).profile_image = f"avatars/user_{user.id}.png"

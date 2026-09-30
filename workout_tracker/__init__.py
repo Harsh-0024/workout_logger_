@@ -222,6 +222,19 @@ def create_app(config_object=Config, init_db: bool = True):
             error_detail="Nothing was saved. Go back, refresh the page and try again.",
         ), 400
 
+    @app.errorhandler(413)
+    def too_large(error):
+        limit_mb = int((app.config.get('MAX_CONTENT_LENGTH') or 0) / (1024 * 1024))
+        message = f"That's more than {limit_mb} MB. Please pick a smaller file."
+        if request.path.startswith('/api/') or request.path.startswith('/shortcut/'):
+            return jsonify({'ok': False, 'error': message}), 413
+        return render_template(
+            'error.html',
+            error_code=413,
+            error_message="That file is too large",
+            error_detail=message,
+        ), 413
+
     @app.errorhandler(500)
     def internal_error(error):
         logger.error(f"Internal server error: {error}", exc_info=True)

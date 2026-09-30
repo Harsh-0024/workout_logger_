@@ -40,6 +40,9 @@ class Config:
     # A form stays good for as long as the page is open: with the default one hour, a workout
     # typed at the gym and saved later was refused. The token still belongs to the session.
     WTF_CSRF_TIME_LIMIT = None
+    # Largest request accepted (photos, pasted workouts). Without it an upload of any size was
+    # taken and decoded, enough to run a small server out of memory.
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024
     ENABLE_RATE_LIMITING = os.environ.get('ENABLE_RATE_LIMITING', 'True').lower() == 'true'
     
     # Pagination

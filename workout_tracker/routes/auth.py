@@ -166,6 +166,10 @@ def register_auth_routes(app, email_service):
             raise AuthenticationError("Unsupported profile image type.")
 
         image = Image.open(file_storage.stream)
+        # Sized before it's decoded: a small file can still unpack into an enormous image.
+        width, height = image.size
+        if width * height > 40_000_000:
+            raise AuthenticationError("That photo is too large. Please pick a smaller one.")
         image = ImageOps.exif_transpose(image)
         image = image.convert('RGB')
         size = 320
