@@ -1776,11 +1776,24 @@
         }
     }
 
+    // The load as it was logged: "BW+14" for a bodyweight exercise, "80 kg" otherwise.
+    function loadText(data, idx) {
+        const offsets = data && Array.isArray(data.bodyweight_offset) ? data.bodyweight_offset : [];
+        const offset = offsets[idx];
+        if (offset !== null && offset !== undefined && isFinite(offset)) {
+            const amount = Math.abs(Number(offset));
+            if (amount < 0.05) return 'BW';
+            return `BW${offset > 0 ? '+' : '−'}${formatNumber(amount)}`;
+        }
+        const weight = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : NaN;
+        return withUnit(weight, 'kg');
+    }
+
     function topSetText(data, idx) {
         const weight = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : NaN;
         const reps = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : NaN;
         if (!(weight > 0) || !(reps > 0)) return '';
-        return `${formatNumber(weight)} kg × ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
+        return `${loadText(data, idx)} × ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
     }
 
     function updateHero(view) {
@@ -1896,7 +1909,7 @@
             const reps = Array.isArray(data.reps) ? Number(data.reps[lastIdx]) : NaN;
             if (weight > 0 && reps > 0) {
                 const repsText = `× ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
-                setTile(2, 'Last session', withUnit(weight, 'kg'), `${repsText} · ${shortDate(labels[lastIdx])}`);
+                setTile(2, 'Last session', loadText(data, lastIdx), `${repsText} · ${shortDate(labels[lastIdx])}`);
             } else {
                 setTile(2, 'Last session', '-', shortDate(labels[lastIdx]));
             }

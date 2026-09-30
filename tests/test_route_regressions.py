@@ -381,6 +381,17 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(average["labels"], ["2026-06-01", "2026-06-03"])
         self.assertGreater(average["data"][1], 0)
 
+    def test_bodyweight_exercise_chart_keeps_the_load_as_logged(self):
+        # Stats showed "Last session 90 kg × 8" for pull-ups logged as BW+10.
+        self._create_logged_in_user(username="chart_bw")
+        self.client.post("/log", data={"workout_text": "20/9/26 Pull\nPull Ups\nBW+10 x 8\n\nBarbell Row\n70 x 8"})
+        pull = self.client.get("/stats/data/Pull%20Ups").get_json()
+        self.assertEqual((pull["weight"], pull["bodyweight_offset"]), ([90.0], [10.0]))
+        row = self.client.get("/stats/data/Barbell%20Row").get_json()
+        self.assertEqual(row["bodyweight_offset"], [None])
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn("setTile(2, 'Last session', loadText(data, lastIdx)", page)
+
     def test_saving_a_workout_looks_each_exercise_up_once(self):
         # Whether an exercise is timed was worked out twice per exercise on every save.
         from sqlalchemy import event

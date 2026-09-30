@@ -486,6 +486,8 @@ def get_chart_data(db_session, user, exercise_name):
     data_effective_volume = []
     data_quality = []
     data_quality_adjusted_1rm = []
+    # For bodyweight exercises, the top set as logged: 14 for "BW+14" (None for others).
+    data_bodyweight_offset = []
     workout_titles = []
 
     target_rep_range = _get_target_rep_range(db_session, user, exercise_name)
@@ -523,8 +525,11 @@ def get_chart_data(db_session, user, exercise_name):
         eff_vol = quality.get('effective_volume') or 0
         q_index = quality.get('quality_index') or 0
 
+        offset = None
+        if getattr(log, 'uses_bodyweight', None) and log.bodyweight and top_weight:
+            offset = round(float(top_weight) - float(log.bodyweight), 2)
         point = (float(e1rm or 0), float(top_weight or 0), int(top_reps or 0),
-                 float(q_index) * 100.0, float(e1rm or 0) * float(q_index or 0))
+                 float(q_index) * 100.0, float(e1rm or 0) * float(q_index or 0), offset)
         if label and labels and labels[-1] == label:
             # The same exercise twice in a day (or under two of its names) is one point:
             # the stronger entry, with the day's volume added up.
@@ -532,7 +537,8 @@ def get_chart_data(db_session, user, exercise_name):
             data_effective_volume[-1] += float(eff_vol or 0)
             if point[0] <= data_1rm[-1]:
                 continue
-            for series in (data_1rm, data_weight, data_reps, data_quality, data_quality_adjusted_1rm):
+            for series in (data_1rm, data_weight, data_reps, data_quality, data_quality_adjusted_1rm,
+                           data_bodyweight_offset):
                 series.pop()
         else:
             labels.append(label)
@@ -544,6 +550,7 @@ def get_chart_data(db_session, user, exercise_name):
         data_reps.append(point[2])
         data_quality.append(point[3])
         data_quality_adjusted_1rm.append(point[4])
+        data_bodyweight_offset.append(point[5])
 
     # Calculate statistics
     stats = {}
@@ -562,6 +569,7 @@ def get_chart_data(db_session, user, exercise_name):
         "workout_days": labels,
         "weight": data_weight,
         "reps": data_reps,
+        "bodyweight_offset": data_bodyweight_offset,
         "volume": data_volume,
         "effective_volume": data_effective_volume,
         "quality": data_quality,
