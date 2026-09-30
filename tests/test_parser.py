@@ -470,6 +470,20 @@ class TestWorkoutDates(unittest.TestCase):
         for title in ("30 Min Cardio", "3 Sets Of Squats", "May Day Workout", "31 Feb Push"):
             self.assertEqual(self._date(title), ("2026-09-30", False, title), title)
 
+    def test_iso_dates_and_a_weekday_in_front(self):
+        # An ISO date was ignored (filed under today); a weekday in front hid the date.
+        self.assertEqual(self._date("2026-09-28 Push"), ("2026-09-28", True, "Push"))
+        self.assertEqual(self._date("Monday 28/9 Push"), ("2026-09-28", True, "Push"))
+        self.assertEqual(self._date("Mon 28 Sep Push"), ("2026-09-28", True, "Push"))
+        self.assertEqual(self._date("Tuesday, 29 September - Legs"), ("2026-09-29", True, "Legs"))
+        self.assertEqual(self._date("Sat Sep 26 Legs"), ("2026-09-26", True, "Legs"))
+        # A date alone isn't the title too; a weekday that isn't before a date stays.
+        self.assertEqual(self._date("29/09/2026"), ("2026-09-29", True, ""))
+        self.assertEqual(self._date("Sunday 5k run"), ("2026-09-30", False, "Sunday 5k run"))
+        self.assertEqual(self._date("Monday Push"), ("2026-09-30", False, "Monday Push"))
+        parsed = workout_parser("2026-02-30 Push\nSquat\n100, 5", now=self.NOW)
+        self.assertEqual(parsed["invalid_date_text"], "2026-02-30")
+
     def test_a_date_that_does_not_exist_is_marked(self):
         for title, text in (("31/9 Push", "31/9"), ("29/2 Push", "29/2"), ("15/13 Push", "15/13"),
                             ("31 Sep Push", "31 Sep"), ("31 Feb Push", "31 Feb")):

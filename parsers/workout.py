@@ -736,6 +736,13 @@ def _month_name_date(title_line: str):
     return None
 
 
+_WEEKDAY_BEFORE_DATE = re.compile(
+    r'^(?:mon(?:day)?|tue(?:s(?:day)?)?|wed(?:nesday)?|thu(?:r(?:s(?:day)?)?)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)'
+    r'\.?,?\s+(?=\d{1,2}[/.\-]\d|\d{4}-\d|\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3}|[A-Za-z]{3,9}\.?\s+\d)',
+    re.IGNORECASE,
+)
+
+
 def _title_case(name: str) -> str:
     """Capitalise the first letter of each word and leave every other letter as typed:
     "oh" -> "Oh", "oH" -> "OH", "EZ-bar" -> "EZ-Bar", "LEG PRESS" stays. A word starts after
@@ -803,15 +810,29 @@ def workout_parser(
 
     # Header
     title_line = raw_lines[0]
-    date_nums = re.findall(r'\d+', title_line.split()[0])
+    # "Monday 30/9 Push", "Tue, 29 Sep - Legs": the weekday in front of a date is dropped.
+    weekday = _WEEKDAY_BEFORE_DATE.match(title_line)
+    if weekday:
+        title_line = title_line[weekday.end():]
     now = now or datetime.now()
     current_year = now.year
+    # "2026-09-28 Push": year first, as other apps and exports write it.
+    iso = re.match(r'^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?=\s|$|[-–—:,])', title_line)
+    date_nums = re.findall(r'\d+', title_line.split()[0]) if not iso else []
 
     # A date that was written but doesn't exist ("31/9", "29/2" outside a leap year), so the
     # check can say so instead of quietly filing the workout under today.
     invalid_date_text = None
-    month_name_date = None if len(date_nums) >= 2 else _month_name_date(title_line)
-    if month_name_date:
+    month_name_date = None if (len(date_nums) >= 2 or iso) else _month_name_date(title_line)
+    if iso:
+        try:
+            date_obj = datetime(int(iso.group(1)), int(iso.group(2)), int(iso.group(3)))
+            date_found = True
+        except ValueError:
+            date_obj = now
+            date_found = False
+            invalid_date_text = iso.group(0)
+    elif month_name_date:
         day, month, written_year, rest = month_name_date
         year = written_year or (current_year - 1 if month > now.month + 1 else current_year)
         try:
@@ -841,12 +862,16 @@ def workout_parser(
         date_found = False
 
     workout_name = title_line
-    if month_name_date and date_found:
+    if iso:
+        workout_name = title_line[iso.end():]
+    elif month_name_date and date_found:
         workout_name = month_name_date[3].strip()
     elif len(date_nums) >= 2:
         parts = title_line.split(' ', 1)
         if len(parts) > 1:
             workout_name = parts[1].strip()
+        elif date_found:
+            workout_name = ""  # a date and nothing else: no title of its own
     workout_name = html.unescape(workout_name)
     workout_name = workout_name.lstrip('-–—:,').strip()
 

@@ -770,6 +770,14 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(states[2][2], "Also at no. 1: saved as a second entry")
         self.assertTrue(body["ok"])  # a note, not a blocker
 
+    def test_a_workout_with_only_a_date_on_the_first_line(self):
+        user = self._create_logged_in_user(username="date_only_user")
+        body = self.client.post("/log/preview", data={"workout_text": "2026-09-20\nBench Press\n60, 8"}).get_json()
+        self.assertEqual((body["date_str"], body["title"]), ("2026-09-20", "Workout"))
+        self.client.post("/log", data={"workout_text": "2026-09-20\nBench Press\n60, 8"})
+        self.assertEqual(self.session.query(WorkoutLog).filter_by(user_id=user.id).one().date.date().isoformat(), "2026-09-20")
+        self.assertEqual(self.client.get("/workout/2026-09-20").status_code, 200)
+
     def test_a_date_that_does_not_exist_is_not_saved_under_today(self):
         user = self._create_logged_in_user(username="bad_date_user")
         body = self.client.post("/log/preview", data={"workout_text": "31/9 Push\nBench Press\n60, 8"}).get_json()
