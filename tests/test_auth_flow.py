@@ -192,5 +192,40 @@ class TestAuthFlow(unittest.TestCase):
         self.assertEqual(self.session.query(User).filter_by(username="alice").one().email, "alice.new@example.com")
 
 
+
+class _LimitedConfig(_FlowConfig):
+    ENABLE_RATE_LIMITING = True
+
+
+class TestCodeGuessing(TestAuthFlow):
+    """Six-digit codes can't simply be tried in turn."""
+
+    def setUp(self):
+        from workout_tracker.routes import auth as auth_routes
+        auth_routes._RATE_LIMIT_BUCKETS.clear()
+        super().setUp()
+        self.app = create_app(config_object=_LimitedConfig, init_db=False)
+        self.client = self.app.test_client()
+
+    def tearDown(self):
+        from workout_tracker.routes import auth as auth_routes
+        auth_routes._RATE_LIMIT_BUCKETS.clear()
+        super().tearDown()
+
+    def test_email_confirmation_codes_are_limited(self):
+        self.client.post("/register", data={"username": "guess", "email": "guess@example.com", "password": "secret123"})
+        right = self.sent[-1]["code"]
+        wrong = "000000" if right != "000000" else "111111"
+        for _ in range(15):
+            page = self.client.post("/verify-email", data={"verification_code": wrong}).get_data(as_text=True)
+            self.assertNotIn("Too many attempts", page)
+        page = self.client.post("/verify-email", data={"verification_code": right}, follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Too many attempts", page)
+        self.assertFalse(self.session.query(User).filter_by(username="guess").one().is_verified)
+
+    # The inherited journeys run with the limit on too: normal use stays well under it.
+
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -502,6 +502,8 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             try:
                 verification_code = request.form.get('verification_code', '').strip()
+                # Codes are six digits: without a limit they could simply be tried in turn.
+                _enforce_rate_limit('verify_email', str(user_id), limit=15, window_seconds=600)
 
                 if AuthService.verify_email(user_id, verification_code):
                     if not current_user.is_authenticated:
@@ -1000,6 +1002,7 @@ def register_auth_routes(app, email_service):
                         flash("New password and confirmation do not match.", "error")
                         return redirect(url_for('account_settings') + '#change-password')
 
+                    _enforce_rate_limit('change_password_verify', str(user.id), limit=15, window_seconds=600)
                     if AuthService.verify_otp(user.id, otp_code, 'change_password'):
                         if not AuthService.set_password(user.id, new_password):
                             raise AuthenticationError(PASSWORD_NOT_CHANGED)
@@ -1209,6 +1212,7 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             try:
                 otp_code = request.form.get('otp_code', '').strip()
+                _enforce_rate_limit('profile_update_verify', str(user_id), limit=15, window_seconds=600)
 
                 if AuthService.verify_otp(user_id, otp_code, 'profile_update'):
                     full_name = pending_update.get('full_name')
@@ -1348,6 +1352,7 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             try:
                 otp_code = request.form.get('otp_code', '').strip()
+                _enforce_rate_limit('change_password_verify', str(user.id), limit=15, window_seconds=600)
 
                 if AuthService.verify_otp(user.id, otp_code, 'change_password'):
                     session['password_change_verified'] = True
@@ -1428,6 +1433,7 @@ def register_auth_routes(app, email_service):
                     flash("Please enter both codes.", "error")
                     return redirect(url_for('verify_email_change_otp'))
 
+                _enforce_rate_limit('change_email_verify', str(user.id), limit=15, window_seconds=600)
                 # Check both before spending either: a typo in one code used to spend the other,
                 # so the retry with both right was refused until new codes were sent.
                 old_valid = AuthService.verify_otp(user.id, otp_old, 'change_email_old', use=False)
