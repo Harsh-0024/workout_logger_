@@ -27,6 +27,7 @@
                     <input type="date" id="exportEndDate" class="form-control">
                 </div>
             </div>
+            <div class="st-hint dt-range-error" id="exportRangeError" role="alert" hidden></div>
 
             <div class="st-field">
                 <span class="st-field-label">File type</span>
@@ -68,9 +69,10 @@
 <style>
     .dt-range { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 18px; }
     .dt-range > .st-field + .st-field { margin-top: 0; }
-    .dt-range + .st-field { margin-top: 18px; }
+    .dt-range + .st-field, .dt-range-error + .st-field { margin-top: 18px; }
     .dt-range .form-control { min-width: 0; color-scheme: dark; }
     [data-theme="light"] .dt-range .form-control { color-scheme: light; }
+    .dt-range-error { color: var(--st-down); }
 </style>
 <script>
     document.addEventListener('DOMContentLoaded', () => {
@@ -81,7 +83,12 @@
         const downloadExportBtn = document.getElementById('downloadExportBtn');
         const isRangeMode = () => { const selected = document.querySelector('input[name="export_scope"]:checked'); return selected && selected.value === 'range'; };
         const selectedExportFormat = () => { const selected = document.querySelector('input[name="export_format"]:checked'); return selected ? selected.value : 'csv'; };
-        const syncExportMode = () => { if (!exportDateRange) return; exportDateRange.style.display = isRangeMode() ? '' : 'none'; };
+        const rangeError = document.getElementById('exportRangeError');
+        const syncExportMode = () => {
+            if (!exportDateRange) return;
+            exportDateRange.style.display = isRangeMode() ? '' : 'none';
+            rangeError.hidden = true;
+        };
         exportScopeInputs.forEach((input) => { input.addEventListener('change', syncExportMode); });
         syncExportMode();
         if (downloadExportBtn) {
@@ -92,8 +99,12 @@
                 if (isRangeMode()) {
                     const start = (exportStartDate?.value || '').trim();
                     const end = (exportEndDate?.value || '').trim();
-                    if (!start || !end) { window.alert('Please select both start and end dates.'); return; }
-                    if (end < start) { window.alert('End date cannot be earlier than start date.'); return; }
+                    // Said under the dates, not in a pop-up.
+                    const problem = !start || !end ? 'Pick both a start and an end date.'
+                        : (end < start ? 'The end date is before the start date.' : '');
+                    rangeError.textContent = problem;
+                    rangeError.hidden = !problem;
+                    if (problem) { (!start ? exportStartDate : exportEndDate)?.focus(); return; }
                     target.searchParams.set('start_date', start);
                     target.searchParams.set('end_date', end);
                 }

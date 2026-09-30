@@ -360,6 +360,13 @@ class TestRouteRegressions(unittest.TestCase):
         saved_page = self.client.get("/workout/2026-09-20?saved=1").get_data(as_text=True)
         self.assertIn("if (localStorage.getItem(draftKey) === sent) localStorage.removeItem(draftKey);", saved_page)
 
+    def test_export_date_range_problems_show_under_the_dates(self):
+        self._create_logged_in_user(username="range_user")
+        page = self.client.get("/settings/data").get_data(as_text=True)
+        self.assertNotIn("window.alert(", page)
+        self.assertIn('id="exportRangeError" role="alert" hidden', page)
+        self.assertIn("The end date is before the start date.", page)
+
     def test_deleting_several_workouts_uses_the_app_confirm_box(self):
         self._create_logged_in_user(username="bulk_confirm")
         page = self.client.get("/workouts").get_data(as_text=True)
