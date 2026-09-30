@@ -434,6 +434,13 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(average["labels"], ["2026-06-01", "2026-06-03"])
         self.assertGreater(average["data"][1], 0)
 
+    def test_stats_range_buttons_show_the_saved_range_and_say_which_is_on(self):
+        self._create_logged_in_user(username="pill_user")
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn("b.setAttribute('aria-pressed', String(b.dataset.range === currentRange));", page)
+        self.assertIn('data-range="90" aria-label="Last 3 months">3M<', page)
+        self.assertIn("// The saved range (say 3M) was used for the chart while \"All\" stayed highlighted.\n    syncActivePills();", page)
+
     def test_stats_chart_draws_only_the_latest_request_and_says_when_it_fails(self):
         self._create_logged_in_user(username="chart_net")
         page = self.client.get("/stats").get_data(as_text=True)

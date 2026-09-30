@@ -60,11 +60,11 @@
                         <button type="button" class="metric-pill" data-metric="tonnage">Volume</button>
                     </div>
                     <div class="stats-range" id="rangeControls" role="group" aria-label="Time range">
-                        <button type="button" class="range-pill" data-range="30">1M</button>
-                        <button type="button" class="range-pill" data-range="90">3M</button>
-                        <button type="button" class="range-pill" data-range="180">6M</button>
-                        <button type="button" class="range-pill" data-range="365">1Y</button>
-                        <button type="button" class="range-pill active" data-range="all">All</button>
+                        <button type="button" class="range-pill" data-range="30" aria-label="Last month">1M</button>
+                        <button type="button" class="range-pill" data-range="90" aria-label="Last 3 months">3M</button>
+                        <button type="button" class="range-pill" data-range="180" aria-label="Last 6 months">6M</button>
+                        <button type="button" class="range-pill" data-range="365" aria-label="Last year">1Y</button>
+                        <button type="button" class="range-pill active" data-range="all" aria-label="All time">All</button>
                     </div>
                     <div class="stats-range stats-years" id="yearControls" role="group" aria-label="Year" hidden></div>
                 </div>
@@ -1748,11 +1748,14 @@
     }
 
     function syncActivePills() {
+        // Which one is on is said to screen readers too, not only shown in gold.
         document.querySelectorAll('.range-pill').forEach(b => {
             b.classList.toggle('active', b.dataset.range === currentRange);
+            b.setAttribute('aria-pressed', String(b.dataset.range === currentRange));
         });
         document.querySelectorAll('.metric-pill').forEach(b => {
             b.classList.toggle('active', b.dataset.metric === currentMetric);
+            b.setAttribute('aria-pressed', String(b.dataset.metric === currentMetric));
         });
     }
 
@@ -2651,6 +2654,8 @@
             if (fullChartData) renderChart(fullChartData);
         });
     });
+    // The saved range (say 3M) was used for the chart while "All" stayed highlighted.
+    syncActivePills();
 
     document.getElementById('viewToggle').addEventListener('click', switchView);
 
