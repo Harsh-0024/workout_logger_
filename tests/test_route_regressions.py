@@ -1457,6 +1457,22 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertIn("Days that failed", page)
         self.assertIn("32/13", page)
 
+    def test_bulk_import_exercise_names_starting_with_a_number_are_not_dates(self):
+        self._create_logged_in_user(username="bulk_decline")
+        payload = "\n".join([
+            "12/01/26 Push",
+            "Flat Dumbbell Press",
+            "30, 8",
+            "3 Decline Press",
+            "40, 10",
+            "2 Marching Lunges",
+            "20, 12",
+        ])
+        page = self.client.post("/bulk-import", data={"bulk_workouts_text": payload, "confirm_import": "0"}).get_data(as_text=True)
+        # One day, not three (it used to read "3 Dec" and "2 Mar" as new days).
+        self.assertIn("12-01-2026 – 12-01-2026", page)
+        self.assertNotIn("Days that failed", page)
+
     def test_bulk_import_missing_year_rolls_forward_chronologically(self):
         inferred = _infer_bulk_import_dates(
             [

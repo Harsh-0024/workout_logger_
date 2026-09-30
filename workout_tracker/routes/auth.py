@@ -1600,8 +1600,8 @@ def register_auth_routes(app, email_service):
                 )
                 if m:
                     day = int(m.group(1))
-                    mon_token = (m.group(2) or "").lower()
-                    mo = month_map.get(mon_token) or month_map.get(mon_token[:3])
+                    # A month's name or its short form only: "3 Decline Press" isn't 3 December.
+                    mo = month_map.get((m.group(2) or "").lower())
                     if not mo:
                         return None
                     year = _parse_year(m.group(3))
