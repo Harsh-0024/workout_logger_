@@ -26,7 +26,7 @@ from services.bodyweight import (
 from services.logging import refresh_best_lift_pointers
 from services.stats import get_csv_export, get_json_export, timed_checker
 from sqlalchemy import desc
-from services.auth import AuthService, AuthenticationError
+from services.auth import AuthService, AuthenticationError, EmailNotVerifiedError
 from utils.errors import ValidationError
 from utils.logger import logger
 from utils.profile_images import (
@@ -313,6 +313,27 @@ def register_auth_routes(app, email_service):
                     return redirect(next_page)
                 return redirect(url_for('user_dashboard', username=user.username))
 
+            except EmailNotVerifiedError as e:
+                # Signing up on another device (or before the code came) left no way to confirm
+                # from here: send a fresh code and go to the page that takes it.
+                session['pending_verification_user_id'] = e.user_id
+                try:
+                    _enforce_rate_limit('email_codes', str(e.user_id), limit=10, window_seconds=600)
+                    pending = Session.get(User, e.user_id)
+                    # Read before the service runs: it closes the shared session.
+                    pending_email, pending_username = pending.email, pending.username
+                    code = AuthService.resend_verification_code(e.user_id)
+                    sent = email_service.send_otp_email(
+                        email=pending_email, username=pending_username, otp_code=code, purpose='verify_email',
+                    )
+                except AuthenticationError:
+                    sent = False
+                except Exception as exc:
+                    logger.error(f"Sending a confirmation code at sign-in failed: {exc}", exc_info=True)
+                    sent = False
+                flash("Confirm your email first: we've sent you a new code." if sent
+                      else "Confirm your email first with the code we sent you.", "info")
+                return redirect(url_for('verify_email'))
             except AuthenticationError as e:
                 flash(str(e), "error")
                 return render_template('login.html')

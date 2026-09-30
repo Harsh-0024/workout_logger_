@@ -15,6 +15,14 @@ class AuthenticationError(Exception):
     pass
 
 
+class EmailNotVerifiedError(AuthenticationError):
+    """The password was right but the email was never confirmed: sign-in can send a new code."""
+
+    def __init__(self, user_id: int):
+        super().__init__("Please verify your email before signing in.")
+        self.user_id = user_id
+
+
 def _password_bytes(password: str) -> bytes:
     """bcrypt only reads the first 72 bytes. Older bcrypt cut longer passwords there quietly;
     bcrypt 5 refuses them instead, which broke sign-up and password changes for long passwords
@@ -555,7 +563,7 @@ class AuthService:
             
             # Check if verified
             if not user.is_verified:
-                raise AuthenticationError("Please verify your email before logging in")
+                raise EmailNotVerifiedError(user.id)
             
             return user
             

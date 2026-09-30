@@ -89,6 +89,21 @@ class TestAuthFlow(unittest.TestCase):
         response = self.client.post("/login?next=//evil.com/x", data={"username_or_email": "alice", "password": "secret123"})
         self.assertEqual(self._path(response), "/alice")
 
+    def test_signing_in_before_confirming_leads_to_the_code(self):
+        # Signing up on one device and signing in on another left no way to confirm.
+        self.client.post("/register", data={"username": "later", "email": "later@example.com", "password": "secret123"})
+        other_device = self.app.test_client()
+        response = other_device.post("/login", data={"username_or_email": "later", "password": "secret123"})
+        self.assertEqual(self._path(response), "/verify-email")
+        code = self.sent[-1]
+        self.assertEqual((code["email"], code["purpose"]), ("later@example.com", "verify_email"))
+        response = other_device.post("/verify-email", data={"verification_code": code["code"]})
+        self.assertEqual(self._path(response), "/later")
+        self.assertTrue(self.session.query(User).filter_by(username="later").one().is_verified)
+        # A wrong password still just says so.
+        page = self.app.test_client().post("/login", data={"username_or_email": "later", "password": "nope12345"})
+        self.assertIn("Invalid username/email or password.", page.get_data(as_text=True))
+
     def test_a_wrong_email_code_does_not_confirm_the_account(self):
         self.client.post("/register", data={"username": "bob", "email": "bob@example.com", "password": "secret123"})
         right = self.sent[-1]["code"]
