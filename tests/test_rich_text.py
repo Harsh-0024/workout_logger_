@@ -27,6 +27,13 @@ class TestRichText(unittest.TestCase):
         lines = PLAIN.split("\n")
         self.assertParsesLikePlain("\n".join([lines[0]] + [f"\t•\t{line}" for line in lines[1:]]))
         self.assertParsesLikePlain("\n".join([lines[0]] + [f"☐ {line}" for line in lines[1:]]))
+        # A check mark with its emoji style selector, and Markdown checklists from other note apps.
+        self.assertParsesLikePlain("\n".join([lines[0]] + [f"✔\ufe0e {line}" for line in lines[1:]]))
+        self.assertParsesLikePlain("\n".join([lines[0]] + [f"- [ ] {line}" for line in lines[1:]]))
+        self.assertParsesLikePlain("\n".join([lines[0]] + [f"- [x] {line}" for line in lines[1:]]))
+        self.assertEqual(to_plain_text("[x] Squat\n100, 5"), "Squat\n100, 5")
+        # A bracket that isn't a checkbox stays.
+        self.assertEqual(to_plain_text("Squat - [3]\n100, 5"), "Squat - [3]\n100, 5")
 
     def test_html(self):
         html = "".join(f"<div><b>{line}</b></div>" for line in PLAIN.split("\n"))

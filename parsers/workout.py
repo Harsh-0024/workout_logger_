@@ -634,6 +634,9 @@ def _title_case(name: str) -> str:
     return re.sub(r"(^|[\s\-/(\[])([a-z])", lambda m: m.group(1) + m.group(2).upper(), name)
 
 
+_UNSPACED_TARGET = re.compile(r'^(.*?[A-Za-z)])\s*[-–—]?\s*(\[[\d\s,.\-–—sS]*\].*)$')
+
+
 def clean_exercise_name(name: str) -> str:
     """Drop stray separators, list bullets and tabs around a typed name
     ("Forearm Roller -" -> "Forearm Roller", "• Squat" -> "Squat")."""
@@ -760,6 +763,10 @@ def workout_parser(
         data_part = ""
         time_range_hint = _has_time_range_hint(clean_line)
         declared_sets, cleaned_line = _extract_declared_sets(clean_line)
+        # "Squat [3]" / "Squat-[8-12]": a target in brackets written without the " - ".
+        unspaced = _UNSPACED_TARGET.match(cleaned_line)
+        if unspaced and " - [" not in cleaned_line:
+            cleaned_line = f"{unspaced.group(1)} - {unspaced.group(2)}"
         bracket_sets = _extract_sets_from_bracket(cleaned_line)
         if bracket_sets is not None:
             declared_sets = bracket_sets

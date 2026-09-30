@@ -545,6 +545,13 @@ class TestSetLinesWrittenInCommonWays(unittest.TestCase):
         self.assertEqual(self._exercises("Squat\n100 x 5, 90 x 8, 8"), [("Squat", [100.0, 90.0, 90.0], [5, 8, 8])])
         self.assertEqual(self._exercises("Pull Ups\nBW+10 x 8, 7, 6, 6"), [("Pull Ups", [10.0] * 4, [8, 7, 6, 6])])
 
+    def test_a_target_in_brackets_without_the_dash(self):
+        for line in ("Squat [3]", "Squat-[3]", "Squat – [3]", "Squat [3, 8-12]"):
+            self.assertEqual(self._exercises(f"{line}\n100, 5")[0][0], "Squat", line)
+        self.assertEqual(self._exercises("Plank [30-60s]\nBW, 45")[0][0], "Plank")
+        # Other brackets are part of the name.
+        self.assertEqual(self._exercises("Squat [paused]\n100, 5")[0][0], "Squat [Paused]")
+
     def test_list_bullets_are_not_part_of_the_name(self):
         for bullet in ("•", "◦", "▪", "‣", "*", "·", "-"):
             self.assertEqual(self._exercises(f"{bullet} Squat\n100, 5")[0][0], "Squat", bullet)

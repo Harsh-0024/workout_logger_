@@ -11,11 +11,14 @@ from html.parser import HTMLParser
 
 _HTML_HINT = re.compile(r"<\s*(?:br|div|p|li|ul|ol|span|b|i|u|strong|em|h[1-6]|html|body|font|tt)\b[^>]*>", re.I)
 _BLOCK_TAGS = {"br", "div", "p", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table"}
-_ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\ufffc"))
+# Includes the emoji style selectors that ride along after marks like "✔︎".
+_ZERO_WIDTH = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u2060\ufeff\ufffc\ufe0e\ufe0f"))
 _SPACES = dict.fromkeys(map(ord, "\u00a0\u2007\u202f\u2009\u200a\t"), " ")
 _LINE_BREAKS = re.compile(r"\r\n?|[\u2028\u2029\u0085\u000b\u000c]")
 # List bullets and checklist boxes at the start of a line (plain "-" is left alone).
 _BULLET = re.compile(r"^[ ]*(?:[•◦▪▫●○■□‣⁃∙·☐☑☒✓✔]\s*)+", re.M)
+# Markdown-style checklist items from other note apps: "- [ ] Squat", "- [x] Squat", "[x] Squat".
+_CHECKBOX = re.compile(r"^[ ]*(?:[-*+][ ]+)?\[[ xX]\][ ]+", re.M)
 
 
 class _HTMLText(HTMLParser):
@@ -119,5 +122,6 @@ def to_plain_text(raw) -> str:
     text = _LINE_BREAKS.sub("\n", text)
     text = text.translate(_ZERO_WIDTH).translate(_SPACES)
     text = _BULLET.sub("", text)
+    text = _CHECKBOX.sub("", text)
     lines = [re.sub(r" {2,}", " ", line).strip() for line in text.split("\n")]
     return "\n".join(lines).strip()
