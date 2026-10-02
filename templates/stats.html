@@ -1,11 +1,16 @@
 {% extends 'base.html' %}
+{% block title %}Stats - Workout Tracker{% endblock %}
 {% block content %}
 <div class="row">
     <div class="col-12">
         <div class="card stats-page">
             <div class="stats-header" id="statsHeader">
                 <h1 class="stats-hero-label">
-                    <span id="heroLabel">Overall strength</span>
+                    <!-- Tapping the title swaps Overall strength and Consistency. -->
+                    <button type="button" id="viewToggle" class="stats-view-toggle">
+                        <span id="heroLabel" class="stats-swap">Overall strength</span>
+                        <i class="bi bi-chevron-expand stats-view-icon" aria-hidden="true"></i>
+                    </button>
                     <button type="button" id="heroInfoBtn" class="stats-info-btn" aria-expanded="false" aria-controls="heroInfo" aria-label="What is this?">
                         <i class="bi bi-info-circle"></i>
                     </button>
@@ -39,7 +44,7 @@
             <p id="heroInfo" class="stats-hero-info" hidden></p>
 
             <!-- Headline: one number that answers "am I getting stronger?" -->
-            <section id="statsHero" class="stats-hero" hidden>
+            <section id="statsHero" class="stats-hero stats-swap" hidden>
                 <div class="stats-hero-value" id="heroValue">-</div>
                 <div class="stats-hero-text">
                     <div class="stats-hero-caption" id="heroCaption"></div>
@@ -54,25 +59,27 @@
                         <button type="button" class="metric-pill" data-metric="top_weight">Heaviest</button>
                         <button type="button" class="metric-pill" data-metric="tonnage">Volume</button>
                     </div>
-                    <div class="stats-range" role="group" aria-label="Time range">
-                        <button type="button" class="range-pill" data-range="30">1M</button>
-                        <button type="button" class="range-pill" data-range="90">3M</button>
-                        <button type="button" class="range-pill" data-range="180">6M</button>
-                        <button type="button" class="range-pill" data-range="365">1Y</button>
-                        <button type="button" class="range-pill active" data-range="all">All</button>
+                    <div class="stats-range" id="rangeControls" role="group" aria-label="Time range">
+                        <button type="button" class="range-pill" data-range="30" aria-label="Last month">1M</button>
+                        <button type="button" class="range-pill" data-range="90" aria-label="Last 3 months">3M</button>
+                        <button type="button" class="range-pill" data-range="180" aria-label="Last 6 months">6M</button>
+                        <button type="button" class="range-pill" data-range="365" aria-label="Last year">1Y</button>
+                        <button type="button" class="range-pill active" data-range="all" aria-label="All time">All</button>
                     </div>
+                    <div class="stats-range stats-years" id="yearControls" role="group" aria-label="Year" hidden></div>
                 </div>
-                <div class="stats-chart">
-                    <canvas id="progressChart"></canvas>
+                <div class="stats-chart stats-swap">
+                    <canvas id="progressChart" role="img" aria-label="Progress chart"></canvas>
                     <div id="chartTip" class="chart-tip" role="status" hidden>
                         <div class="chart-tip-date"></div>
                         <div class="chart-tip-title"></div>
                         <div class="chart-tip-value"></div>
                         <div class="chart-tip-set"></div>
                     </div>
+                    <div id="consistencyGrid" class="cal" aria-label="Days you trained" hidden></div>
                     <div id="chartEmpty" class="stats-empty" hidden>
                         <i class="bi bi-graph-up"></i>
-                        <span>Log a few workouts to see your progress here.</span>
+                        <span id="chartEmptyText" role="status">Log a few workouts to see your progress here.</span>
                     </div>
                 </div>
             </div>
@@ -85,7 +92,7 @@
             <script type="application/json" id="bwExercisesData">{{ bw_exercises | tojson }}</script>
             {% endif %}
 
-            <div id="statsTiles" class="stats-tiles" hidden>
+            <div id="statsTiles" class="stats-tiles stats-swap" hidden>
                 <div class="stats-tile">
                     <div class="stats-tile-label" id="tile1Label">Best</div>
                     <div class="stats-tile-value" id="tile1Value">-</div>
@@ -584,6 +591,119 @@
     .chart-tip-value { margin-top: 3px; font-size: 0.95rem; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; }
     .chart-tip-set { font-size: 0.78rem; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 
+    /* ---------- Switching between Overall strength and Consistency ---------- */
+    .stats-view-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        min-width: 0;
+        margin: 0 0 0 -0.3rem;
+        padding: 0.1rem 0.3rem;
+        border: 0;
+        border-radius: 12px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        line-height: inherit;
+        text-align: left;
+        cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        transition: background var(--transition-fast);
+    }
+    .stats-view-toggle:active { background: var(--gold-subtle); }
+    .stats-view-toggle:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--gold-glow); }
+    .stats-view-toggle:disabled { cursor: default; background: transparent; }
+    .stats-hero-label .stats-view-toggle .stats-view-icon {
+        flex: none;
+        font-size: 13px;
+        line-height: 1;
+        color: var(--text-muted);
+        transition: color var(--transition-fast), opacity var(--transition-fast);
+    }
+    .stats-view-toggle:disabled .stats-view-icon { display: none; }
+    #heroLabel { min-width: 0; overflow-wrap: anywhere; }
+    .stats-view-toggle:not(:disabled) #heroLabel { white-space: nowrap; }
+
+    /* The swap: what changes fades and settles; the frame around it never moves. */
+    .stats-swap {
+        transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .stats-page.is-swapping .stats-swap {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .stats-swap { transition: none; }
+        .stats-page.is-swapping .stats-swap { transform: none; }
+    }
+
+    /* ---------- Consistency: one square per day, gold where you trained ---------- */
+    .stats-page { --cal-off: rgba(255, 255, 255, 0.06); --cal-future: rgba(255, 255, 255, 0.025); --cal-on: #E2BC45; --cal-on-rgb: 212, 175, 55; }
+    [data-theme="light"] .stats-page { --cal-off: rgba(0, 0, 0, 0.065); --cal-future: rgba(0, 0, 0, 0.03); --cal-on: #9E7A2F; --cal-on-rgb: 176, 138, 62; }
+    .stats-range[hidden] { display: none; }
+    /* Years slide sideways when there are more than fit. */
+    .stats-years { overflow-x: auto; scrollbar-width: none; }
+    .stats-years::-webkit-scrollbar { display: none; }
+    .stats-years button { flex: none; }
+
+    /* A year in one row, like a contribution graph: weekday names on the left,
+       months on top, and a square per day that gets more golden with more sets. */
+    .stats-chart.is-cal { height: auto; }
+    .stats-chart.is-cal canvas { display: none !important; }
+    .cal { position: absolute; inset: 0; }
+    .cal[hidden] { display: none; }
+    .stats-chart.is-cal .cal { position: static; padding: 10px 2px 2px; }
+    .cal-body { display: flex; justify-content: center; }
+    .cal-days {
+        flex: none;
+        width: var(--cal-days-w, 32px);
+        display: grid;
+        grid-template-rows: calc(18px - var(--cal-gap)) repeat(7, var(--cal-cell));
+        row-gap: var(--cal-gap);
+    }
+    .cal-days span, .cal-months span, .cal-legend {
+        font-size: 0.68rem;
+        font-weight: 500;
+        line-height: 1;
+        color: var(--text-muted);
+        white-space: nowrap;
+    }
+    .cal-days span { align-self: center; }
+    .cal-scroll { min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; overscroll-behavior-x: contain; }
+    .cal-scroll::-webkit-scrollbar { display: none; }
+    .cal-months { position: relative; height: 18px; }
+    .cal-months span { position: absolute; top: 0; }
+    .cal-grid {
+        display: grid;
+        grid-auto-flow: column;
+        grid-template-rows: repeat(7, var(--cal-cell));
+        grid-auto-columns: var(--cal-cell);
+        gap: var(--cal-gap);
+    }
+    .cal-cell {
+        display: block;
+        border-radius: var(--cal-radius, 3px);
+        background: var(--cal-off);
+        animation: calIn 360ms ease both;
+        animation-delay: calc(var(--c, 0) * 6ms);
+    }
+    .cal-cell.is-future { background: var(--cal-future); }
+    .cal-cell.is-out { visibility: hidden; }
+    .cal-cell.is-on { cursor: pointer; }
+    .cal-cell.is-on[data-l="1"], .cal-swatch[data-l="1"] { background: rgba(var(--cal-on-rgb), 0.3); }
+    .cal-cell.is-on[data-l="2"], .cal-swatch[data-l="2"] { background: rgba(var(--cal-on-rgb), 0.52); }
+    .cal-cell.is-on[data-l="3"], .cal-swatch[data-l="3"] { background: rgba(var(--cal-on-rgb), 0.76); }
+    .cal-cell.is-on[data-l="4"], .cal-swatch[data-l="4"] { background: var(--cal-on); }
+    .cal-swatch[data-l="0"] { background: var(--cal-off); }
+    .cal-cell.is-today { box-shadow: inset 0 0 0 1.5px var(--text-muted); }
+    .cal-cell.is-hot { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+    @keyframes calIn { from { opacity: 0; } to { opacity: 1; } }
+    .cal.no-anim .cal-cell { animation: none; }
+    @media (prefers-reduced-motion: reduce) { .cal-cell { animation: none; } }
+    .cal-legend { display: flex; align-items: center; justify-content: flex-end; gap: 4px; margin-top: 14px; }
+    .cal-legend span { margin: 0 4px; }
+    .cal-swatch { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
+
     /* ---------- Tiles ---------- */
     .stats-tiles {
         display: grid;
@@ -722,13 +842,19 @@
         }
 
         .stats-tile-label {
-            flex: 1;
+            flex: 1 0 auto;
             font-size: 0.65rem;
+        }
+
+        .stats-tile-sub {
+            min-width: 0;
+            flex: 0 1 auto;
         }
 
         .stats-tile-value {
             margin-top: 0;
             font-size: 1.05rem;
+            flex: none;
         }
 
         .stats-tile-sub {
@@ -1179,6 +1305,7 @@
     function hideChartTip() {
         const tip = document.getElementById('chartTip');
         if (tip) tip.hidden = true;
+        document.querySelectorAll('.cal-cell.is-hot').forEach(el => el.classList.remove('is-hot'));
         if (myChart && myChart.tooltip) {
             myChart.tooltip.setActiveElements([], { x: 0, y: 0 });
             myChart.update('none');
@@ -1580,9 +1707,11 @@
             updateSelectedSuggestion(items);
         } else if (event.key === 'Enter') {
             event.preventDefault();
-            if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < items.length) {
-                items[selectedSuggestionIndex].click();
-            }
+            // Enter (or "Go" on a phone keyboard) takes the highlighted match, else the first one,
+            // and puts the list and keyboard away so the chart can be seen.
+            const pick = selectedSuggestionIndex >= 0 && selectedSuggestionIndex < items.length ? selectedSuggestionIndex : 0;
+            items[pick].click();
+            event.target.blur();
         } else if (event.key === 'Escape') {
             hideSuggestions();
         }
@@ -1619,11 +1748,14 @@
     }
 
     function syncActivePills() {
+        // Which one is on is said to screen readers too, not only shown in gold.
         document.querySelectorAll('.range-pill').forEach(b => {
             b.classList.toggle('active', b.dataset.range === currentRange);
+            b.setAttribute('aria-pressed', String(b.dataset.range === currentRange));
         });
         document.querySelectorAll('.metric-pill').forEach(b => {
             b.classList.toggle('active', b.dataset.metric === currentMetric);
+            b.setAttribute('aria-pressed', String(b.dataset.metric === currentMetric));
         });
     }
 
@@ -1647,11 +1779,24 @@
         }
     }
 
+    // The load as it was logged: "BW+14" for a bodyweight exercise, "80 kg" otherwise.
+    function loadText(data, idx) {
+        const offsets = data && Array.isArray(data.bodyweight_offset) ? data.bodyweight_offset : [];
+        const offset = offsets[idx];
+        if (offset !== null && offset !== undefined && isFinite(offset)) {
+            const amount = Math.abs(Number(offset));
+            if (amount < 0.05) return 'BW';
+            return `BW${offset > 0 ? '+' : '−'}${formatNumber(amount)}`;
+        }
+        const weight = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : NaN;
+        return withUnit(weight, 'kg');
+    }
+
     function topSetText(data, idx) {
         const weight = (data && Array.isArray(data.weight)) ? Number(data.weight[idx]) : NaN;
         const reps = (data && Array.isArray(data.reps)) ? Number(data.reps[idx]) : NaN;
         if (!(weight > 0) || !(reps > 0)) return '';
-        return `${formatNumber(weight)} kg × ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
+        return `${loadText(data, idx)} × ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
     }
 
     function updateHero(view) {
@@ -1752,11 +1897,13 @@
 
         if (isOverall) {
             setTile(1, 'Best', formatVsStart(values[bestIdx]), shortDate(labels[bestIdx]));
-            setTile(2, 'Workouts', String(inRange.length), rangeText);
-            const firstDay = dayNumber(labels[currentRange === 'all' ? inRange[0] : startIdx]);
-            const lastDay = dayNumber(labels[labels.length - 1]);
-            const weeks = Math.max(1, ((lastDay - firstDay) + 1) / 7);
-            setTile(3, 'Per week', String(Number((inRange.length / weeks).toFixed(1))), 'on average');
+            const highlights = strengthHighlights(data, labels[startIdx]);
+            setTile(2, 'New bests', String(highlights.newBests), rangeText);
+            if (highlights.top) {
+                setTile(3, 'Most improved', `+${formatPercentChange(highlights.top.pct)}`, highlights.top.name);
+            } else {
+                setTile(3, 'Most improved', '–', 'nothing yet');
+            }
         } else {
             setTile(1, 'Best', withUnit(values[bestIdx], metricInfo.unit), shortDate(labels[bestIdx]));
             const lastIdx = inRange[inRange.length - 1];
@@ -1765,7 +1912,7 @@
             const reps = Array.isArray(data.reps) ? Number(data.reps[lastIdx]) : NaN;
             if (weight > 0 && reps > 0) {
                 const repsText = `× ${Math.round(reps)}${data.is_timed ? 's' : ''}`;
-                setTile(2, 'Last session', withUnit(weight, 'kg'), `${repsText} · ${shortDate(labels[lastIdx])}`);
+                setTile(2, 'Last session', loadText(data, lastIdx), `${repsText} · ${shortDate(labels[lastIdx])}`);
             } else {
                 setTile(2, 'Last session', '-', shortDate(labels[lastIdx]));
             }
@@ -1778,6 +1925,15 @@
         fullChartData = data;
         const staleTip = document.getElementById('chartTip');
         if (staleTip) staleTip.hidden = true;
+        if (!currentExercise && currentView === 'consistency') {
+            renderConsistency(data);
+            return;
+        }
+        document.getElementById('consistencyGrid').hidden = true;
+        document.getElementById('consistencyGrid').parentNode.classList.remove('is-cal');
+        document.getElementById('rangeControls').hidden = false;
+        document.getElementById('yearControls').hidden = true;
+        setText('chartEmptyText', 'Log a few workouts to see your progress here.');
 
         const isOverall = !currentExercise && data && data.unit === 'percent';
         const labels = (data && Array.isArray(data.labels)) ? data.labels : [];
@@ -1828,6 +1984,10 @@
         const view = { isOverall, data, labels, values, trend, startIdx, loggedIndices, metricInfo };
 
         updateHero(view);
+        // Screen readers get the chart as the sentence above it ("Overall strength: +14% stronger since Jul 2026").
+        const heroText = (id) => (document.getElementById(id)?.textContent || '').trim();
+        document.getElementById('progressChart').setAttribute('aria-label',
+            `${heroText('heroLabel')}: ${heroText('heroValue')} ${heroText('heroCaption')} ${heroText('heroChange')}`.replace(/\s+/g, ' ').trim());
         updateTiles(view);
 
         // Dots = individual workouts, line = trend.
@@ -2027,6 +2187,423 @@
         myChart.draw();
     }
 
+    // ================= Consistency: the days you trained =================
+    const VIEW_KEY = 'wt-stats-view';
+    const CONSISTENCY_INFO = 'A square for every day of the year. Gold days are days you trained; the deeper the gold, the more sets you did. The big number is how many workouts you averaged a week that year (from your first one, in the year you started).';
+    const YEAR_KEY = 'wt-stats-year';
+    const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    let currentView = (() => {
+        try { return localStorage.getItem(VIEW_KEY) === 'consistency' ? 'consistency' : 'strength'; } catch (e) { return 'strength'; }
+    })();
+    let calendarSize = '';
+    let consYear = null;
+
+    const dateOf = (iso) => { const [y, m, d] = String(iso).split('-').map(Number); return new Date(y, m - 1, d); };
+    const isoOf = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+    const localToday = () => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); };
+    const mondayOf = (d) => addDays(d, -((d.getDay() + 6) % 7));
+    const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+
+    // Strength tiles: personal records set in the range, and the exercise that moved most.
+    function strengthHighlights(data, rangeStartLabel) {
+        const exercises = (data && Array.isArray(data.exercises)) ? data.exercises : [];
+        const from = currentRange === 'all' ? '' : String(rangeStartLabel || '');
+        let newBests = 0;
+        let top = null;
+        // "Most improved" only looks at your main lifts (the heavier half, with a few sessions),
+        // so a light ab exercise or odd early logs can't claim +1000%.
+        const bases = exercises.map(ex => Number(ex.baseline) || 0).sort((a, b) => a - b);
+        const mainLift = bases.length ? bases[Math.floor((bases.length - 1) / 2)] : 0;
+        exercises.forEach((ex) => {
+            const days = Array.isArray(ex.days) ? ex.days : [];
+            const vals = Array.isArray(ex.values) ? ex.values : [];
+            let bestSoFar = null;
+            let bestBefore = null;
+            let bestIn = null;
+            days.forEach((day, i) => {
+                const v = Number(vals[i]);
+                if (!(v > 0)) return;
+                const inRange = day >= from;
+                if (inRange && bestSoFar !== null && v > bestSoFar * 1.001) newBests += 1;
+                if (bestSoFar === null || v > bestSoFar) bestSoFar = v;
+                if (inRange) bestIn = Math.max(bestIn || 0, v);
+                else bestBefore = Math.max(bestBefore || 0, v);
+            });
+            // Best in the range vs. best before it (all time: vs. where you started), so one
+            // light day never counts as a big jump.
+            const ref = currentRange === 'all' ? Number(ex.baseline) : bestBefore;
+            const isMain = (Number(ex.baseline) || 0) >= mainLift && days.length >= 4;
+            if (isMain && bestIn && ref > 0) {
+                const pct = ((bestIn / ref) - 1) * 100;
+                if (pct >= 0.5 && (!top || pct > top.pct)) top = { name: ex.name, pct };
+            }
+        });
+        return { newBests, top };
+    }
+
+    // ---- Consistency: one calendar year at a time ----
+    function consistencyYears(dayList) {
+        const now = localToday().getFullYear();
+        const first = dayList.length ? Math.min(Number(dayList[0].slice(0, 4)), now) : now;
+        const years = [];
+        for (let y = first; y <= now; y += 1) years.push(y);
+        return years;
+    }
+
+    function yearWindow(year) {
+        const today = localToday();
+        const isCurrent = year === today.getFullYear();
+        return {
+            year,
+            isCurrent,
+            today,
+            start: new Date(year, 0, 1),
+            yearEnd: new Date(year, 11, 31),
+            // Counted up to today in the year that's still going.
+            end: isCurrent ? today : new Date(year, 11, 31),
+        };
+    }
+
+    const countBetween = (dayList, start, end) => {
+        const a = isoOf(start), b = isoOf(end);
+        return dayList.filter(d => d >= a && d <= b).length;
+    };
+
+    function syncYearPills(years) {
+        const bar = document.getElementById('yearControls');
+        const key = years.join(',');
+        if (bar.dataset.years !== key) {
+            bar.replaceChildren(...years.map((y) => {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.dataset.year = String(y);
+                b.textContent = String(y);
+                return b;
+            }));
+            bar.dataset.years = key;
+        }
+        bar.querySelectorAll('button').forEach((b) => {
+            const on = Number(b.dataset.year) === consYear;
+            b.classList.toggle('active', on);
+            b.setAttribute('aria-pressed', String(on));
+        });
+        const active = bar.querySelector('button.active');
+        if (active && bar.scrollWidth > bar.clientWidth) {
+            bar.scrollLeft = Math.max(0, active.offsetLeft - (bar.clientWidth - active.offsetWidth) / 2);
+        }
+    }
+
+    function updateConsistencyHero(dayList, win) {
+        const hero = document.getElementById('statsHero');
+        const valueEl = document.getElementById('heroValue');
+        const changeEl = document.getElementById('heroChange');
+        setText('heroLabel', 'Consistency');
+        document.getElementById('heroInfo').textContent = CONSISTENCY_INFO;
+        valueEl.classList.remove('is-up', 'is-down', 'is-flat');
+        changeEl.classList.remove('is-up', 'is-down');
+        changeEl.replaceChildren();
+
+        const weeksOf = (a, b) => Math.max(1, (daysBetween(a, b) + 1) / 7);
+        // In the year you started, weeks count from your first workout: from 1 January, someone
+        // who started in July and trains 3 times a week read as "0.9 a week".
+        const firstDay = dayList.length ? dateOf(dayList[0]) : null;
+        const startedThisYear = firstDay && firstDay > win.start && firstDay <= win.end;
+        const from = startedThisYear ? firstDay : win.start;
+        const perWeek = Number((countBetween(dayList, win.start, win.end) / weeksOf(from, win.end)).toFixed(1));
+        valueEl.textContent = perWeek.toFixed(1);
+        setText('heroCaption', startedThisYear
+            ? `workouts a week since ${firstDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
+            : `workouts a week in ${win.year}`);
+
+        // Compared with the same stretch of the year before, if you were training then.
+        const prevStart = new Date(win.year - 1, 0, 1);
+        const prevEnd = new Date(win.year - 1, win.end.getMonth(), win.end.getDate());
+        if (dayList.length && dateOf(dayList[0]) <= prevStart) {
+            const before = Number((countBetween(dayList, prevStart, prevEnd) / weeksOf(prevStart, prevEnd)).toFixed(1));
+            const diff = Number((perWeek - before).toFixed(1));
+            const than = win.isCurrent ? 'this time last year' : String(win.year - 1);
+            if (Math.abs(diff) < 0.1) {
+                changeEl.append(`About the same as ${than}`);
+            } else {
+                const up = diff > 0;
+                changeEl.classList.add(up ? 'is-up' : 'is-down');
+                changeEl.innerHTML = `<i class="bi bi-arrow-${up ? 'up' : 'down'}-right" aria-hidden="true"></i>`;
+                const amount = document.createElement('span');
+                amount.className = 'stats-change-amount';
+                amount.textContent = Math.abs(diff).toFixed(1);
+                changeEl.append(amount, ` ${up ? 'more' : 'fewer'} a week than ${than}`);
+            }
+        }
+        hero.hidden = false;
+    }
+
+    function updateConsistencyTiles(dayList, win) {
+        const a = isoOf(win.start), b = isoOf(win.end);
+        const inYear = dayList.filter(d => d >= a && d <= b);
+        const workoutsText = (n) => `${n} workout${n === 1 ? '' : 's'}`;
+        setTile(1, 'Workouts', String(inYear.length), `in ${win.year}`);
+
+        const byMonth = new Array(12).fill(0);
+        inYear.forEach((d) => { byMonth[Number(d.slice(5, 7)) - 1] += 1; });
+        const topMonth = Math.max(...byMonth);
+        if (topMonth > 0) {
+            const m = byMonth.indexOf(topMonth);
+            const name = new Date(win.year, m, 1).toLocaleDateString('en-US', { month: isPhoneChart() ? 'short' : 'long' });
+            setTile(2, 'Busiest month', name, workoutsText(topMonth));
+        } else {
+            setTile(2, 'Busiest month', '–', `in ${win.year}`);
+        }
+
+        const byDay = [0, 0, 0, 0, 0, 0, 0];
+        inYear.forEach((d) => { byDay[dateOf(d).getDay()] += 1; });
+        const most = Math.max(...byDay);
+        if (most > 0) {
+            // Ties go to the earlier day of the week (Monday first).
+            const fav = [1, 2, 3, 4, 5, 6, 0].find(i => byDay[i] === most);
+            // Short on phones, like the month, so "6 workouts" beside it isn't cut off.
+            const dayName = isPhoneChart() ? WEEKDAYS[fav].slice(0, 3) : WEEKDAYS[fav];
+            setTile(3, 'Favourite day', dayName, workoutsText(most));
+        } else {
+            setTile(3, 'Favourite day', '–', `in ${win.year}`);
+        }
+        document.getElementById('statsTiles').hidden = false;
+    }
+
+    // Busier days (more sets) get deeper gold: four steps, split at your own quartiles.
+    function levelFor(daySets) {
+        const vals = Object.values(daySets || {}).map(Number).filter(v => v > 0).sort((x, y) => x - y);
+        if (vals.length < 4) return () => 3;
+        const q = (p) => vals[Math.floor(p * (vals.length - 1))];
+        const t1 = q(0.25), t2 = q(0.5), t3 = q(0.75);
+        return (n) => (!(n > 0) ? 3 : n <= t1 ? 1 : n <= t2 ? 2 : n <= t3 ? 3 : 4);
+    }
+
+    function renderConsistency(data, { animate = true } = {}) {
+        const grid = document.getElementById('consistencyGrid');
+        const chart = grid.parentNode;
+        const canvas = document.getElementById('progressChart');
+        const empty = document.getElementById('chartEmpty');
+        hideChartTip();
+        document.getElementById('metricControls').hidden = true;
+        document.getElementById('rangeControls').hidden = true;
+        canvas.style.visibility = 'hidden';
+
+        const dayList = (data && Array.isArray(data.workout_days) ? data.workout_days : []).slice().sort();
+        const years = consistencyYears(dayList);
+        if (consYear === null) {
+            try { consYear = Number(localStorage.getItem(YEAR_KEY)) || null; } catch (e) { consYear = null; }
+        }
+        if (!years.includes(consYear)) consYear = years[years.length - 1];
+        const yearBar = document.getElementById('yearControls');
+        yearBar.hidden = !dayList.length;
+        syncYearPills(years);
+
+        if (!dayList.length) {
+            chart.classList.remove('is-cal');
+            grid.hidden = true;
+            setText('heroLabel', 'Consistency');
+            setText('chartEmptyText', 'Log a few workouts to see the days you trained.');
+            empty.hidden = false;
+            document.getElementById('statsHero').hidden = true;
+            document.getElementById('statsTiles').hidden = true;
+            return;
+        }
+        empty.hidden = true;
+        const win = yearWindow(consYear);
+        updateConsistencyHero(dayList, win);
+        updateConsistencyTiles(dayList, win);
+        chart.classList.add('is-cal');
+        grid.hidden = false;
+        grid.classList.toggle('no-anim', !animate);
+        drawYear(grid, new Set(dayList), (data && data.day_titles) || {}, (data && data.day_sets) || {}, win);
+    }
+
+    function drawYear(grid, trained, titles, daySets, win) {
+        grid.replaceChildren();
+        const box = grid.parentNode;
+        const first = mondayOf(win.start);
+        const last = addDays(mondayOf(win.yearEnd), 6);
+        const weeks = (daysBetween(first, last) + 1) / 7;
+        const DAYS_W = 32;
+        const gap = 3;
+        // Fill the width on a laptop; on a phone keep squares tappable and let the year slide.
+        const fit = Math.floor((box.clientWidth - 8 - DAYS_W - (weeks - 1) * gap) / weeks);
+        const slides = fit < 10;
+        const cell = slides ? 12 : Math.min(fit, 17);
+        grid.style.setProperty('--cal-cell', `${cell}px`);
+        grid.style.setProperty('--cal-gap', `${gap}px`);
+        grid.style.setProperty('--cal-radius', `${cell >= 14 ? 3 : 2.5}px`);
+        grid.style.setProperty('--cal-days-w', `${DAYS_W}px`);
+        const level = levelFor(daySets);
+        const todayIso = isoOf(win.today);
+
+        const body = document.createElement('div');
+        body.className = 'cal-body';
+        const days = document.createElement('div');
+        days.className = 'cal-days';
+        days.setAttribute('aria-hidden', 'true');
+        ['', '', 'Mon', '', 'Wed', '', 'Fri', ''].forEach((t) => {
+            const s = document.createElement('span');
+            s.textContent = t;
+            days.appendChild(s);
+        });
+        const scroll = document.createElement('div');
+        scroll.className = 'cal-scroll';
+        const months = document.createElement('div');
+        months.className = 'cal-months';
+        months.setAttribute('aria-hidden', 'true');
+        months.style.width = `${weeks * cell + (weeks - 1) * gap}px`;
+        for (let m = 0; m < 12; m += 1) {
+            const col = Math.ceil(daysBetween(first, new Date(win.year, m, 1)) / 7);
+            const label = document.createElement('span');
+            label.textContent = MONTHS[m];
+            label.style.left = `${col * (cell + gap)}px`;
+            months.appendChild(label);
+        }
+        const cells = document.createElement('div');
+        cells.className = 'cal-grid';
+        for (let c = 0; c < weeks; c += 1) {
+            for (let i = 0; i < 7; i += 1) {
+                const d = addDays(first, 7 * c + i);
+                const iso = isoOf(d);
+                const el = document.createElement('span');
+                el.className = 'cal-cell';
+                el.style.setProperty('--c', String(c));
+                if (d.getFullYear() !== win.year) {
+                    el.classList.add('is-out');
+                } else if (iso > todayIso) {
+                    el.classList.add('is-future');
+                } else {
+                    el.dataset.d = iso;
+                    if (trained.has(iso)) {
+                        const sets = Number(daySets[iso]) || 0;
+                        el.classList.add('is-on');
+                        el.dataset.l = String(level(sets));
+                        el.dataset.title = titles[iso] || 'Workout';
+                        if (sets) el.dataset.sets = String(sets);
+                    }
+                    if (iso === todayIso) el.classList.add('is-today');
+                }
+                cells.appendChild(el);
+            }
+        }
+        scroll.append(months, cells);
+        body.append(days, scroll);
+
+        const legend = document.createElement('div');
+        legend.className = 'cal-legend';
+        legend.setAttribute('aria-hidden', 'true');
+        legend.innerHTML = '<span>Less</span>' + [0, 1, 2, 3, 4].map(l => `<i class="cal-swatch" data-l="${l}"></i>`).join('') + '<span>More</span>';
+        grid.append(body, legend);
+
+        // Sliding year: open on the latest weeks (this week, or December for a past year).
+        if (slides) {
+            const col = win.isCurrent ? Math.floor(daysBetween(first, win.today) / 7) : weeks - 1;
+            scroll.scrollLeft = Math.max(0, (col + 1) * (cell + gap) - scroll.clientWidth + cell * 2);
+        }
+        calendarSize = `${box.clientWidth}x${box.clientHeight}`;
+    }
+
+    // Hover (mouse) or tap (touch) a square to see the day; a workout day opens its page.
+    function showCalendarTip(cell, pointerType) {
+        const tip = document.getElementById('chartTip');
+        const box = document.getElementById('consistencyGrid').parentNode;
+        if (!cell || !cell.dataset.d) { hideChartTip(); return; }
+        document.querySelectorAll('.cal-cell.is-hot').forEach(el => el.classList.remove('is-hot'));
+        cell.classList.add('is-hot');
+        const sets = Number(cell.dataset.sets) || 0;
+        tip.querySelector('.chart-tip-date').textContent = longDate(cell.dataset.d);
+        tip.querySelector('.chart-tip-title').textContent = '';
+        tip.querySelector('.chart-tip-value').textContent = cell.dataset.title || 'Rest day';
+        tip.querySelector('.chart-tip-set').textContent = cell.dataset.title && sets ? `${sets} set${sets === 1 ? '' : 's'}` : '';
+        tip.dataset.index = cell.dataset.title ? '0' : '-1';
+        tip.dataset.date = cell.dataset.d;
+        tip.classList.toggle('is-touch', pointerType !== 'mouse' && tip.dataset.index === '0');
+        openChartTipPoint = (idx) => {
+            if (idx === 0 && tip.dataset.date) window.location.href = `/workout/${encodeURIComponent(tip.dataset.date)}?return_to=/stats`;
+        };
+        tip.hidden = false;
+        const r = cell.getBoundingClientRect();
+        const br = box.getBoundingClientRect();
+        const w = tip.offsetWidth;
+        const h = tip.offsetHeight;
+        const cx = r.left - br.left + r.width / 2;
+        const left = Math.max(0, Math.min(cx - w / 2, box.clientWidth - w));
+        const above = r.top - br.top - h - 8;
+        tip.style.left = `${left}px`;
+        tip.style.top = `${above >= 0 ? above : r.bottom - br.top + 8}px`;
+    }
+
+    function setupCalendarEvents() {
+        const grid = document.getElementById('consistencyGrid');
+        grid.addEventListener('pointerover', (e) => {
+            if (e.pointerType !== 'mouse') return;
+            showCalendarTip(e.target.closest('.cal-cell'), 'mouse');
+        });
+        grid.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') hideChartTip(); });
+        grid.addEventListener('pointerdown', (e) => {
+            chartPointerType = e.pointerType || 'mouse';
+            if (chartPointerType === 'mouse') return;
+            showCalendarTip(e.target.closest('.cal-cell'), chartPointerType);
+        });
+        // Sliding the year on a phone moves the squares out from under the note.
+        grid.addEventListener('scroll', () => hideChartTip(), { capture: true, passive: true });
+        grid.addEventListener('click', (e) => {
+            if (chartPointerType !== 'mouse') return;
+            const cell = e.target.closest('.cal-cell.is-on');
+            if (cell && cell.dataset.d) window.location.href = `/workout/${encodeURIComponent(cell.dataset.d)}?return_to=/stats`;
+        });
+    }
+
+    // The title is the switch: Overall strength ⇄ Consistency. Only the contents change.
+    function syncViewToggle() {
+        const btn = document.getElementById('viewToggle');
+        const onExercise = !!currentExercise;
+        btn.disabled = onExercise;
+        if (onExercise) btn.removeAttribute('aria-label');
+        else btn.setAttribute('aria-label', currentView === 'consistency' ? 'Consistency. Switch to overall strength' : 'Overall strength. Switch to consistency');
+    }
+
+    function switchView() {
+        if (currentExercise) return;
+        const next = currentView === 'consistency' ? 'strength' : 'consistency';
+        const page = document.querySelector('.stats-page');
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        hideChartTip();
+        page.classList.add('is-swapping');
+        setTimeout(() => {
+            currentView = next;
+            try { localStorage.setItem(VIEW_KEY, next); } catch (e) { /* private mode */ }
+            syncViewToggle();
+            if (fullChartData) renderChart(fullChartData);
+            requestAnimationFrame(() => requestAnimationFrame(() => page.classList.remove('is-swapping')));
+        }, reduce ? 0 : 180);
+    }
+
+    // Only the latest request draws: picking one exercise and then another quickly could draw
+    // the first one's data under the second one's name. A failed load says so instead of
+    // leaving the previous chart up under the new name.
+    let chartTicket = 0;
+    function fetchChart(url) {
+        const ticket = ++chartTicket;
+        fetch(url)
+            .then(response => {
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return response.json();
+            })
+            .then(data => { if (ticket === chartTicket) renderChart(data); })
+            .catch(error => {
+                if (ticket !== chartTicket) return;
+                console.error('Error loading chart:', error);
+                if (myChart) { myChart.destroy(); myChart = null; }
+                showEmptyState(true);
+                setText('heroLabel', currentExercise || (currentView === 'consistency' ? 'Consistency' : 'Overall strength'));
+                setText('chartEmptyText', "Couldn't load this chart. Check your connection and try again.");
+            });
+    }
+
     function loadAverageChart() {
         const params = new URLSearchParams({
             mode: 'index',
@@ -2035,10 +2612,7 @@
             fade_start_days: '60',
             fade_end_days: '90'
         });
-        fetch(`/stats/data/average?${params.toString()}`)
-            .then(response => response.json())
-            .then(data => renderChart(data))
-            .catch(error => console.error('Error loading average chart:', error));
+        fetchChart(`/stats/data/average?${params.toString()}`);
     }
 
     function loadChart() {
@@ -2049,6 +2623,7 @@
         const bwExercises = bwData ? JSON.parse(bwData.textContent || '[]') : [];
 
         syncClearButton();
+        syncViewToggle();
         if (bwAlert) {
             const showBw = !!exercise && bwExercises.includes(exercise);
             if (showBw && bwLabel) bwLabel.textContent = exercise;
@@ -2060,10 +2635,7 @@
             return;
         }
 
-        fetch(`/stats/data/${encodeURIComponent(exercise)}`)
-            .then(response => response.json())
-            .then(data => renderChart(data))
-            .catch(error => console.error('Error loading chart:', error));
+        fetchChart(`/stats/data/${encodeURIComponent(exercise)}`);
     }
 
     document.querySelectorAll('.range-pill').forEach(btn => {
@@ -2082,6 +2654,10 @@
             if (fullChartData) renderChart(fullChartData);
         });
     });
+    // The saved range (say 3M) was used for the chart while "All" stayed highlighted.
+    syncActivePills();
+
+    document.getElementById('viewToggle').addEventListener('click', switchView);
 
     document.getElementById('heroInfoBtn').addEventListener('click', (event) => {
         const btn = event.currentTarget;
@@ -2136,10 +2712,18 @@
         // Touch: tapping anywhere outside the chart and the box closes the box.
         document.addEventListener('pointerdown', (event) => {
             if (chartTip.hidden) return;
-            if (chartTip.contains(event.target) || chartCanvas.contains(event.target)) return;
+            if (chartTip.contains(event.target) || chartCanvas.parentNode.contains(event.target)) return;
             hideChartTip();
         });
 
+        setupCalendarEvents();
+        document.getElementById('yearControls').addEventListener('click', (event) => {
+            const btn = event.target.closest('button[data-year]');
+            if (!btn || Number(btn.dataset.year) === consYear) return;
+            consYear = Number(btn.dataset.year);
+            try { localStorage.setItem(YEAR_KEY, String(consYear)); } catch (e) { /* private mode */ }
+            if (fullChartData) renderConsistency(fullChartData);
+        });
         if (initialExercise && initialExercise.value) {
             currentExercise = initialExercise.value;
             document.getElementById('exerciseSearch').value = initialExercise.label || initialExercise.value;
@@ -2153,6 +2737,11 @@
     window.addEventListener('resize', () => {
         clearTimeout(resizeTimer);
         resizeTimer = setTimeout(() => {
+            if (fullChartData && !currentExercise && currentView === 'consistency') {
+                const box = document.getElementById('consistencyGrid').parentNode;
+                if (`${box.clientWidth}x${box.clientHeight}` !== calendarSize) renderConsistency(fullChartData, { animate: false });
+                return;
+            }
             if (!myChart || !fullChartData) return;
             const phone = isPhoneChart();
             if (lastPhoneLayout !== null && phone !== lastPhoneLayout) {

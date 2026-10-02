@@ -1,22 +1,20 @@
 {% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
+{% block title %}{{ error_message or "Something went wrong" }} - Workout Tracker{% endblock %}
 {% block content %}
-<div class="row justify-content-center" style="min-height: 70vh; align-items: center;">
-    <div class="col-12 col-md-8 col-lg-6 text-center">
-        <div class="card">
-            <div class="mb-4 mb-md-5">
-                <i class="bi bi-exclamation-triangle" style="font-size: clamp(4rem, 15vw, 6rem); color: var(--gold-primary); opacity: 0.5;"></i>
-            </div>
-            <h1 class="display-1 fw-bold mb-3 mb-md-4" style="font-size: clamp(3rem, 12vw, var(--fs-6xl)); background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-bright) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
-                {{ error_code }}
-            </h1>
-            <h3 class="mb-3 mb-md-4 fw-semibold" style="font-size: clamp(1.25rem, 5vw, 1.5rem);">{{ error_message }}</h3>
-            <p class="text-muted mb-4 mb-md-5" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg)); line-height: 1.6;">
-                Something went wrong. Please try again or return home.
-            </p>
-            <a href="/" class="btn btn-gold-solid px-4 px-md-5">
-                <i class="bi bi-house-door me-2"></i>Return Home
-            </a>
-        </div>
-    </div>
+{{ st.styles() }}
+<style>
+    .err { padding-top: 12vh; text-align: center; }
+    .err-code {
+        margin: 0 0 6px;
+        font-size: 0.78rem; font-weight: 600; letter-spacing: 0.12em;
+        color: var(--st-accent);
+    }
+    .err .st-head { margin-bottom: 28px; }
+</style>
+<div class="st err">
+    <p class="err-code">{{ error_code }}</p>
+    {{ st.head(error_message or "Something went wrong", error_detail or "Please try again, or go back home.") }}
+    <a href="/" class="st-btn st-btn-primary st-btn-sm"><i class="bi bi-house-door"></i>Home</a>
 </div>
 {% endblock %}

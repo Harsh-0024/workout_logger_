@@ -3,7 +3,9 @@ Input validation utilities.
 """
 import re
 import html
+import math
 from typing import Optional
+from urllib.parse import urljoin, urlsplit
 from utils.errors import ValidationError
 
 
@@ -24,6 +26,27 @@ def validate_username(username: str) -> str:
         raise ValidationError("Username must be between 3 and 30 characters")
     
     return username
+
+
+# A username is also its home page's address (/<username>), so it can't be the first part of
+# one of the app's own addresses: someone named "log" or "stats" never reached their Home.
+_RESERVED_USERNAMES = {"admin", "api", "static", "share", "shortcut", "health", "login", "logout", "register"}
+USERNAME_NOT_AVAILABLE = "That username isn't available. Please pick another."
+
+
+def is_reserved_username(username: str) -> bool:
+    name = (username or "").strip().lower()
+    reserved = set(_RESERVED_USERNAMES)
+    try:
+        from flask import current_app
+
+        for rule in current_app.url_map.iter_rules():
+            first = rule.rule.strip("/").split("/", 1)[0].lower()
+            if first and "<" not in first:
+                reserved.add(first)
+    except RuntimeError:  # no app running
+        pass
+    return name in reserved
 
 
 def validate_exercise_name(exercise_name: str) -> str:
@@ -115,3 +138,36 @@ def validate_password(password: str) -> str:
         raise ValidationError("Password must contain at least one number")
     
     return password
+
+
+def is_safe_redirect_url(target: Optional[str], host_url: str) -> bool:
+    """True when ``target`` (e.g. a ``?next=`` value) stays on this site.
+
+    Browsers read a backslash like a slash, so ``/\\evil.com`` means
+    ``//evil.com``; backslashes and control characters are refused outright.
+    """
+    if not target or '\\' in target or any(ord(ch) < 32 or ord(ch) == 127 for ch in target):
+        return False
+    ref = urlsplit(host_url)
+    test = urlsplit(urljoin(host_url, target))
+    return test.scheme in ('http', 'https') and test.netloc == ref.netloc
+
+
+MAX_BODYWEIGHT_KG = 500
+
+
+def parse_bodyweight(raw) -> Optional[float]:
+    """A bodyweight typed in kg: None when blank, else a number from 1 to 500.
+
+    float() also takes "nan", "inf" and "1e5"; any of those would be used for every
+    bodyweight exercise (and NaN can't even be sent to the Stats page as JSON)."""
+    text = str(raw if raw is not None else '').strip()
+    if not text:
+        return None
+    try:
+        value = float(text)
+    except ValueError:
+        raise ValidationError("Bodyweight must be a number.")
+    if not math.isfinite(value) or value < 1 or value > MAX_BODYWEIGHT_KG:
+        raise ValidationError(f"Bodyweight must be between 1 and {MAX_BODYWEIGHT_KG} kg.")
+    return value

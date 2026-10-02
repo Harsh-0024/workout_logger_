@@ -103,6 +103,17 @@ class TestRouteRegressions(unittest.TestCase):
             sess["_id"] = "route-test-session"
         return user
 
+    def test_timed_preference_only_redirects_within_the_site(self):
+        self._create_logged_in_user(username="timed_redirect_user")
+        for next_url in ("//evil.com", "/\\evil.com", "https://evil.com/"):
+            for query in (f"exercise=Plank&is_timed=yes&next={next_url}", f"next={next_url}"):
+                response = self.client.get(f"/timed-preference/set?{query}")
+                self.assertEqual(response.status_code, 302)
+                self.assertEqual(response.headers["Location"], "/log", query)
+
+        response = self.client.get("/timed-preference/set?exercise=Plank&is_timed=no&next=/workout/2026-09-30")
+        self.assertEqual(response.headers["Location"], "/workout/2026-09-30")
+
     def test_service_worker_is_served_from_root_without_login(self):
         # Browsers refuse a service worker behind a redirect, so '/<username>'
         # must not catch /sw.js and send it to the login page.
@@ -112,6 +123,18 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.headers.get("Cache-Control"), "no-cache")
         self.assertIn(b"addEventListener('fetch'", response.data)
         response.close()
+
+        # A workout kept offline for a day that already has one waits to be added, never dropped.
+        sync = self.client.get("/static/offline-sync.js")
+        script = sync.get_data(as_text=True)
+        sync.close()
+        self.assertIn("already has a workout, so the one saved offline is waiting", script)
+        self.assertNotIn("wasn't added", script)
+
+        # The offline page says logging still works, and offers it.
+        offline = self.client.get("/static/offline.html")
+        self.assertIn('href="/log"', offline.get_data(as_text=True))
+        offline.close()
 
         # What the worker fetches on install must not need a login either.
         for path in ("/static/offline.html", "/static/manifest.json"):
@@ -176,7 +199,29 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.get_json()["status"], "invalid")
         self.assertTrue(response.get_json()["error"])
+        self.assertNotIn("date", response.get_json())
+        # A dated one that can't be read says which day it is, for "Your Thu 25 Sept workout...".
+        response = self._upload_offline("25/9/26 Legs\n100, 5")
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.get_json()["date"], "2026-09-25")
         self.assertEqual(self.session.query(WorkoutLog).count(), 0)
+
+    def test_offline_workout_kept_under_an_old_username_still_uploads(self):
+        user = self._create_logged_in_user(username="renamed_now")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn(f'data-user-id="{user.id}"', page)
+        self.assertIn(f"userId: {user.id},", page)
+
+        # Kept before the rename: the old username, but this account's id.
+        response = self.client.post("/api/offline-workouts", json={
+            "text": "20/9/26 Legs\nSquat 100x5", "user": "old_name", "user_id": user.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.get_json()["status"], "saved")
+
+        # Another account's workout is refused, whatever the name.
+        response = self.client.post("/api/offline-workouts", json={
+            "text": "21/9/26 Legs\nSquat 100x5", "user": "renamed_now", "user_id": user.id + 1})
+        self.assertEqual(response.status_code, 409)
 
     def test_csrf_token_refresh_for_pages_opened_offline(self):
         self.assertEqual(self.client.get("/api/csrf-token").status_code, 302)
@@ -192,8 +237,13 @@ class TestRouteRegressions(unittest.TestCase):
         response = self.client.post("/log", data={
             "workout_text": "Leg Day\nSquat 120x5",
             "saved_at": str(int(saved_at.timestamp() * 1000)),
+            "offline_id": "kept-1",
         })
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 302)
+        # The workout page it lands on tells the phone to forget its kept copy.
+        location = urlsplit(response.headers["Location"])
+        self.assertEqual(location.path, f"/workout/{saved_at:%Y-%m-%d}")
+        self.assertIn("offline_saved=kept-1", location.query)
         log = self.session.query(WorkoutLog).filter_by(user_id=user.id).one()
         self.assertEqual(log.date, saved_at)
 
@@ -204,6 +254,661 @@ class TestRouteRegressions(unittest.TestCase):
         })
         newest = self.session.query(WorkoutLog).filter_by(user_id=user.id).order_by(WorkoutLog.id.desc()).first()
         self.assertEqual(newest.date.date(), date.today())
+
+    def test_offline_workout_that_fails_again_keeps_its_place_on_the_phone(self):
+        self._create_logged_in_user(username="offline_retry")
+        saved_at = datetime.now().replace(microsecond=0) - timedelta(days=4)
+        stamp = str(int(saved_at.timestamp() * 1000))
+        response = self.client.post("/log", data={
+            "workout_text": "# nothing to read",
+            "saved_at": stamp,
+            "offline_id": "kept-2",
+        })
+        self.assertEqual(response.status_code, 422)
+        page = response.get_data(as_text=True)
+        # Sent again from this page, it is still the same kept workout, dated the same day.
+        self.assertIn('name="offline_id" value="kept-2"', page)
+        self.assertIn(f'name="saved_at" value="{stamp}"', page)
+
+        # An id that isn't one the phone makes is not echoed back.
+        page = self.client.post("/log", data={
+            "workout_text": "# nothing to read",
+            "offline_id": '"><script>',
+        }).get_data(as_text=True)
+        self.assertNotIn('name="offline_id"', page)
+
+        # A normal save doesn't mention the phone at all.
+        response = self.client.post("/log", data={"workout_text": "Leg Day\nSquat 120x5"})
+        self.assertNotIn("offline_saved", response.headers["Location"])
+
+    def test_log_preview_checks_an_offline_workout_against_the_day_it_was_kept(self):
+        user = self._create_logged_in_user(username="offline_preview")
+        saved_at = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0) - timedelta(days=5)
+        self.session.add(WorkoutLog(
+            user_id=user.id, date=saved_at, workout_name="Leg Day", exercise="Squat",
+            top_weight=100, top_reps=5,
+        ))
+        self.session.commit()
+
+        body = self.client.post("/log/preview", data={
+            "workout_text": "Leg Day\nLeg Press 200x10",
+            "mode": "append",
+            "saved_at": str(int(saved_at.timestamp() * 1000)),
+        }).get_json()
+        self.assertEqual(body["date_str"], saved_at.strftime("%Y-%m-%d"))
+        self.assertEqual(body["existing"]["date_str"], saved_at.strftime("%Y-%m-%d"))
+
+    def test_every_page_has_its_own_title(self):
+        # Titles name the page in tabs, history and for screen readers.
+        self._create_logged_in_user(username="title_user")
+        self.client.post("/log", data={"workout_text": "20/9/26 Leg Day\nSquat 120x5"})
+        pages = {
+            "/log": "Log workout",
+            "/stats": "Stats",
+            "/workouts": "All workouts",
+            "/retrieve/categories": "Retrieve",
+            "/retrieve/custom": "Custom workout",
+            "/set_plan": "Workout plan",
+            "/set_exercises": "Rep ranges",
+            "/settings": "Settings",
+            "/settings/account": "Account",
+            "/settings/data": "Your data",
+            "/settings/integrations": "Integrations",
+            "/settings/more": "Bodyweight exercises",
+            "/bulk-import": "Bulk import",
+            "/shortcut/urls": "Apple Shortcuts",
+            "/shortcut/mapping": "Session names",
+            "/workout/2026-09-20": "Leg Day, Sun, 20 Sep 2026",
+            "/workout/2026-09-20/edit": "Edit workout",
+            "/no-such-page/really": "Page not found",
+        }
+        for path, title in pages.items():
+            page = self.client.get(path).get_data(as_text=True)
+            found = re.search(r"<title>(.*?)</title>", page, re.S)
+            self.assertIsNotNone(found, path)
+            self.assertEqual(found.group(1).strip(), f"{title} - Workout Tracker", path)
+
+        self.assertIn(f"{date.today().year} Workout Tracker", self.client.get("/log").get_data(as_text=True))
+
+    def test_integrations_page_does_not_overstate_how_keys_are_kept(self):
+        # Keys are saved as written (not encrypted), so the page mustn't say "stored securely".
+        self._create_logged_in_user(username="keys_page")
+        page = self.client.get("/settings/integrations").get_data(as_text=True)
+        self.assertNotIn("stored securely", page)
+        self.assertIn("only ever shown by their last four characters", page)
+
+    def test_keyboard_shortcut_list_shows_admin_panel_to_admins_only(self):
+        user = self._create_logged_in_user(username="keys_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertNotIn("Admin panel</span>", page)
+        self.assertIn("key === 'a' && isAdminShortcutEnabled", page)
+        self.assertIn(".modal.show:not(#shortcutsModal)", page)
+
+        self.session.query(User).filter_by(id=user.id).update({"role": UserRole.ADMIN})
+        self.session.commit()
+        self.assertIn("Admin panel</span>", self.client.get("/log").get_data(as_text=True))
+
+    def test_plan_changes_that_did_not_reach_the_server_come_back(self):
+        self._create_logged_in_user(username="plan_keeper")
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertIn("data-editor data-editor-keep>", page)
+        self.assertIn("Not saved yet: your changes are back", page)
+        # Bulk import shares the editor but not this (it shows other text after an import).
+        self.assertNotIn("data-editor-keep>", self.client.get("/bulk-import").get_data(as_text=True))
+
+    def test_edits_that_did_not_reach_the_server_come_back(self):
+        # A save that ended on the sign-in page lost the edits; the page now keeps what was
+        # sent and puts it back, and the workout page forgets it once saved.
+        self._create_logged_in_user(username="edit_keeper")
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        edit = self.client.get("/workout/2026-09-20/edit").get_data(as_text=True)
+        self.assertIn('id="editRestored" role="status" hidden', edit)
+        self.assertIn("sessionStorage.setItem(SENT_KEY, JSON.stringify(", edit)
+        workout = self.client.get("/workout/2026-09-20").get_data(as_text=True)
+        self.assertIn("k.startsWith('wt-edit-sent:", workout)
+
+    def test_log_draft_is_kept_until_the_save_is_confirmed(self):
+        # The draft was cleared as Save was pressed: a save that ended on the sign-in page
+        # (session expired) lost the typed workout.
+        self._create_logged_in_user(username="draft_keeper")
+        page = self.client.get("/log").get_data(as_text=True)
+        submit = page[page.index("form.addEventListener('submit'"):page.index("window.addEventListener('pageshow'")]
+        self.assertNotIn("removeItem(DRAFT_KEY)", submit)
+        self.assertIn("sessionStorage.setItem(SENT_KEY, textarea.value)", submit)
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        saved_page = self.client.get("/workout/2026-09-20?saved=1").get_data(as_text=True)
+        self.assertIn("if (localStorage.getItem(draftKey) === sent) localStorage.removeItem(draftKey);", saved_page)
+
+    def test_export_date_range_problems_show_under_the_dates(self):
+        self._create_logged_in_user(username="range_user")
+        page = self.client.get("/settings/data").get_data(as_text=True)
+        self.assertNotIn("window.alert(", page)
+        self.assertIn('id="exportRangeError" role="alert" hidden', page)
+        self.assertIn("The end date is before the start date.", page)
+
+    def test_deleting_several_workouts_uses_the_app_confirm_box(self):
+        self._create_logged_in_user(username="bulk_confirm")
+        page = self.client.get("/workouts").get_data(as_text=True)
+        self.assertIn("confirm: 'true', confirmTitle: title", page)
+        self.assertIn("confirmDestructive: 'true'", page)
+        # The browser's own box only where the form can't go through the app's one.
+        self.assertIn("if (!form.requestSubmit && !window.confirm(", page)
+
+    def test_log_page_sends_a_workout_once(self):
+        # "Add to that day" skipped the Save button's guard, so a double tap added the exercises twice.
+        self._create_logged_in_user(username="once_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn("if (sending) {", page)
+        self.assertIn("addBtn.el.textContent = 'Adding…';", page)
+
+    def test_log_and_edit_bars_keep_the_count_readable_on_phones(self):
+        # The check count sits beside the buttons; on narrow phones it stacks onto two
+        # lines instead of being cut off, and Edit's button is as short as Log's.
+        self._create_logged_in_user(username="bar_user")
+        self.client.post("/log", data={"workout_text": "20/9/26 Leg Day\nSquat 120x5"})
+        log_page = self.client.get("/log").get_data(as_text=True)
+        edit_page = self.client.get("/workout/2026-09-20/edit").get_data(as_text=True)
+        for page in (log_page, edit_page):
+            self.assertIn(".lg-meta.is-stacked .lg-meta-part", page)
+            self.assertIn("function fitMeta(el)", page)
+        self.assertIn('id="saveBtn">Save</button>', edit_page)
+
+    def test_an_exercise_done_twice_in_a_day_is_one_chart_point(self):
+        user = self._create_logged_in_user(username="chart_twice")
+        for day, sets in ((datetime(2026, 6, 1, 18), [(100.0, 5)]), (datetime(2026, 6, 3, 18), [(110.0, 5), (60.0, 12)])):
+            handle_workout_log(self.session, user, {
+                "date": day, "workout_name": "Legs",
+                "exercises": [{"name": "Zercher Squat", "exercise_string": f"Zercher Squat\n{w}, {r}",
+                               "weights": [w] * 3, "reps": [r] * 3, "valid": True} for w, r in sets],
+            })
+        self.session.commit()
+
+        body = self.client.get("/stats/data/Zercher%20Squat").get_json()
+        self.assertEqual(body["labels"], ["2026-06-01", "2026-06-03"])
+        # The day's stronger entry is the point, not the lighter back-off after it.
+        self.assertEqual(body["weight"], [100.0, 110.0])
+        self.assertGreater(body["stats"]["improvement_pct"], 0)
+        self.assertEqual(body["series"]["tonnage"][1], 110.0 * 5 * 3 + 60.0 * 12 * 3)
+
+        average = self.client.get("/stats/data/average").get_json()
+        self.assertEqual(average["labels"], ["2026-06-01", "2026-06-03"])
+        self.assertGreater(average["data"][1], 0)
+
+    def test_stats_range_buttons_show_the_saved_range_and_say_which_is_on(self):
+        self._create_logged_in_user(username="pill_user")
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn("b.setAttribute('aria-pressed', String(b.dataset.range === currentRange));", page)
+        self.assertIn('data-range="90" aria-label="Last 3 months">3M<', page)
+        self.assertIn("// The saved range (say 3M) was used for the chart while \"All\" stayed highlighted.\n    syncActivePills();", page)
+
+    def test_stats_chart_draws_only_the_latest_request_and_says_when_it_fails(self):
+        self._create_logged_in_user(username="chart_net")
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn("if (ticket === chartTicket) renderChart(data);", page)
+        self.assertIn("Couldn't load this chart. Check your connection and try again.", page)
+        self.assertIn('id="chartEmptyText" role="status"', page)  # read out when it changes
+        self.assertNotIn(".then(response => response.json())\n            .then(data => renderChart(data))", page)
+
+    def test_bodyweight_exercise_chart_keeps_the_load_as_logged(self):
+        # Stats showed "Last session 90 kg × 8" for pull-ups logged as BW+10.
+        self._create_logged_in_user(username="chart_bw")
+        self.client.post("/log", data={"workout_text": "20/9/26 Pull\nPull Ups\nBW+10 x 8\n\nBarbell Row\n70 x 8"})
+        pull = self.client.get("/stats/data/Pull%20Ups").get_json()
+        self.assertEqual((pull["weight"], pull["bodyweight_offset"]), ([90.0], [10.0]))
+        row = self.client.get("/stats/data/Barbell%20Row").get_json()
+        self.assertEqual(row["bodyweight_offset"], [None])
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn("setTile(2, 'Last session', loadText(data, lastIdx)", page)
+
+    def test_saving_a_workout_looks_each_exercise_up_once(self):
+        # Whether an exercise is timed was worked out twice per exercise on every save.
+        from sqlalchemy import event
+
+        user = self._create_logged_in_user(username="save_speed")
+        names = ["Flat Barbell Press", "Incline Dumbbell Press", "Cable Lateral Raise",
+                 "Tricep Pushdown", "Low Cable Fly", "Overhead Extension"]
+        for i in range(5):
+            handle_workout_log(self.session, user, {
+                "date": datetime(2026, 5, 1, 18) + timedelta(days=3 * i), "workout_name": "Push",
+                "exercises": [{"name": n, "exercise_string": f"{n}\n{50 + i} 45, 8 9",
+                               "weights": [50.0 + i, 45.0, 45.0], "reps": [8, 9, 9], "valid": True} for n in names],
+            })
+        self.session.commit()
+
+        queries = []
+        listener = lambda *args, **kwargs: queries.append(1)
+        event.listen(self.engine, "before_cursor_execute", listener)
+        try:
+            text = "30/9/26 Push\n" + "\n".join(f"{n}\n60 55, 8 9" for n in names)
+            response = self.client.post("/log", data={"workout_text": text})
+        finally:
+            event.remove(self.engine, "before_cursor_execute", listener)
+        self.assertEqual(response.status_code, 302)
+        self.assertLess(len(queries), 11 * len(names))
+
+    def test_exercise_chart_asks_the_database_a_fixed_number_of_times(self):
+        # One query per session made long histories slow to chart on a remote database.
+        from sqlalchemy import event
+
+        user = self._create_logged_in_user(username="chart_speed")
+        start = datetime(2026, 1, 1, 18, 0)
+        for i in range(40):
+            day = start + timedelta(days=2 * i)
+            handle_workout_log(self.session, user, {
+                "date": day, "workout_name": "Legs",
+                "exercises": [{"name": "Back Squat", "exercise_string": f"Back Squat\n{100 + i} 90, 5 6",
+                               "weights": [100.0 + i, 90.0, 90.0], "reps": [5, 6, 6], "valid": True}],
+            })
+        self.session.commit()
+
+        queries = []
+        listener = lambda *args, **kwargs: queries.append(1)
+        event.listen(self.engine, "before_cursor_execute", listener)
+        try:
+            body = self.client.get("/stats/data/Back%20Squat").get_json()
+        finally:
+            event.remove(self.engine, "before_cursor_execute", listener)
+        self.assertEqual(len(body["labels"]), 40)
+        self.assertFalse(body["is_timed"])
+        self.assertLess(len(queries), 25)
+
+        # The Stats page itself doesn't build whole exports (it used to, twice, on every visit).
+        queries.clear()
+        event.listen(self.engine, "before_cursor_execute", listener)
+        try:
+            self.assertEqual(self.client.get("/stats").status_code, 200)
+        finally:
+            event.remove(self.engine, "before_cursor_execute", listener)
+        self.assertLess(len(queries), 15)
+
+    def test_header_buttons_show_keyboard_focus(self):
+        # Bootstrap hides the outline on a plain .btn; the header's Settings and Log out are plain .btn.
+        self._create_logged_in_user(username="focus_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn('class="btn btn-sm mobile-header-btn"', page)
+        # On phones the header buttons are icons only (their text is hidden), so they carry a name.
+        self.assertIn('mobile-header-btn" aria-label="Settings"', page)
+        self.assertIn('mobile-header-btn" aria-label="Log out"', page)
+        rule = re.search(r"\.btn:focus-visible\s*\{([^}]*)\}", page)
+        self.assertIsNotNone(rule)
+        self.assertIn("outline: 2px solid", rule.group(1))
+
+    def test_time_history_is_found_on_a_real_database(self):
+        # Only logs with brackets are fetched; a hint in one of them still marks the exercise timed.
+        from services.logging import _has_time_history
+
+        user = self._create_logged_in_user(username="time_history")
+        for day, text in ((1, "Dead Hang\nBW, 40"), (2, "Dead Hang - [30-60s]\nBW, 45"), (3, "Squat - [5-8]\n100, 5")):
+            self.session.add(WorkoutLog(user_id=user.id, date=datetime(2026, 9, day), exercise=text.split(" - ")[0].split("\n")[0],
+                                        exercise_string=text, top_weight=1, top_reps=1))
+        self.session.add(WorkoutLog(user_id=user.id, date=datetime(2026, 9, 4), exercise="Plank", exercise_string=None,
+                                    top_weight=1, top_reps=1))
+        self.session.commit()
+        self.assertTrue(_has_time_history(self.session, user.id, "Dead Hang"))
+        self.assertFalse(_has_time_history(self.session, user.id, "Squat"))
+        self.assertFalse(_has_time_history(self.session, user.id, "Plank"))
+
+    def test_log_check_shows_seconds_like_the_workout_page(self):
+        self._create_logged_in_user(username="timed_check")
+        text = "29/9/26 Grip\nDead Hang\nBW, 40 35\n\nWrist Curl\n15, 15 12\n\nFarmer Walk - [20-60s]\n30, 40"
+
+        def labels():
+            body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+            return {row["name"]: row["sets_label"] for row in body["exercises"]}
+
+        # Known timed exercises and written time targets read as seconds; others as reps.
+        self.assertEqual(labels(), {
+            "Dead Hang": "BW×40s · BW×35s · BW×35s",
+            "Wrist Curl": "15×15 · 15×12 · 15×12",
+            "Farmer Walk": "30×40s · 30×40s · 30×40s",
+        })
+        # Once the user says Dead Hang is counted in reps, the check follows that answer.
+        self.client.get("/timed-preference/set?exercise=Dead+Hang&is_timed=no&next=/log")
+        self.assertEqual(labels()["Dead Hang"], "BW×40 · BW×35 · BW×35")
+
+    def test_tab_bar_only_for_people_signed_in(self):
+        # Signed out, every tab leads to the sign-in page; the share page has its own invite instead.
+        page = self.client.get("/no-such-page/really").get_data(as_text=True)
+        self.assertNotIn('class="mobile-bottom-nav', page)
+        self.assertNotIn('<a class="nav-link" href="/stats">', page)  # nor the desktop links
+        self.assertIn('mobile-header-btn" aria-label="Log in"', page)
+        self.assertIn('mobile-header-btn" aria-label="Create account"', page)
+        self.assertRegex(page, r'<body class="[^"]*is-signed-out')
+        self._create_logged_in_user(username="tab_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn('class="mobile-bottom-nav', page)
+        self.assertIn('<a class="nav-link" href="/stats">', page)
+        self.assertNotRegex(page, r'<body class="[^"]*is-signed-out')
+
+    def test_a_page_left_open_for_hours_can_still_save(self):
+        # A workout typed over a long gym session is saved hours after the Log page loaded.
+        import time as time_module
+
+        class _CsrfConfig(_RouteTestConfig):
+            WTF_CSRF_ENABLED = True
+
+        app = create_app(config_object=_CsrfConfig, init_db=False)
+        self.assertIsNone(app.config["WTF_CSRF_TIME_LIMIT"])
+        client = app.test_client()
+        user = self._create_logged_in_user(username="slow_logger")
+        with client.session_transaction() as sess:
+            sess["_user_id"] = str(user.id)
+            sess["_fresh"] = True
+        page = client.get("/log").get_data(as_text=True)
+        token = re.search(r'name="csrf-token" content="([^"]+)"', page).group(1)
+        three_hours_later = time_module.time() + 3 * 3600
+        with patch("time.time", return_value=three_hours_later):
+            response = client.post("/log", data={"csrf_token": token, "workout_text": "20/9/26 Legs\nSquat 100x5"})
+        self.assertEqual(response.status_code, 302)
+
+        # A page that really is out of date says so, and that nothing was saved.
+        response = client.post("/log", data={"csrf_token": "stale", "workout_text": "20/9/26 Legs\nSquat 100x5"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Nothing was saved", response.get_data(as_text=True))
+
+    def test_settings_refuse_a_bodyweight_that_is_not_a_weight(self):
+        user = self._create_logged_in_user(username="bw_setter")
+        for raw in ("nan", "inf", "780"):
+            self.client.post("/settings", data={"form_type": "bodyweight", "bodyweight": raw})
+            self.session.expire_all()
+            self.assertEqual(self.session.get(User, user.id).bodyweight, 80.0, raw)
+        self.client.post("/settings", data={"form_type": "bodyweight", "bodyweight": "76.5"})
+        self.session.expire_all()
+        self.assertEqual(self.session.get(User, user.id).bodyweight, 76.5)
+
+    def test_password_change_that_fails_does_not_say_it_worked(self):
+        from services.auth import AuthService
+
+        user = self._create_logged_in_user(username="pw_changer")
+        self.session.query(User).filter_by(id=user.id).update({"password_hash": AuthService.hash_password("secret123")})
+        self.session.commit()
+        form = {"form_type": "password", "current_password": "secret123",
+                "new_password": "newsecret1", "confirm_password": "newsecret1"}
+        with patch("workout_tracker.routes.auth.AuthService.set_password", return_value=False):
+            page = self.client.post("/settings", data=form, follow_redirects=True).get_data(as_text=True)
+        self.assertNotIn("Password updated", page)
+        self.assertIn("wasn&#39;t changed", page)
+
+    def test_messages_are_short_and_calm(self):
+        # "…updated successfully!" didn't match the redesign's tone ("Saved").
+        self._create_logged_in_user(username="calm_user")
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        page = self.client.post("/workout/2026-09-20/edit", data={
+            "workout_title": "Legs", "workout_date": "2026-09-20", "workout_text": "Squat\n100, 6",
+        }, follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Workout saved.", page)
+        self.assertNotIn("successfully", page)
+        page = self.client.post("/settings", data={"form_type": "bodyweight", "bodyweight": "77"},
+                                follow_redirects=True).get_data(as_text=True)
+        self.assertIn("Bodyweight updated.", page)
+
+    def test_error_messages_skip_jargon(self):
+        self._create_logged_in_user(username="plain_words")
+        page = self.client.get("/workout/2026-02-30", follow_redirects=True).get_data(as_text=True)
+        self.assertIn("That link doesn&#39;t point to a workout.", page)
+        self.assertNotIn("Invalid date format", page)
+
+    def test_messages_leave_room_for_their_close_button(self):
+        # The app's .alert padding replaced Bootstrap's room for the ×, so long messages ran under it.
+        self._create_logged_in_user(username="alert_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        rules = re.findall(r"\.alert\.alert-dismissible\s*\{([^}]*)\}", page)
+        self.assertTrue(rules)
+        self.assertTrue(all("padding-right: 48px" in rule for rule in rules))
+
+    def test_exports_give_every_logged_set_in_the_chosen_range(self):
+        import csv
+        import io
+        import json
+
+        user = self._create_logged_in_user(username="exporter")
+        self.client.post("/log", data={"workout_text": "10/9/26 Push\nBench Press\n80 75, 8 10"})
+        self.client.post("/log", data={"workout_text": "20/9/26 Legs\nSquat\n100, 5"})
+        other = User(username="someone_else", role=UserRole.USER, is_verified=True)
+        self.session.add(other)
+        self.session.commit()
+        self.session.add(WorkoutLog(user_id=other.id, date=datetime(2026, 9, 15), exercise="Secret Lift",
+                                    top_weight=1, top_reps=1))
+        self.session.commit()
+
+        response = self.client.get("/export_csv")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("attachment; filename=workout_history_exporter_", response.headers["Content-Disposition"])
+        rows = list(csv.DictReader(io.StringIO(response.get_data(as_text=True))))
+        self.assertEqual([r["Exercise"] for r in rows], ["Squat", "Bench Press"])  # newest first
+        self.assertEqual(rows[1]["Weights"], "80.0,75.0,75.0")
+        self.assertEqual(rows[1]["Reps"], "8,10,10")
+        self.assertEqual((rows[1]["Uses Bodyweight"], rows[1]["Bodyweight (kg)"]), ("no", "80.0"))
+
+        body = json.loads(self.client.get("/export_json?start_date=2026-09-01&end_date=2026-09-12").get_data(as_text=True))
+        self.assertEqual(body["user"], "exporter")
+        self.assertEqual([w["date"] for w in body["workouts"]], ["2026-09-10"])
+        self.assertEqual(body["workouts"][0]["entries"][0]["bodyweight"], 80.0)
+        self.assertIn("uses_bodyweight", body["workouts"][0]["entries"][0])
+
+        # A bodyweight exercise says so, so "10" reads as BW+10 kg rather than 10 kg.
+        self.client.post("/log", data={"workout_text": "12/9/26 Pull\nPull Ups\nBW+10, 8"})
+        body = json.loads(self.client.get("/export_json?start_date=2026-09-12&end_date=2026-09-12").get_data(as_text=True))
+        entry = body["workouts"][0]["entries"][0]
+        self.assertEqual((entry["exercise"], entry["uses_bodyweight"], entry["bodyweight"]), ("Pull Ups", True, 80.0))
+        self.assertEqual(entry["sets_json"]["weights"][0], 10.0)
+        self.assertFalse(entry["timed"])
+
+        # A timed exercise says its reps are seconds.
+        self.client.post("/log", data={"workout_text": "13/9/26 Core\nPlank - [30-60s]\n0, 45"})
+        body = json.loads(self.client.get("/export_json?start_date=2026-09-13&end_date=2026-09-13").get_data(as_text=True))
+        self.assertTrue(body["workouts"][0]["entries"][0]["timed"])
+        rows = list(csv.DictReader(io.StringIO(self.client.get("/export_csv?start_date=2026-09-13&end_date=2026-09-13").get_data(as_text=True))))
+        self.assertEqual(rows[0]["Timed"], "yes")
+        self.assertNotIn("Secret Lift", json.dumps(body))
+
+        # Nothing in range, or a bad range: back to the data page with a message.
+        for query in ("start_date=2025-01-01&end_date=2025-01-31", "start_date=2026-09-20",
+                      "start_date=2026-09-20&end_date=2026-09-01", "start_date=bad&end_date=2026-09-01"):
+            response = self.client.get(f"/export_csv?{query}")
+            self.assertEqual(response.status_code, 302, query)
+            self.assertEqual(urlsplit(response.headers["Location"]).path, "/settings/data", query)
+
+    def test_pages_are_not_framed_or_sniffed_and_cookies_stay_same_site(self):
+        from config import Config
+
+        response = self.client.get("/login")
+        self.assertEqual(response.headers["X-Content-Type-Options"], "nosniff")
+        self.assertEqual(response.headers["X-Frame-Options"], "SAMEORIGIN")
+        self.assertEqual(self.app.config["SESSION_COOKIE_SAMESITE"], "Lax")
+        self.assertEqual(self.app.config["REMEMBER_COOKIE_SAMESITE"], "Lax")
+        self.assertTrue(self.app.config["SESSION_COOKIE_HTTPONLY"])
+        # Secure (HTTPS-only) where deployed; a local http run can still sign in.
+        self.assertEqual(self.app.config["SESSION_COOKIE_SECURE"], Config.DEPLOYED)
+        self.assertEqual(self.app.config["REMEMBER_COOKIE_SECURE"], Config.DEPLOYED)
+
+        self._create_logged_in_user(username="cookie_user")
+        cookie = self.client.get("/log").headers.get("Set-Cookie", "")
+        if cookie:
+            self.assertIn("SameSite=Lax", cookie)
+            self.assertIn("HttpOnly", cookie)
+
+    def test_stats_chart_is_described_for_screen_readers(self):
+        self._create_logged_in_user(username="chart_reader")
+        page = self.client.get("/stats").get_data(as_text=True)
+        self.assertIn('<canvas id="progressChart" role="img" aria-label=', page)
+        self.assertIn("document.getElementById('progressChart').setAttribute('aria-label'", page)
+        # Consistency counts weeks from your first workout in the year you started.
+        self.assertIn("const from = startedThisYear ? firstDay : win.start;", page)
+        self.assertIn("workouts a week since ${", page)
+        # Enter in the exercise search takes the first match and puts the list and keyboard away.
+        self.assertIn("items[pick].click();", page)
+        self.assertIn("event.target.blur();", page)
+
+    def test_bodyweight_line_only_moves_the_setting_for_the_newest_workout(self):
+        user = self._create_logged_in_user(username="bw_line_user")  # bodyweight 80
+
+        def current():
+            self.session.expire_all()
+            return self.session.get(User, user.id).bodyweight
+
+        def logged(day):
+            return {log.bodyweight for log in self.session.query(WorkoutLog).filter(
+                WorkoutLog.user_id == user.id, WorkoutLog.date >= datetime(2026, 9, day),
+                WorkoutLog.date < datetime(2026, 9, day + 1))}
+
+        self.client.post("/log", data={"workout_text": "20/9/26 Pull\nBody Weight - 78 kg\nPull Ups\nBW+5, 8"})
+        self.assertEqual(current(), 78.0)
+        self.assertEqual(logged(20), {78.0})
+
+        # An older workout keeps its own bodyweight, but today's setting stays.
+        self.client.post("/log", data={"workout_text": "5/9/26 Pull\nBody Weight - 70 kg\nPull Ups\nBW, 8"})
+        self.assertEqual(current(), 78.0)
+        self.assertEqual(logged(5), {70.0})
+
+        # A typo isn't a bodyweight.
+        self.client.post("/log", data={"workout_text": "25/9/26 Pull\nBody Weight - 7800 kg\nPull Ups\nBW, 9"})
+        self.assertEqual(current(), 78.0)
+        self.assertEqual(logged(25), {78.0})
+
+        # Editing the old workout (the edit box has no bodyweight line) keeps its 70 kg.
+        self.client.post("/workout/2026-09-05/edit", data={
+            "workout_title": "Pull A", "workout_date": "2026-09-05", "workout_text": "Pull Ups\nBW, 10"})
+        self.session.expire_all()
+        self.assertEqual(logged(5), {70.0})
+        self.assertEqual(current(), 78.0)
+
+    def test_pages_are_gzipped_when_the_browser_asks(self):
+        import gzip
+
+        self._create_logged_in_user(username="gzip_user")
+        plain = self.client.get("/log")
+        self.assertNotIn("Content-Encoding", plain.headers)
+        packed = self.client.get("/log", headers={"Accept-Encoding": "gzip, deflate, br"})
+        self.assertEqual(packed.headers["Content-Encoding"], "gzip")
+        self.assertIn("Accept-Encoding", packed.headers["Vary"])
+        self.assertEqual(gzip.decompress(packed.data), plain.data)
+        self.assertLess(len(packed.data) * 3, len(plain.data))
+        self.assertEqual(int(packed.headers["Content-Length"]), len(packed.data))
+
+        # Files, tiny answers and images are left alone.
+        script = self.client.get("/static/offline-sync.js", headers={"Accept-Encoding": "gzip"})
+        self.assertNotIn("Content-Encoding", script.headers)
+        script.close()
+        tiny = self.client.get("/api/csrf-token", headers={"Accept-Encoding": "gzip"})
+        self.assertNotIn("Content-Encoding", tiny.headers)
+
+    def test_error_pages_say_what_happened(self):
+        page = self.client.get("/no-such-page/really").get_data(as_text=True)
+        self.assertIn("That page doesn&#39;t exist, or it has moved.", page)
+        self.assertNotIn("Something went wrong. Please try again", page)
+
+    def test_theme_is_set_before_the_page_is_drawn(self):
+        # Light mode drew dark first and faded to light on every page when only the end of the page set it.
+        page = self.client.get("/login").get_data(as_text=True)
+        head = page.split("</head>", 1)[0]
+        self.assertIn("document.documentElement.setAttribute('data-theme'", head)
+        self.assertLess(head.index("data-theme"), head.index("<link"))
+
+    def test_desktop_bar_fits_between_phone_and_desktop_widths(self):
+        self._create_logged_in_user(username="tablet_user")
+        page = self.client.get("/log").get_data(as_text=True)
+        self.assertIn("@media (min-width: 576px) and (max-width: 991.98px)", page)
+        # Icons only on the narrowest of these, words kept for screen readers (not display:none).
+        narrow = page.split("@media (min-width: 576px) and (max-width: 767.98px)", 1)[1][:400]
+        self.assertIn("clip: rect(0 0 0 0)", narrow)
+        self.assertNotIn("display: none", narrow)
+
+    def test_unsent_drafts_belong_to_one_account(self):
+        # Someone else signing in on the same phone must not see your unsent workout.
+        user = self._create_logged_in_user(username="draft_owner")
+        self.assertIn(f"const DRAFT_KEY = 'wt-log-draft:{user.id}';", self.client.get("/log").get_data(as_text=True))
+        self.assertIn(f"const DRAFT_KEY = 'wt-custom-draft:{user.id}';", self.client.get("/retrieve/custom").get_data(as_text=True))
+
+    def test_log_check_points_out_an_exercise_written_twice(self):
+        self._create_logged_in_user(username="twice_user")
+        text = "20/9/26 Legs\nSquat\n100, 5\n\nLeg Press\n200, 10\n\nsquat\n80, 8"
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        states = [(row["name"], row["state"], row["note"]) for row in body["exercises"]]
+        self.assertEqual(states[0][1], "new")
+        self.assertEqual(states[2][1], "twice")
+        self.assertEqual(states[2][2], "Also at no. 1: saved as a second entry")
+        self.assertTrue(body["ok"])  # a note, not a blocker
+
+    def test_a_workout_with_only_a_date_on_the_first_line(self):
+        user = self._create_logged_in_user(username="date_only_user")
+        body = self.client.post("/log/preview", data={"workout_text": "2026-09-20\nBench Press\n60, 8"}).get_json()
+        self.assertEqual((body["date_str"], body["title"]), ("2026-09-20", "Workout"))
+        self.client.post("/log", data={"workout_text": "2026-09-20\nBench Press\n60, 8"})
+        self.assertEqual(self.session.query(WorkoutLog).filter_by(user_id=user.id).one().date.date().isoformat(), "2026-09-20")
+        self.assertEqual(self.client.get("/workout/2026-09-20").status_code, 200)
+
+    def test_a_date_that_does_not_exist_is_not_saved_under_today(self):
+        user = self._create_logged_in_user(username="bad_date_user")
+        body = self.client.post("/log/preview", data={"workout_text": "31/9 Push\nBench Press\n60, 8"}).get_json()
+        self.assertFalse(body["ok"])
+        self.assertEqual(body["errors"][0]["message"], "Line 1: “31/9” isn't a real date. Check the day and month.")
+        self.assertTrue(body["date_invalid"])
+        response = self.client.post("/log", data={"workout_text": "31/9 Push\nBench Press\n60, 8"})
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(self.session.query(WorkoutLog).filter_by(user_id=user.id).count(), 0)
+
+    def test_timed_sets_written_as_times(self):
+        # "Plank\n60s, 45s" used to be skipped ("couldn't read"), and "3 x 60s" was 3 kg for 60.
+        user = self._create_logged_in_user(username="times_user")
+        text = "20/9/26 Core\nPlank\n60s, 45s\n\nDead Hang\n3 x 40s\n\nWall Sit\n1:30 1:00"
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        labels = {row["name"]: row["sets_label"] for row in body["exercises"]}
+        # Only times written: the load is bodyweight, as with "BW, 60 45".
+        self.assertEqual(labels["Plank"], "BW×60s · BW×45s · BW×45s")
+        self.assertEqual(labels["Dead Hang"], "BW×40s · BW×40s · BW×40s")
+        self.assertEqual(labels["Wall Sit"], "BW×90s · BW×60s · BW×60s")
+
+        self.client.post("/log", data={"workout_text": text})
+        logs = {log.exercise: log for log in self.session.query(WorkoutLog).filter_by(user_id=user.id)}
+        self.assertEqual(logs["Wall Sit"].sets_json["reps"], [90, 60, 60])
+        self.assertTrue(logs["Wall Sit"].uses_bodyweight)
+        self.assertGreater(logs["Wall Sit"].estimated_1rm or 0, 0)  # scored at bodyweight, so it charts
+        page = self.client.get("/workout/2026-09-20").get_data(as_text=True)
+        self.assertIn("90s", page)
+
+    def test_retrieve_placeholder_sets_left_as_they_are_are_not_saved(self):
+        # Retrieve writes "1, 1" under an exercise with no history; pasted back untouched it
+        # was saved as real 1 kg x 1 sets.
+        user = self._create_logged_in_user(username="placeholder_user")
+        text = ("20/9/26 - Session 4 - Legs\n\nLeg Press - [10–20]\n1, 1\n\n"
+                "Pull Ups\nbw/4, 1\n\nLeg Extension - [2, 12–20]\n60, 12")
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        states = [(row["name"], row["state"]) for row in body["exercises"]]
+        self.assertEqual(states[:2], [("Leg Press", "skip"), ("Pull Ups", "skip")])
+        self.assertNotEqual(states[2][1], "skip")
+        self.assertTrue(body["ok"])
+        self.assertIn("Retrieve's 1, 1", body["exercises"][0]["note"])
+
+        self.client.post("/log", data={"workout_text": text})
+        saved = [row.exercise for row in self.session.query(WorkoutLog).filter_by(user_id=user.id)]
+        self.assertEqual(saved, ["Leg Extension"])
+
+        # All still placeholders: nothing to save, and it says so.
+        body = self.client.post("/log/preview", data={"workout_text": "21/9/26 Legs\nLeg Press\n1, 1"}).get_json()
+        self.assertFalse(body["ok"])
+
+    def test_log_check_suggests_the_name_behind_a_superset_label(self):
+        user = self._create_logged_in_user(username="superset_user")
+        handle_workout_log(self.session, user, {
+            "date": datetime(2026, 9, 20, 18), "workout_name": "Legs",
+            "exercises": [{"name": "Zercher Squat", "exercise_string": "Zercher Squat\n100, 5",
+                           "weights": [100.0] * 3, "reps": [5] * 3, "valid": True}],
+        })
+        self.session.commit()
+        body = self.client.post("/log/preview", data={"workout_text": "29/9/26 Legs\nA1 Zercher Squat\n100, 5"}).get_json()
+        row = body["exercises"][0]
+        self.assertEqual((row["state"], row["suggestion"], row["fix_line"]), ("suggest", "Zercher Squat", "Zercher Squat"))
+        # The fix button's name says what it does, beyond its visible "Use it".
+        self.assertIn('aria-label="Use it: ${esc(ex.suggestion)} on line ${ex.line}"', self.client.get("/log").get_data(as_text=True))
+
+    def test_log_check_says_when_numbers_could_not_be_read(self):
+        self._create_logged_in_user(username="unread_user")
+        text = "20/9/26 Legs\nSquat\n100/5, 105/4\n\nPlank"
+        body = self.client.post("/log/preview", data={"workout_text": text}).get_json()
+        notes = [(row["state"], row["note"]) for row in body["exercises"]]
+        self.assertEqual(notes, [("skip", "Couldn't read the sets, so this line won't be saved"),
+                                 ("skip", "No numbers, so this line won't be saved")])
 
     def test_shared_workout_page_shows_medals_preview_and_invite_when_logged_out(self):
         from itsdangerous import URLSafeSerializer
@@ -398,6 +1103,54 @@ class TestRouteRegressions(unittest.TestCase):
         pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
         self.assertEqual(self.client.get(f"{pick_path}?list=1").get_json()["sessions"], ["Session 1 - Owner Push"])
 
+    def test_rep_ranges_save_as_clean_lines_and_stay_on_the_page(self):
+        from models import RepRange
+
+        user = self._create_logged_in_user(username="rep_editor")
+        response = self.client.post("/set_exercises", data={
+            "form_type": "save_exercises",
+            "rep_text": "bench press 6-10\nDips: 3x6-12\nbench press: 5 - 8\nPlank",
+        })
+        self.assertEqual(urlsplit(response.headers["Location"]).path, "/set_exercises")
+        saved = self.session.query(RepRange).filter_by(user_id=user.id).one().text_content
+        self.assertEqual(saved, "Bench Press: 5–8\nDips: 3, 6–12")
+
+        # The page lists them as rows to edit in place, each with the muscle group the
+        # Custom workout page would put it in.
+        page = self.client.get("/set_exercises").get_data(as_text=True)
+        self.assertIn('id="rr-data">[["Bench Press", "5\\u20138", "Chest"], ["Dips", "3, 6\\u201312", "Chest"]]', page)
+
+    def test_rep_ranges_are_not_wiped_when_the_page_script_never_ran(self):
+        from models import RepRange
+
+        user = self._create_logged_in_user(username="rep_keeper")
+        self.client.post("/set_exercises", data={"form_type": "save_exercises", "rep_text": "Bench Press: 5-8"})
+
+        # The rows are drawn and rep_text is filled by the page's script; without it Save sends nothing.
+        response = self.client.post("/set_exercises", data={"form_type": "save_exercises", "rep_text": ""})
+        self.assertEqual(urlsplit(response.headers["Location"]).path, "/set_exercises")
+        self.assertEqual(self.session.query(RepRange).filter_by(user_id=user.id).one().text_content, "Bench Press: 5–8")
+
+        # Removing every range on purpose still works: the script marks the form it filled.
+        self.client.post("/set_exercises", data={"form_type": "save_exercises", "rep_text": "", "rep_text_ready": "1"})
+        self.session.expire_all()
+        self.assertEqual(self.session.query(RepRange).filter_by(user_id=user.id).one().text_content, "")
+
+    def test_saving_the_plan_keeps_it_and_stays_on_the_page(self):
+        from models import Plan
+
+        user = self._create_logged_in_user(username="plan_writer", follow_admin=True)
+        response = self.client.post("/set_plan", data={"plan_text": "  Day 1 - Push\nBench Press - [3, 6-8]\n  "})
+        self.assertEqual(urlsplit(response.headers["Location"]).path, "/set_plan")
+        self.session.expire_all()
+        self.assertEqual(self.session.query(Plan).filter_by(user_id=user.id).one().text_content,
+                         "Day 1 - Push\nBench Press - [3, 6-8]")
+        # Writing your own plan stops following the admin's.
+        self.assertFalse(self.session.get(User, user.id).follow_admin_plan)
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertIn("Workout plan saved.", page)
+        self.assertIn("Bench Press - [3, 6-8]", page)
+
     def test_plan_owner_has_no_follow_switch(self):
         owner_id = self._plan_owner_with_plan()
         with self.client.session_transaction() as sess:
@@ -454,6 +1207,29 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertTrue(picked["ok"], picked)
         self.assertIn("Pull Ups", picked["text"])
 
+    def test_retrieve_day_that_is_not_in_the_plan_says_so(self):
+        # It showed "Day 'Session 999' not found in plan." as the workout, with Copy and Share.
+        self._create_logged_in_user(username="stale_link")
+        response = self.client.get("/retrieve/final/Session/999", follow_redirects=True)
+        page = response.get_data(as_text=True)
+        self.assertIn("Session 999 isn&#39;t in your plan any more.", page)
+        self.assertNotIn("not found in plan", page)
+        self.assertEqual(self.client.get("/retrieve/final/Session/1").status_code, 200)
+
+    def test_shortcut_pick_by_number_with_ten_or_more_sessions(self):
+        # "1" was ambiguous (Session 1, 10, 11...) and "0" picked Session 10.
+        from list_of_exercise import DEFAULT_PLAN
+        user = self._create_logged_in_user(username="numbers_user")
+        self.session.add(Plan(user_id=user.id, text_content=DEFAULT_PLAN))
+        self.session.commit()
+        pick_path = urlsplit(self.client.get("/shortcut/pick").get_json()["url"]).path
+        for key, title in (("1", "Session 1 - Chest & Biceps"), ("10", "Session 10"), ("s1", "Session 1 - Chest & Biceps")):
+            picked = self.client.get(pick_path, query_string={"format": "json", "key": key}).get_json()
+            self.assertTrue(picked["ok"], (key, picked))
+            self.assertIn(title, picked["text"], key)
+        for key in ("0", "17"):
+            self.assertFalse(self.client.get(pick_path, query_string={"format": "json", "key": key}).get_json()["ok"], key)
+
     def test_shortcut_key_problems_explain_themselves_to_the_shortcut(self):
         # Empty key (the "paste your key" question was skipped): the app's JSON, not a
         # "not found" web page, so the shortcut shows the message instead of "not reachable".
@@ -506,23 +1282,9 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(selection_page.status_code, 200)
         selection_html = selection_page.get_data(as_text=True)
         self.assertIn("Custom Lift", selection_html)
-        self.assertIn('class="exercise-picker-panel"', selection_html)
-        self.assertIn('id="customSortDialog"', selection_html)
-        self.assertIn('id="selectedExerciseList"', selection_html)
-        self.assertIn('id="reviewExercisesBtn"', selection_html)
-        header_position = selection_html.index('custom-exercise-list-header')
-        self.assertLess(
-            selection_html.index('class="exercise-picker-panel"'),
-            header_position,
-        )
-        self.assertLess(
-            header_position,
-            selection_html.index('id="selectedSection"'),
-        )
-        self.assertLess(
-            header_position,
-            selection_html.index('id="getWorkoutBtn"'),
-        )
+        self.assertIn('id="crGroups"', selection_html)
+        self.assertIn('id="crPicked"', selection_html)
+        self.assertIn('id="crGet"', selection_html)
 
         response = self.client.post(
             "/retrieve/custom",
@@ -534,12 +1296,19 @@ class TestRouteRegressions(unittest.TestCase):
             },
         )
 
+        # The plan is its own page: refreshing it doesn't resend the form or count the pick again.
+        self.assertEqual(response.status_code, 302)
+        plan_url = response.headers["Location"]
+        self.assertEqual(urlsplit(plan_url).path, "/retrieve/custom/plan")
+        response = self.client.get(plan_url)
         self.assertEqual(response.status_code, 200)
+        self.client.get(plan_url)
         page = response.get_data(as_text=True)
         self.assertIn("Custom Workout", page)
-        self.assertIn("Custom Lift - [3, 6-8]", page)
-        self.assertIn("2 Exercises", page)
-        self.assertLess(page.index("Barbell Curl"), page.index("Custom Lift - [3, 6-8]"))
+        # With no sets chosen on the page, the plan's own "[4, 6-8]" stands.
+        self.assertIn("Custom Lift - [4, 6-8]", page)
+        self.assertIn("2 exercises", page)
+        self.assertLess(page.index("Barbell Curl"), page.index("Custom Lift - [4, 6-8]"))
         self.assertEqual(
             self.session.query(CustomRetrievalEvent)
             .filter_by(user_id=user.id)
@@ -547,63 +1316,22 @@ class TestRouteRegressions(unittest.TestCase):
             2,
         )
 
-    def test_custom_retrieve_review_restores_a_draft_for_adding_exercises(self):
-        user = self._create_logged_in_user(username="custom_retrieve_review_user")
-        self.session.add(
-            Plan(
-                user_id=user.id,
-                text_content="Custom Focus 1\nCustom Lift - [4, 6-8]",
-            )
-        )
+    def test_custom_plan_address_with_unknown_exercises_goes_back_to_the_picker(self):
+        self._create_logged_in_user(username="custom_plan_bad_link")
+        self.session.add(Plan(user_id=self.session.query(User).filter_by(username="custom_plan_bad_link").one().id,
+                              text_content="Day 1\nCustom Lift - [4, 6-8]"))
         self.session.commit()
+        for query in ("", "e=not-an-exercise", f"e={normalize_exercise_name('Custom Lift')}&s=99"):
+            response = self.client.get(f"/retrieve/custom/plan?{query}")
+            self.assertEqual(response.status_code, 302, query)
+            self.assertTrue(response.headers["Location"].endswith("/retrieve/custom"), query)
 
-        custom_lift_key = normalize_exercise_name("Custom Lift")
-        review_start = self.client.post(
-            "/retrieve/custom",
-            data={
-                "flow": "review",
-                "exercise": [custom_lift_key],
-                "two_set_exercise": [custom_lift_key],
-            },
-        )
-
-        self.assertEqual(review_start.status_code, 302)
-        self.assertIn("/retrieve/custom/review", review_start.headers["Location"])
-
-        review_page = self.client.get("/retrieve/custom/review")
-        self.assertEqual(review_page.status_code, 200)
-        review_html = review_page.get_data(as_text=True)
-        self.assertIn("Review Exercises", review_html)
-        self.assertIn("Custom Lift", review_html)
-        self.assertIn('id="reviewGetWorkoutBtn"', review_html)
-
-        add_more = self.client.post(
-            "/retrieve/custom/review",
-            data={
-                "review_action": "add_more",
-                "exercise": [custom_lift_key],
-                "two_set_exercise": [custom_lift_key],
-            },
-        )
-        self.assertEqual(add_more.status_code, 302)
-        self.assertIn("/retrieve/custom", add_more.headers["Location"])
-
-        selector_page = self.client.get("/retrieve/custom")
-        selector_html = selector_page.get_data(as_text=True)
-        self.assertIn(f'let selectedKeys = ["{custom_lift_key}"];', selector_html)
-        self.assertIn(f'new Set(["{custom_lift_key}"])', selector_html)
-
-        final_workout = self.client.post(
-            "/retrieve/custom",
-            data={
-                "exercise": [custom_lift_key],
-                "two_set_exercise": [custom_lift_key],
-            },
-        )
-        self.assertEqual(final_workout.status_code, 200)
-        self.assertIn("Custom Lift - [2, 6-8]", final_workout.get_data(as_text=True))
-        with self.client.session_transaction() as browser_session:
-            self.assertNotIn("custom_retrieval_draft", browser_session)
+    def test_custom_retrieve_review_page_now_lives_on_the_picker(self):
+        self._create_logged_in_user(username="custom_retrieve_review_user")
+        for method in (self.client.get, self.client.post):
+            response = method("/retrieve/custom/review")
+            self.assertEqual(response.status_code, 302)
+            self.assertTrue(response.headers["Location"].endswith("/retrieve/custom"))
 
     def test_custom_retrieve_two_set_override_replaces_plan_set_target(self):
         user = self._create_logged_in_user(username="custom_retrieve_two_sets_user")
@@ -622,40 +1350,11 @@ class TestRouteRegressions(unittest.TestCase):
                 "exercise": [custom_lift_key],
                 "two_set_exercise": [custom_lift_key],
             },
+            follow_redirects=True,
         )
 
         self.assertEqual(response.status_code, 200)
         self.assertIn("Custom Lift - [2, 6-8]", response.get_data(as_text=True))
-
-    def test_custom_retrieve_prefers_recent_retrieval_frequency(self):
-        user = self._create_logged_in_user(username="custom_retrieve_ranking_user")
-        walking_lunge_key = normalize_exercise_name("Walking Dumbbell Lunges")
-        self.session.add_all(
-            [
-                CustomRetrievalEvent(
-                    user_id=user.id,
-                    exercise_key=walking_lunge_key,
-                    retrieved_at=datetime.now() - timedelta(days=1),
-                ),
-                CustomRetrievalEvent(
-                    user_id=user.id,
-                    exercise_key=walking_lunge_key,
-                    retrieved_at=datetime.now() - timedelta(days=2),
-                ),
-                CustomRetrievalEvent(
-                    user_id=user.id,
-                    exercise_key=normalize_exercise_name("Flat Dumbbell Press"),
-                    retrieved_at=datetime.now() - timedelta(days=100),
-                ),
-            ]
-        )
-        self.session.commit()
-
-        response = self.client.get("/retrieve/custom")
-
-        self.assertEqual(response.status_code, 200)
-        page = response.get_data(as_text=True)
-        self.assertLess(page.index("Walking Dumbbell Lunges"), page.index("Barbell Curl"))
 
     def test_custom_retrieve_sort_preference_is_saved_per_user(self):
         user = self._create_logged_in_user(username="custom_retrieve_sort_user")
@@ -669,12 +1368,6 @@ class TestRouteRegressions(unittest.TestCase):
         self.assertEqual(response.get_json(), {"ok": True, "sort_mode": "alpha_desc"})
         preference = self.session.query(CustomRetrievalPreference).filter_by(user_id=user.id).one()
         self.assertEqual(preference.sort_mode, "alpha_desc")
-
-        selection_page = self.client.get("/retrieve/custom")
-        self.assertIn(
-            'data-sort-mode="alpha_desc"',
-            selection_page.get_data(as_text=True),
-        )
 
         invalid_response = self.client.post(
             "/retrieve/custom/sort-preference",
@@ -842,6 +1535,55 @@ class TestRouteRegressions(unittest.TestCase):
         stored_user = self.session.query(User).filter_by(id=user.id).one()
         self.assertEqual(stored_user.profile_image, put_kwargs["Key"])
 
+    def test_deleting_an_account_removes_its_photo_too(self):
+        # The photo lives in storage at a public address; it outlived the account.
+        admin = self._create_logged_in_user(username="photo_admin")
+        self.session.query(User).filter_by(id=admin.id).update({"role": UserRole.ADMIN})
+        target = User(username="leaving", email="leaving@example.com", is_verified=True,
+                      profile_image="avatars/user_99_abcd1234.png")
+        self.session.add(target)
+        self.session.commit()
+        with patch("workout_tracker.routes.admin.delete_profile_image") as delete_photo, \
+             patch("workout_tracker.routes.admin.email_queue"), \
+             patch("services.admin.Session", self.session):
+            self.client.post("/admin/delete-user", data={"user_id": target.id, "deletion_reason": "Asked to leave"})
+        delete_photo.assert_called_once_with("avatars/user_99_abcd1234.png")
+        self.assertIsNone(self.session.query(User).filter_by(username="leaving").first())
+
+    def test_delete_profile_image_removes_a_local_photo(self):
+        import os
+        import tempfile
+        from utils import profile_images
+
+        path = os.path.join(tempfile.mkdtemp(), "user_1_abcd1234.png")
+        with open(path, "wb") as f:
+            f.write(b"png")
+        with patch("utils.profile_images.get_local_profile_image_path", return_value=path):
+            profile_images.delete_profile_image("avatars/user_1_abcd1234.png")
+        self.assertFalse(os.path.exists(path))
+        profile_images.delete_profile_image(None)  # nothing to do
+
+    def test_oversized_uploads_are_refused_politely(self):
+        user = self._create_logged_in_user(username="big_upload_user")
+        # A small file that unpacks into a 48-megapixel image isn't decoded.
+        image_bytes = BytesIO()
+        Image.new("1", (8000, 6000)).save(image_bytes, format="PNG")
+        image_bytes.seek(0)
+        s3 = Mock()
+        with patch("workout_tracker.routes.auth.has_r2_profile_image_storage", return_value=True), \
+             patch("workout_tracker.routes.auth.get_r2_profile_image_client", return_value=s3):
+            response = self.client.post("/settings", data={"form_type": "profile_photo",
+                                                           "profile_image": (image_bytes, "huge.png")},
+                                        content_type="multipart/form-data", follow_redirects=True)
+        self.assertIn("That photo is too large", response.get_data(as_text=True))
+        s3.put_object.assert_not_called()
+        self.assertIsNone(self.session.query(User).filter_by(id=user.id).one().profile_image)
+
+        # A request over the limit gets a page that says so, not a bare error.
+        too_big = self.client.post("/settings", data={"form_type": "profile", "full_name": "x" * (17 * 1024 * 1024)})
+        self.assertEqual(too_big.status_code, 413)
+        self.assertIn("That file is too large", too_big.get_data(as_text=True))
+
     def test_profile_photo_reupload_gets_new_url_and_deletes_old_photo(self):
         user = self._create_logged_in_user(username="avatar_reupload_user")
         self.session.get(User, user.id).profile_image = f"avatars/user_{user.id}.png"
@@ -1000,6 +1742,38 @@ class TestRouteRegressions(unittest.TestCase):
         page = response.get_data(as_text=True)
         self.assertIn("Days that failed", page)
         self.assertIn("32/13", page)
+
+    def test_bulk_import_exercise_names_starting_with_a_number_are_not_dates(self):
+        self._create_logged_in_user(username="bulk_decline")
+        payload = "\n".join([
+            "12/01/26 Push",
+            "Flat Dumbbell Press",
+            "30, 8",
+            "3 Decline Press",
+            "40, 10",
+            "2 Marching Lunges",
+            "20, 12",
+        ])
+        page = self.client.post("/bulk-import", data={"bulk_workouts_text": payload, "confirm_import": "0"}).get_data(as_text=True)
+        # One day, not three (it used to read "3 Dec" and "2 Mar" as new days).
+        self.assertIn("12-01-2026 – 12-01-2026", page)
+        self.assertNotIn("Days that failed", page)
+
+    def test_bulk_import_reads_iso_dotted_and_weekday_dates(self):
+        user = self._create_logged_in_user(username="bulk_iso")
+        payload = "\n".join([
+            "2026-01-10 Push", "Flat Dumbbell Press", "30, 8", "",
+            "Monday 12/01/26 Pull", "Barbell Row", "12.5, 10", "",
+            "14.01.2026 Legs", "Leg Press", "200, 10",
+        ])
+        page = self.client.post("/bulk-import", data={"bulk_workouts_text": payload, "confirm_import": "1"},
+                                follow_redirects=True).get_data(as_text=True)
+        self.assertNotIn("No workout days found", page)
+        days = sorted({log.date.date().isoformat() for log in self.session.query(WorkoutLog).filter_by(user_id=user.id)})
+        # Three days: "12.5, 10" under Barbell Row is a set, not 12 May.
+        self.assertEqual(days, ["2026-01-10", "2026-01-12", "2026-01-14"])
+        titles = {log.date.date().isoformat(): log.workout_name for log in self.session.query(WorkoutLog).filter_by(user_id=user.id)}
+        self.assertEqual(titles["2026-01-12"], "Pull")
 
     def test_bulk_import_missing_year_rolls_forward_chronologically(self):
         inferred = _infer_bulk_import_dates(

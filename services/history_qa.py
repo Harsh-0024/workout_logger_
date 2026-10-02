@@ -10,6 +10,7 @@ from config import Config
 from models import WorkoutLog
 from services.stats import get_average_growth_data, get_chart_data
 from utils.logger import logger
+from utils.dates import utc_now
 
 
 def _exercise_candidates(exercise_name: str) -> List[str]:
@@ -69,7 +70,7 @@ def _parse_day_month(text: str) -> Optional[date]:
     if not month_num:
         return None
 
-    today = datetime.utcnow().date()
+    today = utc_now().date()
     year = today.year
     candidate = None
     try:
@@ -252,12 +253,36 @@ def _pull_like(exercise_name: str) -> bool:
     return any(k in s for k in keywords)
 
 
+def _push_like(exercise_name: str) -> bool:
+    s = (exercise_name or '').strip().lower()
+    keywords = ('press', 'bench', 'dip', 'fly', 'flye', 'push', 'lateral raise', 'front raise', 'tricep', 'skull')
+    return any(k in s for k in keywords)
+
+
+def _legs_like(exercise_name: str) -> bool:
+    s = (exercise_name or '').strip().lower()
+    keywords = ('squat', 'leg press', 'leg extension', 'leg curl', 'lunge', 'calf', 'hamstring', 'quad',
+                'glute', 'hip thrust', 'romanian', 'rdl', 'step up', 'hack')
+    return any(k in s for k in keywords)
+
+
+# Which of a day's exercises count towards "best <type> day". Before, only "pull" was filtered,
+# so "best push day" could name a legs day.
+_DAY_TYPE_FILTERS = {
+    'pull': _pull_like,
+    'push': lambda name: _push_like(name) and not _legs_like(name),  # not "Leg Press"
+    'legs': _legs_like,
+    'lower': _legs_like,
+    'upper': lambda name: (_pull_like(name) or _push_like(name)) and not _legs_like(name),
+}
+
+
 def _answer_best_day(db_session, user, *, day_type: str, since_days: int) -> Dict[str, Any]:
     day_type_norm = (day_type or '').strip().lower()
     since_days = int(since_days or 30)
     since_days = max(1, min(since_days, 365))
 
-    cutoff_dt = datetime.utcnow() - timedelta(days=since_days)
+    cutoff_dt = utc_now() - timedelta(days=since_days)
 
     logs = (
         db_session.query(WorkoutLog)
@@ -278,10 +303,8 @@ def _answer_best_day(db_session, user, *, day_type: str, since_days: int) -> Dic
 
     scored: List[Tuple[float, date, List[WorkoutLog]]] = []
     for d, day_logs in by_day.items():
-        if day_type_norm == 'pull':
-            filtered = [l for l in day_logs if _pull_like(l.exercise)]
-        else:
-            filtered = list(day_logs)
+        keep = _DAY_TYPE_FILTERS.get(day_type_norm)
+        filtered = [l for l in day_logs if keep(l.exercise)] if keep else list(day_logs)
 
         if not filtered:
             continue

@@ -1,3 +1,4 @@
+import gzip
 import os
 import secrets
 import urllib.parse
@@ -50,10 +51,45 @@ def create_app(config_object=Config, init_db: bool = True):
     if app.config.get('WTF_CSRF_ENABLED'):
         csrf = CSRFProtect(app)
 
+    # Pages carry ~120-200 KB of inline styles; gzipped they are ~20-40 KB, which matters on a
+    # weak gym signal. Only text, only when the browser asks, never files or streams (and a proxy
+    # that compresses too leaves an already-compressed response alone).
+    compressible = ('text/', 'application/json', 'application/javascript', 'application/manifest+json', 'image/svg+xml')
+
+    @app.after_request
+    def gzip_response(response):
+        if (
+            response.direct_passthrough
+            or response.is_streamed
+            or response.status_code < 200
+            or response.status_code in (204, 304)
+            or 'Content-Encoding' in response.headers
+            or 'gzip' not in (request.headers.get('Accept-Encoding') or '').lower()
+            or not (response.mimetype or '').startswith(compressible)
+        ):
+            return response
+        body = response.get_data()
+        if len(body) < 1024:
+            return response
+        response.set_data(gzip.compress(body, compresslevel=6))
+        response.headers['Content-Encoding'] = 'gzip'
+        response.headers['Content-Length'] = str(len(response.get_data()))
+        response.vary.add('Accept-Encoding')
+        return response
+
+    @app.after_request
+    def security_headers(response):
+        # Browsers take files only as the type they're sent as, and no other site can
+        # show these pages inside a frame (a disguised "Delete" button, say).
+        response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+        response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+        return response
+
     @app.context_processor
     def inject_feature_flags():
         return {
             'ENABLE_CSRF': bool(app.config.get('WTF_CSRF_ENABLED')),
+            'current_year': datetime.now().year,
         }
 
     app.jinja_env.globals['iphone_launch_screens'] = [
@@ -76,7 +112,7 @@ def create_app(config_object=Config, init_db: bool = True):
     @login_manager.user_loader
     def load_user(user_id):
         try:
-            return Session.query(User).get(int(user_id))
+            return Session.get(User, int(user_id))
         except Exception:
             return None
 
@@ -159,7 +195,12 @@ def create_app(config_object=Config, init_db: bool = True):
                 'error': SHORTCUT_KEY_MISSING,
                 'server': deployment_name(request.host),
             }), 404
-        return render_template('error.html', error_code=404, error_message="Page not found"), 404
+        return render_template(
+            'error.html',
+            error_code=404,
+            error_message="Page not found",
+            error_detail="That page doesn't exist, or it has moved.",
+        ), 404
 
     @app.errorhandler(CSRFError)
     def handle_csrf_error(error):
@@ -174,14 +215,37 @@ def create_app(config_object=Config, init_db: bool = True):
                 )
         except Exception:
             pass
-        return render_template('error.html', error_code=400, error_message="Invalid request"), 400
+        return render_template(
+            'error.html',
+            error_code=400,
+            error_message="This page is out of date",
+            error_detail="Nothing was saved. Go back, refresh the page and try again.",
+        ), 400
+
+    @app.errorhandler(413)
+    def too_large(error):
+        limit_mb = int((app.config.get('MAX_CONTENT_LENGTH') or 0) / (1024 * 1024))
+        message = f"That's more than {limit_mb} MB. Please pick a smaller file."
+        if request.path.startswith('/api/') or request.path.startswith('/shortcut/'):
+            return jsonify({'ok': False, 'error': message}), 413
+        return render_template(
+            'error.html',
+            error_code=413,
+            error_message="That file is too large",
+            error_detail=message,
+        ), 413
 
     @app.errorhandler(500)
     def internal_error(error):
         logger.error(f"Internal server error: {error}", exc_info=True)
         Session.rollback()
         return (
-            render_template('error.html', error_code=500, error_message="Internal server error"),
+            render_template(
+                'error.html',
+                error_code=500,
+                error_message="Something went wrong",
+                error_detail="That didn't work on our side. Please try again in a moment.",
+            ),
             500,
         )
 

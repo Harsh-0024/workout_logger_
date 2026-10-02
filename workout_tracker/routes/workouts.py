@@ -6,7 +6,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-from flask import Response, flash, jsonify, redirect, render_template, request, url_for
+from flask import Response, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import login_required, current_user
 from flask_wtf.csrf import generate_csrf
 from itsdangerous import URLSafeSerializer, BadSignature
@@ -14,10 +14,8 @@ from sqlalchemy import desc, func
 
 from list_of_exercise import get_workout_days, list_of_exercises
 from models import Session, User, WorkoutLog, UserApiKey, ShortcutKeyMap, RepRange
-from parsers.workout import workout_parser
 from services.logging import (
     handle_workout_log,
-    compute_workout_summary_for_date,
     classify_exercise_performance,
     resolve_timed_exercise_status,
     set_timed_exercise_preference,
@@ -29,6 +27,8 @@ from services.logging import (
     refresh_best_lift_pointers,
 )
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
+from parsers.workout import workout_parser
+from services.log_check import check_workout_text, public_check
 from services import workout_insights as insights
 from services.exercise_matching import build_name_index, normalize_exercise_name, resolve_equivalent_names
 from services.bodyweight import (
@@ -41,7 +41,8 @@ from utils.errors import ParsingError, ValidationError, UserNotFoundError
 from utils.logger import logger
 from utils.profile_images import get_profile_image_url
 from utils.rich_text import to_plain_text
-from utils.validators import sanitize_text_input, validate_username
+from utils.validators import is_safe_redirect_url, sanitize_text_input, validate_username
+from utils.dates import utc_now
 
 
 SHORTCUT_KEY_HELP = (
@@ -50,6 +51,12 @@ SHORTCUT_KEY_HELP = (
 )
 SHORTCUT_KEY_INVALID = "Your shortcut key isn't valid. " + SHORTCUT_KEY_HELP
 SHORTCUT_KEY_MISSING = "Your shortcut key is missing. " + SHORTCUT_KEY_HELP
+SHORTCUT_DAY_TAKEN = (
+    "That day already has a workout, so nothing was saved. "
+    "To add these exercises to it, paste them on the Log page and choose Add to that day."
+)
+# What the workout page says after a save from the Log page (timed questions, skipped lines).
+LOG_SAVED_SESSION_KEY = 'log_saved'
 SAVE_WORKOUT_FAILED = "Error saving workout. Please try again."
 
 
@@ -309,7 +316,7 @@ def register_workout_routes(app):
 
         return None, None
 
-    def get_recent_workouts(user, limit=50):
+    def get_recent_workouts(user, limit=50, include_details=True):
         try:
             logs = (
                 Session.query(WorkoutLog)
@@ -327,21 +334,23 @@ def register_workout_routes(app):
                     by_date[date_key] = {
                         'date': log.date,
                         'title': _clean_workout_title(log.workout_name or "Workout"),
-                        'exercises': set(),
+                        'exercises': [],
                         'logs': [],
                     }
-                by_date[date_key]['exercises'].add(log.exercise)
+                # Exercises in the order they were logged.
+                if log.exercise not in by_date[date_key]['exercises']:
+                    by_date[date_key]['exercises'].append(log.exercise)
                 by_date[date_key]['logs'].append(log)
 
             for date_key in sorted(by_date.keys(), reverse=True):
                 item = by_date[date_key]
-                exercise_list = sorted(item['exercises'])
+                exercise_list = item['exercises']
                 workouts.append({
                     'date': item['date'],
                     'title': item['title'],
                     'exercises': ", ".join(exercise_list),
                     'exercise_list': exercise_list,
-                    'exercise_details': build_exercise_text(item['logs']),
+                    'exercise_details': build_exercise_text(item['logs']) if include_details else '',
                 })
                 if limit is not None and len(workouts) >= limit:
                     break
@@ -389,6 +398,39 @@ def register_workout_routes(app):
                 'latest_workout': None,
             }
 
+    _SESSION_TITLE_RE = re.compile(r"^(session\s+\d+)\s*[-–—:]\s*(.+)$", re.IGNORECASE)
+
+    def _home_history(workouts):
+        """Workouts grouped by month, newest first, for Home and All workouts."""
+        months = []
+        for w in workouts:
+            d = w['date'].date() if isinstance(w['date'], datetime) else w['date']
+            title = w.get('title') or 'Workout'
+            session_label = ''
+            match = _SESSION_TITLE_RE.match(title)
+            if match:
+                session_label = match.group(1).title()
+                title = match.group(2).strip()
+            key = (d.year, d.month)
+            if not months or months[-1]['key'] != key:
+                months.append({'key': key, 'label': d.strftime('%B %Y'), 'items': []})
+            months[-1]['items'].append({
+                'iso': d.isoformat(),
+                'day': d.day,
+                'weekday': d.strftime('%a'),
+                'date_label': f"{d.strftime('%a')}, {d.day} {d.strftime('%b %Y')}",
+                'title': title,
+                'full_title': w.get('title') or 'Workout',
+                'session_label': session_label,
+                'exercises': w.get('exercise_list') or [],
+                'search': ' '.join([
+                    w.get('title') or '',
+                    d.strftime('%Y-%m-%d'), d.strftime('%d-%m-%y'), f"{d.day} {d.strftime('%b %B %Y %A')}",
+                    w.get('exercises') or '',
+                ]).lower(),
+            })
+        return months
+
     def index():
         if current_user.is_authenticated:
             return redirect(url_for('user_dashboard', username=current_user.username))
@@ -414,15 +456,19 @@ def register_workout_routes(app):
                 flash("You can only view your own dashboard.", "error")
                 return redirect(url_for('user_dashboard', username=normalized_current or current_user.username))
 
-            recent_workouts = get_recent_workouts(user, limit=250)
+            # Home only shows the last few; the full list lives on /workouts.
+            recent_workouts = get_recent_workouts(user, limit=3, include_details=False)
+            recent = [item for month in _home_history(recent_workouts) for item in month['items']]
 
             profile_image_url = get_profile_image_url(getattr(user, 'profile_image', None))
 
             display_name = (user.full_name or user.username or '').strip()
+            first_name = display_name.split()[0] if display_name else ''
             return render_template(
                 'index.html',
-                display_name=display_name,
-                recent_workouts=recent_workouts,
+                first_name=first_name,
+                initial=(display_name[:1] or '?').upper(),
+                recent=recent,
                 profile_image_url=profile_image_url,
             )
         except (ValidationError, UserNotFoundError) as e:
@@ -473,7 +519,7 @@ def register_workout_routes(app):
                 parsed = urlsplit(return_to)
                 if (not parsed.scheme) and (not parsed.netloc):
                     candidate = parsed.path or ''
-                    if candidate.startswith('/workout/') or candidate.startswith('/stats'):
+                    if candidate.startswith('/workout/') or candidate.startswith('/stats') or candidate == '/workouts':
                         back_url = candidate + ((f"?{parsed.query}") if parsed.query else '')
 
             current_workout_url = url_for('view_workout', date_str=date_str)
@@ -671,6 +717,8 @@ def register_workout_routes(app):
                     )
                 rows.append({
                     "name": log.exercise,
+                    # Numbers saved without an exercise name (the parser's placeholder).
+                    "missing_name": log.exercise == "Unknown Exercise",
                     "performance_key": perf.get("key"),
                     "performance_label": perf.get("label"),
                     "sets_line": insights.format_sets_line(
@@ -701,6 +749,11 @@ def register_workout_routes(app):
             share_token = _make_share_token(user.id, workout_date)
             share_url = url_for('shared_workout', token=share_token, _external=True)
 
+            saved = None
+            saved_state = session.get(LOG_SAVED_SESSION_KEY)
+            if request.args.get('saved') and isinstance(saved_state, dict) and saved_state.get('date') == date_str:
+                saved = saved_state
+
             return render_template(
                 'workout_detail.html',
                 date=date_str,
@@ -713,9 +766,11 @@ def register_workout_routes(app):
                 missing_bw_exercises=sorted(missing_bw_exercises),
                 share_url=share_url,
                 back_url=back_url,
+                saved=saved,
+                missing_name_count=sum(1 for row in rows if row.get("missing_name")),
             )
         except ValueError:
-            flash("Invalid date format.", "error")
+            flash("That link doesn't point to a workout.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
         except Exception as e:
             logger.error(f"Error viewing workout: {e}", exc_info=True)
@@ -724,43 +779,15 @@ def register_workout_routes(app):
 
     @login_required
     def workout_summary(date_str):
-        user = current_user
-        try:
-            workout_day = datetime.strptime(date_str, '%Y-%m-%d').date()
-        except ValueError:
-            flash("Invalid date format.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
-
-        summary, exercise_count, set_count = compute_workout_summary_for_date(Session, user, workout_day)
-        if not summary:
-            flash("Workout not found.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
-        timed_prompts = []
-        seen_timed_prompt_keys = set()
-        for row in summary:
-            if not row.get("timed_prompt_needed"):
-                continue
-            exercise_name = str(row.get("timed_prompt_exercise") or row.get("name") or "").strip()
-            if not exercise_name:
-                continue
-            dedup_key = exercise_name.lower()
-            if dedup_key in seen_timed_prompt_keys:
-                continue
-            seen_timed_prompt_keys.add(dedup_key)
-            timed_prompts.append({"exercise": exercise_name})
-
-        return render_template(
-            'result.html',
-            summary=summary,
-            date=date_str,
-            exercise_count=int(exercise_count or 0),
-            set_count=int(set_count or 0),
-            timed_prompts=timed_prompts,
-        )
+        # Old post-log summary link (Shortcut replies sent before the redesign): the workout page shows it all.
+        return redirect(url_for('view_workout', date_str=date_str))
 
     @login_required
     def workout_history():
-        return redirect(url_for('user_dashboard', username=current_user.username))
+        workouts = get_recent_workouts(current_user, limit=None, include_details=False)
+        count = len(workouts)
+        subtitle = f"{count} workout{'' if count == 1 else 's'} logged" if count else ''
+        return render_template('workout_history.html', history=_home_history(workouts), subtitle=subtitle)
 
     def _recommend_workout_payload(
         user,
@@ -1443,7 +1470,7 @@ def register_workout_routes(app):
                     }
                 )
 
-            today = datetime.utcnow().date()
+            today = utc_now().date()
             matched_items: list[tuple[datetime.date, str, int]] = []
             category_trained: dict[str, datetime.date] = {}
             session_evidence_items: list[tuple[datetime.date, dict]] = []
@@ -2069,7 +2096,7 @@ def register_workout_routes(app):
                     if key_id:
                         key_row = Session.query(UserApiKey).filter_by(id=key_id, user_id=user.id).first()
                         if key_row:
-                            key_row.last_used_at = datetime.utcnow()
+                            key_row.last_used_at = utc_now()
                             Session.commit()
                     source = "gemini"
                 except GeminiServiceError as e:
@@ -2474,6 +2501,8 @@ def register_workout_routes(app):
                     f"{cat_name} {day_id}",
                     f"{cat_name}:{day_id}",
                     f"{cat_name}-{day_id}",
+                    # The day's number alone ("1" is Session 1, not every session with a 1 in it).
+                    str(day_id),
                 }
                 if cat_name.lower() == "session":
                     aliases.add(f"session {day_id}")
@@ -2524,6 +2553,9 @@ def register_workout_routes(app):
 
         partial_candidates: list[dict] = []
         for alias, items in alias_map.items():
+            # A number only ever matches a day's own number (above): "0" isn't part of Session 10.
+            if key.isdigit() or alias.isdigit():
+                continue
             if key in alias or alias in key:
                 partial_candidates.extend(items)
         partial = _unique_entries(partial_candidates)
@@ -2598,7 +2630,7 @@ def register_workout_routes(app):
             user_id = payload.get("user_id")
             if not user_id:
                 raise BadSignature("Missing user")
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
@@ -2636,7 +2668,7 @@ def register_workout_routes(app):
             user_id = payload.get("user_id")
             if not user_id:
                 raise BadSignature("Missing user")
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
@@ -2673,7 +2705,7 @@ def register_workout_routes(app):
             user_id = payload.get("user_id")
             if not user_id:
                 raise BadSignature("Missing user")
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 raise BadSignature("Unknown user")
         except BadSignature:
@@ -2764,7 +2796,22 @@ def register_workout_routes(app):
             )
 
         date_str = result.get("date_str")
-        detail_url = url_for('workout_summary', date_str=date_str, _external=True)
+        detail_url = url_for('view_workout', date_str=date_str, _external=True)
+        if result.get("already_exists") and not _same_workout_already_saved(
+                user, raw_text, datetime.strptime(date_str, '%Y-%m-%d')):
+            # A different workout for a day that has one: nothing was saved, so don't say it was.
+            return _shortcut_json({
+                "ok": False,
+                "error": SHORTCUT_DAY_TAKEN,
+                "date": date_str,
+                "result_url": detail_url,
+                "already_exists": True,
+                "input_source": source,
+            })
+        skipped = result.get("skipped") or []
+        success_message = "Workout logged."
+        if skipped:
+            success_message += " Not saved: " + " ".join(skipped)
         return _shortcut_json(
             {
                 "ok": True,
@@ -2776,7 +2823,7 @@ def register_workout_routes(app):
                 "input_source": source,
                 "already_exists": bool(result.get("already_exists")),
                 "message": result.get("message") or (
-                    "Workout already there." if result.get("already_exists") else "Workout logged successfully."
+                    "Workout already there." if result.get("already_exists") else success_message
                 ),
             }
         )
@@ -3000,24 +3047,33 @@ def register_workout_routes(app):
             workout_name = logs[0].workout_name or "Workout"
             workout_text = build_exercise_text(logs)
 
+            def render_edit(*, title=None, date_value=None, text=None, errors=None, status=200):
+                return render_template(
+                    'workout_edit.html',
+                    workout_date=date_value or workout_date.strftime('%Y-%m-%d'),
+                    workout_name=title if title is not None else workout_name,
+                    workout_text=text if text is not None else workout_text,
+                    date=date_str,
+                    errors=errors or [],
+                    exercise_list=_log_name_suggestions(user),
+                ), status
+
             if request.method == 'POST':
                 title = sanitize_text_input(request.form.get('workout_title', ''), max_length=100) or "Workout"
                 date_input = request.form.get('workout_date', '').strip()
                 exercises_input = request.form.get('workout_text', '').strip()
 
+                keep = dict(title=title, date_value=date_input, text=exercises_input, status=422)
                 if not date_input:
-                    flash("Please select a workout date.", "error")
-                    return redirect(url_for('edit_workout', date_str=date_str))
+                    return render_edit(errors=["Pick a date for this workout."], **keep)
 
                 if not exercises_input:
-                    flash("Please enter workout exercises.", "error")
-                    return redirect(url_for('edit_workout', date_str=date_str))
+                    return render_edit(errors=["Add at least one exercise."], **keep)
 
                 try:
                     new_date = datetime.strptime(date_input, '%Y-%m-%d').date()
                 except ValueError:
-                    flash("Invalid date format.", "error")
-                    return redirect(url_for('edit_workout', date_str=date_str))
+                    return render_edit(errors=["Pick a valid date."], **keep)
 
                 new_start_dt = datetime.combine(new_date, datetime.min.time())
                 new_end_dt = new_start_dt + timedelta(days=1)
@@ -3031,18 +3087,24 @@ def register_workout_routes(app):
                         .first()
                     )
                     if conflict:
-                        flash("A workout already exists on that date. Edit that day instead.", "error")
-                        return redirect(url_for('edit_workout', date_str=date_str))
+                        return render_edit(errors=["That date already has a workout. Edit that day instead."], **keep)
 
-                header_date = new_date.strftime('%d/%m')
-                raw_text = f"{header_date} {title}\n{exercises_input}"
-
-                parsed = workout_parser(raw_text, bodyweight=user.bodyweight, preserve_bodyweight_offsets=True)
-                if not parsed:
-                    raise ParsingError("Could not parse workout data. Please check the format.")
+                header = f"{new_date.day}/{new_date.month}/{new_date.strftime('%y')} {title}"
+                check = check_workout_text(Session, user, exercises_input, header=header)
+                if check.get("errors"):
+                    # Keep the edits so they can be fixed in place.
+                    return render_edit(
+                        title=title, date_value=date_input, text=exercises_input,
+                        errors=[e["message"] for e in check["errors"]], status=422,
+                    )
+                parsed = check["parsed"]
 
                 parsed['date'] = new_start_dt
                 parsed['workout_name'] = title
+                # The edit box has no bodyweight line: keep the day's, not today's.
+                logged_bodyweight = next((log.bodyweight for log in logs if log.bodyweight), None)
+                if parsed.get('bodyweight') is None and logged_bodyweight:
+                    parsed['logged_bodyweight'] = logged_bodyweight
 
                 old_exercises = [log.exercise for log in logs]
 
@@ -3050,23 +3112,20 @@ def register_workout_routes(app):
                     WorkoutLog.date >= start_dt,
                     WorkoutLog.date < end_dt,
                 ).delete(synchronize_session=False)
+                # The rows are gone; forget the loaded copies so the new rows never meet them.
+                for log in logs:
+                    Session.expunge(log)
 
                 handle_workout_log(Session, user, parsed)
                 refresh_best_lift_pointers(Session, user, old_exercises)
                 Session.commit()
 
-                flash("Workout updated successfully!", "success")
+                flash("Workout saved.", "success")
                 return redirect(url_for('view_workout', date_str=new_date.strftime('%Y-%m-%d')))
 
-            return render_template(
-                'workout_edit.html',
-                workout_date=workout_date.strftime('%Y-%m-%d'),
-                workout_name=workout_name,
-                workout_text=workout_text,
-                date=date_str,
-            )
+            return render_edit()[0]
         except ValueError:
-            flash("Invalid date format.", "error")
+            flash("That link doesn't point to a workout.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
         except ParsingError as e:
             Session.rollback()
@@ -3075,7 +3134,7 @@ def register_workout_routes(app):
         except Exception as e:
             Session.rollback()
             logger.error(f"Error editing workout: {e}", exc_info=True)
-            flash("Error updating workout.", "error")
+            flash("Couldn't save the workout. Please try again.", "error")
             return redirect(url_for('edit_workout', date_str=date_str))
 
     @login_required
@@ -3110,13 +3169,13 @@ def register_workout_routes(app):
             Session.commit()
 
             if deleted:
-                flash("Workout day deleted successfully.", "success")
+                flash("Workout deleted.", "success")
             else:
                 flash("Workout not found.", "error")
 
             return redirect(url_for('user_dashboard', username=user.username))
         except ValueError:
-            flash("Invalid date format.", "error")
+            flash("That link doesn't point to a workout.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
         except Exception as e:
             Session.rollback()
@@ -3131,7 +3190,7 @@ def register_workout_routes(app):
         selected_dates = request.form.getlist('selected_dates')
         if not selected_dates:
             flash("Select at least one workout day to delete.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
 
         unique_dates = []
         seen = set()
@@ -3144,7 +3203,7 @@ def register_workout_routes(app):
 
         if not unique_dates:
             flash("Select at least one workout day to delete.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
 
         total_deleted_days = 0
         affected_exercises = set()
@@ -3184,53 +3243,61 @@ def register_workout_routes(app):
             Session.commit()
 
             if total_deleted_days:
-                flash(f"Deleted {total_deleted_days} workout day(s).", "success")
+                flash(f"Deleted {total_deleted_days} workout{'' if total_deleted_days == 1 else 's'}.", "success")
             else:
                 flash("No matching workouts were found to delete.", "info")
 
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
         except Exception as e:
             Session.rollback()
             logger.error(f"Error bulk deleting workouts: {e}", exc_info=True)
             flash("Error deleting selected workouts.", "error")
-            return redirect(url_for('user_dashboard', username=user.username))
+            return redirect(url_for('workout_history'))
 
-    def _parse_and_save_workout_text(user, raw_text: str, saved_at=None):
+    def _check_error_message(check):
+        errors = check.get("errors") or []
+        if not errors:
+            return None
+        message = errors[0]["message"]
+        if len(errors) > 1:
+            message += f" ({len(errors) - 1} more like this.)"
+        return message
+
+    def _parse_and_save_workout_text(user, raw_text: str, *, append: bool = False, saved_at=None):
         text = to_plain_text(raw_text)
         if not text:
             return None, "Please enter workout data."
 
         try:
-            parsed = workout_parser(
-                text,
-                bodyweight=user.bodyweight,
-                preserve_bodyweight_offsets=True,
-                now=saved_at,
-            )
-            if not parsed:
-                raise ParsingError("Could not parse workout data. Please check the format.")
-        except ParsingError as e:
-            return None, str(e)
+            # saved_at: a workout kept on the phone offline is dated the day it was kept.
+            check = check_workout_text(Session, user, text, append=append, now=saved_at)
         except Exception as e:
             logger.error(f"Parsing error: {e}", exc_info=True)
             return None, "Error parsing workout data. Please check the format."
+        error = _check_error_message(check)
+        if error:
+            return None, error
+        parsed = check["parsed"]
 
         needs_bodyweight_info = bool(user.bodyweight is None and has_bodyweight_token(text))
+        skipped = [w["message"] for w in check.get("warnings") or [] if "won't be saved" in w["message"]]
 
-        parsed_date = parsed.get('date')
-        if parsed_date:
-            existing_log = _find_existing_workout_for_day(user.id, parsed_date)
-            if existing_log:
-                existing_day, _, _ = _workout_day_bounds(existing_log.date)
-                return {
-                    "summary": [],
-                    "date_str": existing_day.strftime('%Y-%m-%d'),
-                    "exercise_count": 0,
-                    "set_count": 0,
-                    "needs_bodyweight_info": needs_bodyweight_info,
-                    "already_exists": True,
-                    "message": "Workout already there.",
-                }, None
+        existing_log = _find_existing_workout_for_day(user.id, parsed['date'])
+        if existing_log and not append:
+            existing_day, _, _ = _workout_day_bounds(existing_log.date)
+            return {
+                "summary": [],
+                "date_str": existing_day.strftime('%Y-%m-%d'),
+                "exercise_count": 0,
+                "set_count": 0,
+                "needs_bodyweight_info": needs_bodyweight_info,
+                "already_exists": True,
+                "message": "Workout already there.",
+            }, None
+        if existing_log and append:
+            # Join the day that is already there: same timestamp and title.
+            parsed['date'] = existing_log.date
+            parsed['workout_name'] = existing_log.workout_name
 
         try:
             summary = handle_workout_log(Session, user, parsed)
@@ -3247,12 +3314,6 @@ def register_workout_routes(app):
                     continue
                 seen_timed_prompt_keys.add(dedup_key)
                 timed_prompt_rows.append({"exercise": exercise_name})
-            exercises = parsed.get('exercises') or []
-            exercise_count = len(exercises)
-            set_count = sum(
-                _count_sets({'weights': item.get('weights') or [], 'reps': item.get('reps') or []})
-                for item in exercises
-            )
             Session.commit()
             logger.info(
                 f"Workout logged successfully for user {user.username} on {parsed['date']}"
@@ -3260,11 +3321,13 @@ def register_workout_routes(app):
             return {
                 "summary": summary,
                 "date_str": parsed['date'].strftime('%Y-%m-%d'),
-                "exercise_count": exercise_count,
-                "set_count": set_count,
+                "exercise_count": int(check.get("exercise_count") or 0),
+                "set_count": int(check.get("set_count") or 0),
                 "timed_prompts": timed_prompt_rows,
                 "needs_bodyweight_info": needs_bodyweight_info,
                 "already_exists": False,
+                "appended": bool(existing_log and append),
+                "skipped": skipped,
             }, None
         except Exception as e:
             Session.rollback()
@@ -3310,8 +3373,14 @@ def register_workout_routes(app):
             return jsonify({'ok': False, 'status': 'signed_out'}), 401
         user = current_user
         payload = request.get_json(silent=True) or {}
+        # Kept on the phone for this account: by id when the phone knows it (a username
+        # can change while a workout waits), else by the username it was kept under.
+        owner_id = payload.get('user_id')
         owner = str(payload.get('user') or '').strip().lower()
-        if owner and owner != (user.username or '').strip().lower():
+        if owner_id is not None and str(owner_id).strip():
+            if str(owner_id).strip() != str(user.id):
+                return jsonify({'ok': False, 'status': 'wrong_user'}), 409
+        elif owner and owner != (user.username or '').strip().lower():
             return jsonify({'ok': False, 'status': 'wrong_user'}), 409
 
         raw_text = str(payload.get('text') or '').strip()
@@ -3320,7 +3389,16 @@ def register_workout_routes(app):
         if error == SAVE_WORKOUT_FAILED:
             return jsonify({'ok': False, 'status': 'retry'}), 503
         if error:
-            return jsonify({'ok': False, 'status': 'invalid', 'error': str(error)}), 422
+            body = {'ok': False, 'status': 'invalid', 'error': str(error)}
+            # The phone names the workout by the date written in it ("Your Thu 25 Sept
+            # workout couldn't be read"), not the day it happened to be kept.
+            try:
+                parsed = workout_parser(to_plain_text(raw_text), now=saved_at)
+                if parsed and parsed.get('date_found'):
+                    body['date'] = parsed['date'].strftime('%Y-%m-%d')
+            except Exception:
+                pass
+            return jsonify(body), 422
 
         date_str = result.get('date_str')
         body = {
@@ -3344,37 +3422,116 @@ def register_workout_routes(app):
         response.headers['Cache-Control'] = 'no-store'
         return response
 
+    def _log_name_suggestions(user):
+        # The user's own exercises first (most logged first). Spellings of one exercise
+        # ("Cable Oh Extension" / "Cable OH Extension") count together and are offered the way
+        # they were last logged, so a corrected spelling takes over at once.
+        rows = (
+            Session.query(WorkoutLog.exercise, func.count(WorkoutLog.id), func.max(WorkoutLog.date))
+            .filter(WorkoutLog.user_id == user.id)
+            .group_by(WorkoutLog.exercise)
+            .all()
+        )
+        groups = {}
+        for name, count, last in rows:
+            if not name or name == "Unknown Exercise":
+                continue
+            key = normalize_exercise_name(name) or name.lower()
+            group = groups.setdefault(key, {"count": 0, "name": name, "last": last})
+            group["count"] += count
+            if last and (group["last"] is None or last > group["last"]):
+                group["name"], group["last"] = name, last
+        own = [g["name"] for g in sorted(groups.values(), key=lambda g: -g["count"])]
+        own_keys = set(groups)
+        return own + [name for name in list_of_exercises if (normalize_exercise_name(name) or name.lower()) not in own_keys]
+
+    def _offline_fix_fields():
+        """A workout kept offline being fixed and sent again: its id on the phone and
+        when it was kept, so a failed try can be sent again as the same workout."""
+        offline_id = (request.form.get('offline_id') or '').strip()
+        if not re.fullmatch(r'[A-Za-z0-9-]{1,64}', offline_id):
+            return None
+        saved_at = (request.form.get('saved_at') or '').strip()
+        return {"id": offline_id, "saved_at": saved_at if saved_at.isdigit() else ''}
+
+    def _render_log_page(text='', *, error=None, errors=None, existing=None, status=200):
+        return render_template(
+            'log.html',
+            exercise_list=_log_name_suggestions(current_user),
+            workout_text=text,
+            error=error,
+            errors=errors or [],
+            existing=existing,
+            offline_fix=_offline_fix_fields() if request.method == 'POST' else None,
+        ), status
+
     @login_required
     def log_workout():
         user = current_user
 
         if request.method == 'GET':
-            return render_template('log.html', exercise_list=list_of_exercises)
+            return _render_log_page()[0]
 
         raw_text = request.form.get('workout_text', '').strip()
+        append = 'append' in request.form.getlist('mode')
         # Set when a workout kept offline is being fixed and sent again.
         saved_at = _client_saved_at(request.form.get('saved_at'))
-        result, error = _parse_and_save_workout_text(user, raw_text, saved_at=saved_at)
+        result, error = _parse_and_save_workout_text(user, raw_text, append=append, saved_at=saved_at)
         if error:
-            flash(str(error), "error")
-            return redirect(url_for('log_workout'))
+            # Keep the text so it can be fixed in place.
+            try:
+                errors = [e["message"] for e in check_workout_text(Session, user, to_plain_text(raw_text)).get("errors") or []]
+            except Exception:
+                errors = []
+            return _render_log_page(raw_text, error=error, errors=errors, status=422)
         if result.get("already_exists"):
-            flash(result.get("message") or "Workout already there.", "info")
-            return redirect(url_for('view_workout', date_str=result.get("date_str")))
-        if result.get("needs_bodyweight_info"):
-            flash(
-                "Set your bodyweight in Settings to calculate BW loads accurately.",
-                "info",
-            )
+            existing_log = _find_existing_workout_for_day(user.id, datetime.strptime(result["date_str"], '%Y-%m-%d'))
+            return _render_log_page(raw_text, existing={
+                "date_str": result["date_str"],
+                "title": _clean_workout_title((existing_log.workout_name if existing_log else None) or "Workout"),
+                "url": url_for('view_workout', date_str=result["date_str"]),
+            }, status=409)
 
-        return render_template(
-            'result.html',
-            summary=result.get("summary") or [],
-            date=result.get("date_str"),
-            exercise_count=int(result.get("exercise_count") or 0),
-            set_count=int(result.get("set_count") or 0),
-            timed_prompts=result.get("timed_prompts") or [],
-        )
+        session[LOG_SAVED_SESSION_KEY] = {
+            "date": result.get("date_str"),
+            "timed_prompts": [p["exercise"] for p in result.get("timed_prompts") or []],
+            "skipped": result.get("skipped") or [],
+            "appended": bool(result.get("appended")),
+            "needs_bodyweight": bool(result.get("needs_bodyweight_info")),
+        }
+        offline_fix = _offline_fix_fields()
+        # The phone forgets its kept copy once it lands here (see offline-sync.js).
+        offline_saved = offline_fix["id"] if offline_fix else None
+        return redirect(url_for('view_workout', date_str=result.get("date_str"), saved=1, offline_saved=offline_saved))
+
+    @login_required
+    def log_preview():
+        text = to_plain_text(request.form.get('workout_text', ''))
+        append = request.form.get('mode') == 'append'
+        header = None
+        title = (request.form.get('title') or '').strip()
+        date_value = (request.form.get('date') or '').strip()
+        if date_value:
+            # Edit page: title and date live in their own fields.
+            try:
+                header_date = datetime.strptime(date_value, '%Y-%m-%d')
+            except ValueError:
+                return jsonify({"ok": False, "errors": [{"line": None, "message": "Pick a valid date."}]}), 400
+            header = f"{header_date.day}/{header_date.month}/{header_date.strftime('%y')} {title or 'Workout'}"
+        try:
+            check = check_workout_text(
+                Session, current_user, text, header=header, append=append,
+                now=_client_saved_at(request.form.get('saved_at')),
+            )
+        except Exception as e:
+            logger.error(f"Log preview failed: {e}", exc_info=True)
+            return jsonify({"ok": False, "errors": [{"line": None, "message": "Couldn't read this right now."}]}), 500
+        payload = public_check(check)
+        existing = payload.get("existing")
+        if existing:
+            existing["url"] = url_for('view_workout', date_str=existing["date_str"])
+            existing["title"] = _clean_workout_title(existing.get("title") or "Workout")
+        return jsonify(payload)
 
     @login_required
     def set_timed_preference():
@@ -3383,21 +3540,28 @@ def register_workout_routes(app):
         choice = (request.args.get('is_timed') or '').strip().lower()
         next_url = (request.args.get('next') or '').strip()
 
+        if not is_safe_redirect_url(next_url, request.host_url):
+            next_url = url_for('log_workout')
+
         if not exercise_name or choice not in {'yes', 'no'}:
             flash("Invalid timed exercise preference request.", "error")
-            return redirect(next_url or url_for('log_workout'))
+            return redirect(next_url)
 
         try:
             set_timed_exercise_preference(Session, user.id, exercise_name, choice == 'yes')
             Session.commit()
+            saved = session.get(LOG_SAVED_SESSION_KEY)
+            if isinstance(saved, dict) and saved.get("timed_prompts"):
+                saved["timed_prompts"] = [
+                    name for name in saved["timed_prompts"] if name.lower() != exercise_name.lower()
+                ]
+                session[LOG_SAVED_SESSION_KEY] = saved
         except Exception as e:
             Session.rollback()
             logger.error(f"Error saving timed preference: {e}", exc_info=True)
             flash("Could not save timed preference. Please try again.", "error")
 
-        if next_url.startswith('/'):
-            return redirect(next_url)
-        return redirect(url_for('log_workout'))
+        return redirect(next_url)
 
     app.add_url_rule('/', endpoint='index', view_func=index, methods=['GET'])
     app.add_url_rule('/workouts', endpoint='workout_history', view_func=workout_history, methods=['GET'])
@@ -3422,6 +3586,7 @@ def register_workout_routes(app):
     app.add_url_rule('/workout/<date_str>/delete', endpoint='delete_workout', view_func=delete_workout, methods=['POST'])
     app.add_url_rule('/workouts/delete-selected', endpoint='bulk_delete_workouts', view_func=bulk_delete_workouts, methods=['POST'])
     app.add_url_rule('/log', endpoint='log_workout', view_func=log_workout, methods=['GET', 'POST'])
+    app.add_url_rule('/log/preview', endpoint='log_preview', view_func=log_preview, methods=['POST'])
     app.add_url_rule('/timed-preference/set', endpoint='set_timed_preference', view_func=set_timed_preference, methods=['GET'])
     app.add_url_rule('/api/recommend-workout', endpoint='recommend_workout_api', view_func=recommend_workout_api, methods=['GET'])
     app.add_url_rule('/api/csrf-token', endpoint='csrf_token_api', view_func=csrf_token_api, methods=['GET'])

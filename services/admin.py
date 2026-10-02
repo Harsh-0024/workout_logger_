@@ -59,7 +59,7 @@ class AdminService:
         """Merge duplicate users by email, keeping the account with logs."""
         session = Session()
         try:
-            admin = session.query(User).get(admin_user_id)
+            admin = session.get(User, admin_user_id)
             if not admin or not admin.is_admin():
                 raise AdminError("Unauthorized: Only admins can clean up users")
 
@@ -234,12 +234,12 @@ class AdminService:
         session = Session()
         try:
             # Verify admin user
-            admin = session.query(User).get(admin_user_id)
+            admin = session.get(User, admin_user_id)
             if not admin or not admin.is_admin():
                 raise AdminError("Unauthorized: Only admins can delete users")
             
             # Get target user
-            target_user = session.query(User).get(target_user_id)
+            target_user = session.get(User, target_user_id)
             if not target_user:
                 raise AdminError("User not found")
             
@@ -255,6 +255,7 @@ class AdminService:
             # can raise ObjectDeletedError)
             target_username = target_user.username
             target_email = target_user.email
+            target_photo = getattr(target_user, 'profile_image', None)
             admin_username = admin.username
 
             # Store user info for email notification
@@ -262,7 +263,9 @@ class AdminService:
                 'username': target_username,
                 'email': target_email,
                 'deletion_reason': deletion_reason,
-                'admin_username': admin_username
+                'admin_username': admin_username,
+                # The photo file is removed after the rows are gone (it's in storage, not the DB).
+                'profile_image': target_photo,
             }
             
             start = time.perf_counter()
@@ -330,12 +333,12 @@ class AdminService:
         session = Session()
         try:
             # Verify admin user
-            admin = session.query(User).get(admin_user_id)
+            admin = session.get(User, admin_user_id)
             if not admin or not admin.is_admin():
                 raise AdminError("Unauthorized: Only admins can promote users")
             
             # Get target user
-            target_user = session.query(User).get(target_user_id)
+            target_user = session.get(User, target_user_id)
             if not target_user:
                 raise AdminError("User not found")
             

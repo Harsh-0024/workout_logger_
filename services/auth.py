@@ -6,6 +6,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from models import User, UserRole, EmailVerification, Session, _seed_user_data, session_factory
+from utils.errors import ValidationError
 from utils.logger import logger
 from config import Config
 
@@ -14,20 +15,47 @@ class AuthenticationError(Exception):
     pass
 
 
+class EmailNotVerifiedError(AuthenticationError):
+    """The password was right but the email was never confirmed: sign-in can send a new code."""
+
+    def __init__(self, user_id: int):
+        super().__init__("Please verify your email before signing in.")
+        self.user_id = user_id
+
+
+def _password_bytes(password: str) -> bytes:
+    """bcrypt only reads the first 72 bytes. Older bcrypt cut longer passwords there quietly;
+    bcrypt 5 refuses them instead, which broke sign-up and password changes for long passwords
+    (a password manager's, or ~40 accented letters) and locked out accounts made with one.
+    Cutting here keeps every existing hash matching."""
+    return (password or '').encode('utf-8')[:72]
+
+
+def _checked_new_password(new_password: str) -> str:
+    """The same rules as sign-up, for a password change."""
+    from utils.errors import ValidationError
+    from utils.validators import validate_password
+
+    try:
+        return validate_password(new_password)
+    except ValidationError as e:
+        raise AuthenticationError(str(e))
+
+
 class AuthService:
     
     @staticmethod
     def hash_password(password: str) -> str:
         """Hash a password using bcrypt."""
         salt = bcrypt.gensalt()
-        hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+        hashed = bcrypt.hashpw(_password_bytes(password), salt)
         return hashed.decode('utf-8')
     
     @staticmethod
     def verify_password(password: str, password_hash: str) -> bool:
         """Verify a password against its hash."""
         try:
-            return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+            return bcrypt.checkpw(_password_bytes(password), password_hash.encode('utf-8'))
         except Exception:
             return False
     
@@ -108,9 +136,13 @@ class AuthService:
         session = Session()
         try:
             # Validate inputs using centralized validators
-            from utils.validators import validate_username, validate_email, validate_password
+            from utils.validators import (
+                USERNAME_NOT_AVAILABLE, is_reserved_username, validate_email, validate_password, validate_username,
+            )
             
             username = validate_username(username)
+            if is_reserved_username(username):
+                raise AuthenticationError(USERNAME_NOT_AVAILABLE)
             email = validate_email(email)
             password = validate_password(password)
             
@@ -124,6 +156,9 @@ class AuthService:
                     raise AuthenticationError("Username already taken")
                 else:
                     raise AuthenticationError("Email already registered")
+            # A username that is someone's email address would be mistaken for them at sign-in.
+            if session.query(User).filter(User.email == username).first():
+                raise AuthenticationError(USERNAME_NOT_AVAILABLE)
             
             # Create user
             role = UserRole.ADMIN if is_admin or email in Config.ADMIN_EMAIL_ALLOWLIST else UserRole.USER
@@ -154,9 +189,14 @@ class AuthService:
         except AuthenticationError:
             session.rollback()
             raise
+        except ValidationError as e:
+            # "Password must contain at least one number" is the whole message.
+            session.rollback()
+            raise AuthenticationError(str(e))
         except Exception as e:
             session.rollback()
-            raise AuthenticationError(f"Registration failed: {str(e)}")
+            logger.error(f"Registration failed: {e}", exc_info=True)
+            raise AuthenticationError("Couldn't create your account right now. Please try again.")
         finally:
             session.close()
 
@@ -165,7 +205,7 @@ class AuthService:
         """Generate and store a one-time code for password changes."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise AuthenticationError("User not found")
 
@@ -207,7 +247,7 @@ class AuthService:
         """Generate OTPs for confirming an email change on both old and new addresses."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise AuthenticationError("User not found")
 
@@ -252,14 +292,12 @@ class AuthService:
         """Set a user's password without verifying the current password."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
 
             if not user:
                 return False
 
-            if len(new_password) < 8:
-                raise AuthenticationError("New password must be at least 8 characters")
-
+            new_password = _checked_new_password(new_password)
             user.password_hash = AuthService.hash_password(new_password)
             user.updated_at = datetime.now()
             session.commit()
@@ -285,9 +323,14 @@ class AuthService:
 
             identifier_type = 'email' if '@' in identifier else 'username'
 
-            user = session.query(User).filter(
+            # An address means its owner (the code goes to that inbox), a name its account.
+            matches = session.query(User).filter(
                 (User.username == identifier) | (User.email == identifier)
-            ).first()
+            ).all()
+            by_email = [m for m in matches if (m.email or '').lower() == identifier]
+            user = (by_email if identifier_type == 'email' and by_email else matches or [None])[0]
+            if identifier_type == 'username':
+                user = next((m for m in matches if (m.username or '').lower() == identifier), user)
 
             if not user:
                 logger.info(
@@ -329,7 +372,7 @@ class AuthService:
         """Generate and store a one-time code for profile updates."""
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 raise AuthenticationError("User not found")
 
@@ -362,11 +405,12 @@ class AuthService:
             session.close()
 
     @staticmethod
-    def verify_otp(user_id: int, otp_code: str, purpose: str, mark_verified: bool = False) -> bool:
-        """Verify a one-time code for a given purpose."""
+    def verify_otp(user_id: int, otp_code: str, purpose: str, mark_verified: bool = False, use: bool = True) -> bool:
+        """Verify a one-time code for a given purpose. With use=False the code is only checked,
+        not spent (for steps that need two codes to be right before either is used)."""
         session = session_factory()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             if not user:
                 logger.info(
                     "OTP verification failed: user missing",
@@ -392,6 +436,8 @@ class AuthService:
                 )
                 return False
 
+            if not use:
+                return True
             verification.verified_at = datetime.now()
             if mark_verified and not user.is_verified:
                 user.is_verified = True
@@ -418,7 +464,7 @@ class AuthService:
         """
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             
             if not user:
                 return False
@@ -464,7 +510,7 @@ class AuthService:
         """
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             
             if not user:
                 raise AuthenticationError("User not found")
@@ -487,7 +533,8 @@ class AuthService:
             raise
         except Exception as e:
             session.rollback()
-            raise AuthenticationError(f"Failed to resend code: {str(e)}")
+            logger.error(f"Failed to resend verification code: {e}", exc_info=True)
+            raise AuthenticationError("Couldn't send a new code right now. Please try again.")
         finally:
             session.close()
     
@@ -501,22 +548,22 @@ class AuthService:
         """
         session = Session()
         try:
-            # Try to find user by username or email
-            user = session.query(User).filter(
-                (User.username == username_or_email.lower()) | 
-                (User.email == username_or_email.lower())
-            ).first()
-            
+            # Username or email. One person's username can be another's email address, so each
+            # match is tried: taking whichever came first could check the wrong password.
+            identifier = (username_or_email or '').strip().lower()
+            candidates = session.query(User).filter(
+                (User.username == identifier) | (User.email == identifier)
+            ).all()
+            user = next(
+                (c for c in candidates if AuthService.verify_password(password, c.password_hash)),
+                None,
+            )
             if not user:
-                return None
-            
-            # Verify password
-            if not AuthService.verify_password(password, user.password_hash):
                 return None
             
             # Check if verified
             if not user.is_verified:
-                raise AuthenticationError("Please verify your email before logging in")
+                raise EmailNotVerifiedError(user.id)
             
             return user
             
@@ -537,7 +584,7 @@ class AuthService:
         """
         session = Session()
         try:
-            user = session.query(User).get(user_id)
+            user = session.get(User, user_id)
             
             if not user:
                 return False
@@ -546,9 +593,7 @@ class AuthService:
             if not AuthService.verify_password(old_password, user.password_hash):
                 raise AuthenticationError("Current password is incorrect")
             
-            # Validate new password
-            if len(new_password) < 8:
-                raise AuthenticationError("New password must be at least 8 characters")
+            new_password = _checked_new_password(new_password)
             
             # Update password
             user.password_hash = AuthService.hash_password(new_password)

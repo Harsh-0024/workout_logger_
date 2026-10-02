@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% block title %}Bodyweight exercises - Workout Tracker{% endblock %}
 {% import '_settings_ui.html' as st %}
 {% block content %}
 {{ st.styles() }}
@@ -45,7 +46,7 @@
     <div class="st-section">
         <div class="st-search">
             <i class="bi bi-search"></i>
-            <input type="search" id="bwSearch" class="form-control" placeholder="Search exercises" autocomplete="off" aria-label="Search exercises">
+            <input type="search" id="bwSearch" class="form-control" placeholder="Search exercises" autocomplete="off" enterkeyhint="search" aria-label="Search exercises">
         </div>
     </div>
 
@@ -119,6 +120,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedSection = document.getElementById('bwSelectedSection');
     const availableSection = document.getElementById('bwAvailableSection');
     const searchInput = document.getElementById('bwSearch');
+    // "Search" on a phone keyboard only puts the keyboard away: the list already filters as you type.
+    if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchInput.blur(); } });
     const noResults = document.getElementById('bwNoResults');
     const selectedCountEl = document.getElementById('bwSelectedCount');
 

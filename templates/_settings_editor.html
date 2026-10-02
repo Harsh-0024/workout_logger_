@@ -20,12 +20,33 @@
             const original = area.value;
             const cleanLabel = state.textContent;
             let dirty = false;
-            area.addEventListener('input', () => {
+            const markDirty = () => {
                 dirty = area.value !== original;
                 state.textContent = dirty ? 'Unsaved changes' : cleanLabel;
                 state.classList.toggle('is-dirty', dirty);
+            };
+            area.addEventListener('input', markDirty);
+            // data-editor-keep: what was sent comes back if the save never landed (it ended on the
+            // sign-in page); after a real save the page shows that same text, so it's dropped.
+            const keepKey = form.hasAttribute('data-editor-keep')
+                ? `wt-editor-sent:{{ current_user.id if current_user.is_authenticated else '' }}:${location.pathname}` : null;
+            if (keepKey) {
+                try {
+                    const sent = sessionStorage.getItem(keepKey);
+                    sessionStorage.removeItem(keepKey);
+                    if (sent !== null && sent.trim() && sent.trim() !== area.value.trim()) {
+                        area.value = sent;
+                        markDirty();
+                        state.textContent = 'Not saved yet: your changes are back';
+                    }
+                } catch (e) { /* storage off */ }
+            }
+            form.addEventListener('submit', () => {
+                dirty = false;
+                if (keepKey) {
+                    try { sessionStorage.setItem(keepKey, area.value); } catch (e) { /* storage off */ }
+                }
             });
-            form.addEventListener('submit', () => { dirty = false; });
             window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
         });
         // Close the format note when tapping elsewhere.

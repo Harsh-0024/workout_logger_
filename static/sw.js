@@ -1,6 +1,6 @@
 importScripts('/static/offline-workouts.js');
 
-const VERSION = 'v4';
+const VERSION = 'v6';
 // Files that are the same for everyone (styles, icons, the offline page).
 const SHARED_CACHE = `workout-tracker-shared-${VERSION}`;
 // The signed-in person's pages and data; emptied when nobody is signed in.
@@ -63,7 +63,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'signed-in' && typeof data.home === 'string' && typeof data.user === 'string') {
-    const who = JSON.stringify({ home: data.home, user: data.user });
+    // The account id too: a username can change while a workout waits to upload.
+    const who = JSON.stringify({ home: data.home, user: data.user, userId: data.userId ?? null });
     event.waitUntil(
       caches.open(USER_CACHE).then((cache) => cache.put(SIGNED_IN_KEY, new Response(who)))
     );
@@ -115,11 +116,11 @@ async function saveWorkout(request) {
     // keep the workout and upload it with a fresh one.
     if (response.status === 400) throw new Error('stale page');
     if (fixingId) {
-      // Fixing a kept workout: a result page means it's in. Otherwise the
-      // server sent back an error, so keep the latest edit for the next try.
+      // Fixing a kept workout: keep the latest edit for the next try. Once it's
+      // in, the server sends the browser on to the workout page, which forgets
+      // the kept copy (offline_saved in its address; see offline-sync.js).
       const kept = await offlineWorkouts.get(fixingId).catch(() => null);
-      if (response.status === 200) await offlineWorkouts.remove(fixingId).catch(() => {});
-      else if (kept && text) await offlineWorkouts.put({ ...kept, text }).catch(() => {});
+      if (kept && text) await offlineWorkouts.put({ ...kept, text }).catch(() => {});
     }
     return response;
   } catch (err) {
@@ -131,6 +132,7 @@ async function saveWorkout(request) {
     await offlineWorkouts.put({
       id: kept ? kept.id : newId(),
       user: who.user,
+      userId: who.userId ?? null,
       text,
       savedAt: kept ? kept.savedAt : Date.now(),
       status: 'pending',

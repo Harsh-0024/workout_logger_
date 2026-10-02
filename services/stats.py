@@ -14,7 +14,7 @@ from models import WorkoutLog, RepRange, StatsExerciseView, StatsPreference
 from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweight
 from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
-from services.logging import resolve_timed_exercise_status
+from services.logging import _has_time_hint_in_exercise_string, resolve_timed_exercise_status
 from services.exercise_matching import token_signature
 from utils.dates import local_date
 
@@ -333,7 +333,7 @@ def _get_peak_1rm_for_log(db_session, log=None) -> float:
     return float(quality.get('peak_1rm') or 0.0)
 
 
-def _query_logs_for_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
+def _export_query(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
     query = db_session.query(WorkoutLog).filter_by(user_id=user.id)
 
     if start_date is not None:
@@ -344,15 +344,35 @@ def _query_logs_for_export(db_session, user, start_date: Optional[date] = None, 
         end_dt_exclusive = datetime.combine(end_date + timedelta(days=1), time.min)
         query = query.filter(WorkoutLog.date < end_dt_exclusive)
 
-    return query.order_by(desc(WorkoutLog.date)).all()
+    return query
+
+
+def _query_logs_for_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
+    return _export_query(db_session, user, start_date, end_date).order_by(desc(WorkoutLog.date)).all()
 
 
 def get_export_log_count(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None) -> int:
-    logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
-    return len(logs)
+    # Counted by the database: loading the whole history just to count it doubled an export's work.
+    return _export_query(db_session, user, start_date, end_date).count()
 
 
-def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None):
+def timed_checker(db_session, user):
+    """Whether a log's reps are seconds (Plank, Dead Hang, a "[30-60s]" target), asking the
+    database once per exercise name."""
+    by_name: Dict[str, bool] = {}
+
+    def is_timed(log) -> bool:
+        if _has_time_hint_in_exercise_string(log.exercise_string or ''):
+            return True
+        name = log.exercise or ''
+        if name not in by_name:
+            by_name[name] = bool(resolve_timed_exercise_status(db_session, user.id, name, '').get('is_timed'))
+        return by_name[name]
+
+    return is_timed
+
+
+def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None, is_timed=None):
     """Generates a CSV string of all workout history."""
     logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
 
@@ -370,7 +390,13 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
         'Top Weight (kg)',
         'Top Reps',
         'Estimated 1RM (kg)',
+        # For bodyweight exercises the weights above are added to (or taken off) bodyweight.
+        'Uses Bodyweight',
+        'Bodyweight (kg)',
+        # For timed exercises the reps are seconds.
+        'Timed',
     ])
+    is_timed = is_timed or timed_checker(db_session, user)
 
     for log in logs:
         sets_json = log.sets_json if isinstance(log.sets_json, dict) else {}
@@ -387,16 +413,20 @@ def get_csv_export(db_session, user, start_date: Optional[date] = None, end_date
             log.top_weight if log.top_weight is not None else "",
             log.top_reps if log.top_reps is not None else "",
             f"{log.estimated_1rm:.2f}" if log.estimated_1rm is not None else "",
+            "yes" if log.uses_bodyweight else ("no" if log.uses_bodyweight is not None else ""),
+            log.bodyweight if log.bodyweight is not None else "",
+            "yes" if is_timed(log) else "no",
         ])
 
     return output.getvalue()
 
 
-def get_json_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None) -> Dict:
+def get_json_export(db_session, user, start_date: Optional[date] = None, end_date: Optional[date] = None, is_timed=None) -> Dict:
     """Generate full JSON export payload for workout history."""
     logs = _query_logs_for_export(db_session, user, start_date=start_date, end_date=end_date)
 
     workouts_by_date: Dict[str, Dict] = {}
+    is_timed = is_timed or timed_checker(db_session, user)
     for log in logs:
         date_key = log.date.strftime('%Y-%m-%d') if log.date else ""
         entry = {
@@ -409,6 +439,11 @@ def get_json_export(db_session, user, start_date: Optional[date] = None, end_dat
             'top_weight': log.top_weight,
             'top_reps': log.top_reps,
             'estimated_1rm': log.estimated_1rm,
+            # For bodyweight exercises the weights are added to (or taken off) bodyweight.
+            'uses_bodyweight': log.uses_bodyweight,
+            'bodyweight': log.bodyweight,
+            # For timed exercises the reps are seconds.
+            'timed': is_timed(log),
         }
         workouts_by_date.setdefault(date_key, {'date': date_key, 'entries': []})['entries'].append(entry)
 
@@ -417,6 +452,19 @@ def get_json_export(db_session, user, start_date: Optional[date] = None, end_dat
         'export_date': datetime.now().isoformat(),
         'workouts': list(workouts_by_date.values()),
     }
+
+
+def _any_log_is_timed(db_session, user, logs) -> bool:
+    """Whether any of these logs is a timed exercise. Apart from a time written in a log's own
+    text, the answer only depends on the exercise name, so the database is asked once per name
+    instead of once per session (a long history made the chart slow to load)."""
+    if any(_has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '') or '') for log in logs):
+        return True
+    names = dict.fromkeys(getattr(log, 'exercise', '') or '' for log in logs)
+    return any(
+        resolve_timed_exercise_status(db_session, user.id, name, '').get("is_timed")
+        for name in names
+    )
 
 
 def get_chart_data(db_session, user, exercise_name):
@@ -438,21 +486,13 @@ def get_chart_data(db_session, user, exercise_name):
     data_effective_volume = []
     data_quality = []
     data_quality_adjusted_1rm = []
+    # For bodyweight exercises, the top set as logged: 14 for "BW+14" (None for others).
+    data_bodyweight_offset = []
     workout_titles = []
 
     target_rep_range = _get_target_rep_range(db_session, user, exercise_name)
 
-    exercise_is_timed = False
-    for log in logs:
-        timed_status = resolve_timed_exercise_status(
-            db_session,
-            user.id,
-            getattr(log, 'exercise', ''),
-            getattr(log, 'exercise_string', '') or '',
-        )
-        if timed_status.get("is_timed"):
-            exercise_is_timed = True
-            break
+    exercise_is_timed = _any_log_is_timed(db_session, user, logs)
 
     if exercise_is_timed:
         timed_target = _get_timed_target_range(db_session, user, exercise_name)
@@ -460,8 +500,8 @@ def get_chart_data(db_session, user, exercise_name):
         timed_target = None
 
     for log in logs:
-        labels.append(local_date(log.date).isoformat() if log.date else "")
-        workout_titles.append(_clean_workout_title(getattr(log, 'workout_name', None)))
+        label = local_date(log.date).isoformat() if log.date else ""
+        title = _clean_workout_title(getattr(log, 'workout_name', None))
 
         sets_for_quality = _normalize_sets_for_log(db_session, log)
 
@@ -485,13 +525,32 @@ def get_chart_data(db_session, user, exercise_name):
         eff_vol = quality.get('effective_volume') or 0
         q_index = quality.get('quality_index') or 0
 
-        data_1rm.append(float(e1rm or 0))
-        data_weight.append(float(top_weight or 0))
-        data_reps.append(int(top_reps or 0))
-        data_volume.append(float(total_vol or 0))
-        data_effective_volume.append(float(eff_vol or 0))
-        data_quality.append(float(q_index) * 100.0)
-        data_quality_adjusted_1rm.append(float(e1rm or 0) * float(q_index or 0))
+        offset = None
+        if getattr(log, 'uses_bodyweight', None) and log.bodyweight and top_weight:
+            offset = round(float(top_weight) - float(log.bodyweight), 2)
+        point = (float(e1rm or 0), float(top_weight or 0), int(top_reps or 0),
+                 float(q_index) * 100.0, float(e1rm or 0) * float(q_index or 0), offset)
+        if label and labels and labels[-1] == label:
+            # The same exercise twice in a day (or under two of its names) is one point:
+            # the stronger entry, with the day's volume added up.
+            data_volume[-1] += float(total_vol or 0)
+            data_effective_volume[-1] += float(eff_vol or 0)
+            if point[0] <= data_1rm[-1]:
+                continue
+            for series in (data_1rm, data_weight, data_reps, data_quality, data_quality_adjusted_1rm,
+                           data_bodyweight_offset):
+                series.pop()
+        else:
+            labels.append(label)
+            workout_titles.append(title)
+            data_volume.append(float(total_vol or 0))
+            data_effective_volume.append(float(eff_vol or 0))
+        data_1rm.append(point[0])
+        data_weight.append(point[1])
+        data_reps.append(point[2])
+        data_quality.append(point[3])
+        data_quality_adjusted_1rm.append(point[4])
+        data_bodyweight_offset.append(point[5])
 
     # Calculate statistics
     stats = {}
@@ -510,6 +569,7 @@ def get_chart_data(db_session, user, exercise_name):
         "workout_days": labels,
         "weight": data_weight,
         "reps": data_reps,
+        "bodyweight_offset": data_bodyweight_offset,
         "volume": data_volume,
         "effective_volume": data_effective_volume,
         "quality": data_quality,
@@ -597,33 +657,26 @@ def get_average_growth_data(db_session, user) -> Dict:
 
     by_date = {}
     for exercise_logs in logs_by_exercise.values():
-        exercise_logs.sort(key=lambda l: l.date or datetime.min)
-        base = None
-        per_day_values = {}
-
+        # A day's best for the exercise, so a lighter second entry that day doesn't pull it down.
+        best_by_day = {}
         for log in exercise_logs:
             if not log.date:
                 continue
             one_rm = _get_peak_1rm_for_log(db_session, log)
             if not one_rm or one_rm <= 0:
                 continue
-            if base is None:
-                base = one_rm
-            if not base:
-                continue
+            date_key = local_date(log.date)
+            best_by_day[date_key] = max(best_by_day.get(date_key, 0.0), float(one_rm))
+
+        if not best_by_day:
+            continue
+        base = best_by_day[min(best_by_day)]
+
+        for date_key, one_rm in best_by_day.items():
             pct_change = ((one_rm - base) / base) * 100.0
             pct_change = max(-300.0, min(300.0, pct_change))
-            per_day_values.setdefault(local_date(log.date), []).append(pct_change)
-
-        if not base:
-            continue
-
-        for date_key, values in per_day_values.items():
-            if not values:
-                continue
-            day_avg = sum(values) / len(values)
             entry = by_date.setdefault(date_key, {'weighted_sum': 0.0, 'weight_sum': 0.0})
-            entry['weighted_sum'] += day_avg * base
+            entry['weighted_sum'] += pct_change * base
             entry['weight_sum'] += base
 
     if not by_date:
@@ -692,6 +745,22 @@ def _fade_multiplier(days_since_last: int, fade_start_days: int, fade_end_days: 
     return max(0.0, min(1.0, (fade_end_days - float(days_since_last)) / span))
 
 
+def _logged_set_count(log) -> int:
+    """How many sets a log holds (at least 1), for how full a day looks in Consistency."""
+    data = getattr(log, 'sets_json', None)
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except ValueError:
+            data = None
+    if isinstance(data, dict):
+        for key in ('reps', 'weights'):
+            values = data.get(key)
+            if isinstance(values, list) and values:
+                return len(values)
+    return 1
+
+
 def get_overall_progress_data(
     db_session,
     user,
@@ -725,6 +794,8 @@ def get_overall_progress_data(
     exercise_day_values: Dict[str, Dict] = {}
     workout_days = set()
     title_by_day: Dict = {}
+    name_by_key: Dict[str, str] = {}
+    sets_by_day: Dict = {}
 
     for log in logs:
         if not log.date:
@@ -735,6 +806,9 @@ def get_overall_progress_data(
         day = local_date(log.date)
         workout_days.add(day)
         title_by_day.setdefault(day, _clean_workout_title(getattr(log, 'workout_name', None)))
+        # The latest spelling names the exercise.
+        name_by_key[key] = str(log.exercise or '').strip() or key
+        sets_by_day[day] = sets_by_day.get(day, 0) + _logged_set_count(log)
         value = _get_peak_1rm_for_log(db_session, log)
         if not value or value <= 0:
             continue
@@ -785,12 +859,19 @@ def get_overall_progress_data(
         if sessions_by_exercise.get(key, 0) >= int(min_sessions)
     ]
 
+    # Every day trained and what it was called, for the Consistency view.
+    day_titles = {d.isoformat(): title_by_day.get(d, 'Workout') for d in workout_days_sorted}
+    day_sets = {d.isoformat(): int(sets_by_day.get(d, 0)) for d in workout_days_sorted}
+
     if not universe:
         return {
             'labels': [],
             'data': [],
             'log_data': [],
-            'workout_days': [],
+            'workout_days': [d.isoformat() for d in workout_days_sorted],
+            'day_titles': day_titles,
+            'day_sets': day_sets,
+            'exercises': [],
             'weight': [],
             'reps': [],
             'exercise': 'Overall',
@@ -904,6 +985,18 @@ def get_overall_progress_data(
         'data': series,
         'log_data': log_series,
         'workout_days': [d.isoformat() for d in workout_days_sorted],
+        'day_titles': day_titles,
+        'day_sets': day_sets,
+        # Each exercise's estimated max per session, for "New bests" and "Most improved".
+        'exercises': [
+            {
+                'name': name_by_key.get(key, key),
+                'baseline': round(baseline_by_exercise[key], 2),
+                'days': [d.isoformat() for d in timelines[key]['days']],
+                'values': [round(v, 2) for v in timelines[key]['values']],
+            }
+            for key in universe
+        ],
         'weight': [],
         'reps': [],
         'workout_titles': workout_titles,

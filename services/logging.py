@@ -4,15 +4,20 @@ Workout logging service for processing and saving workout data.
 from collections import Counter, defaultdict
 from typing import Any, List, Dict, Optional, Tuple
 from datetime import datetime, date, timedelta
+from sqlalchemy import func, or_
+import math
 import re
 
 from list_of_exercise import get_workout_days
 from models import Lift, RepRange, TimedExercisePreference, WorkoutLog
 from parsers.workout import (
+    TIME_TOKEN,
+    is_time_only_exercise,
     align_sets,
     extract_numbers,
     _extract_declared_sets,
     _extract_sets_from_bracket,
+    _parse_plan_exercise_line,
 )
 from services.best_scoring import (
     compare_strength_workouts,
@@ -262,19 +267,14 @@ def _parse_plan_target_sets(plan_text: str) -> Dict[str, int]:
                 line = str(raw_exercise or "").strip()
                 if not line:
                     continue
-                bracket_sets = _extract_sets_from_bracket(line)
-                if not (isinstance(bracket_sets, int) and bracket_sets > 0):
+                if _extract_sets_from_bracket(line) is None:
                     continue
-                base_name = line
-                if " - [" in line:
-                    base_name = line.split(" - [", 1)[0].strip()
-                declared_sets, cleaned_name = _extract_declared_sets(base_name)
-                if isinstance(declared_sets, int) and declared_sets > 0:
-                    base_name = cleaned_name
-                key = normalize_exercise_name(base_name or "")
-                if not key:
+                parsed = _parse_plan_exercise_line(line)
+                declared_sets = parsed.get("declared_sets")
+                key = normalize_exercise_name(parsed.get("name") or "")
+                if not key or not declared_sets:
                     continue
-                target_counters[key][int(bracket_sets)] += 1
+                target_counters[key][int(declared_sets)] += 1
 
     resolved: Dict[str, int] = {}
     for key, counter in target_counters.items():
@@ -384,6 +384,7 @@ def _resolve_pointer_target_context(
     rep_target_sets: Optional[Dict[str, int]] = None,
     plan_target_sets: Optional[Dict[str, int]] = None,
     log_ex_index=None,
+    is_timed: Optional[bool] = None,
 ) -> Tuple[int, bool, bool]:
     rep_targets = rep_target_sets
     if rep_targets is None:
@@ -400,14 +401,15 @@ def _resolve_pointer_target_context(
         inferred_set_count=inferred_set_count,
         default_sets=3,
     )
-    timed_status = resolve_timed_exercise_status(
-        db_session,
-        user.id,
-        exercise_name,
-        exercise_string,
-        log_ex_index=log_ex_index,
-    )
-    return target_sets, strict_target_sets, bool(timed_status.get("is_timed"))
+    if is_timed is None:
+        is_timed = bool(resolve_timed_exercise_status(
+            db_session,
+            user.id,
+            exercise_name,
+            exercise_string,
+            log_ex_index=log_ex_index,
+        ).get("is_timed"))
+    return target_sets, strict_target_sets, is_timed
 
 
 def refresh_best_lift_pointer(
@@ -421,7 +423,9 @@ def refresh_best_lift_pointer(
     plan_target_sets: Optional[Dict[str, int]] = None,
     log_ex_index=None,
     lift_ex_index=None,
+    is_timed: Optional[bool] = None,
 ) -> Optional[Lift]:
+    # is_timed: pass it when already worked out for this exercise, to skip looking it up again.
     target_sets, strict_target_sets, is_timed = _resolve_pointer_target_context(
         db_session,
         user,
@@ -431,6 +435,7 @@ def refresh_best_lift_pointer(
         rep_target_sets=rep_target_sets,
         plan_target_sets=plan_target_sets,
         log_ex_index=log_ex_index,
+        is_timed=is_timed,
     )
     best_log = _get_best_log(
         db_session,
@@ -796,7 +801,9 @@ def _has_time_hint_in_exercise_string(exercise_string: str) -> bool:
             continue
         if re.search(r"(?:\b(?:s|sec|secs|second|seconds)\b|\d+\s*s(?:ec(?:onds?)?)?\b)", token):
             return True
-    return False
+    # Sets written as times ("60s, 45s", "1:00"), on the lines under the name (a name like
+    # "21s Curl" isn't a time).
+    return any(TIME_TOKEN.search(line) for line in text.splitlines()[1:])
 
 
 def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_index=None) -> bool:
@@ -806,16 +813,19 @@ def _has_time_history(db_session, user_id: int, exercise_name: str, *, log_ex_in
     if not candidates:
         return False
 
+    # A time hint is a bracket, a digit followed by "s" (60s, 45 sec) or a colon (1:00), so the
+    # database skips every log without one (this runs for each exercise on every page and save).
+    maybe_timed = [WorkoutLog.exercise_string.like('%[%'), WorkoutLog.exercise_string.like('%:%')]
+    maybe_timed += [WorkoutLog.exercise_string.ilike(f'%{digit}s%') for digit in range(10)]
+    maybe_timed += [WorkoutLog.exercise_string.ilike(f'%{digit} s%') for digit in range(10)]
     logs = (
         db_session.query(WorkoutLog)
         .filter(WorkoutLog.user_id == user_id)
         .filter(WorkoutLog.exercise.in_(candidates))
+        .filter(or_(*maybe_timed))
         .all()
     )
-    for log in logs:
-        if _has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '')):
-            return True
-    return False
+    return any(_has_time_hint_in_exercise_string(getattr(log, 'exercise_string', '')) for log in logs)
 
 
 def get_timed_exercise_preference(db_session, user_id: int, exercise_name: str) -> Optional[bool]:
@@ -1045,11 +1055,23 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
     summary = []
     workout_date = parsed_data.get('date', datetime.now())
     workout_name = parsed_data.get('workout_name')
+    # A "Body Weight - 73 kg" line is that workout's bodyweight; without one, an edited workout
+    # keeps the bodyweight it was logged with. The line becomes the current bodyweight only when
+    # this is the newest workout: pasting or editing an old one used to reset today's setting.
+    workout_bodyweight = parsed_data.get('logged_bodyweight') or getattr(user, "bodyweight", None)
     parsed_bodyweight = parsed_data.get('bodyweight')
     if parsed_bodyweight is not None:
         try:
             parsed_bodyweight = float(parsed_bodyweight)
-            if parsed_bodyweight > 0:
+            if not (math.isfinite(parsed_bodyweight) and 1 <= parsed_bodyweight <= 500):
+                raise ValueError("not a bodyweight")
+            workout_bodyweight = parsed_bodyweight
+            latest = (
+                db_session.query(func.max(WorkoutLog.date))
+                .filter(WorkoutLog.user_id == user.id)
+                .scalar()
+            )
+            if latest is None or workout_date >= latest:
                 user.bodyweight = parsed_bodyweight
                 db_session.flush()
         except (TypeError, ValueError):
@@ -1125,12 +1147,10 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             if aligned_new_sets:
                 new_sets = aligned_new_sets
         
-        uses_bodyweight = bool(is_bodyweight_enabled(
-            db_session,
-            user.id,
-            ex_name,
-            exercise_text=new_str,
-        )) if is_valid else False
+        uses_bodyweight = bool(
+            is_bodyweight_enabled(db_session, user.id, ex_name, exercise_text=new_str)
+            or is_time_only_exercise(new_str, item.get('source_name') or ex_name)
+        ) if is_valid else False
         if is_valid and has_bodyweight_token(new_str):
             set_bodyweight_preference(
                 db_session,
@@ -1141,7 +1161,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
             )
         effective_new_sets = effective_sets_for_current(
             new_sets,
-            getattr(user, "bodyweight", None),
+            workout_bodyweight,
             uses_bodyweight,
         )
 
@@ -1196,7 +1216,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                     exercise=ex_name,
                     exercise_string=new_str,
                     sets_json=new_sets,
-                    bodyweight=user.bodyweight,
+                    bodyweight=workout_bodyweight,
                     uses_bodyweight=uses_bodyweight,
                     top_weight=daily_max_weight if daily_max_weight > 0 else None,
                     top_reps=daily_max_reps if daily_max_reps > 0 else None,
@@ -1271,6 +1291,7 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
                 plan_target_sets=plan_target_sets,
                 log_ex_index=log_ex_index,
                 lift_ex_index=lift_ex_index,
+                is_timed=time_based,
             )
         else:
             row['status'] = "ERROR"
@@ -1355,7 +1376,7 @@ def _get_best_log_before_date(
 
 def compute_workout_summary_for_date(db_session, user, workout_date: date | datetime) -> tuple[list[Dict], int, int]:
     """
-    Build the `summary` rows that `templates/result.html` expects, for an already-logged day.
+    Build per-exercise summary rows (previous best, today, medal) for an already-logged day.
     This recreates the "previous best vs today's performance" session summary without mutating history.
     """
     workout_day = workout_date.date() if isinstance(workout_date, datetime) else workout_date

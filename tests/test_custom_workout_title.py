@@ -62,6 +62,9 @@ def test_classifier_edge_cases():
     assert classify_by_name("T-bar Wide-Grip Row") == {"Back"}
     assert classify_by_name("Leg Curl") == {"Legs"}
     assert classify_by_name("Reverse Barbell Curl") == {"Forearms"}
+    assert classify_by_name("Shoulder Barbell Press") == {"Shoulders"}
+    assert classify_by_name("Superman") == {"Back"}
+    assert classify_by_name("Cable Arm Wrestling") == {"Forearms"}
     assert classify_by_name("Back-Assisted Leg Raises") == {"Abs"}
     assert classify_by_name("Upright Rows") == {"Shoulders"}
     assert classify_by_name("Chest-Supported Machine High Row") == {"Back"}

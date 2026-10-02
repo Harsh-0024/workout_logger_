@@ -1,67 +1,167 @@
 {% extends 'base.html' %}
+{% block title %}Edit workout - Workout Tracker{% endblock %}
+{% import '_settings_ui.html' as st %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-12 col-md-10 col-lg-8">
-        <div class="card">
-            <div class="text-center mb-4 mb-md-5">
-                <div class="mb-3 mb-md-4">
-                    <i class="bi bi-pencil" style="font-size: clamp(3rem, 10vw, 4rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                </div>
-                <h2 class="fw-bold mb-2 mb-md-3" style="font-size: clamp(1.5rem, 6vw, 2rem);">Edit Workout</h2>
-                <p class="text-muted mb-0" style="font-size: clamp(0.875rem, 3vw, var(--fs-lg));">Update title, date, or exercises</p>
-            </div>
+{{ st.styles() }}
+{% include '_log_editor.html' %}
+<style>
+    .ed-fields { display: grid; grid-template-columns: minmax(0, 1fr) 190px; gap: 14px; align-items: end; }
+    /* Side by side here, so no stacked-field gap above the second one. */
+    .ed-fields .st-field + .st-field { margin-top: 0; }
+    .ed-danger { margin-top: 44px; display: flex; justify-content: center; }
+    @media (max-width: 576px) {
+        .ed-fields { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+    }
+</style>
 
-            <form method="POST" action="{{ url_for('edit_workout', date_str=date) }}">
-                <div class="row g-3 mb-3 mb-md-4">
-                    <div class="col-12 col-md-6">
-                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                            Workout Title
-                        </label>
-                        <input type="text" name="workout_title" class="form-control" value="{{ workout_name }}" maxlength="100" required>
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label text-muted mb-2 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                            Workout Date
-                        </label>
-                        <input type="date" name="workout_date" class="form-control" value="{{ workout_date }}" required>
-                    </div>
-                </div>
+<div class="st lg" id="editPage" data-preview-url="{{ url_for('log_preview') }}" data-original-date="{{ date }}">
+    {{ st.head('Edit workout', 'Fix names or numbers.', back=url_for('view_workout', date_str=date), back_label='Back to workout') }}
 
-                <div class="mb-3 mb-md-4">
-                    <label class="form-label text-muted mb-2 mb-md-3 d-block tracking-wide" style="font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: 2px; font-weight: 600;">
-                        Exercises
-                    </label>
-                    <textarea name="workout_text" class="form-control" rows="10" style="font-family: 'SF Mono', 'Menlo', 'Monaco', monospace; font-size: clamp(0.75rem, 2.5vw, 0.875rem); line-height: 1.6;" spellcheck="false">{{ workout_text }}</textarea>
-                    <small class="text-muted mt-2 d-block" style="font-size: var(--fs-xs);">
-                        <i class="bi bi-info-circle me-1"></i>Use the same logging format (e.g., Bench Press 100 x 5)
-                    </small>
-                </div>
-
-                <button type="submit" class="btn btn-gold-solid w-100 mb-3">
-                    <i class="bi bi-check-circle-fill me-2"></i>Save Changes
-                </button>
-            </form>
-
-            <form
-                method="POST"
-                action="{{ url_for('delete_workout', date_str=date) }}"
-                data-confirm="true"
-                data-confirm-title="Delete workout day"
-                data-confirm-message="Delete this entire workout day? This cannot be undone."
-                data-confirm-cta="Delete Workout"
-                data-confirm-destructive="true"
-            >
-                <button type="submit" class="btn btn-outline-danger w-100 mb-3">
-                    <i class="bi bi-trash-fill me-2"></i>Delete Workout Day
-                </button>
-            </form>
-
-            <div class="text-center pt-3 pt-md-4 border-top" style="border-color: var(--border-subtle) !important;">
-                <a href="{{ url_for('view_workout', date_str=date) }}" class="text-muted text-decoration-none small hover-gold tracking-wide">
-                    <i class="bi bi-arrow-left me-1"></i>Back to Workout
-                </a>
-            </div>
+    <div class="lg-callout" id="editRestored" role="status" hidden>
+        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+        <div>
+            <strong>Your changes weren't saved.</strong>
+            <p>They're back below: check them and save again.</p>
         </div>
     </div>
+
+    {% if errors %}
+    <div class="lg-callout is-error" role="alert">
+        <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+        <div>
+            <strong>Nothing was changed.</strong>
+            {% for message in errors %}<p>{{ message }}</p>{% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="{{ url_for('edit_workout', date_str=date) }}" id="editForm" class="st-section lg-flow" data-no-loading="true">
+        <div class="ed-fields">
+            <div class="st-field">
+                <label for="workoutTitle">Title</label>
+                <input type="text" id="workoutTitle" name="workout_title" class="form-control" value="{{ workout_name }}" maxlength="100" required>
+            </div>
+            <div class="st-field">
+                <label for="workoutDate">Date</label>
+                <input type="date" id="workoutDate" name="workout_date" class="form-control" value="{{ workout_date }}" required>
+            </div>
+        </div>
+
+        <div class="st-group lg-editor-group">
+            <label for="workoutTextarea" class="visually-hidden">Exercises</label>
+            <textarea name="workout_text" id="workoutTextarea" class="st-editor lg-editor" spellcheck="false" autocomplete="off">{{ workout_text }}</textarea>
+            <div id="exerciseSuggestions" class="lg-suggest" role="listbox" hidden></div>
+        </div>
+
+        <section class="lg-check" id="logCheck" hidden aria-label="Check before saving">
+            <div class="st-label"><span>Check</span></div>
+            <div id="checkNotes"></div>
+            <div class="st-group" id="checkList"></div>
+        </section>
+
+        <div class="lg-bar">
+            <button type="button" class="lg-meta" id="logMeta" aria-live="polite">Checking…</button>
+            <div class="lg-bar-actions">
+                <a href="{{ url_for('view_workout', date_str=date) }}" class="st-btn st-btn-quiet st-btn-sm">Cancel</a>
+                <button type="submit" class="st-btn st-btn-primary st-btn-sm" id="saveBtn">Save</button>
+            </div>
+        </div>
+    </form>
+
+    <form
+        method="POST"
+        action="{{ url_for('delete_workout', date_str=date) }}"
+        class="ed-danger"
+        data-confirm="true"
+        data-confirm-title="Delete workout day"
+        data-confirm-message="Delete this entire workout day? This cannot be undone."
+        data-confirm-cta="Delete Workout"
+        data-confirm-destructive="true"
+    >
+        <button type="submit" class="st-btn st-btn-danger st-btn-sm"><i class="bi bi-trash"></i>Delete this workout</button>
+    </form>
 </div>
+
+<script type="application/json" id="exerciseData">{{ exercise_list | tojson if exercise_list is defined else '[]' }}</script>
+<script>
+    (function () {
+        const page = document.getElementById('editPage');
+        const form = document.getElementById('editForm');
+        const textarea = document.getElementById('workoutTextarea');
+        const titleInput = document.getElementById('workoutTitle');
+        const dateInput = document.getElementById('workoutDate');
+        const saveBtn = document.getElementById('saveBtn');
+        const meta = document.getElementById('logMeta');
+        const check = document.getElementById('logCheck');
+        const csrf = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '';
+        const LogEditor = window.LogEditor;
+
+        // What was sent with Save. If the save ended on the sign-in page, the page comes back
+        // with the old text; put the edits back. A saved workout's page forgets them.
+        const SENT_KEY = 'wt-edit-sent:{{ current_user.id }}:{{ date }}';
+        try {
+            const sent = JSON.parse(sessionStorage.getItem(SENT_KEY) || 'null');
+            sessionStorage.removeItem(SENT_KEY);
+            if (sent && (sent.text !== textarea.value || sent.title !== titleInput.value || sent.date !== dateInput.value)) {
+                textarea.value = sent.text;
+                titleInput.value = sent.title;
+                dateInput.value = sent.date;
+                document.getElementById('editRestored').hidden = false;
+            }
+        } catch (e) { /* storage off */ }
+
+        LogEditor.autoGrow(textarea);
+        LogEditor.attachPasteTidy(textarea);
+        LogEditor.attachSuggestions(textarea, document.getElementById('exerciseSuggestions'),
+            JSON.parse(document.getElementById('exerciseData').textContent || '[]'), { firstLineIsTitle: false });
+
+        const render = (data) => {
+            check.hidden = false;
+            // The day being edited is not a clash with itself.
+            if (data && data.existing && data.existing.date_str === page.dataset.originalDate) data.existing = null;
+            const view = LogEditor.renderCheck(data, {
+                notes: document.getElementById('checkNotes'),
+                list: document.getElementById('checkList'),
+                textarea,
+                allowAppend: false,
+                conflictMessage: 'That date already has a workout',
+            });
+            LogEditor.paintMeta(meta, view);
+            saveBtn.disabled = view.blocked;
+        };
+
+        const preview = LogEditor.previewer(page.dataset.previewUrl, csrf, () => {
+            const body = new FormData();
+            body.append('workout_text', textarea.value);
+            body.append('title', titleInput.value);
+            body.append('date', dateInput.value);
+            return body;
+        }, render);
+
+        textarea.addEventListener('input', preview.soon);
+        titleInput.addEventListener('input', preview.soon);
+        dateInput.addEventListener('change', preview.now);
+        meta.addEventListener('click', () => check.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+        preview.now();
+
+        form.addEventListener('submit', (e) => {
+            if (saveBtn.disabled) {
+                e.preventDefault();
+                check.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return;
+            }
+            saveBtn.textContent = 'Saving…';
+            try {
+                sessionStorage.setItem(SENT_KEY, JSON.stringify({ text: textarea.value, title: titleInput.value, date: dateInput.value }));
+            } catch (err) { /* storage off */ }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.metaKey && (e.key || '').toLowerCase() === 'enter') {
+                e.preventDefault();
+                form.requestSubmit(saveBtn);
+            }
+        });
+    })();
+</script>
 {% endblock %}

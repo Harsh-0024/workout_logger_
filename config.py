@@ -37,6 +37,12 @@ class Config:
     
     # Feature Flags
     ENABLE_CSRF = True
+    # A form stays good for as long as the page is open: with the default one hour, a workout
+    # typed at the gym and saved later was refused. The token still belongs to the session.
+    WTF_CSRF_TIME_LIMIT = None
+    # Largest request accepted (photos, pasted workouts). Without it an upload of any size was
+    # taken and decoded, enough to run a small server out of memory.
+    MAX_CONTENT_LENGTH = 16 * 1024 * 1024
     ENABLE_RATE_LIMITING = os.environ.get('ENABLE_RATE_LIMITING', 'True').lower() == 'true'
     
     # Pagination
@@ -75,6 +81,22 @@ class Config:
     
     # Authentication
     REMEMBER_COOKIE_DURATION = 30  # days
+
+    # Sign-in cookies: hidden from page scripts, not sent along with other sites' requests,
+    # and only over HTTPS where the app is deployed (Render and Railway set these variables;
+    # a local run on http://localhost keeps working).
+    DEPLOYED = bool(
+        os.environ.get('RENDER')
+        or os.environ.get('RAILWAY_ENVIRONMENT')
+        or os.environ.get('RAILWAY_ENVIRONMENT_NAME')
+        or os.environ.get('RAILWAY_PROJECT_ID')
+    )
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    SESSION_COOKIE_SECURE = DEPLOYED
+    REMEMBER_COOKIE_HTTPONLY = True
+    REMEMBER_COOKIE_SAMESITE = 'Lax'
+    REMEMBER_COOKIE_SECURE = DEPLOYED
     VERIFICATION_TOKEN_EXPIRY = 24  # hours
     OTP_TOKEN_EXPIRY_MINUTES = int(os.environ.get('OTP_TOKEN_EXPIRY_MINUTES', 10))
 

@@ -3,14 +3,13 @@ import re
 import json
 import secrets
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
 
 from flask import flash, redirect, render_template, request, session, url_for
 from flask_login import login_required, login_user, logout_user, current_user
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
-from parsers.workout import workout_parser
+from parsers.workout import _WEEKDAY_BEFORE_DATE, workout_parser
 from services.logging import handle_workout_log
 
 from config import Config
@@ -25,9 +24,9 @@ from services.bodyweight import (
     set_bodyweight_preference,
 )
 from services.logging import refresh_best_lift_pointers
-from services.stats import get_csv_export, get_json_export
+from services.stats import get_csv_export, get_json_export, timed_checker
 from sqlalchemy import desc
-from services.auth import AuthService, AuthenticationError
+from services.auth import AuthService, AuthenticationError, EmailNotVerifiedError
 from utils.errors import ValidationError
 from utils.logger import logger
 from utils.profile_images import (
@@ -38,7 +37,10 @@ from utils.profile_images import (
     has_r2_profile_image_storage,
     normalize_profile_image_key,
 )
-from utils.validators import sanitize_text_input, validate_username
+from utils.validators import (
+    USERNAME_NOT_AVAILABLE, is_reserved_username, is_safe_redirect_url, parse_bodyweight, sanitize_text_input,
+    validate_email, validate_username,
+)
 
 from .decorators import dev_only, require_admin
 
@@ -117,13 +119,13 @@ def _infer_bulk_import_dates(headers, today: date | None = None):
     return resolved
 
 
+# set_password reports failure by returning False; the page used to say "updated" regardless.
+PASSWORD_NOT_CHANGED = "Your password wasn't changed. Please try again."
+
+
 def register_auth_routes(app, email_service):
     def _is_safe_redirect_url(target: str) -> bool:
-        if not target:
-            return False
-        ref_url = urlparse(request.host_url)
-        test_url = urlparse(urljoin(request.host_url, target))
-        return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+        return is_safe_redirect_url(target, request.host_url)
 
     def _get_client_ip() -> str:
         forwarded = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
@@ -164,6 +166,10 @@ def register_auth_routes(app, email_service):
             raise AuthenticationError("Unsupported profile image type.")
 
         image = Image.open(file_storage.stream)
+        # Sized before it's decoded: a small file can still unpack into an enormous image.
+        width, height = image.size
+        if width * height > 40_000_000:
+            raise AuthenticationError("That photo is too large. Please pick a smaller one.")
         image = ImageOps.exif_transpose(image)
         image = image.convert('RGB')
         size = 320
@@ -229,6 +235,12 @@ def register_auth_routes(app, email_service):
                 username = request.form.get('username', '').strip()
                 email = request.form.get('email', '').strip()
                 password = request.form.get('password', '')
+                # Each sign-up emails a code to the address given: not a way to fill an inbox.
+                _enforce_rate_limit('register', email, limit=10, window_seconds=3600)
+                # The page checks this too, but only when its script runs.
+                confirm_password = request.form.get('confirm_password')
+                if confirm_password is not None and confirm_password != password:
+                    raise AuthenticationError("Passwords don't match.")
 
                 user, verification_code = AuthService.register_user(
                     username=username,
@@ -285,7 +297,7 @@ def register_auth_routes(app, email_service):
                     return render_template('login.html')
 
                 if user.email and user.email.lower() in Config.ADMIN_EMAIL_ALLOWLIST and not user.is_admin():
-                    db_user = Session.query(User).get(user.id)
+                    db_user = Session.get(User, user.id)
                     if db_user and not db_user.is_admin():
                         db_user.role = UserRole.ADMIN
                         db_user.updated_at = datetime.now()
@@ -301,6 +313,27 @@ def register_auth_routes(app, email_service):
                     return redirect(next_page)
                 return redirect(url_for('user_dashboard', username=user.username))
 
+            except EmailNotVerifiedError as e:
+                # Signing up on another device (or before the code came) left no way to confirm
+                # from here: send a fresh code and go to the page that takes it.
+                session['pending_verification_user_id'] = e.user_id
+                try:
+                    _enforce_rate_limit('email_codes', str(e.user_id), limit=10, window_seconds=600)
+                    pending = Session.get(User, e.user_id)
+                    # Read before the service runs: it closes the shared session.
+                    pending_email, pending_username = pending.email, pending.username
+                    code = AuthService.resend_verification_code(e.user_id)
+                    sent = email_service.send_otp_email(
+                        email=pending_email, username=pending_username, otp_code=code, purpose='verify_email',
+                    )
+                except AuthenticationError:
+                    sent = False
+                except Exception as exc:
+                    logger.error(f"Sending a confirmation code at sign-in failed: {exc}", exc_info=True)
+                    sent = False
+                flash("Confirm your email first: we've sent you a new code." if sent
+                      else "Confirm your email first with the code we sent you.", "info")
+                return redirect(url_for('verify_email'))
             except AuthenticationError as e:
                 flash(str(e), "error")
                 return render_template('login.html')
@@ -376,7 +409,7 @@ def register_auth_routes(app, email_service):
             flash("No login code requested. Please request a new code.", "error")
             return redirect(url_for('login_otp_request'))
 
-        user = Session.query(User).get(user_id)
+        user = Session.get(User, user_id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -394,7 +427,7 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_otp_identifier', None)
                     session.pop('pending_otp_purpose', None)
 
-                    verified_user = Session.query(User).get(user_id)
+                    verified_user = Session.get(User, user_id)
                     if verified_user and verified_user.email:
                         if verified_user.email.lower() in Config.ADMIN_EMAIL_ALLOWLIST and not verified_user.is_admin():
                             verified_user.role = UserRole.ADMIN
@@ -475,7 +508,7 @@ def register_auth_routes(app, email_service):
                 flash("No pending verification found.", "error")
                 return redirect(url_for('login'))
 
-        user = Session.query(User).get(user_id)
+        user = Session.get(User, user_id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('register'))
@@ -492,6 +525,8 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             try:
                 verification_code = request.form.get('verification_code', '').strip()
+                # Codes are six digits: without a limit they could simply be tried in turn.
+                _enforce_rate_limit('verify_email', str(user_id), limit=15, window_seconds=600)
 
                 if AuthService.verify_email(user_id, verification_code):
                     if not current_user.is_authenticated:
@@ -503,20 +538,20 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_verification_user_id', None)
 
                     if current_user.is_authenticated:
-                        flash("Email verified successfully!", "success")
+                        flash("Email confirmed.", "success")
                         return redirect(url_for('user_dashboard', username=redirect_username))
 
-                    verified_user = Session.query(User).get(user_id)
+                    verified_user = Session.get(User, user_id)
                     if verified_user:
                         login_user(
                             verified_user,
                             remember=True,
                             duration=timedelta(days=Config.REMEMBER_COOKIE_DURATION),
                         )
-                        flash("Email verified successfully! You're now signed in.", "success")
+                        flash("Email confirmed. You're signed in.", "success")
                         return redirect(url_for('user_dashboard', username=verified_user.username))
 
-                    flash("Email verified successfully! Please log in.", "success")
+                    flash("Email confirmed. Please sign in.", "success")
                     return redirect(url_for('login'))
 
                 flash("Invalid verification code. Please try again.", "error")
@@ -543,7 +578,7 @@ def register_auth_routes(app, email_service):
                 return redirect(url_for('login'))
 
         try:
-            user = Session.query(User).get(user_id)
+            user = Session.get(User, user_id)
             if not user:
                 flash("User not found.", "error")
                 return redirect(url_for('register'))
@@ -551,6 +586,7 @@ def register_auth_routes(app, email_service):
             user_email = user.email
             user_username = user.username
 
+            _enforce_rate_limit('email_codes', str(user_id), limit=10, window_seconds=600)
             verification_code = AuthService.resend_verification_code(user_id)
 
             email_sent = email_service.send_otp_email(
@@ -575,8 +611,13 @@ def register_auth_routes(app, email_service):
 
     @login_required
     def logout():
+        # Everything this browser held for the account goes: a code sign-in's "no current
+        # password needed" pass, pending email or password changes, save notes. Cleared before
+        # logout_user(), which then marks the remember-me cookie for removal (clearing after it
+        # would drop that mark and the cookie would sign them straight back in).
+        session.clear()
         logout_user()
-        flash("Logged out successfully.", "info")
+        flash("Logged out.", "info")
         return redirect(url_for('login'))
 
     @login_required
@@ -630,7 +671,7 @@ def register_auth_routes(app, email_service):
                         )
                     )
                     Session.commit()
-                    flash("API key added successfully!", "success")
+                    flash("Key added.", "success")
                     return redirect(url_for('integrations_settings'))
 
                 if form_type == 'delete_api_key':
@@ -669,7 +710,7 @@ def register_auth_routes(app, email_service):
                                 _delete_profile_image(old_image)
                             except Exception as e:
                                 logger.warning(f"Could not delete old profile photo {old_image}: {e}")
-                        flash("Profile photo updated successfully!", "success")
+                        flash("Photo updated.", "success")
                     except AuthenticationError as e:
                         Session.rollback()
                         flash(str(e), "error")
@@ -685,7 +726,7 @@ def register_auth_routes(app, email_service):
                         user.profile_image = None
                         user.updated_at = datetime.now()
                         Session.commit()
-                        flash("Profile photo removed successfully!", "success")
+                        flash("Photo removed.", "success")
                     except Exception as e:
                         Session.rollback()
                         logger.error(f"Profile photo removal failed: {e}", exc_info=True)
@@ -693,21 +734,13 @@ def register_auth_routes(app, email_service):
                     return redirect(url_for('account_settings'))
 
                 if form_type == 'bodyweight':
-                    bodyweight_raw = request.form.get('bodyweight', '').strip()
                     try:
-                        if bodyweight_raw:
-                            bodyweight = float(bodyweight_raw)
-                            if bodyweight < 1:
-                                flash("Bodyweight must be at least 1 kg.", "error")
-                                return redirect(url_for('user_settings'))
-                            user.bodyweight = bodyweight
-                        else:
-                            user.bodyweight = None
+                        user.bodyweight = parse_bodyweight(request.form.get('bodyweight', ''))
                         user.updated_at = datetime.now()
                         Session.commit()
-                        flash("Bodyweight updated successfully!", "success")
-                    except ValueError:
-                        flash("Invalid bodyweight value.", "error")
+                        flash("Bodyweight updated.", "success")
+                    except ValidationError as e:
+                        flash(str(e), "error")
                     except Exception as e:
                         Session.rollback()
                         logger.error(f"Bodyweight update failed: {e}", exc_info=True)
@@ -803,19 +836,14 @@ def register_auth_routes(app, email_service):
                     username = sanitize_text_input(request.form.get('username', ''), max_length=30)
                     email = sanitize_text_input(request.form.get('email', ''), max_length=255)
                     current_password = request.form.get('current_password', '')
-                    bodyweight_raw = request.form.get('bodyweight', '').strip()
                     bodyweight = user.bodyweight
-
-                    if bodyweight_raw:
-                        try:
-                            bodyweight = float(bodyweight_raw)
-                        except ValueError:
-                            flash("Bodyweight must be a number.", "error")
-                            return redirect(url_for('account_settings'))
-
-                        if bodyweight <= 0:
-                            flash("Bodyweight must be greater than 0.", "error")
-                            return redirect(url_for('account_settings'))
+                    try:
+                        typed_bodyweight = parse_bodyweight(request.form.get('bodyweight', ''))
+                    except ValidationError as e:
+                        flash(str(e), "error")
+                        return redirect(url_for('account_settings'))
+                    if typed_bodyweight is not None:
+                        bodyweight = typed_bodyweight
 
                     if not username or not email:
                         flash("Username and email are required.", "error")
@@ -830,6 +858,14 @@ def register_auth_routes(app, email_service):
                             raise AuthenticationError("Current password is incorrect")
 
                     username = validate_username(username)
+                    if username != (user.username or '').lower() and (
+                            is_reserved_username(username)
+                            or Session.query(User).filter(User.email == username, User.id != user_id).first()):
+                        flash(USERNAME_NOT_AVAILABLE, "error")
+                        return redirect(url_for('account_settings'))
+                    # As at sign-up: a typo like "alice@@example" is caught here, not when the
+                    # codes can't be sent.
+                    email = validate_email(email)
 
                     existing_username = (
                         Session.query(User)
@@ -872,6 +908,7 @@ def register_auth_routes(app, email_service):
                         }
                         session['pending_email_change_user_id'] = user_id
 
+                        _enforce_rate_limit('email_codes', str(user_id), limit=10, window_seconds=600)
                         otp_payload = AuthService.request_email_change_otps(
                             user_id,
                             current_email=user_email,
@@ -904,6 +941,7 @@ def register_auth_routes(app, email_service):
                             'email': email,
                             'bodyweight': bodyweight,
                         }
+                        _enforce_rate_limit('email_codes', str(user.id), limit=10, window_seconds=600)
                         otp_payload = AuthService.request_profile_update_otp(user.id)
                         email_sent = email_service.send_otp_email(
                             email=otp_payload['email'],
@@ -914,7 +952,7 @@ def register_auth_routes(app, email_service):
                         if email_sent:
                             flash("One-time code sent to your email.", "info")
                             return redirect(url_for('verify_profile_update_otp'))
-                        flash("Unable to send OTP. Please try again.", "error")
+                        flash("Couldn't send the code. Please try again.", "error")
                         return redirect(url_for('account_settings'))
 
                     user.full_name = full_name if full_name else None
@@ -928,7 +966,7 @@ def register_auth_routes(app, email_service):
 
                     Session.commit()
 
-                    flash("Profile updated successfully!", "success")
+                    flash("Profile updated.", "success")
                     return redirect(url_for('account_settings'))
 
                 if form_type == 'password':
@@ -941,26 +979,29 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('account_settings') + '#change-password')
 
                     if otp_login_verified or password_change_verified:
-                        AuthService.set_password(user.id, new_password)
+                        if not AuthService.set_password(user.id, new_password):
+                            raise AuthenticationError(PASSWORD_NOT_CHANGED)
                         session.pop('otp_login_verified', None)
                         session.pop('otp_login_user_id', None)
                         session.pop('password_change_verified', None)
                         session.pop('password_change_user_id', None)
-                        flash("Password updated successfully!", "success")
+                        flash("Password updated.", "success")
                         return redirect(url_for('account_settings'))
 
                     if not current_password:
-                        flash("Please enter your current password or use the OTP option.", "error")
+                        flash("Enter your current password, or sign in with a code instead.", "error")
                         return redirect(url_for('account_settings') + '#change-password')
 
                     if not AuthService.verify_password(current_password, user.password_hash):
                         raise AuthenticationError("Current password is incorrect")
 
-                    AuthService.set_password(user.id, new_password)
-                    flash("Password updated successfully!", "success")
+                    if not AuthService.set_password(user.id, new_password):
+                        raise AuthenticationError(PASSWORD_NOT_CHANGED)
+                    flash("Password updated.", "success")
                     return redirect(url_for('account_settings'))
 
                 if form_type == 'password_otp_request':
+                    _enforce_rate_limit('email_codes', str(user.id), limit=10, window_seconds=600)
                     otp_payload = AuthService.request_password_change_otp(user.id)
                     email_sent = email_service.send_otp_email(
                         email=otp_payload['email'],
@@ -984,7 +1025,7 @@ def register_auth_routes(app, email_service):
                     confirm_password = request.form.get('confirm_password', '')
 
                     if not pending_password_change:
-                        flash("Request a code first to use OTP password change.", "error")
+                        flash("Ask for a code first, then enter it here.", "error")
                         return redirect(url_for('account_settings') + '#change-password')
 
                     if not otp_code:
@@ -995,15 +1036,17 @@ def register_auth_routes(app, email_service):
                         flash("New password and confirmation do not match.", "error")
                         return redirect(url_for('account_settings') + '#change-password')
 
+                    _enforce_rate_limit('change_password_verify', str(user.id), limit=15, window_seconds=600)
                     if AuthService.verify_otp(user.id, otp_code, 'change_password'):
-                        AuthService.set_password(user.id, new_password)
+                        if not AuthService.set_password(user.id, new_password):
+                            raise AuthenticationError(PASSWORD_NOT_CHANGED)
                         session.pop('pending_password_change', None)
                         session.pop('password_change_user_id', None)
                         session.pop('otp_login_verified', None)
                         session.pop('otp_login_user_id', None)
                         session.pop('password_change_verified', None)
                         session.pop('password_change_user_id', None)
-                        flash("Password updated successfully!", "success")
+                        flash("Password updated.", "success")
                         return redirect(url_for('account_settings'))
 
                     flash("Invalid code. Please try again.", "error")
@@ -1071,11 +1114,13 @@ def register_auth_routes(app, email_service):
                 .all()
             )
             if logs:
-                csv_data = get_csv_export(Session, user)
+                # Both exports ask "is this exercise timed?" once per name between them.
+                is_timed = timed_checker(Session, user)
+                csv_data = get_csv_export(Session, user, is_timed=is_timed)
                 csv_bytes = csv_data.encode('utf-8')
                 csv_size_kb = (len(csv_bytes) + 1023) // 1024
 
-                json_payload = get_json_export(Session, user)
+                json_payload = get_json_export(Session, user, is_timed=is_timed)
                 json_bytes = json.dumps(json_payload, ensure_ascii=False, indent=2).encode('utf-8')
                 json_size_kb = (len(json_bytes) + 1023) // 1024
         except Exception as e:
@@ -1191,7 +1236,7 @@ def register_auth_routes(app, email_service):
             return redirect(url_for('user_settings'))
 
         user_id = current_user.id
-        user = Session.query(User).get(user_id)
+        user = Session.get(User, user_id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -1201,6 +1246,7 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             try:
                 otp_code = request.form.get('otp_code', '').strip()
+                _enforce_rate_limit('profile_update_verify', str(user_id), limit=15, window_seconds=600)
 
                 if AuthService.verify_otp(user_id, otp_code, 'profile_update'):
                     full_name = pending_update.get('full_name')
@@ -1213,6 +1259,11 @@ def register_auth_routes(app, email_service):
                         return redirect(url_for('user_settings'))
 
                     username = validate_username(username)
+                    if username != (user.username or '').lower() and (
+                            is_reserved_username(username)
+                            or Session.query(User).filter(User.email == username, User.id != user_id).first()):
+                        flash(USERNAME_NOT_AVAILABLE, "error")
+                        return redirect(url_for('user_settings'))
                     existing_username = (
                         Session.query(User)
                         .filter(User.username == username, User.id != user_id)
@@ -1250,6 +1301,7 @@ def register_auth_routes(app, email_service):
                         }
                         session['pending_email_change_user_id'] = user_id
 
+                        _enforce_rate_limit('email_codes', str(user_id), limit=10, window_seconds=600)
                         otp_payload = AuthService.request_email_change_otps(
                             user_id,
                             current_email=user_email,
@@ -1277,7 +1329,7 @@ def register_auth_routes(app, email_service):
                         flash("Unable to send email change codes. Please try again.", "error")
                         return redirect(url_for('user_settings'))
 
-                    user = Session.query(User).get(user_id)
+                    user = Session.get(User, user_id)
                     if not user:
                         flash("User not found.", "error")
                         return redirect(url_for('login'))
@@ -1295,7 +1347,7 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_profile_update', None)
                     session.pop('pending_profile_update_user_id', None)
 
-                    flash("Profile updated successfully!", "success")
+                    flash("Profile updated.", "success")
                     return redirect(url_for('user_settings'))
 
                 flash("Invalid code. Please try again.", "error")
@@ -1327,7 +1379,7 @@ def register_auth_routes(app, email_service):
             flash("Password change verification mismatch.", "error")
             return redirect(url_for('user_settings'))
 
-        user = Session.query(User).get(current_user.id)
+        user = Session.get(User, current_user.id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -1337,6 +1389,7 @@ def register_auth_routes(app, email_service):
         if request.method == 'POST':
             try:
                 otp_code = request.form.get('otp_code', '').strip()
+                _enforce_rate_limit('change_password_verify', str(user.id), limit=15, window_seconds=600)
 
                 if AuthService.verify_otp(user.id, otp_code, 'change_password'):
                     session['password_change_verified'] = True
@@ -1366,6 +1419,7 @@ def register_auth_routes(app, email_service):
     @login_required
     def resend_password_change_otp():
         try:
+            _enforce_rate_limit('email_codes', str(current_user.id), limit=10, window_seconds=600)
             otp_payload = AuthService.request_password_change_otp(current_user.id)
             email_sent = email_service.send_otp_email(
                 email=otp_payload['email'],
@@ -1399,7 +1453,7 @@ def register_auth_routes(app, email_service):
             flash("Email change verification mismatch.", "error")
             return redirect(url_for('user_settings'))
 
-        user = Session.query(User).get(current_user.id)
+        user = Session.get(User, current_user.id)
         if not user:
             flash("User not found.", "error")
             return redirect(url_for('login'))
@@ -1417,8 +1471,14 @@ def register_auth_routes(app, email_service):
                     flash("Please enter both codes.", "error")
                     return redirect(url_for('verify_email_change_otp'))
 
-                old_valid = AuthService.verify_otp(user.id, otp_old, 'change_email_old')
-                new_valid = AuthService.verify_otp(user.id, otp_new, 'change_email_new')
+                _enforce_rate_limit('change_email_verify', str(user.id), limit=15, window_seconds=600)
+                # Check both before spending either: a typo in one code used to spend the other,
+                # so the retry with both right was refused until new codes were sent.
+                old_valid = AuthService.verify_otp(user.id, otp_old, 'change_email_old', use=False)
+                new_valid = AuthService.verify_otp(user.id, otp_new, 'change_email_new', use=False)
+                if old_valid and new_valid:
+                    old_valid = AuthService.verify_otp(user.id, otp_old, 'change_email_old')
+                    new_valid = AuthService.verify_otp(user.id, otp_new, 'change_email_new')
 
                 if old_valid and new_valid:
                     full_name = pending_change.get('full_name')
@@ -1429,7 +1489,7 @@ def register_auth_routes(app, email_service):
                         flash("Missing email change details.", "error")
                         return redirect(url_for('user_settings'))
 
-                    user = Session.query(User).get(current_user.id)
+                    user = Session.get(User, current_user.id)
                     if not user:
                         flash("User not found.", "error")
                         return redirect(url_for('login'))
@@ -1450,7 +1510,7 @@ def register_auth_routes(app, email_service):
                     session.pop('pending_email_change', None)
                     session.pop('pending_email_change_user_id', None)
 
-                    flash("Email updated successfully!", "success")
+                    flash("Email updated.", "success")
                     return redirect(url_for('user_settings'))
 
                 flash("Invalid codes. Please try again.", "error")
@@ -1478,6 +1538,7 @@ def register_auth_routes(app, email_service):
             return redirect(url_for('user_settings'))
 
         try:
+            _enforce_rate_limit('email_codes', str(current_user.id), limit=10, window_seconds=600)
             otp_payload = AuthService.request_email_change_otps(
                 current_user.id,
                 current_email=pending_change.get('current_email'),
@@ -1517,6 +1578,7 @@ def register_auth_routes(app, email_service):
             return redirect(url_for('user_settings'))
 
         try:
+            _enforce_rate_limit('email_codes', str(current_user.id), limit=10, window_seconds=600)
             otp_payload = AuthService.request_profile_update_otp(current_user.id)
             email_sent = email_service.send_otp_email(
                 email=otp_payload['email'],
@@ -1580,6 +1642,22 @@ def register_auth_routes(app, email_service):
                 s = (line or "").strip()
                 if not s or s.startswith("#"):
                     return None
+                # "Monday 28/9 ...", "Tue, 29 Sep ...": the weekday in front of a date.
+                weekday = _WEEKDAY_BEFORE_DATE.match(s)
+                if weekday:
+                    s = s[weekday.end():]
+
+                # yyyy-mm-dd, as exports from other apps write it
+                m = re.match(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})(?=\s|$|[-–—:,])", s)
+                if m:
+                    return {"day": int(m.group(3)), "month": int(m.group(2)), "year": int(m.group(1)),
+                            "year_str": m.group(1)}
+
+                # dd.mm.yy / dd-mm-yyyy: only with a year, so a weight like "12.5" isn't 12 May
+                m = re.match(r"^(\d{1,2})[.\-](\d{1,2})[.\-](\d{2}|\d{4})(?=\s|$|[-–—:,])", s)
+                if m:
+                    return {"day": int(m.group(1)), "month": int(m.group(2)), "year": _parse_year(m.group(3)),
+                            "year_str": m.group(3)}
 
                 # dd/mm[/yy]
                 m = re.match(r"^\s*(\d{1,2})\s*/\s*(\d{1,2})(?:\s*/\s*(\d{2,4}))?", s)
@@ -1597,8 +1675,8 @@ def register_auth_routes(app, email_service):
                 )
                 if m:
                     day = int(m.group(1))
-                    mon_token = (m.group(2) or "").lower()
-                    mo = month_map.get(mon_token) or month_map.get(mon_token[:3])
+                    # A month's name or its short form only: "3 Decline Press" isn't 3 December.
+                    mo = month_map.get((m.group(2) or "").lower())
                     if not mo:
                         return None
                     year = _parse_year(m.group(3))

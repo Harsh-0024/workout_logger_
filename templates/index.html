@@ -1,447 +1,129 @@
 {% extends 'base.html' %}
+{% import '_settings_ui.html' as st %}
+{% block title %}Home - Workout Tracker{% endblock %}
 {% block content %}
-<div class="row g-3 g-md-4 align-items-start">
-    <!-- Main Dashboard -->
-    <div class="col-12 col-lg-8">
-        <div class="card w-100 dashboard-main-card">
-            <div class="text-center mb-4 mb-md-5 profile-header-section">
-                <div class="mb-3 mb-md-4">
-                    {% if profile_image_url %}
-                    <a href="{{ url_for('user_settings', _anchor='profile-appearance') }}" style="display: inline-block;">
-                        <img src="{{ profile_image_url }}" alt="Profile photo" class="profile-avatar">
-                    </a>
-                    {% else %}
-                    <a href="{{ url_for('user_settings', _anchor='profile-appearance') }}" style="display: inline-block;">
-                        <i class="bi bi-person-circle" style="font-size: clamp(5rem, 12vw, 6.5rem); color: var(--gold-primary); opacity: 0.6;"></i>
-                    </a>
-                    {% endif %}
-                </div>
-                <h1 class="fw-bold mb-0" style="font-size: clamp(1.875rem, 6vw, var(--fs-5xl)); background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-bright) 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;">
-                    {{ display_name }}
-                </h1>
-                <p class="text-muted mt-2 mt-md-3 mb-0" style="font-size: var(--fs-sm);">Elite Performance Dashboard</p>
-            </div>
-
-            <div class="d-grid gap-2 gap-md-3 mb-3 mb-md-4">
-                <a href="/log" class="btn btn-gold-solid">
-                    <i class="bi bi-plus-circle-fill me-2"></i>Log Workout
-                </a>
-                <a href="/retrieve/categories" class="btn btn-gold-solid">
-                    <i class="bi bi-list-ul me-2"></i>Retrieve Plan
-                </a>
-                <a href="{{ url_for('retrieve_custom') }}" class="btn btn-gold-outline">
-                    <i class="bi bi-sliders2-vertical me-2"></i>Custom Retrieve
-                </a>
-                <button type="button" class="btn btn-gold-outline" id="recommendWorkoutBtn" hidden>
-                    <i class="bi bi-stars me-2"></i>Suggest Workout
-                </button>
-                <a href="/stats" class="btn btn-gold-outline">
-                    <i class="bi bi-graph-up-arrow me-2"></i>View Progress
-                </a>
-            </div>
-
-            <div id="recommendWorkoutCard" class="card" style="display: none; background: var(--card-bg-solid); border: 1px solid var(--border-subtle);">
-                <div class="d-flex align-items-center gap-2 mb-2">
-                    <i class="bi bi-lightbulb text-gold"></i>
-                    <h6 class="mb-0 fw-bold">Suggested workout</h6>
-                </div>
-                <div id="recommendWorkoutMeta" class="text-muted mb-2" style="display: none; font-size: var(--fs-xs);"></div>
-                <a id="recommendWorkoutLink" href="#" class="btn btn-gold-solid w-100 mb-3" style="display: none;"></a>
-                <ul id="recommendWorkoutReasons" class="text-muted mb-0" style="text-align: left; padding-left: 1.1rem;"></ul>
-            </div>
-
-        </div>
-    </div>
-
-    <!-- Recent Workouts Panel -->
-    <div class="col-12 col-lg-4">
-        {% if recent_workouts %}
-        <div class="card w-100 d-flex flex-column recent-workouts-card" id="recent-workouts" style="max-height: none;">
-            <div class="d-flex align-items-center justify-content-between mb-3 mb-md-4 gap-2">
-                <div class="d-flex align-items-center">
-                    <i class="bi bi-clock-history me-2 text-gold" style="font-size: clamp(1.25rem, 4vw, 1.5rem);"></i>
-                    <h5 class="mb-0 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">Recent Workouts</h5>
-                </div>
-                <button type="button" id="toggleSelectModeBtn" class="btn btn-outline-secondary btn-sm d-none" aria-label="Cancel selection mode">
-                    <i class="bi bi-x-circle me-1"></i>Cancel
-                </button>
-            </div>
-
-            <div class="d-flex gap-2 mb-3">
-                <form id="bulkDeleteForm" method="POST" action="{{ url_for('bulk_delete_workouts') }}" class="d-inline-block d-none">
-                    <button type="submit" id="bulkDeleteBtn" class="btn btn-outline-danger btn-sm" disabled>
-                        <i class="bi bi-trash me-1"></i>Delete Selected
-                    </button>
-                </form>
-                <button type="button" id="selectAllRecentBtn" class="btn btn-outline-secondary btn-sm d-none">
-                    <i class="bi bi-check2-all me-1"></i>Select All
-                </button>
-            </div>
-
-            {% if recent_workouts|length > 3 %}
-            <div class="mb-3">
-                <input id="recentSearch" type="text" class="form-control" placeholder="Search by date, workout name, exercise (comma-separated)" style="font-size: var(--fs-sm);">
-            </div>
-            {% endif %}
-
-            <div id="recentEmpty" class="text-muted text-center py-4" style="display: none; font-size: var(--fs-sm);">No results.</div>
-
-            <div id="recentList" class="flex-grow-1 recent-workouts-list" style="min-height: 0; overflow-y: auto;">
-                {% for workout in recent_workouts %}
-                <div class="recent-workout-item recent-item" style="transition: all var(--transition-base);" data-search="{{ (workout.title ~ ' ' ~ (workout.date.strftime('%Y-%m-%d')) ~ ' ' ~ (workout.date.strftime('%d-%m-%y')) ~ ' ' ~ (workout.exercises or '')) | lower }}">
-                    <div class="d-flex justify-content-between align-items-center gap-2">
-                        <input
-                            type="checkbox"
-                            class="form-check-input recent-select-checkbox d-none"
-                            style="margin-top: 0;"
-                            form="bulkDeleteForm"
-                            name="selected_dates"
-                            value="{{ workout.date.strftime('%Y-%m-%d') }}"
-                        >
-                        <a href="{{ url_for('view_workout', date_str=workout.date.strftime('%Y-%m-%d')) }}" class="text-decoration-none d-flex justify-content-between align-items-center gap-2 flex-grow-1 recent-workout-link">
-                        <div class="recent-workout-body" style="flex: 1; min-width: 0;">
-                            <span class="text-white fw-semibold d-block recent-workout-title" style="font-size: clamp(0.875rem, 3vw, 1rem); overflow-wrap: break-word; word-break: break-word;">{{ workout.title }}</span>
-                            <small class="text-muted recent-workout-date" style="font-size: var(--fs-xs); white-space: nowrap;">{{ workout.date | format_date }} • {{ workout.date.strftime('%A') }}</small>
-                        </div>
-                        <i class="bi bi-chevron-right text-muted" style="flex-shrink: 0;"></i>
-                        </a>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-
-            
-        </div>
-        {% else %}
-        <div class="card text-center w-100 h-100 recent-workouts-card">
-            <div class="mb-3 mb-md-4">
-                <i class="bi bi-trophy" style="font-size: clamp(2.5rem, 8vw, 3rem); color: var(--gold-primary); opacity: 0.3;"></i>
-            </div>
-            <h5 class="mb-2 mb-md-3 fw-bold" style="font-size: clamp(1rem, 4vw, 1.25rem);">Begin Your Journey</h5>
-            <p class="text-muted mb-3 mb-md-4" style="font-size: var(--fs-sm); line-height: 1.6;">Start logging your workouts to track your progress and achieve your goals.</p>
-            <a href="/log" class="btn btn-gold-outline w-100">
-                <i class="bi bi-plus-circle me-2"></i>Log Your First Workout
-            </a>
-        </div>
-        {% endif %}
-    </div>
-</div>
-
-<script>
-    (function() {
-        const input = document.getElementById('recentSearch');
-        const list = document.getElementById('recentList');
-        const empty = document.getElementById('recentEmpty');
-        const toggleSelectModeBtn = document.getElementById('toggleSelectModeBtn');
-        const bulkDeleteForm = document.getElementById('bulkDeleteForm');
-        const bulkDeleteBtn = document.getElementById('bulkDeleteBtn');
-        const selectAllRecentBtn = document.getElementById('selectAllRecentBtn');
-        const params = new URLSearchParams(window.location.search);
-        const startBulkDelete = params.get('bulk_delete') === '1';
-        if (!list) return;
-
-        const items = Array.from(list.querySelectorAll('.recent-item'));
-        const checkboxes = Array.from(list.querySelectorAll('.recent-select-checkbox'));
-        const links = Array.from(list.querySelectorAll('.recent-workout-link'));
-        let selectionMode = false;
-
-        const selectedCount = () => checkboxes.filter(cb => cb.checked).length;
-        const visibleCheckboxes = () => checkboxes.filter(cb => {
-            const item = cb.closest('.recent-item');
-            return item && item.style.display !== 'none';
-        });
-
-        const refreshBulkDeleteState = () => {
-            const count = selectedCount();
-            const visible = visibleCheckboxes();
-            const allVisibleSelected = visible.length > 0 && visible.every(cb => cb.checked);
-            if (bulkDeleteBtn) {
-                bulkDeleteBtn.disabled = count === 0;
-                bulkDeleteBtn.innerHTML = count > 0
-                    ? `<i class="bi bi-trash me-1"></i>Delete Selected (${count})`
-                    : '<i class="bi bi-trash me-1"></i>Delete Selected';
-            }
-            if (selectAllRecentBtn) {
-                selectAllRecentBtn.disabled = !selectionMode || visible.length === 0;
-                selectAllRecentBtn.innerHTML = allVisibleSelected
-                    ? '<i class="bi bi-x-circle me-1"></i>Clear All'
-                    : '<i class="bi bi-check2-all me-1"></i>Select All';
-            }
-        };
-
-        const setSelectionMode = (enabled) => {
-            selectionMode = !!enabled;
-            checkboxes.forEach(cb => {
-                cb.classList.toggle('d-none', !selectionMode);
-                if (!selectionMode) cb.checked = false;
-            });
-            links.forEach(link => {
-                link.style.pointerEvents = selectionMode ? 'none' : '';
-                link.style.opacity = selectionMode ? '0.9' : '';
-            });
-            if (bulkDeleteForm) {
-                bulkDeleteForm.classList.toggle('d-none', !selectionMode);
-            }
-            if (selectAllRecentBtn) {
-                selectAllRecentBtn.classList.toggle('d-none', !selectionMode);
-            }
-            if (toggleSelectModeBtn) {
-                toggleSelectModeBtn.classList.toggle('d-none', !selectionMode);
-                toggleSelectModeBtn.innerHTML = selectionMode
-                    ? '<i class="bi bi-x-circle me-1"></i>Cancel'
-                    : '<i class="bi bi-check2-square me-1"></i>Select';
-            }
-            refreshBulkDeleteState();
-        };
-
-        const normalizeSearchValue = (value) => String(value || '')
-            .toLowerCase()
-            .replace(/[-–—]+/g, ' ')
-            .replace(/[^a-z0-9\s]+/g, ' ')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-        const applyFilter = () => {
-            const raw = input ? (input.value || '') : '';
-            const rawTerms = raw ? raw.split(',').map(t => t.trim()).filter(Boolean) : [];
-
-            if (rawTerms.length === 0) {
-                for (const el of items) {
-                    el.style.display = '';
-                }
-                if (empty) empty.style.display = items.length ? 'none' : 'block';
-                return;
-            }
-
-            const include = [];
-            const exclude = [];
-            for (const term of rawTerms) {
-                const normalizedTerm = term.trim();
-                if (normalizedTerm.startsWith('not ') || normalizedTerm.startsWith('no ')) {
-                    const ex = normalizeSearchValue(normalizedTerm.replace(/^(not|no)\s+/, '').trim());
-                    if (ex) exclude.push(ex);
-                } else {
-                    const normalized = normalizeSearchValue(normalizedTerm);
-                    if (normalized) include.push(normalized);
-                }
-            }
-
-            let shown = 0;
-            for (const el of items) {
-                const hay = normalizeSearchValue(el.getAttribute('data-search') || '');
-
-                const hasExcluded = exclude.some(ex => hay.includes(ex));
-                if (hasExcluded) {
-                    el.style.display = 'none';
-                    continue;
-                }
-
-                const match = include.length === 0 || include.some(t => hay.includes(t));
-                el.style.display = match ? 'block' : 'none';
-                if (match) shown++;
-            }
-
-            if (empty) empty.style.display = shown === 0 ? 'block' : 'none';
-        };
-
-        if (toggleSelectModeBtn) {
-            toggleSelectModeBtn.addEventListener('click', () => setSelectionMode(!selectionMode));
-        }
-
-        if (selectAllRecentBtn) {
-            selectAllRecentBtn.addEventListener('click', () => {
-                const visible = visibleCheckboxes();
-                if (visible.length === 0) {
-                    refreshBulkDeleteState();
-                    return;
-                }
-                const shouldSelectAll = visible.some(cb => !cb.checked);
-                visible.forEach(cb => {
-                    cb.checked = shouldSelectAll;
-                });
-                refreshBulkDeleteState();
-            });
-        }
-
-        checkboxes.forEach(cb => cb.addEventListener('change', refreshBulkDeleteState));
-
-        if (bulkDeleteForm) {
-            bulkDeleteForm.addEventListener('submit', (e) => {
-                const count = selectedCount();
-                if (count <= 0) {
-                    e.preventDefault();
-                    return;
-                }
-                if (!window.confirm(`Delete ${count} selected workout day(s)? This cannot be undone.`)) {
-                    e.preventDefault();
-                }
-            });
-        }
-
-        if (input) {
-            input.addEventListener('input', applyFilter);
-        }
-        applyFilter();
-        setSelectionMode(startBulkDelete);
-
-        if (startBulkDelete) {
-            window.history.replaceState({}, '', window.location.pathname + window.location.hash);
-        }
-    })();
-</script>
-
+{{ st.styles() }}
 <style>
-    .recent-select-checkbox.form-check-input {
-        width: 1.15rem;
-        height: 1.15rem;
-        border-color: var(--border-gold);
-        background-color: rgba(212, 175, 55, 0.08);
-        accent-color: var(--gold-primary);
+    /* Home is a welcome: you, two ways in, and the last few workouts. Nothing more. */
+    .st.hm { max-width: 460px; padding-top: 28px; }
+    .hm-hello { text-align: center; }
+    .hm-avatar {
+        width: 92px; height: 92px; border-radius: 50%;
+        display: inline-flex; align-items: center; justify-content: center;
+        overflow: hidden;
+        border: 1px solid var(--border-gold);
+        box-shadow: 0 0 0 6px var(--gold-subtle);
+        background: var(--gold-subtle);
+        color: var(--st-accent);
+        font-size: 2.2rem; font-weight: 600; text-decoration: none;
+        transition: box-shadow var(--transition-base);
     }
+    .hm-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .hm-avatar:hover, .hm-avatar:focus-visible { outline: none; color: var(--st-accent); box-shadow: 0 0 0 8px var(--gold-subtle); }
+    .hm-greet { margin: 26px 0 4px; font-size: 1rem; color: var(--text-muted); }
+    .hm .hm-name { margin: 0; font-size: clamp(2.3rem, 10vw, 2.8rem); font-weight: 600; line-height: 1.1; overflow-wrap: anywhere; }
+    .hm-note { margin: 12px 0 0; font-size: 0.92rem; color: var(--st-accent); }
+    .hm-note[hidden] { display: none; }
 
-    .recent-select-checkbox.form-check-input:checked {
-        background-color: var(--gold-primary);
-        border-color: var(--gold-primary);
-    }
+    .hm-actions { display: grid; gap: 12px; margin-top: 36px; }
+    .hm-actions .st-btn { height: 52px; font-size: 0.98rem; border-radius: 14px; }
+    .hm-actions .st-btn i { font-size: 1.05rem; }
 
-    .recent-select-checkbox.form-check-input:focus {
-        border-color: var(--gold-primary);
-        box-shadow: 0 0 0 0.2rem var(--gold-subtle);
+    .hm-recent { margin-top: 44px; }
+    .hm-row { -webkit-tap-highlight-color: transparent; }
+    .hm a.hm-row:active { background: var(--gold-subtle); }
+    .hm-row:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-glow); }
+    .hm-row .st-row-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .hm-all { display: block; margin-top: 18px; text-align: center; }
+
+    @media (min-width: 576px) {
+        .st.hm { padding-top: 7vh; }
     }
 </style>
 
-<script>
-    (function() {
-        const btn = document.getElementById('recommendWorkoutBtn');
-        const card = document.getElementById('recommendWorkoutCard');
-        const link = document.getElementById('recommendWorkoutLink');
-        const reasonsEl = document.getElementById('recommendWorkoutReasons');
-        const metaEl = document.getElementById('recommendWorkoutMeta');
-        if (!btn || !card || !link || !reasonsEl || !metaEl) return;
+<div class="st hm">
+    <section class="hm-hello">
+        <a class="hm-avatar" href="{{ url_for('user_settings') }}" aria-label="Profile and settings">
+            {% if profile_image_url %}<img src="{{ profile_image_url }}" alt="">{% else %}{{ initial }}{% endif %}
+        </a>
+        <p class="hm-greet" id="hmGreet">{% if recent %}Hello{% else %}Welcome{% endif %}</p>
+        <h1 class="hm-name">{{ first_name }}</h1>
+        {% if recent %}
+        <p class="hm-note" id="hmNote" hidden>Nice work today.</p>
+        {% else %}
+        <p class="st-sub hm-note" style="color: var(--text-muted);">Your workouts will show up here.</p>
+        {% endif %}
+    </section>
 
-        const setLoading = (loading) => {
-            btn.disabled = loading;
-            if (loading) {
-                btn.dataset.originalLabel = btn.dataset.originalLabel || btn.innerHTML;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Thinking...';
-            } else if (btn.dataset.originalLabel) {
-                btn.innerHTML = btn.dataset.originalLabel;
-            }
-        };
+    <div class="hm-actions">
+        {% if recent %}
+        <a class="st-btn st-btn-primary" id="hmMain" href="{{ url_for('log_workout') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i><span>Log workout</span></a>
+        <a class="st-btn st-btn-quiet" href="{{ url_for('retrieve_categories') }}"><i class="bi bi-list-ul" aria-hidden="true"></i>Retrieve</a>
+        {% else %}
+        <a class="st-btn st-btn-primary" href="{{ url_for('retrieve_categories') }}"><i class="bi bi-list-ul" aria-hidden="true"></i>Retrieve a plan</a>
+        <a class="st-btn st-btn-quiet" href="{{ url_for('log_workout') }}"><i class="bi bi-plus-lg" aria-hidden="true"></i>Log workout</a>
+        {% endif %}
+    </div>
 
-        btn.addEventListener('click', async () => {
-            setLoading(true);
-            try {
-                const res = await fetch('/api/recommend-workout?nocache=1&ai=0', { credentials: 'same-origin' });
-                const data = await res.json();
-                if (!res.ok || !data || !data.ok) {
-                    throw new Error(data?.error || 'Unable to get recommendation');
-                }
-
-                const category = data.category;
-                const dayId = data.day_id;
-                const url = data.url;
-                const label = data.label;
-                const reasons = Array.isArray(data.reasons) ? data.reasons : [];
-                const warning = data.warning;
-                const source = data.source;
-
-                reasonsEl.innerHTML = '';
-                for (const r of reasons) {
-                    const li = document.createElement('li');
-                    li.textContent = r;
-                    reasonsEl.appendChild(li);
-                }
-
-                if (warning || source) {
-                    metaEl.style.display = 'block';
-                    metaEl.textContent = warning || (source === 'fallback' ? 'Fallback suggestion' : '');
-                } else {
-                    metaEl.style.display = 'none';
-                    metaEl.textContent = '';
-                }
-
-                link.style.display = 'block';
-                link.href = url;
-                link.textContent = (label && String(label).trim())
-                    ? String(label).trim()
-                    : `${String(category).toUpperCase()} • DAY ${dayId}`;
-                card.style.display = 'block';
-
-                const y = card.getBoundingClientRect().top + window.scrollY - 120;
-                window.scrollTo({ top: y, behavior: 'smooth' });
-            } catch (e) {
-                card.style.display = 'none';
-                metaEl.style.display = 'none';
-                metaEl.textContent = '';
-                alert('Unable to suggest a workout right now. Please try again.');
-            } finally {
-                setLoading(false);
-            }
-        });
-    })();
-</script>
+    {% if recent %}
+    <section class="hm-recent" aria-label="Recent workouts">
+        <div class="st-label">Recent</div>
+        <div class="st-group">
+            {% for item in recent %}
+            <a class="st-row hm-row" href="{{ url_for('view_workout', date_str=item.iso) }}" aria-label="{{ item.full_title }}, {{ item.date_label }}">
+                <span class="st-row-main"><span class="st-row-title">{{ item.title }}</span></span>
+                <span class="st-row-value" data-d="{{ item.iso }}">{{ item.day }} {{ item.date_label.split(' ')[2] }}</span>
+                <i class="bi bi-chevron-right st-chev" aria-hidden="true"></i>
+            </a>
+            {% endfor %}
+        </div>
+        <a class="st-link hm-all" href="{{ url_for('workout_history') }}">See all workouts</a>
+    </section>
+    {% endif %}
+</div>
 
 <script>
-    (function() {
-        const mainCard = document.querySelector('.dashboard-main-card');
-        const recentCard = document.querySelector('.recent-workouts-card');
-        if (!mainCard || !recentCard) return;
+    (function () {
+        // iPhone Safari only shows :active press states when a touch listener exists.
+        document.addEventListener('touchstart', () => {}, { passive: true });
 
-        const syncHeight = () => {
-            if (window.innerWidth >= 992) {
-                const height = mainCard.offsetHeight;
-                if (height) {
-                    recentCard.style.height = `${height}px`;
-                }
-            } else {
-                recentCard.style.height = 'auto';
-                recentCard.style.maxHeight = 'none';
-            }
-        };
+        // Everything here follows the phone's own clock, not the server's.
+        const now = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const todayIso = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+        const parseIso = (iso) => { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); };
 
-        if ('ResizeObserver' in window) {
-            const observer = new ResizeObserver(syncHeight);
-            observer.observe(mainCard);
+        const greet = document.getElementById('hmGreet');
+        if (greet && greet.textContent.trim() === 'Hello') {
+            const h = now.getHours();
+            greet.textContent = h >= 5 && h < 12 ? 'Good morning' : h >= 12 && h < 17 ? 'Good afternoon' : 'Good evening';
         }
-        
-        window.addEventListener('resize', syncHeight);
-        window.addEventListener('load', syncHeight);
-        setTimeout(syncHeight, 100);
-    })();
-</script>
 
-<script>
-    (function() {
-        const list = document.querySelector('.recent-workouts-list');
-        if (!list) return;
-        let scrollTimeout = null;
-
-        const markScrolling = () => {
-            list.classList.add('is-scrolling');
-            if (scrollTimeout) {
-                clearTimeout(scrollTimeout);
+        // Soft dates: Today, Yesterday, a weekday, then a plain date.
+        const midnight = parseIso(todayIso);
+        document.querySelectorAll('.hm-row [data-d]').forEach((el) => {
+            const then = parseIso(el.dataset.d);
+            const days = Math.round((midnight - then) / 86400000);
+            let text;
+            if (days === 0) text = 'Today';
+            else if (days === 1) text = 'Yesterday';
+            else if (days > 1 && days < 7) text = then.toLocaleDateString('en-GB', { weekday: 'long' });
+            else {
+                const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][then.getMonth()];
+                text = `${then.getDate()} ${month}` + (then.getFullYear() !== now.getFullYear() ? ` ${then.getFullYear()}` : '');
             }
-            scrollTimeout = setTimeout(() => {
-                list.classList.remove('is-scrolling');
-            }, 120);
-        };
-
-        list.addEventListener('scroll', markScrolling, { passive: true });
-
-        list.addEventListener('touchend', () => {
-            if (scrollTimeout) {
-                clearTimeout(scrollTimeout);
-            }
-            list.classList.remove('is-scrolling');
+            el.textContent = text;
         });
 
-        list.addEventListener('touchcancel', () => {
-            if (scrollTimeout) {
-                clearTimeout(scrollTimeout);
-            }
-            list.classList.remove('is-scrolling');
-        });
+        // Trained today: a quiet well done, and the main button opens that workout.
+        const first = document.querySelector('.hm-row [data-d]');
+        const main = document.getElementById('hmMain');
+        if (first && main && first.dataset.d === todayIso) {
+            document.getElementById('hmNote').hidden = false;
+            main.href = first.closest('a').getAttribute('href');
+            main.querySelector('i').className = 'bi bi-check2';
+            main.querySelector('span').textContent = "Today's workout";
+        }
     })();
 </script>
 {% endblock %}

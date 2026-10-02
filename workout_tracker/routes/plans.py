@@ -1,31 +1,34 @@
 from datetime import datetime
 
-from flask import flash, jsonify, redirect, render_template, request, session, url_for
+from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required, current_user
 
 from list_of_exercise import get_workout_days
 from models import Plan, RepRange, Session
 from services.retrieve import (
+    CUSTOM_PICKER_GROUPS,
     CUSTOM_RETRIEVAL_SORT_MODES,
+    exercise_groups_for,
     generate_custom_retrieve_output,
+    describe_retrieve_output,
     generate_retrieve_output,
     DEFAULT_CUSTOM_WORKOUT_TITLE,
     get_custom_retrieval_exercise_catalog,
     infer_custom_workout_title,
-    get_custom_retrieval_sort_preference,
     get_admin_display_name,
     get_effective_plan_text,
     _own_plan_text,
     is_plan_owner,
     record_custom_retrieval,
     set_custom_retrieval_sort_preference,
+    set_exercise_group_choice,
 )
 from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
+from services.rep_ranges import canonical_rep_text, merge_rep_entries, parse_rep_entries
 from utils.logger import logger
 from utils.validators import sanitize_text_input
 
 
-CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY = 'custom_retrieval_draft'
 
 
 def _resolve_custom_retrieval_selection(catalog, selected_keys, two_set_keys):
@@ -54,26 +57,96 @@ def _resolve_custom_retrieval_selection(catalog, selected_keys, two_set_keys):
 
 
 def register_plan_routes(app):
+    def _grid_columns(count):
+        """Columns for a group on wide screens: whole rows where the count allows it."""
+        if count <= 5:
+            return max(count, 1)
+        for cols in (4, 3, 5):
+            if count % cols == 0:
+                return cols
+        return 4
+
+    def _lay_out_groups(groups):
+        """Merge lone single-session groups, then size each grid so no row ends in a gap."""
+        singles = [g for g in groups if len(g['items']) == 1]
+        if len(singles) > 1:
+            merged = {'title': 'Other' if len(singles) < len(groups) else 'Workouts', 'items': [
+                {**g['items'][0], 'number': g['title']} for g in singles
+            ]}
+            first = groups.index(singles[0])
+            groups = [g for g in groups if g not in singles]
+            groups.insert(first, merged)
+        for group in groups:
+            count = len(group['items'])
+            wide = _grid_columns(count)
+            narrow = 1 if count == 1 else 2
+            group['wide'], group['narrow'] = wide, narrow
+            # The last cell stretches over whatever the last row leaves empty.
+            for item in group['items']:
+                item['span_wide'] = item['span_narrow'] = 1
+            left_wide, left_narrow = count % wide, count % narrow
+            if left_wide:
+                group['items'][-1]['span_wide'] = wide - left_wide + 1
+            if left_narrow:
+                group['items'][-1]['span_narrow'] = narrow - left_narrow + 1
+        return groups
+
+    def _retrieve_groups(data):
+        """Every session in the plan, grouped the way the plan groups them (cycles, or categories)."""
+        workout = data.get('workout') if isinstance(data, dict) else None
+        workout = workout if isinstance(workout, dict) else {}
+        titles = data.get('session_titles') if isinstance(data, dict) else None
+        titles = titles if isinstance(titles, dict) else {}
+        headings = data.get('headings') if isinstance(data, dict) else None
+        heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
+
+        def session_item(sid):
+            return {
+                'number': f"Session {sid}",
+                'name': titles.get(str(sid)) or f"Session {sid}",
+                'url': url_for('retrieve_final', category='Session', day_id=sid),
+            }
+
+        groups = []
+        if isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions:
+            for heading in headings:
+                ids = sorted(int(x) for x in (heading_sessions.get(heading) or []) if str(x).isdigit())
+                if ids:
+                    groups.append({'title': heading, 'items': [session_item(sid) for sid in ids]})
+            return groups
+
+        for category, days in workout.items():
+            day_names = list((days or {}).keys())
+            items = []
+            for index, day_name in enumerate(day_names, start=1):
+                if str(category).strip().lower() == 'session':
+                    items.append(session_item(index))
+                    continue
+                exercises = [
+                    str(line).split(' - [', 1)[0].strip()
+                    for line in ((days or {}).get(day_name) or [])[:2]
+                ]
+                items.append({
+                    'number': f"Day {index}",
+                    'name': ', '.join(e for e in exercises if e) or day_name,
+                    'url': url_for('retrieve_final', category=category, day_id=index),
+                })
+            if items:
+                title = 'Sessions' if str(category).strip().lower() == 'session' else category
+                groups.append({'title': title, 'items': items})
+        return groups
+
     @login_required
     def retrieve_categories():
         user = current_user
 
         try:
             raw_text = get_effective_plan_text(Session, user)
-            data = get_workout_days(raw_text or "")
-
-            headings = data.get('headings') if isinstance(data, dict) else None
-            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
-            if isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions:
-                return render_template('retrieve_step1.html', headings=headings)
-
-            categories = list(data.get('workout', {}).keys())
-
-            if not categories:
+            groups = _lay_out_groups(_retrieve_groups(get_workout_days(raw_text or "")))
+            if not groups:
                 flash("No workout plan found. Please set up your plan first.", "info")
                 return redirect(url_for('set_plan'))
-
-            return render_template('retrieve_step1.html', categories=categories)
+            return render_template('retrieve.html', groups=groups)
         except Exception as e:
             logger.error(f"Error in retrieve_categories: {e}", exc_info=True)
             flash("Error loading workout categories.", "error")
@@ -81,88 +154,26 @@ def register_plan_routes(app):
 
     @login_required
     def retrieve_heading_days(heading_id: int):
-        user = current_user
-
-        try:
-            raw_text = get_effective_plan_text(Session, user)
-            if not raw_text:
-                flash("No workout plan found.", "error")
-                return redirect(url_for('set_plan'))
-
-            data = get_workout_days(raw_text)
-            headings = data.get('headings') if isinstance(data, dict) else None
-            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
-            if not (isinstance(headings, list) and headings and isinstance(heading_sessions, dict) and heading_sessions):
-                flash("Headings not found in plan.", "error")
-                return redirect(url_for('retrieve_categories'))
-
-            if not isinstance(heading_id, int) or heading_id < 1 or heading_id > len(headings):
-                flash("Invalid heading.", "error")
-                return redirect(url_for('retrieve_categories'))
-
-            heading_name = headings[heading_id - 1]
-            session_ids = heading_sessions.get(heading_name) or []
-            session_ids = [int(x) for x in session_ids if isinstance(x, int) or str(x).isdigit()]
-            session_ids.sort()
-
-            session_titles = None
-            maybe_titles = data.get("session_titles") if isinstance(data, dict) else None
-            if isinstance(maybe_titles, dict):
-                session_titles = maybe_titles
-
-            return render_template(
-                'retrieve_step2.html',
-                category_name='Session',
-                num_days=0,
-                session_titles=session_titles,
-                session_ids=session_ids,
-                heading_id=heading_id,
-                heading_name=heading_name,
-                back_url=url_for('retrieve_categories'),
-            )
-        except Exception as e:
-            logger.error(f"Error in retrieve_heading_days: {e}", exc_info=True)
-            flash("Error loading heading days.", "error")
-            return redirect(url_for('retrieve_categories'))
+        # Old two-step links: every session is on one page now.
+        return redirect(url_for('retrieve_categories'))
 
     @login_required
     def retrieve_days(category):
-        user = current_user
+        return redirect(url_for('retrieve_categories'))
 
-        try:
-            # Decode HTML entities first, then sanitize
-            import html
-            category = html.unescape(category)
-            category = sanitize_text_input(category, max_length=100)
-            category = html.unescape(category)
-            
-            raw_text = get_effective_plan_text(Session, user)
-            if not raw_text:
-                flash("No workout plan found.", "error")
-                return redirect(url_for('set_plan'))
-
-            data = get_workout_days(raw_text)
-
-            if category not in data.get('workout', {}):
-                flash("Invalid category.", "error")
-                return redirect(url_for('retrieve_categories'))
-
-            num_days = len(data['workout'][category])
-            session_titles = None
-            if str(category).strip().lower() == "session":
-                maybe_titles = data.get("session_titles")
-                if isinstance(maybe_titles, dict):
-                    session_titles = maybe_titles
-            return render_template(
-                'retrieve_step2.html',
-                category_name=category,
-                num_days=num_days,
-                session_titles=session_titles,
-            )
-        except Exception as e:
-            logger.error(f"Error in retrieve_days: {e}", exc_info=True)
-            flash("Error loading workout days.", "error")
-            return redirect(url_for('retrieve_categories'))
+    def _session_place(data, category, day_id):
+        """("Session 9 · Cycle 3", "Chest & Biceps") for the plan page header."""
+        titles = data.get('session_titles') if isinstance(data, dict) else None
+        if str(category).strip().lower() == 'session':
+            name = (titles or {}).get(str(day_id)) if isinstance(titles, dict) else None
+            kicker = f"Session {day_id}"
+            heading_sessions = data.get('heading_sessions') if isinstance(data, dict) else None
+            for heading, ids in (heading_sessions or {}).items():
+                if day_id in [int(x) for x in ids if str(x).isdigit()]:
+                    kicker += f" · {heading}"
+                    break
+            return kicker, name or f"Session {day_id}"
+        return f"Day {day_id}", category
 
     @login_required
     def retrieve_final(category, day_id):
@@ -175,80 +186,120 @@ def register_plan_routes(app):
             category = sanitize_text_input(category, max_length=100)
             category = html.unescape(category)
             
+            plan_days = get_workout_days(get_effective_plan_text(Session, user) or "")
+            if f"{category} {day_id}" not in ((plan_days.get("workout") or {}).get(category) or {}):
+                # An old link after the plan changed: say so, rather than offering to copy an error.
+                flash(f"{category} {day_id} isn't in your plan any more.", "error")
+                return redirect(url_for('retrieve_categories'))
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
-
-            back_to_days_url = None
-            if str(category).strip().lower() == 'session':
-                heading_id = request.args.get('heading_id')
-                if heading_id and str(heading_id).isdigit():
-                    back_to_days_url = url_for('retrieve_heading_days', heading_id=int(heading_id))
+            kicker, title = _session_place(plan_days, category, day_id)
             return render_template(
-                'retrieve_step3.html',
+                'retrieve_plan.html',
                 output=output,
+                plan=describe_retrieve_output(output),
                 exercise_count=exercise_count,
                 set_count=set_count,
-                category_name=category,
-                day_id=day_id,
-                back_to_days_url=back_to_days_url,
+                kicker=kicker,
+                title=title,
+                back_url=url_for('retrieve_categories'),
             )
         except Exception as e:
             logger.error(f"Error in retrieve_final: {e}", exc_info=True)
-            flash("Error generating workout plan.", "error")
+            flash("Couldn't make that workout. Please try again.", "error")
             return redirect(url_for('retrieve_categories'))
+
+    def _custom_picker_groups(catalog):
+        """The picker's muscle groups: your own exercises first, then the rest, each A-Z."""
+        groups = {name: [] for name in CUSTOM_PICKER_GROUPS}
+        for item in catalog:
+            groups.setdefault(item.get('group') or 'Other', []).append(item)
+        # Empty groups are kept (hidden) so an exercise can be moved into them.
+        return [
+            {'name': name, 'items': sorted(items, key=lambda i: (not i.get('yours'), i['name'].casefold()))}
+            for name, items in groups.items()
+        ]
+
+    def _custom_set_overrides(selected_keys, two_set_keys, set_counts):
+        """The sets shown on the page for each exercise, so the plan says exactly what the picker did."""
+        overrides = {}
+        if set_counts and len(set_counts) == len(selected_keys):
+            for key, raw in zip(selected_keys, set_counts):
+                try:
+                    count = int(raw)
+                except (TypeError, ValueError):
+                    raise ValueError('Invalid set selection.')
+                if not 1 <= count <= 10:
+                    raise ValueError('Invalid set selection.')
+                overrides[key] = count
+            return overrides
+        # Older pages sent only the exercises switched to two sets.
+        for key in two_set_keys:
+            overrides[key] = 2
+        return overrides
 
     @login_required
     def retrieve_custom():
         user = current_user
 
         try:
-            sort_mode = get_custom_retrieval_sort_preference(Session, user)
-            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode=sort_mode)
+            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode='alpha_asc')
             if not catalog:
                 flash("No exercises are available to retrieve yet.", "info")
                 return redirect(url_for('set_plan'))
 
             if request.method == 'GET':
-                draft = session.get(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, {})
-                draft_selected_keys = draft.get('selected_keys', []) if isinstance(draft, dict) else []
-                draft_two_set_keys = draft.get('two_set_keys', []) if isinstance(draft, dict) else []
-                if draft_selected_keys:
-                    try:
-                        draft_selected_keys, _, draft_two_set_keys = _resolve_custom_retrieval_selection(
-                            catalog,
-                            draft_selected_keys,
-                            draft_two_set_keys,
-                        )
-                    except ValueError:
-                        session.pop(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, None)
-                        draft_selected_keys = []
-                        draft_two_set_keys = []
                 return render_template(
                     'retrieve_custom.html',
+                    groups=_custom_picker_groups(catalog),
                     exercises=catalog,
-                    sort_mode=sort_mode,
-                    draft_selected_keys=draft_selected_keys,
-                    draft_two_set_keys=draft_two_set_keys,
                 )
 
             try:
-                selected_keys, selected_exercises, two_set_keys = _resolve_custom_retrieval_selection(
+                selected_keys, _, two_set_keys = _resolve_custom_retrieval_selection(
                     catalog,
                     request.form.getlist('exercise'),
                     request.form.getlist('two_set_exercise'),
                 )
+                set_counts = request.form.getlist('set_count')
+                _custom_set_overrides(selected_keys, two_set_keys, set_counts)
             except ValueError as error:
                 flash(str(error), 'error')
                 return redirect(url_for('retrieve_custom'))
 
-            if request.form.get('flow') == 'review':
-                session[CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY] = {
-                    'selected_keys': selected_keys,
-                    'two_set_keys': two_set_keys,
-                }
-                return redirect(url_for('retrieve_custom_review'))
+            try:
+                record_custom_retrieval(Session, user, selected_keys)
+            except Exception as e:
+                Session.rollback()
+                logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
 
-            two_set_keys_set = set(two_set_keys)
-            set_overrides = {key: (2 if key in two_set_keys_set else 3) for key in selected_keys}
+            # The plan is its own page, so refreshing or coming back to it doesn't ask to
+            # send the form again (or count the pick twice).
+            return redirect(url_for(
+                'retrieve_custom_plan',
+                e=selected_keys,
+                s=set_counts or None,
+                t=two_set_keys or None,
+            ))
+        except Exception as e:
+            logger.error(f"Error generating custom workout: {e}", exc_info=True)
+            flash("Couldn't make that workout. Please try again.", "error")
+            return redirect(url_for('retrieve_custom'))
+
+    @login_required
+    def retrieve_custom_plan():
+        """The plan for a custom pick: exercises (e), their sets (s) or, from older pages, the
+        ones switched to two sets (t), in the address."""
+        user = current_user
+        try:
+            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode='alpha_asc')
+            try:
+                selected_keys, selected_exercises, two_set_keys = _resolve_custom_retrieval_selection(
+                    catalog, request.args.getlist('e'), request.args.getlist('t'),
+                )
+                set_overrides = _custom_set_overrides(selected_keys, two_set_keys, request.args.getlist('s'))
+            except ValueError as error:
+                flash(str(error), 'error')
+                return redirect(url_for('retrieve_custom'))
 
             try:
                 workout_title = infer_custom_workout_title(Session, user, selected_exercises)
@@ -258,7 +309,7 @@ def register_plan_routes(app):
             workout_title = workout_title or DEFAULT_CUSTOM_WORKOUT_TITLE
 
             # Give retrieve the full plan line so a plan-only rep range (e.g. "[4, 6-8]")
-            # still guides the output; set_overrides keeps the UI set count authoritative.
+            # still guides the output; set_overrides carries the sets chosen on the page.
             catalog_by_key = {item['key']: item for item in catalog}
             selected_lines = [
                 catalog_by_key[key].get('exercise_line') or catalog_by_key[key]['name']
@@ -271,90 +322,45 @@ def register_plan_routes(app):
                 set_overrides=set_overrides,
                 title=workout_title,
             )
-            try:
-                record_custom_retrieval(Session, user, selected_keys)
-            except Exception as e:
-                Session.rollback()
-                logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
-            session.pop(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, None)
-
             return render_template(
-                'retrieve_step3.html',
+                'retrieve_plan.html',
                 output=output,
+                plan=describe_retrieve_output(output),
                 exercise_count=exercise_count,
                 set_count=set_count,
-                category_name=None,
-                day_id=None,
-                back_to_days_url=url_for('retrieve_custom'),
+                kicker='Custom workout',
+                title=workout_title,
+                back_url=url_for('retrieve_custom'),
                 custom_retrieval=True,
                 custom_workout_title=workout_title,
                 default_custom_workout_title=DEFAULT_CUSTOM_WORKOUT_TITLE,
             )
         except Exception as e:
             logger.error(f"Error generating custom workout: {e}", exc_info=True)
-            flash("Error generating custom workout.", "error")
+            flash("Couldn't make that workout. Please try again.", "error")
             return redirect(url_for('retrieve_custom'))
 
     @login_required
     def retrieve_custom_review():
-        user = current_user
+        # Picking, sets and order all happen on the one Custom workout page now.
+        return redirect(url_for('retrieve_custom'))
 
+    @login_required
+    def save_exercise_group():
+        """Long-press "Move to…" on the Custom workout page."""
+        key = str(request.form.get('exercise') or '').strip()
+        group = str(request.form.get('group') or '').strip()
+        catalog = get_custom_retrieval_exercise_catalog(Session, current_user, sort_mode='alpha_asc')
+        item = next((i for i in catalog if i['key'] == key), None)
+        if item is None or group not in CUSTOM_PICKER_GROUPS:
+            return jsonify({'ok': False, 'error': 'Unknown exercise or group.'}), 400
         try:
-            sort_mode = get_custom_retrieval_sort_preference(Session, user)
-            catalog = get_custom_retrieval_exercise_catalog(Session, user, sort_mode=sort_mode)
-            if not catalog:
-                flash('No exercises are available to retrieve yet.', 'info')
-                return redirect(url_for('set_plan'))
-
-            if request.method == 'POST':
-                selected_keys = request.form.getlist('exercise')
-                two_set_keys = request.form.getlist('two_set_exercise')
-                if not selected_keys and request.form.get('review_action') == 'add_more':
-                    session[CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY] = {
-                        'selected_keys': [],
-                        'two_set_keys': [],
-                    }
-                    return redirect(url_for('retrieve_custom'))
-                try:
-                    selected_keys, _, two_set_keys = _resolve_custom_retrieval_selection(
-                        catalog,
-                        selected_keys,
-                        two_set_keys,
-                    )
-                except ValueError as error:
-                    flash(str(error), 'error')
-                    return redirect(url_for('retrieve_custom_review'))
-
-                session[CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY] = {
-                    'selected_keys': selected_keys,
-                    'two_set_keys': two_set_keys,
-                }
-                return redirect(url_for('retrieve_custom'))
-
-            draft = session.get(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, {})
-            selected_keys = draft.get('selected_keys', []) if isinstance(draft, dict) else []
-            two_set_keys = draft.get('two_set_keys', []) if isinstance(draft, dict) else []
-            try:
-                selected_keys, _, two_set_keys = _resolve_custom_retrieval_selection(
-                    catalog,
-                    selected_keys,
-                    two_set_keys,
-                )
-            except ValueError as error:
-                session.pop(CUSTOM_RETRIEVAL_DRAFT_SESSION_KEY, None)
-                flash(str(error), 'error')
-                return redirect(url_for('retrieve_custom'))
-
-            catalog_by_key = {item['key']: item for item in catalog}
-            return render_template(
-                'retrieve_custom_review.html',
-                exercises=[catalog_by_key[key] for key in selected_keys],
-                two_set_keys=two_set_keys,
-            )
+            set_exercise_group_choice(Session, current_user, key, group, item['auto_group'])
         except Exception as e:
-            logger.error(f'Error loading custom workout review: {e}', exc_info=True)
-            flash('Error loading your selected exercises.', 'error')
-            return redirect(url_for('retrieve_custom'))
+            Session.rollback()
+            logger.error(f"Error saving exercise group: {e}", exc_info=True)
+            return jsonify({'ok': False, 'error': 'Could not save that right now.'}), 500
+        return jsonify({'ok': True, 'group': group, 'auto_group': item['auto_group']})
 
     @login_required
     def save_custom_retrieval_sort_preference():
@@ -401,8 +407,9 @@ def register_plan_routes(app):
                 user.follow_admin_plan = False
                 plan.updated_at = datetime.now()
                 Session.commit()
-                flash("Workout plan updated successfully!", "success")
-                return redirect(url_for('user_dashboard', username=user.username))
+                flash("Workout plan saved.", "success")
+                # Stay on the plan, as Rep ranges does, so the saved text is right there to check.
+                return redirect(url_for('set_plan'))
 
             can_follow = not is_plan_owner(Session, user)
             return render_template(
@@ -416,7 +423,7 @@ def register_plan_routes(app):
         except Exception as e:
             Session.rollback()
             logger.error(f"Error in set_plan: {e}", exc_info=True)
-            flash("Error saving workout plan.", "error")
+            flash("Couldn't save the plan. Please try again.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
 
     @login_required
@@ -445,18 +452,26 @@ def register_plan_routes(app):
                         flash("Switched to your own rep ranges.", "success")
                     return redirect(url_for('set_exercises'))
 
-                rep_text = request.form.get('rep_text', '').strip()
-                reps.text_content = rep_text
+                new_text = canonical_rep_text(request.form.get('rep_text', ''))
+                if not new_text and (reps.text_content or '').strip() and request.form.get('rep_text_ready') != '1':
+                    # The page's script fills rep_text when Save is pressed. An empty one without its
+                    # mark means the script never ran, not that every range was removed.
+                    flash("Rep ranges weren't saved. Reload the page and try again.", "error")
+                    return redirect(url_for('set_exercises'))
+                reps.text_content = new_text
                 user.follow_admin_exercises = False
                 reps.updated_at = datetime.now()
                 Session.commit()
-                flash("Rep ranges updated successfully!", "success")
-                return redirect(url_for('user_dashboard', username=user.username))
+                flash("Rep ranges saved.", "success")
+                return redirect(url_for('set_exercises'))
 
             can_follow = not is_plan_owner(Session, user)
+            entries = merge_rep_entries(parse_rep_entries(reps.text_content or ""))
+            groups = exercise_groups_for(Session, user, [name for name, _ in entries])
             return render_template(
                 'set_exercises.html',
-                current_reps=reps.text_content or "",
+                entries=[[name, value, groups[name]] for name, value in entries],
+                group_order=CUSTOM_PICKER_GROUPS,
                 follow_admin_exercises=can_follow and getattr(user, 'follow_admin_exercises', False),
                 admin_display_name=get_admin_display_name(Session),
                 can_follow=can_follow,
@@ -498,10 +513,22 @@ def register_plan_routes(app):
         methods=['GET', 'POST'],
     )
     app.add_url_rule(
+        '/retrieve/custom/plan',
+        endpoint='retrieve_custom_plan',
+        view_func=retrieve_custom_plan,
+        methods=['GET'],
+    )
+    app.add_url_rule(
         '/retrieve/custom/review',
         endpoint='retrieve_custom_review',
         view_func=retrieve_custom_review,
         methods=['GET', 'POST'],
+    )
+    app.add_url_rule(
+        '/retrieve/custom/group',
+        endpoint='save_exercise_group',
+        view_func=save_exercise_group,
+        methods=['POST'],
     )
     app.add_url_rule(
         '/retrieve/custom/sort-preference',

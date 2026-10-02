@@ -3,7 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>{% block title %}Workout Tracker | Elite Performance{% endblock %}</title>
+    <title>{% block title %}Workout Tracker{% endblock %}</title>
+    <script>
+        // The theme before anything is drawn (the full theme code is at the end of the page):
+        // otherwise light mode drew dark first and faded to light on every page.
+        (function () {
+            try {
+                var pref = localStorage.getItem('workout-tracker-theme-preference');
+                var saved = localStorage.getItem('workout-tracker-theme');
+                var system = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', pref !== 'system' && saved ? saved : system);
+            } catch (e) { /* storage off: the full theme code decides */ }
+        })();
+    </script>
     {% block head_meta %}{% endblock %}
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -66,7 +78,7 @@
             --text-primary: #FFFFFF;
             --text-secondary: #E5E5E5;
             --text-muted: #A1A1AA;
-            --text-subtle: #71717A;
+            --text-subtle: #82828B;   /* 4.5:1+ on every dark surface (was #71717A, ~4:1) */
             
             /* Borders & Dividers */
             --border-primary: rgba(212, 175, 55, 0.2);
@@ -124,7 +136,7 @@
             --text-primary: #1A1A1A;            /* Rich Black */
             --text-secondary: #2D2D2D;          /* Charcoal */
             --text-muted: #707070;              /* Medium Gray */
-            --text-subtle: #9A9A9A;             /* Light Gray */
+            --text-subtle: #757575;             /* Light Gray, ~4.5:1 on cards (was #9A9A9A, ~2.7:1) */
             
             /* Refined Borders */
             --border-primary: rgba(201, 169, 97, 0.3);
@@ -884,6 +896,32 @@
             position: relative;
             padding: 8px 16px !important;
             border-radius: 8px;
+            white-space: nowrap;  /* "Log out" stays on one line */
+        }
+
+        /* Between phone and desktop widths the full bar needs tighter spacing to fit. */
+        @media (min-width: 576px) and (max-width: 991.98px) {
+            .navbar .nav-link {
+                padding: 8px 8px !important;
+                letter-spacing: 1px;
+                font-size: 0.78rem;
+            }
+            .navbar .navbar-nav { gap: 2px !important; }
+        }
+
+        /* Narrower still (before the phone layout): icons only, with the words kept for
+           screen readers. */
+        @media (min-width: 576px) and (max-width: 767.98px) {
+            .navbar .nav-link span {
+                position: absolute !important;
+                width: 1px; height: 1px;
+                margin: -1px; padding: 0;
+                overflow: hidden;
+                clip: rect(0 0 0 0);
+                white-space: nowrap;
+                border: 0;
+            }
+            .navbar .nav-link i { font-size: 1.1rem; }
         }
 
         .nav-link::after {
@@ -1001,6 +1039,12 @@
             position: relative;
             overflow: hidden;
             word-break: break-word;
+        }
+
+        /* Room for the close button, which sits over the right edge (Bootstrap gives it 3rem,
+           the padding above took it away, so long messages ran under the ×). */
+        .alert.alert-dismissible {
+            padding-right: 48px;
         }
 
         .alert::before {
@@ -1751,6 +1795,10 @@
                 padding-bottom: 80px;
             }
 
+            body.is-signed-out {
+                padding-bottom: 0;
+            }
+
             .mobile-bottom-nav {
                 position: fixed;
                 bottom: 0;
@@ -1998,6 +2046,10 @@
                 margin-bottom: var(--space-md);
             }
 
+            .alert.alert-dismissible {
+                padding-right: 48px;
+            }
+
             /* Mobile Icons */
             i[class*="bi-"] {
                 font-size: 1.2em;
@@ -2112,6 +2164,13 @@
             border-radius: 4px;
         }
 
+        /* Bootstrap's .btn:focus-visible drops the outline for a colour plain .btn never sets,
+           so header buttons (Settings, Log out) showed no focus at all. */
+        .btn:focus-visible {
+            outline: 2px solid var(--gold-primary);
+            outline-offset: 2px;
+        }
+
         /* --- MOBILE-SPECIFIC ENHANCEMENTS --- */
         
         /* Touch-friendly interactions */
@@ -2210,7 +2269,7 @@
         }
     </style>
 </head>
-<body class="{% block body_class %}{% endblock %}" data-ai-admin="{{ 'true' if current_user.is_authenticated and current_user.is_admin() else 'false' }}">
+<body class="{% block body_class %}{% endblock %}{{ '' if current_user.is_authenticated else ' is-signed-out' }}" data-ai-admin="{{ 'true' if current_user.is_authenticated and current_user.is_admin() else 'false' }}">
     <div class="global-loader" id="globalLoader" aria-live="polite" aria-busy="true">
         <div class="global-loader-content">
             <div class="global-loader-ring"></div>
@@ -2230,25 +2289,25 @@
             <div class="mobile-header-actions">
             {% if current_user.is_authenticated %}
                 {% if current_user.is_admin() %}
-                    <button type="button" class="btn btn-sm mobile-header-btn" id="openAiAssistantMobile" aria-keyshortcuts="K">
+                    <button type="button" class="btn btn-sm mobile-header-btn" id="openAiAssistantMobile" aria-keyshortcuts="K" aria-label="AI assistant">
                         <i class="bi bi-stars"></i>
                         <span>AI</span>
                     </button>
                 {% endif %}
-                <a href="{{ url_for('user_settings') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('user_settings') }}" class="btn btn-sm mobile-header-btn" aria-label="Settings">
                     <i class="bi bi-gear"></i>
                     <span>Settings</span>
                 </a>
-                <a href="{{ url_for('logout') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('logout') }}" class="btn btn-sm mobile-header-btn" aria-label="Log out">
                     <i class="bi bi-box-arrow-right"></i>
-                    <span>Logout</span>
+                    <span>Log out</span>
                 </a>
             {% else %}
-                <a href="{{ url_for('login') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('login') }}" class="btn btn-sm mobile-header-btn" aria-label="Log in">
                     <i class="bi bi-person"></i>
-                    <span>Login</span>
+                    <span>Log in</span>
                 </a>
-                <a href="{{ url_for('register') }}" class="btn btn-sm mobile-header-btn">
+                <a href="{{ url_for('register') }}" class="btn btn-sm mobile-header-btn" aria-label="Create account">
                     <i class="bi bi-person-plus"></i>
                     <span>Register</span>
                 </a>
@@ -2261,6 +2320,7 @@
     <nav class="navbar navbar-expand d-none d-sm-block">
         <div class="container">
             <div class="navbar-nav mx-auto gap-2 gap-md-4">
+                {% if current_user.is_authenticated %}{# Signed out, these only lead to the sign-in page. #}
                 <a class="nav-link" href="/">
                     <i class="bi bi-house-door"></i>
                     <span class="d-none d-sm-inline ms-2">Home</span>
@@ -2277,6 +2337,7 @@
                     <i class="bi bi-graph-up-arrow"></i>
                     <span class="d-none d-sm-inline ms-2">Stats</span>
                 </a>
+                {% endif %}
             </div>
             <div class="navbar-nav ms-auto gap-2">
                 {% if current_user.is_authenticated %}
@@ -2298,12 +2359,12 @@
                     </a>
                     <a class="nav-link" href="{{ url_for('logout') }}">
                         <i class="bi bi-box-arrow-right"></i>
-                        <span class="d-none d-sm-inline ms-2">Logout</span>
+                        <span class="d-none d-sm-inline ms-2">Log out</span>
                     </a>
                 {% else %}
                     <a class="nav-link" href="{{ url_for('login') }}">
                         <i class="bi bi-person"></i>
-                        <span class="d-none d-sm-inline ms-2">Login</span>
+                        <span class="d-none d-sm-inline ms-2">Log in</span>
                     </a>
                     <a class="nav-link" href="{{ url_for('register') }}">
                         <i class="bi bi-person-plus"></i>
@@ -2314,7 +2375,8 @@
         </div>
     </nav>
 
-    <!-- Mobile Bottom Navigation -->
+    <!-- Mobile Bottom Navigation (signed in only: signed out, every tab leads to the sign-in page) -->
+    {% if current_user.is_authenticated %}
     <nav class="mobile-bottom-nav d-sm-none">
         <div class="container">
             <div class="d-flex justify-content-around align-items-center">
@@ -2337,6 +2399,7 @@
             </div>
         </div>
     </nav>
+    {% endif %}
 
     <div class="container mb-5 app-content">
         <!-- Flash Messages -->
@@ -2364,7 +2427,7 @@
     <footer class="footer" style="margin-bottom: env(safe-area-inset-bottom);">
         <div class="container">
             <div class="d-flex align-items-center justify-content-center gap-2">
-                <span>2025 Workout Tracker</span>
+                <span>{{ current_year }} Workout Tracker</span>
             </div>
         </div>
     </footer>
@@ -2426,11 +2489,11 @@
                             <span class="shortcut-key">K</span>
                             <span class="text-muted">Open AI assistant</span>
                         </div>
+                        <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
+                            <span class="shortcut-key">A</span>
+                            <span class="text-muted">Admin panel</span>
+                        </div>
                     {% endif %}
-                    <div class="d-flex align-items-center justify-content-between py-2 border-bottom" style="border-color: var(--border-subtle) !important;">
-                        <span class="shortcut-key">A</span>
-                        <span class="text-muted">Admin panel</span>
-                    </div>
                     <div class="d-flex align-items-center justify-content-between py-2">
                         <span class="shortcut-key">/</span>
                         <span class="text-muted">Focus search (history or recent)</span>
@@ -2757,6 +2820,7 @@
                 type: 'signed-in',
                 home: {{ url_for('user_dashboard', username=current_user.username)|tojson }},
                 user: {{ current_user.username|tojson }},
+                userId: {{ current_user.id|tojson }},
             };
             {% else %}
             const message = { type: 'signed-out' };
@@ -2773,7 +2837,7 @@
     </script>
     {% if current_user.is_authenticated %}
     <script src="{{ url_for('static', filename='offline-workouts.js') }}"></script>
-    <script src="{{ url_for('static', filename='offline-sync.js') }}" data-user="{{ current_user.username }}"></script>
+    <script src="{{ url_for('static', filename='offline-sync.js') }}" data-user="{{ current_user.username }}" data-user-id="{{ current_user.id }}"></script>
     {% endif %}
     <script>
         (function() {
@@ -2843,8 +2907,11 @@
             document.addEventListener('keydown', (event) => {
                 if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.altKey) return;
                 if (isTypingContext(event.target)) return;
+                // Not on the sign-in pages, and not from behind an open dialog.
+                if (document.body.classList.contains('is-signed-out')) return;
+                if (document.querySelector('.modal.show:not(#shortcutsModal)')) return;
 
-                const key = event.key.toLowerCase();
+                const key = (event.key || '').toLowerCase();
                 if (/^[1-9]$/.test(key)) {
                     const target = document.querySelector(`[data-shortcut="${key}"]`);
                     if (target) {
@@ -2868,7 +2935,7 @@
                 } else if (key === 'g') {
                     event.preventDefault();
                     window.location.href = '/stats';
-                } else if (key === 'a') {
+                } else if (key === 'a' && isAdminShortcutEnabled) {
                     event.preventDefault();
                     window.location.href = '/admin';
                 } else if (key === 'k') {

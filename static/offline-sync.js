@@ -3,6 +3,10 @@
 (function () {
   const store = self.offlineWorkouts;
   const me = (document.currentScript && document.currentScript.dataset.user) || '';
+  const myId = (document.currentScript && document.currentScript.dataset.userId) || '';
+  // Kept workouts are this account's by id (a username can change while one waits);
+  // ones kept before ids were stored go by username.
+  const isMine = (item) => (item.userId != null && myId ? String(item.userId) === myId : item.user === me);
   if (!store || !me || !('indexedDB' in window)) return;
 
   const csrfMeta = document.querySelector('meta[name="csrf-token"]');
@@ -44,7 +48,7 @@
     alerts.append(alert);
   }
 
-  const mine = () => store.all().then((items) => items.filter((item) => item.user === me));
+  const mine = () => store.all().then((items) => items.filter(isMine));
 
   // Shows where kept workouts stand; returns how many are waiting to upload.
   async function render() {
@@ -76,7 +80,7 @@
     method: 'POST',
     credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-    body: JSON.stringify({ text: item.text, saved_at: item.savedAt, user: item.user }),
+    body: JSON.stringify({ text: item.text, saved_at: item.savedAt, user: item.user, user_id: item.userId ?? null }),
   });
 
   async function upload(item) {
@@ -102,9 +106,10 @@
       return 'uploaded';
     }
     if (response.ok && body.status === 'already_there') {
-      await store.remove(item.id);
-      notice('info', `${day} already had a workout, so the one saved offline wasn't added.`, { href: body.url, label: 'View' });
-      return 'uploaded';
+      // Kept, not dropped: on the Log page it can be added to that day (or given another date).
+      await store.put({ ...item, status: 'failed', error: `${day} already has a workout. Add this to it, or change the date.` });
+      notice('warning', `${day} already has a workout, so the one saved offline is waiting.`, { href: `/log#fix-${item.id}`, label: 'Add it' });
+      return 'kept';
     }
     if (response.status === 422) {
       await store.put({ ...item, status: 'failed', error: body.error || '' });
@@ -198,7 +203,7 @@
     if (!hash.startsWith('#fix-')) return;
     history.replaceState(null, '', location.pathname + location.search);
     const item = await store.get(hash.slice(5)).catch(() => null);
-    if (!item || item.user !== me) return;
+    if (!item || !isMine(item)) return;
 
     textarea.value = item.text;
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
@@ -233,8 +238,20 @@
     form.prepend(context);
   }
 
+  // Landed on a workout page after a kept workout was fixed and saved: forget it.
+  async function forgetSaved() {
+    const params = new URLSearchParams(location.search);
+    const id = params.get('offline_saved');
+    if (!id) return;
+    params.delete('offline_saved');
+    const query = params.toString();
+    history.replaceState(history.state, '', location.pathname + (query ? `?${query}` : '') + location.hash);
+    const item = await store.get(id).catch(() => null);
+    if (item && isMine(item)) await store.remove(id);
+  }
+
   showCarriedNotices();
-  logPage().catch(() => {}).then(sync);
+  forgetSaved().catch(() => {}).then(logPage).catch(() => {}).then(sync);
   window.addEventListener('online', sync);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') sync();
