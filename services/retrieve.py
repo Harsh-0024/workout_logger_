@@ -44,6 +44,10 @@ CUSTOM_RETRIEVAL_SORT_MODES = {
 }
 DEFAULT_CUSTOM_RETRIEVAL_SORT_MODE = "most_retrieved"
 CUSTOM_RETRIEVAL_HISTORY_DAYS = 90
+# Custom workout puts an exercise under "often" when it's in the plan, or was trained on at
+# least this many days in the weeks up to the latest workout (so a break doesn't empty it).
+CUSTOM_OFTEN_WEEKS = 12
+CUSTOM_OFTEN_MIN_DAYS = 2
 
 
 def _normalize_text(text: str) -> str:
@@ -334,7 +338,8 @@ def record_custom_retrieval(db_session, user, exercise_keys):
 
 
 def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
-    """Return selectable exercises from the plan, shared catalogue, and user history."""
+    """Return selectable exercises from the plan, rep ranges, shared catalogue and user history,
+    each marked "often" when it's in the plan or trained regularly of late."""
     catalog = {}
 
     key_by_signature = {}
@@ -342,13 +347,13 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     def add_exercise(raw_exercise, *, preserve_plan_details=False, yours=False, merge_twins=False):
         raw_value = str(raw_exercise or "").strip()
         if not raw_value:
-            return
+            return None
 
         parsed = _parse_plan_exercise_line(raw_value)
         display_name = str(parsed.get("name") or raw_value).strip()
         key = normalize_exercise_name(display_name)
         if not key or key == "unknown exercise":
-            return
+            return None
         # "Lat Dumbbell Rows" in the history is the plan's "Dumbbell Lat Row": the same
         # words in another order. Keep one row, under the name already in the list.
         signature = token_signature(display_name)
@@ -356,7 +361,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         if merge_twins and twin and twin != key and key not in catalog:
             if yours:
                 catalog[twin]["yours"] = True
-            return
+            return twin
         if signature:
             key_by_signature.setdefault(signature, key)
 
@@ -371,7 +376,9 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
             }
         elif yours:
             catalog[key]["yours"] = True
+        return key
 
+    plan_keys = set()
     plan_text = get_effective_plan_text(db_session, user)
     plan_data = get_workout_days(plan_text or "")
     workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
@@ -383,7 +390,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
                 if not isinstance(exercises, list):
                     continue
                 for exercise in exercises:
-                    add_exercise(exercise, preserve_plan_details=True, yours=True)
+                    plan_keys.add(add_exercise(exercise, preserve_plan_details=True, yours=True))
 
     for exercise in list_of_exercises:
         add_exercise(exercise, merge_twins=True)
@@ -394,11 +401,24 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         .distinct()
         .all()
     )
+    key_by_logged_name = {}
     for row in logged_exercises or []:
         try:
-            add_exercise(row[0], yours=True, merge_twins=True)
+            name = row[0]
         except (IndexError, KeyError, TypeError):
-            add_exercise(row, yours=True, merge_twins=True)
+            name = row
+        key_by_logged_name[name] = add_exercise(name, yours=True, merge_twins=True)
+
+    # Every exercise in the rep ranges, too: the list can hold many not in the plan or history.
+    # They're yours when the rep ranges are; a list followed from the admin or the defaults
+    # shows like the built-in list.
+    rep_ranges_text = get_effective_rep_ranges_text(db_session, user)
+    own_rep_ranges = bool((_own_rep_ranges_text(db_session, user) or "").strip())
+    for line in (rep_ranges_text or "").splitlines():
+        if ":" in line:
+            add_exercise(line.split(":", 1)[0], yours=own_rep_ranges, merge_twins=True)
+
+    trained_days = _recent_training_days(db_session, user, key_by_logged_name)
 
     cutoff = datetime.now() - timedelta(days=CUSTOM_RETRIEVAL_HISTORY_DAYS)
     usage_rows = (
@@ -423,7 +443,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     }
 
     plan_parts = _plan_parts_by_exercise(plan_data)
-    custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
+    custom_ranges, custom_sets = _parse_rep_ranges_text(rep_ranges_text)
     moved = get_exercise_group_choices(db_session, user)
     for key, item in catalog.items():
         usage = usage_by_key.get(key, {})
@@ -440,9 +460,31 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         )
         item["auto_group"] = _picker_group(item["name"], plan_parts.get(key))
         item["group"] = moved.get(key) or item["auto_group"]
+        item["often"] = key in plan_keys or len(trained_days.get(key, ())) >= CUSTOM_OFTEN_MIN_DAYS
 
     mode = sort_mode if sort_mode in CUSTOM_RETRIEVAL_SORT_MODES else get_custom_retrieval_sort_preference(db_session, user)
     return _sort_custom_retrieval_catalog(list(catalog.values()), mode)
+
+
+def _recent_training_days(db_session, user, key_by_logged_name) -> Dict[str, set]:
+    """{catalogue key: the days it was trained} over the CUSTOM_OFTEN_WEEKS up to the latest workout."""
+    latest = db_session.query(func.max(WorkoutLog.date)).filter(WorkoutLog.user_id == user.id).scalar()
+    if not latest:
+        return {}
+    rows = (
+        db_session.query(WorkoutLog.exercise, WorkoutLog.date)
+        .filter(
+            WorkoutLog.user_id == user.id,
+            WorkoutLog.date > latest - timedelta(weeks=CUSTOM_OFTEN_WEEKS),
+        )
+        .all()
+    )
+    days = {}
+    for name, when in rows:
+        key = key_by_logged_name.get(name)
+        if key and when:
+            days.setdefault(key, set()).add(when.date())
+    return days
 
 
 def _sort_custom_retrieval_catalog(catalog, sort_mode):

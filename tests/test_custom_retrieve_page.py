@@ -144,6 +144,39 @@ class TestCustomRetrievePage(unittest.TestCase):
                      {"exercise": normalize_exercise_name("Dumbbell Curl"), "group": "Glutes"}):
             self.assertEqual(self.client.post("/retrieve/custom/group", data=data).status_code, 400)
 
+    def test_rep_range_exercises_are_listed_as_yours(self):
+        user = self._user_with_plan("picker_rep_list")
+        self.session.add(RepRange(user_id=user.id, text_content="Seated Zottman Curl: 10-12\nBarbell Curl: 4, 8-10"))
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        button = self._button(html, "Seated Zottman Curl")
+        self.assertNotIn("is-other", button)
+        self.assertIn('data-reps="10-12"', button)
+        self.assertIn('data-tier="rest"', button)  # set up, but never trained
+
+    def test_often_trained_first_and_the_rest_folded_under_less_often(self):
+        user = self._user_with_plan("picker_often")
+
+        def log(name, *days):
+            for month, day in days:
+                self.session.add(WorkoutLog(user_id=user.id, date=base.datetime(2026, month, day), workout_name="W",
+                                            exercise=name, exercise_string="x", sets_json={}))
+
+        log("Leg Curl", (9, 1), (9, 15))          # off the plan, but on two days lately
+        log("Upright Rows", (9, 10))              # once
+        log("Hip Thrust", (1, 5), (1, 12))        # twice, but months before the latest workout
+        log("Flat Barbell Press", (9, 20))        # the latest workout
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        for name in ("Flat Barbell Press", "Cable Fly", "Leg Curl"):
+            self.assertIn('data-tier="often"', self._button(html, name), name)
+        for name in ("Upright Rows", "Hip Thrust", "Incline Barbell Press"):
+            self.assertIn('data-tier="rest"', self._button(html, name), name)
+        chest = html[html.index('data-group="Chest"'):html.index('data-group="Back"')]
+        self.assertLess(chest.index('data-name="Cable Fly"'), chest.index('class="cr-more"'))
+        self.assertLess(chest.index('class="cr-more"'), chest.index('data-name="Incline Barbell Press"'))
+        self.assertIn("Less often", chest)
+
     def test_an_empty_group_is_still_there_to_move_into(self):
         self._user_with_plan("picker_empty_group")
         html = self.client.get("/retrieve/custom").get_data(as_text=True)

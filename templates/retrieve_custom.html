@@ -2,6 +2,12 @@
 {% import '_settings_ui.html' as st %}
 {% block title %}Custom workout - Workout Tracker{% endblock %}
 {% block content %}
+{% macro exercise_button(ex, tier) %}
+<button type="button" class="cr-ex{% if not ex.yours %} is-other{% endif %}" data-key="{{ ex.key }}" data-name="{{ ex.name }}" data-sets="{{ ex.default_sets }}" data-reps="{{ ex.rep_range }}" data-auto="{{ ex.auto_group }}" data-tier="{{ tier }}" aria-pressed="false">
+    <span class="cr-ex-name">{{ ex.name }}</span>
+    <i class="bi bi-check-lg cr-tick" aria-hidden="true"></i>
+</button>
+{% endmacro %}
 {{ st.styles() }}
 <style>
     /* Custom workout: pick exercises by muscle, set their order and sets, get the plan.
@@ -39,7 +45,27 @@
     .cr-tick { flex: none; width: 22px; text-align: center; color: var(--st-accent); font-size: 1.05rem; opacity: 0; transition: opacity var(--transition-fast); }
     .cr-ex.is-picked { color: var(--st-accent); font-weight: 600; }
     .cr-ex.is-picked .cr-tick { opacity: 1; }
-    .cr-ex[hidden], .cr-group[hidden] { display: none; }
+    .cr-ex[hidden], .cr-group[hidden], .cr-list[hidden], .cr-more[hidden] { display: none; }
+
+    /* ---- "Less often": the exercises you rarely or never train, folded under the rest ---- */
+    .cr-more { border-top: 1px solid var(--st-hair); }
+    .cr-more-head {
+        display: flex; align-items: center; gap: 8px;
+        min-height: 48px; padding: 10px 18px 10px 54px;
+        list-style: none; cursor: pointer;
+        color: var(--text-muted); font-size: 0.86rem; font-weight: 500;
+        -webkit-tap-highlight-color: transparent;
+        transition: background var(--transition-fast), color var(--transition-fast);
+    }
+    .cr-more-head::-webkit-details-marker { display: none; }
+    .cr-more-head:hover { background: var(--st-row-hover); color: var(--text-primary); }
+    .cr-more-head:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--gold-glow); }
+    .cr-more-count { color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    .cr-more-chev { margin-left: auto; font-size: 0.8rem; color: var(--text-subtle); transition: transform var(--transition-fast); }
+    .cr-more[open] .cr-more-chev { transform: rotate(90deg); }
+    /* A group with nothing trained often just lists everything, unfolded. */
+    .cr-more.is-flat { border-top: 0; }
+    .cr-more.is-flat > .cr-more-head { display: none; }
     /* Long-press opens "Move to…", so no text selection or iPhone callout on the rows. */
     .cr-ex { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
     .cr-ex.is-held { background: var(--gold-subtle); }
@@ -157,6 +183,7 @@
         .cr-empty-note { display: none; }
     }
     @media (max-width: 575.98px) {
+        .cr-more-head { padding-left: 50px; }
         .cr-bar { bottom: calc(86px + env(safe-area-inset-bottom) + 10px); }
         .cr-mine { bottom: calc(86px + env(safe-area-inset-bottom) + 86px); max-height: calc(100vh - 290px); }
         .cr-ex { padding-left: 50px; }
@@ -191,14 +218,19 @@
                             <span class="cr-picked-count" data-picked></span>
                             <i class="bi bi-chevron-right st-chev" aria-hidden="true"></i>
                         </summary>
-                        <div class="cr-list">
-                            {% for ex in group['items'] %}
-                            <button type="button" class="cr-ex{% if not ex.yours %} is-other{% endif %}" data-key="{{ ex.key }}" data-name="{{ ex.name }}" data-sets="{{ ex.default_sets }}" data-reps="{{ ex.rep_range }}" data-auto="{{ ex.auto_group }}" aria-pressed="false">
-                                <span class="cr-ex-name">{{ ex.name }}</span>
-                                <i class="bi bi-check-lg cr-tick" aria-hidden="true"></i>
-                            </button>
-                            {% endfor %}
+                        <div class="cr-list" data-tier="often">
+                            {% for ex in group['often'] %}{{ exercise_button(ex, 'often') }}{% endfor %}
                         </div>
+                        <details class="cr-more">
+                            <summary class="cr-more-head">
+                                <span>Less often</span>
+                                <span class="cr-more-count" data-more-count></span>
+                                <i class="bi bi-chevron-right cr-more-chev" aria-hidden="true"></i>
+                            </summary>
+                            <div class="cr-list" data-tier="rest">
+                                {% for ex in group['rest'] %}{{ exercise_button(ex, 'rest') }}{% endfor %}
+                            </div>
+                        </details>
                     </details>
                     {% endfor %}
                 </div>
@@ -272,6 +304,25 @@
         buttons.forEach((b) => buttonsByKey.set(b.dataset.key, b));
 
         let picks = [];   // [{ key, sets }] in workout order
+
+        // ---- Each group: what you train often, then "Less often" folded below ----
+        // A group with nothing trained often lists everything unfolded; one with nothing
+        // else has no fold.
+        const layoutGroup = (g) => {
+            const often = g.querySelector('.cr-list[data-tier="often"]');
+            const more = g.querySelector('.cr-more');
+            const rest = more.querySelector('.cr-list');
+            const nOften = often.querySelectorAll('.cr-ex').length;
+            const nRest = rest.querySelectorAll('.cr-ex').length;
+            often.hidden = nOften === 0;
+            more.hidden = nRest === 0;
+            more.querySelector('[data-more-count]').textContent = nRest;
+            const flat = nOften === 0;
+            if (flat) more.open = true;
+            else if (more.classList.contains('is-flat')) more.open = false;
+            more.classList.toggle('is-flat', flat);
+        };
+        groups.forEach(layoutGroup);
 
         // ---- Keep the picks on this device for a while (back from the plan, a reload) ----
         const save = () => {
@@ -406,7 +457,7 @@
         };
 
         const placeInGroup = (b, group) => {
-            const list = group.querySelector('.cr-list');
+            const list = group.querySelector(`.cr-list[data-tier="${b.dataset.tier}"]`);
             const rank = (el) => [el.classList.contains('is-other') ? 1 : 0, el.dataset.name.toLowerCase()];
             const mine = rank(b);
             const after = Array.from(list.children).find((el) => {
@@ -415,7 +466,9 @@
                 return r[0] > mine[0] || (r[0] === mine[0] && r[1] > mine[1]);
             });
             list.insertBefore(b, after || null);
-            groups.forEach((g) => { if (!search.value) g.hidden = !g.querySelector('.cr-ex'); });
+            groups.forEach((g) => {
+                if (!search.value) { g.hidden = !g.querySelector('.cr-ex'); layoutGroup(g); }
+            });
         };
 
         const csrf = document.querySelector('meta[name="csrf-token"]')?.content || '';
@@ -550,29 +603,44 @@
         document.addEventListener('keydown', (e) => { if (e.key === 'Escape') setSheet(false); });
         wide.addEventListener('change', () => setSheet(false));
 
-        // ---- Search opens every group with a match ----
+        // ---- Search opens every group with a match, "Less often" included ----
         const OPEN_KEY = 'wt-custom-open';
+        const MORE_KEY = 'wt-custom-more';
+        const mores = groups.map((g) => g.querySelector('.cr-more'));
         const normalize = (v) => String(v || '').toLowerCase().replace(/[‐‑‒–—−-]+/g, ' ').replace(/[^a-z0-9\s]+/g, ' ').replace(/\s+/g, ' ').trim();
         buttons.forEach((b) => { b._hay = normalize(b.dataset.name); });
         let openBeforeSearch = null;
         search.addEventListener('input', () => {
             const q = normalize(search.value);
-            if (q && !openBeforeSearch) openBeforeSearch = groups.filter((g) => g.open);
+            if (q && !openBeforeSearch) openBeforeSearch = [...groups, ...mores].filter((d) => d.open);
             let any = false;
             groups.forEach((g) => {
-                let hits = 0;
-                g.querySelectorAll('.cr-ex').forEach((b) => {
-                    const hit = !q || b._hay.includes(q);
-                    b.hidden = !hit;
-                    if (hit) hits += 1;
+                const lists = Array.from(g.querySelectorAll('.cr-list'));
+                const hitsIn = lists.map((list) => {
+                    let hits = 0;
+                    list.querySelectorAll('.cr-ex').forEach((b) => {
+                        const hit = !q || b._hay.includes(q);
+                        b.hidden = !hit;
+                        if (hit) hits += 1;
+                    });
+                    return hits;
                 });
+                const [oftenHits, restHits] = hitsIn;
+                const hits = oftenHits + restHits;
                 g.hidden = q ? hits === 0 : !g.querySelector('.cr-ex');
-                if (q) g.open = hits > 0;
+                if (q) {
+                    g.open = hits > 0;
+                    lists[0].hidden = oftenHits === 0;
+                    const more = g.querySelector('.cr-more');
+                    more.hidden = restHits === 0;
+                    more.open = restHits > 0;
+                }
                 if (hits) any = true;
             });
             noMatch.hidden = !q || any;
             if (!q && openBeforeSearch) {
-                groups.forEach((g) => { g.open = openBeforeSearch.includes(g); });
+                groups.forEach(layoutGroup);
+                [...groups, ...mores].forEach((d) => { d.open = openBeforeSearch.includes(d) || d.classList.contains('is-flat'); });
                 openBeforeSearch = null;
             }
         });
@@ -606,9 +674,17 @@
             const open = JSON.parse(sessionStorage.getItem(OPEN_KEY) || '[]');
             groups.forEach((g) => { if (open.includes(g.dataset.group)) g.open = true; });
         } catch (e) { /* fine */ }
-        groups.forEach((g) => g.addEventListener('toggle', () => {
-            if (search.value) return;
-            try { sessionStorage.setItem(OPEN_KEY, JSON.stringify(groups.filter((x) => x.open).map((x) => x.dataset.group))); } catch (e) { /* fine */ }
+        try {
+            const open = JSON.parse(sessionStorage.getItem(MORE_KEY) || '[]');
+            mores.forEach((m) => { if (open.includes(m.closest('.cr-group').dataset.group)) m.open = true; });
+        } catch (e) { /* fine */ }
+        groups.forEach((g) => g.addEventListener('toggle', (e) => {
+            if (search.value || e.target !== g) return;
+            try { sessionStorage.setItem(OPEN_KEY, JSON.stringify(groups.filter((x) => x.open).map((x) => x.dataset.group))); } catch (e2) { /* fine */ }
+        }));
+        mores.forEach((m) => m.addEventListener('toggle', () => {
+            if (search.value || m.classList.contains('is-flat')) return;
+            try { sessionStorage.setItem(MORE_KEY, JSON.stringify(mores.filter((x) => x.open && !x.classList.contains('is-flat')).map((x) => x.closest('.cr-group').dataset.group))); } catch (e) { /* fine */ }
         }));
 
         // ---- Send the picks in order, with their sets ----

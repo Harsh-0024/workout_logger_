@@ -209,15 +209,22 @@ def register_plan_routes(app):
             return redirect(url_for('retrieve_categories'))
 
     def _custom_picker_groups(catalog):
-        """The picker's muscle groups: your own exercises first, then the rest, each A-Z."""
+        """The picker's muscle groups, each in two parts: what you train often (A-Z), then
+        "Less often": your other exercises, then the rest (each A-Z)."""
         groups = {name: [] for name in CUSTOM_PICKER_GROUPS}
         for item in catalog:
             groups.setdefault(item.get('group') or 'Other', []).append(item)
         # Empty groups are kept (hidden) so an exercise can be moved into them.
-        return [
-            {'name': name, 'items': sorted(items, key=lambda i: (not i.get('yours'), i['name'].casefold()))}
-            for name, items in groups.items()
-        ]
+        laid_out = []
+        for name, items in groups.items():
+            items = sorted(items, key=lambda i: (not i.get('yours'), i['name'].casefold()))
+            laid_out.append({
+                'name': name,
+                'items': items,
+                'often': [i for i in items if i.get('often')],
+                'rest': [i for i in items if not i.get('often')],
+            })
+        return laid_out
 
     def _custom_set_overrides(selected_keys, two_set_keys, set_counts):
         """The sets shown on the page for each exercise, so the plan says exactly what the picker did."""
