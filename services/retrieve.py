@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import re
+import statistics
 from typing import Dict, List, Optional
 
 from sqlalchemy import func
@@ -44,10 +45,15 @@ CUSTOM_RETRIEVAL_SORT_MODES = {
 }
 DEFAULT_CUSTOM_RETRIEVAL_SORT_MODE = "most_retrieved"
 CUSTOM_RETRIEVAL_HISTORY_DAYS = 90
-# Custom workout puts an exercise under "often" when it's in the plan, or was trained on at
-# least this many days in the weeks up to the latest workout (so a break doesn't empty it).
-CUSTOM_OFTEN_WEEKS = 12
-CUSTOM_OFTEN_MIN_DAYS = 2
+# Custom workout: which exercises someone trains often. See often_trained_keys().
+PACE_HISTORY_DAYS = 182          # the pace is learned from the last 6 months
+BREAK_COUNTS_AS_DAYS = 14        # a longer stretch without workouts counts as two weeks
+WINDOW_PACES = 3                 # look back 3 times the pace...
+WINDOW_MIN_DAYS = 28             # ...but at least 4 weeks
+WINDOW_MAX_DAYS = 182            # ...and at most 6 months
+OFTEN_MIN_DAYS = 2               # trained on 2 days in that time: part of the routine
+MIN_REPEATS_TO_FOLD = 5          # fewer repeats than this: too early to tell, nothing folds
+PLAN_FOLLOWED_SHARE = 0.5        # the plan counts when half its exercises were trained lately
 
 
 def _normalize_text(text: str) -> str:
@@ -418,7 +424,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         if ":" in line:
             add_exercise(line.split(":", 1)[0], yours=own_rep_ranges, merge_twins=True)
 
-    trained_days = _recent_training_days(db_session, user, key_by_logged_name)
+    often_keys = _often_trained_catalog_keys(db_session, user, key_by_logged_name, plan_keys)
 
     cutoff = datetime.now() - timedelta(days=CUSTOM_RETRIEVAL_HISTORY_DAYS)
     usage_rows = (
@@ -460,31 +466,77 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         )
         item["auto_group"] = _picker_group(item["name"], plan_parts.get(key))
         item["group"] = moved.get(key) or item["auto_group"]
-        item["often"] = key in plan_keys or len(trained_days.get(key, ())) >= CUSTOM_OFTEN_MIN_DAYS
+        item["often"] = often_keys is None or key in often_keys
 
     mode = sort_mode if sort_mode in CUSTOM_RETRIEVAL_SORT_MODES else get_custom_retrieval_sort_preference(db_session, user)
     return _sort_custom_retrieval_catalog(list(catalog.values()), mode)
 
 
-def _recent_training_days(db_session, user, key_by_logged_name) -> Dict[str, set]:
-    """{catalogue key: the days it was trained} over the CUSTOM_OFTEN_WEEKS up to the latest workout."""
-    latest = db_session.query(func.max(WorkoutLog.date)).filter(WorkoutLog.user_id == user.id).scalar()
-    if not latest:
-        return {}
+def often_trained_keys(workouts, plan_keys=()) -> Optional[set]:
+    """Which exercises someone trains often, learned from their own workouts.
+
+    workouts: [(date, {exercise keys done that day})]. Returns the keys trained often, or
+    None when there isn't enough history yet to tell (then nothing is folded away).
+
+    1. The pace: how many days usually pass before an exercise comes back - the median of
+       every repeat in the last 6 months, so a rare comeback after months doesn't skew it.
+    2. Look back 3 paces from the latest workout (at least 4 weeks, at most 6 months).
+    3. Often = trained on 2+ days in that time. Also often: an exercise done for the first
+       time within the last pace (just started), and the plan's exercises when the plan is
+       followed (half of them trained in the last 6 months).
+    Throughout, a stretch without workouts counts as at most two weeks, so a holiday or an
+    illness doesn't fold away someone's routine. Worked out fresh each time, so it follows
+    any change in how often someone trains.
+    """
+    days = sorted({day for day, _ in workouts})
+    if not days:
+        return None
+    # A clock that runs on training time: breaks count as two weeks at most.
+    clock, now = {}, 0
+    for previous, day in zip([None] + days, days):
+        if previous is not None:
+            now += min(BREAK_COUNTS_AS_DAYS, (day - previous).days)
+        clock[day] = now
+    times = {}
+    for day, keys in workouts:
+        for key in keys or ():
+            if key:
+                times.setdefault(key, set()).add(clock[day])
+    times = {key: sorted(ts) for key, ts in times.items()}
+
+    gaps = [b - a for ts in times.values() for a, b in zip(ts, ts[1:]) if b > now - PACE_HISTORY_DAYS]
+    if len(gaps) < MIN_REPEATS_TO_FOLD:
+        return None
+    pace = statistics.median(gaps)
+    window = min(WINDOW_MAX_DAYS, max(WINDOW_MIN_DAYS, WINDOW_PACES * pace))
+
+    often = set()
+    for key, ts in times.items():
+        if sum(t > now - window for t in ts) >= OFTEN_MIN_DAYS:
+            often.add(key)
+        elif len(ts) == 1 and now - ts[0] <= pace:
+            often.add(key)
+    plan_keys = {key for key in plan_keys if key}
+    if plan_keys:
+        trained_lately = {key for key, ts in times.items() if ts[-1] > now - PACE_HISTORY_DAYS}
+        if len(plan_keys & trained_lately) >= PLAN_FOLLOWED_SHARE * len(plan_keys):
+            often |= plan_keys
+    return often
+
+
+def _often_trained_catalog_keys(db_session, user, key_by_logged_name, plan_keys) -> Optional[set]:
+    """often_trained_keys() for this user's logged workouts, under the picker's keys."""
     rows = (
         db_session.query(WorkoutLog.exercise, WorkoutLog.date)
-        .filter(
-            WorkoutLog.user_id == user.id,
-            WorkoutLog.date > latest - timedelta(weeks=CUSTOM_OFTEN_WEEKS),
-        )
+        .filter(WorkoutLog.user_id == user.id)
         .all()
     )
-    days = {}
+    by_day = {}
     for name, when in rows:
         key = key_by_logged_name.get(name)
         if key and when:
-            days.setdefault(key, set()).add(when.date())
-    return days
+            by_day.setdefault(when.date(), set()).add(key)
+    return often_trained_keys(sorted(by_day.items()), plan_keys)
 
 
 def _sort_custom_retrieval_catalog(catalog, sort_mode):

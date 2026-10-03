@@ -1,6 +1,7 @@
 """The one-page Custom workout picker: muscle groups, sets per exercise, order kept."""
 import re
 import unittest
+from datetime import timedelta
 
 import tests.test_route_regressions as base
 from models import ExerciseGroupChoice, Plan, RepRange, WorkoutLog
@@ -152,20 +153,20 @@ class TestCustomRetrievePage(unittest.TestCase):
         button = self._button(html, "Seated Zottman Curl")
         self.assertNotIn("is-other", button)
         self.assertIn('data-reps="10-12"', button)
-        self.assertIn('data-tier="rest"', button)  # set up, but never trained
 
     def test_often_trained_first_and_the_rest_folded_under_less_often(self):
         user = self._user_with_plan("picker_often")
 
         def log(name, *days):
-            for month, day in days:
-                self.session.add(WorkoutLog(user_id=user.id, date=base.datetime(2026, month, day), workout_name="W",
+            for day in days:
+                self.session.add(WorkoutLog(user_id=user.id, date=day, workout_name="W",
                                             exercise=name, exercise_string="x", sets_json={}))
 
-        log("Leg Curl", (9, 1), (9, 15))          # off the plan, but on two days lately
-        log("Upright Rows", (9, 10))              # once
-        log("Hip Thrust", (1, 5), (1, 12))        # twice, but months before the latest workout
-        log("Flat Barbell Press", (9, 20))        # the latest workout
+        mondays = [base.datetime(2026, 8, 10) + timedelta(weeks=w) for w in range(6)]
+        for name in ("Flat Barbell Press", "Cable Fly", "Overhead Press", "Leg Curl"):
+            log(name, *mondays)                   # a weekly routine; Leg Curl is off the plan
+        log("Upright Rows", mondays[1])           # once, weeks ago
+        log("Hip Thrust", base.datetime(2026, 1, 5), base.datetime(2026, 1, 12))  # twice, months before
         self.session.commit()
         html = self.client.get("/retrieve/custom").get_data(as_text=True)
         for name in ("Flat Barbell Press", "Cable Fly", "Leg Curl"):
