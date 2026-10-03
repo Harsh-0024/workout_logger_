@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 import re
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from sqlalchemy import func
 
@@ -33,7 +33,7 @@ from services.exercise_matching import (
     token_signature,
 )
 from services.workout_title import classify_by_name, infer_workout_title, split_title, title_from_plan_day
-from parsers.workout import _parse_plan_exercise_line, parse_bw_weight
+from parsers.workout import _parse_plan_exercise_line, join_set_rows, parse_bw_weight, parse_set_row
 from utils.dates import utc_now
 
 
@@ -666,7 +666,7 @@ def _generate_retrieve_output_for_exercises(db_session, user, exercises, *, head
 
         output_lines.append(f"{ex_name}{fmt_rng}")
         if sets_line:
-            output_lines.append(sets_line)
+            output_lines.extend(_sets_line_as_rows(sets_line, target_sets=target_sets))
         output_lines.append("")
 
     return "\n".join(output_lines).rstrip(), exercise_count, set_count
@@ -1188,6 +1188,15 @@ def _normalize_sets_line(sets_line: str, default_weight: str = "1", target_sets:
     return f"{' '.join(weights)}, {' '.join(reps)}"
 
 
+def _sets_line_as_rows(sets_line: str, target_sets: int = 3) -> List[str]:
+    """One set per line ("45, 3" then "40, 4"), shorthand spelled out, so every set reads
+    on its own and is edited on its own."""
+    weights, reps = _parse_sets_line_tokens(sets_line, target_sets=target_sets)
+    if not weights or len(weights) != len(reps):
+        return [sets_line]
+    return [f"{w}, {r}" for w, r in zip(weights, reps)]
+
+
 def _count_sets_from_line(sets_line: str, target_sets: int = 3) -> int:
     """Count sets for the display line.
 
@@ -1274,8 +1283,13 @@ def describe_retrieve_output(output: str) -> Dict:
         declared = plan.get("declared_sets")
         inline_range = plan.get("inline_range")
         target_sets = int(declared) if declared else 3
-        sets_line = lines[1] if len(lines) > 1 else ""
-        fresh = not sets_line or _is_default_numeric_sets(sets_line) or sets_line.lower().replace(" ", "") == "bw/4,1"
+        rows = lines[1:]
+        if len(rows) > 1 and all(parse_set_row(row) for row in rows):
+            fresh = all(row.lower().replace(" ", "") in {"1,1", "bw/4,1"} for row in rows)
+            sets_line = join_set_rows(rows)
+        else:
+            sets_line = rows[0] if rows else ""
+            fresh = not sets_line or _is_default_numeric_sets(sets_line) or sets_line.lower().replace(" ", "") == "bw/4,1"
         sets_label = ""
         if not fresh:
             try:

@@ -18,7 +18,7 @@ from services.logging import (
     comparison_set_count,
     resolve_target_sets_for_exercise,
 )
-from services.retrieve import generate_retrieve_output, get_effective_plan_text
+from services.retrieve import describe_retrieve_output, generate_retrieve_output, get_effective_plan_text
 from services.retrieve import _build_best_sets_line_from_logs
 
 
@@ -290,6 +290,16 @@ class TestRetrieveBestLineSelection(unittest.TestCase):
         self.assertEqual(line, "30 27.5, 6 10 7")
 
 
+class TestDescribeRetrieveOutput(unittest.TestCase):
+    def test_reads_one_set_per_line_and_the_one_line_form_alike(self):
+        per_line = "3/10/26 - Back\n\nBody Weight - 73 kg\n\nPull-Ups - [6–10]\nbw+10, 7\nbw+5, 8\nbw+5, 7\n\nRow - [2]\n1, 1\n1, 1"
+        one_line = "3/10/26 - Back\n\nBody Weight - 73 kg\n\nPull-Ups - [6–10]\nbw+10 bw+5, 7 8 7\n\nRow - [2]\n1, 1"
+        new, old = describe_retrieve_output(per_line), describe_retrieve_output(one_line)
+        self.assertEqual(new, old)
+        self.assertEqual(new["exercises"][0]["sets_label"], "BW+10×7 · BW+5×8 · BW+5×7")
+        self.assertTrue(new["exercises"][1]["fresh"])
+
+
 class TestRetrieveIntegration(unittest.TestCase):
     def setUp(self):
         self.engine = create_engine("sqlite:///:memory:")
@@ -363,7 +373,7 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertRegex(output.splitlines()[0], r"^\d{1,2}/\d{1,2}/\d{2}\b")
         self.assertIn("Body Weight - 80 kg", output)
         self.assertIn("Flat Dumbbell Press - [3, 8-12]", output)
-        self.assertIn("25 22.5, 6 10 7", output)
+        self.assertIn("25, 6\n22.5, 10\n22.5, 7", output)
         self.assertNotIn("45, 3", output)
 
     def test_generate_retrieve_output_infers_lbs_from_recent_logs(self):
@@ -458,7 +468,7 @@ class TestRetrieveIntegration(unittest.TestCase):
 
         output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 6)
 
-        self.assertIn("Deadlift - [3, 3–6]\n100 90 80, 5 6", output)
+        self.assertIn("Deadlift - [3, 3–6]\n100, 5\n90, 6\n80, 6", output)
         self.assertIn("Lat Pulldown - [2, 8–12]", output)
         self.assertNotIn("[3] -", output)
         self.assertNotIn("[2] -", output)
@@ -607,7 +617,7 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertEqual(set_count, 3)
         self.assertIn("Dumbbell Curl - [3, 8-12]", output)
         # fallback to <N keeps the best available history line
-        self.assertIn("12.5 10, 8 10", output)
+        self.assertIn("12.5, 8\n10, 10\n10, 10", output)
 
     def test_generate_retrieve_output_matches_dash_variant_reordered_exercise(self):
         plan = Plan(
@@ -654,7 +664,7 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertEqual(exercise_count, 1)
         self.assertEqual(set_count, 2)
         self.assertIn("Dumbbell Wrist Flexion - [2, 12-20]", output)
-        self.assertIn("15 13.8, 14 18", output)
+        self.assertIn("15, 14\n13.8, 18", output)
         self.assertNotIn("1, 1", output)
 
     def test_follow_admin_plan_prefers_non_empty_admin_plan(self):

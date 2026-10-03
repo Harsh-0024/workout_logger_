@@ -272,6 +272,92 @@ class TestWorkoutParser(unittest.TestCase):
         self.assertEqual(exs[0]["weights"], [32.5, 32.5, 32.5])
         self.assertEqual(exs[0]["reps"], [8, 8, 8])
 
+    def test_one_set_per_line_reads_the_same_as_one_line(self):
+        one_line = """
+        3/10/26 - Session 6 - Back & Biceps
+        Body Weight - 73 kg
+        Deadlift - [3–6]
+        45 40 35, 3 4 6
+        Pull-Ups - [6–10]
+        bw+10 bw+5, 7 8 7
+        Dumbbell Lat Row - [8–12]
+        30 25, 8 14
+        Preacher Curl - [2, 8–12]
+        22.5 20, 9
+        Bodyweight Inverted row - [1]
+        bw-1, 12
+        """
+        per_line = """
+        3/10/26 - Session 6 - Back & Biceps
+        Body Weight - 73 kg
+        Deadlift - [3–6]
+        45, 3
+        40, 4
+        35, 6
+
+        Pull-Ups - [6–10]
+        bw+10, 7
+        bw+5, 8
+        bw+5, 7
+
+        Dumbbell Lat Row - [8–12]
+        30, 8
+        25, 14
+        25, 14
+
+        Preacher Curl - [2, 8–12]
+        22.5, 9
+        20, 9
+
+        Bodyweight Inverted row - [1]
+        bw-1, 12
+        """
+        old = workout_parser(one_line, bodyweight=70)
+        new = workout_parser(per_line, bodyweight=70)
+        pick = lambda r: [(e["name"], e["weights"], e["reps"]) for e in r["exercises"]]
+        self.assertEqual(pick(new), pick(old))
+        self.assertEqual(new["exercises"][1]["weights"], [83.0, 78.0, 78.0])
+
+    def test_set_rows_mix_with_other_formats(self):
+        result = workout_parser("""
+        3/10 Push
+        Bench Press - [3]
+        60 x 8
+        55 x 10
+        50 x 12
+        Dips
+        bw, 10
+        bw, 8
+        Cable Fly
+        20 17.5 15
+        12 12 15
+        """, bodyweight=70)
+        exs = result["exercises"]
+        self.assertEqual([e["name"] for e in exs], ["Bench Press", "Dips", "Cable Fly"])
+        self.assertEqual(exs[0]["weights"], [60.0, 55.0, 50.0])
+        self.assertEqual(exs[0]["reps"], [8, 10, 12])
+        self.assertEqual(exs[1]["weights"], [70.0, 70.0, 70.0])
+        self.assertEqual(exs[1]["reps"], [10, 8, 8])
+        self.assertEqual(exs[2]["reps"], [12, 12, 15])
+
+    def test_set_rows_with_a_dot_and_a_space(self):
+        result = workout_parser("""
+        3/10 Pull
+        Row - [2]
+        25. 4
+        23. 10
+        Curl
+        22.5. 9
+        Shrug
+        25.4, 10
+        """)
+        exs = result["exercises"]
+        self.assertEqual([e["name"] for e in exs], ["Row", "Curl", "Shrug"])
+        self.assertEqual((exs[0]["weights"], exs[0]["reps"]), ([25.0, 23.0], [4, 10]))
+        self.assertEqual((exs[1]["weights"], exs[1]["reps"]), ([22.5] * 3, [9] * 3))
+        self.assertEqual(exs[2]["weights"], [25.4] * 3)
+        self.assertEqual(exs[2]["exercise_string"], "Shrug\n25.4, 10")
+
     def test_bodyweight_line_accepts_lbs_and_bare_values(self):
         lbs_result = workout_parser(
             """
