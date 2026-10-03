@@ -65,6 +65,15 @@
     .rr-row.is-dup .rr-name { color: var(--st-warn); }
 
     .rr-lists { margin-top: 18px; }
+
+    /* ---- Exercises still without a range: said once, above the list ---- */
+    .rr-missing {
+        display: flex; align-items: center; gap: 8px;
+        margin: -2px 4px 12px;
+        font-size: 0.84rem; color: var(--st-warn);
+    }
+    .rr-missing[hidden] { display: none; }
+    .rr-missing .st-link { margin-left: auto; }
     .rr-row[hidden], .rr-group[hidden], .rr-empty[hidden], .rr-raw-wrap[hidden], .rr-groups[hidden] { display: none; }
 
     /* ---- Muscle groups that open on a tap, as on Custom workout; A–Z inside ---- */
@@ -136,6 +145,11 @@
                 <span>Exercises</span>
                 <button type="button" class="st-link st-label-aside" id="rr-mode">Edit as text</button>
             </div>
+            <div class="rr-missing" id="rr-missing" role="status" hidden>
+                <i class="bi bi-exclamation-circle" aria-hidden="true"></i>
+                <span id="rr-missing-text"></span>
+                <button type="button" class="st-link" id="rr-missing-show">Show</button>
+            </div>
             <div class="st-group rr-groups" id="rr-groups"></div>
             <div class="st-group st-empty rr-empty" id="rr-empty" hidden></div>
             <div class="st-group rr-raw-wrap" id="rr-raw-wrap" hidden>
@@ -170,7 +184,14 @@
     const VALUE_RE = new RegExp(String.raw`^\s*${VALUE}\s*$`, 'iu');
     const TRAIL_RE = new RegExp(String.raw`^(.*?\p{L}.*?)\s+(${VALUE})\s*$`, 'iu');
 
+    // Written in place of a range to say there isn't one yet: "(blank)", "n/a", "-"...
+    const NO_RANGE = new Set(['blank', 'empty', 'none', 'nil', 'null', 'na', 'n/a', 'tbd', 'tba', '?', '-', '–', '—']);
+    const isNoRange = (v) => {
+        const t = (v || '').trim().replace(/\s+/g, ' ').replace(/^[()[\]<>{}]+|[()[\]<>{}]+$/g, '').trim().toLowerCase();
+        return !t || NO_RANGE.has(t);
+    };
     const formatValue = (v) => {
+        if (isNoRange(v)) return '';
         const text = (v || '').trim().replace(/\s+/g, ' ');
         const m = text.match(VALUE_RE);
         if (!m) return text;
@@ -210,7 +231,8 @@
             if (name === null) { pending = cleanName(line) || null; continue; }
             name = cleanName(name);
             if (!name) continue;
-            if (value.trim()) out.push([name, formatValue(value)]);
+            value = formatValue(value);
+            if (value) out.push([name, value]);
             else pending = name;
         }
         flush();
@@ -297,36 +319,48 @@
 
     const serialize = () => rows()
         .map((r) => [nameOf(r).value.trim(), valOf(r).value.trim()])
-        .filter(([n, v]) => n && v)
-        .map(([n, v]) => `${n}: ${stored(v)}`).join('\n');
+        .filter(([n]) => n)
+        .map(([n, v]) => `${n}: ${stored(v)}`.trim()).join('\n');
 
     /* ---- Status: count, filter, unsaved ---- */
     let original = '';
     let rawMode = false;
+    let onlyMissing = false;   // "Show": just the exercises without a range
+    const missingBox = $('rr-missing'), missingText = $('rr-missing-text'), missingBtn = $('rr-missing-show');
+    const lacksRange = (r) => !!nameOf(r).value.trim() && !valOf(r).value.trim();
 
     function refresh() {
         const all = rows();
         const q = keyOf(addName.value);
         let shown = 0;
         const seen = new Set();
+        const missing = all.filter(lacksRange);
+        if (!missing.length) onlyMissing = false;
         all.forEach((r) => {
             const k = keyOf(nameOf(r).value);
             r.classList.toggle('is-dup', !!k && seen.has(k));
             if (k) seen.add(k);
-            const match = !q || k.includes(q);
+            // Marked while it has no range; the mark stays put while its range is being typed.
+            if (lacksRange(r)) r.classList.add('is-missing');
+            else if (document.activeElement !== valOf(r)) r.classList.remove('is-missing');
+            const match = (!q || k.includes(q)) && (!onlyMissing || r.classList.contains('is-missing'));
             r.hidden = !match;
             if (match) shown++;
         });
-        // Searching opens the groups with a match; clearing it puts them back as they were.
+        const n = missing.length;
+        missingBox.hidden = rawMode || n === 0;
+        missingText.textContent = `${n} exercise${n === 1 ? ' has' : 's have'} no rep range`;
+        missingBtn.textContent = onlyMissing ? 'Show all' : 'Show';
+        // Searching (or "Show") opens the groups with a match; clearing it puts them back as they were.
         const wasSearching = searching;
-        searching = !!q;
+        searching = !!q || onlyMissing;
         groupsEl.querySelectorAll('.rr-group').forEach((g) => {
             const total = g.querySelectorAll('.rr-row').length;
             const visible = g.querySelectorAll('.rr-row:not([hidden])').length;
             if (!total) { g.remove(); return; }
             g.hidden = !visible;
-            g.querySelector('.rr-group-count').textContent = q ? `${visible} of ${total}` : total;
-            if (q) g.open = visible > 0;
+            g.querySelector('.rr-group-count').textContent = searching ? `${visible} of ${total}` : total;
+            if (searching) g.open = visible > 0;
             else if (wasSearching) g.open = g.dataset.group === 'New' || remembered.includes(g.dataset.group);
         });
         const exact = q && findRow(addName.value);
@@ -404,6 +438,8 @@
         addName.focus();
     }
 
+    missingBtn.addEventListener('click', () => { onlyMissing = !onlyMissing; refresh(); });
+
     /* ---- Add bar ---- */
     addName.addEventListener('input', () => {
         const hit = findRow(addName.value);
@@ -469,7 +505,7 @@
     function toRaw() {
         raw.value = rows().map((r) => {
             const n = nameOf(r).value.trim(), v = valOf(r).value.trim();
-            return n || v ? `${n}: ${stored(v)}` : '';
+            return n || v ? `${n}: ${stored(v)}`.trim() : '';
         }).filter(Boolean).join('\n');
         rawMode = true;
         lists.classList.add('is-raw');
@@ -492,7 +528,7 @@
     modeBtn.addEventListener('click', () => (rawMode ? toList() : toRaw()));
     raw.addEventListener('input', refresh);
 
-    /* ---- Save: every exercise needs a range, and each only once ---- */
+    /* ---- Save: each exercise once and named; one without a range is saved as such ---- */
     let saving = false;
     form.addEventListener('submit', (e) => {
         if (rawMode) toList();
@@ -503,7 +539,6 @@
         });
         addName.value = '';
         refresh();
-        const missing = rows().filter((r) => nameOf(r).value.trim() && !valOf(r).value.trim());
         const dup = rows().find((r) => r.classList.contains('is-dup'));
         const nameless = rows().find((r) => !nameOf(r).value.trim());
         const stop = (row, focusEl, text) => {
@@ -514,13 +549,6 @@
             focusEl.focus({ preventScroll: true });
             say(text, 'is-warn');
         };
-        if (missing.length) {
-            missing.forEach((r) => { r.classList.add('is-missing'); r.closest('.rr-group').open = true; });
-            const n = missing.length;
-            return stop(missing[0], valOf(missing[0]), n === 1
-                ? `Add a range for ${nameOf(missing[0]).value.trim()}.`
-                : `Add a range for ${n} exercises.`);
-        }
         if (nameless) return stop(nameless, nameOf(nameless), 'Name this exercise, or remove it.');
         if (dup) return stop(dup, nameOf(dup), `${nameOf(dup).value.trim()} is listed twice.`);
         $('rr-text').value = serialize();

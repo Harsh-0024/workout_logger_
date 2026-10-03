@@ -473,6 +473,21 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertNotIn("[3] -", output)
         self.assertNotIn("[2] -", output)
 
+    def test_an_exercise_without_a_rep_range_retrieves_without_one(self):
+        plan = Plan(user_id=self.user.id, text_content="Session 6 - Back & Biceps\nChest Dips\nBarbell Squat - [2]")
+        # Stored blank, and the older "(blank)" written as if it were a range.
+        rep = RepRange(user_id=self.user.id, text_content="Chest Dips:\nBarbell Squat: (blank)")
+        self.db.add(plan)
+        self.db.add(rep)
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 6)
+
+        self.assertIn("Chest Dips\n", output)
+        self.assertIn("Barbell Squat - [2]\n", output)
+        self.assertNotIn("blank", output)
+        self.assertNotIn("[]", output)
+
     def test_logged_bw_notation_rebases_when_current_bodyweight_changed(self):
         self.user.bodyweight = 72
         plan = Plan(

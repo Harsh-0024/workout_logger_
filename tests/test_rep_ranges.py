@@ -37,8 +37,17 @@ class TestRepRanges(unittest.TestCase):
     def test_stored_text_has_one_line_per_exercise(self):
         text = "Bench Press: 6-10\nrow 8-12\n6-10\nbench press: 5-8\nPlank"
         # A repeat keeps its first place and spelling and takes the last range; a stray range
-        # or a name with no range is dropped.
-        self.assertEqual(canonical_rep_text(text), "Bench Press: 5–8\nRow: 8–12")
+        # is dropped, and a name with no range is kept without one.
+        self.assertEqual(canonical_rep_text(text), "Bench Press: 5–8\nRow: 8–12\nPlank:")
+
+    def test_words_standing_in_for_a_range_mean_no_range(self):
+        text = "Chest Dips: (blank)\nBarbell Squat: n/a\nSeated Leg Curl: -\nPlank: TBD\nPush-Ups: Max reps"
+        self.assertEqual(
+            canonical_rep_text(text),
+            "Chest Dips:\nBarbell Squat:\nSeated Leg Curl:\nPlank:\nPush-Ups: Max reps",
+        )
+        # A blank later in the list doesn't wipe a range given earlier.
+        self.assertEqual(canonical_rep_text("Dips: 8-12\nDips: (blank)"), "Dips: 8–12")
 
     def test_existing_stored_text_reads_back_unchanged(self):
         stored = "Flat Barbell Press: 5–8\nDips: 3, 6–12\nForearm Roller: 30–60s"

@@ -33,6 +33,7 @@ from services.exercise_matching import (
     resolve_equivalent_names,
     token_signature,
 )
+from services.rep_ranges import is_no_range
 from services.workout_title import classify_by_name, infer_workout_title, split_title, title_from_plan_day
 from parsers.workout import _parse_plan_exercise_line, join_set_rows, parse_bw_weight, parse_set_row
 from utils.dates import utc_now
@@ -569,7 +570,7 @@ def _parse_rep_ranges_text(rep_text):
         exercise_key_raw = k.strip()
         exercise_key = exercise_key_raw.lower()
         exercise_key_norm = normalize_exercise_name(exercise_key_raw)
-        value = v.strip()
+        value = "" if is_no_range(v) else v.strip()
         m = re.match(r'^(\d+)\s*,\s*(.+)$', value)
         if m:
             try:
