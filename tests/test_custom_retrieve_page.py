@@ -178,6 +178,20 @@ class TestCustomRetrievePage(unittest.TestCase):
         self.assertLess(chest.index('class="cr-more"'), chest.index('data-name="Incline Barbell Press"'))
         self.assertIn("Less often", chest)
 
+    def test_gym_tags_are_separate_exercises_sharing_the_base_rep_range(self):
+        user = self._user_with_plan("picker_gym_tags")
+        self.session.add(RepRange(user_id=user.id, text_content="Preacher Curl: 2, 8-12"))
+        for name in ("Preacher Curl", "Preacher Curl (Wellness)", "Preacher Curl (YFC)"):
+            self.session.add(WorkoutLog(user_id=user.id, date=base.datetime(2026, 9, 1), workout_name="Arms",
+                                        exercise=name, exercise_string="x", sets_json={}))
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        for name in ("Preacher Curl", "Preacher Curl (Wellness)", "Preacher Curl (YFC)"):
+            button = self._button(html, name)
+            self.assertIn('data-reps="8-12"', button)
+            self.assertIn('data-sets="2"', button)
+        self.assertEqual(len(re.findall(r'data-name="Preacher Curl[^"]*"', html)), 3)
+
     def test_an_empty_group_is_still_there_to_move_into(self):
         self._user_with_plan("picker_empty_group")
         html = self.client.get("/retrieve/custom").get_data(as_text=True)

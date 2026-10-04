@@ -33,7 +33,7 @@ from services.exercise_matching import (
     resolve_equivalent_names,
     token_signature,
 )
-from services.rep_ranges import is_no_range
+from services.rep_ranges import is_no_range, lookup_rep_target
 from services.workout_title import classify_by_name, infer_workout_title, split_title, title_from_plan_day
 from parsers.workout import _parse_plan_exercise_line, join_set_rows, parse_bw_weight, parse_set_row
 from utils.dates import utc_now
@@ -458,13 +458,12 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         item["last_retrieved_at"] = usage.get("last_retrieved_at")
         # The same sets and reps a plan retrieve would give this exercise.
         parsed = _parse_plan_exercise_line(item["exercise_line"])
+        rep_range, rep_range_sets = lookup_rep_target(item["name"], custom_ranges, custom_sets)
         declared = parsed.get("declared_sets")
         if declared is None:
-            declared = custom_sets.get(item["name"].lower(), custom_sets.get(key))
+            declared = rep_range_sets
         item["default_sets"] = int(declared) if isinstance(declared, int) and declared > 0 else 3
-        item["rep_range"] = (
-            custom_ranges.get(item["name"].lower()) or custom_ranges.get(key) or parsed.get("inline_range") or ""
-        )
+        item["rep_range"] = rep_range or parsed.get("inline_range") or ""
         item["auto_group"] = _picker_group(item["name"], plan_parts.get(key))
         item["group"] = moved.get(key) or item["auto_group"]
         item["often"] = often_keys is None or key in often_keys
@@ -714,19 +713,15 @@ def _generate_retrieve_output_for_exercises(db_session, user, exercises, *, head
         plan_declared_sets = parsed_plan_ex.get("declared_sets")
         plan_inline_range = parsed_plan_ex.get("inline_range")
 
-        ex_key = ex_name.lower()
         ex_key_norm = normalize_exercise_name(ex_name)
-        rng = custom_ranges.get(ex_key, "")
-        if not rng and ex_key_norm:
-            rng = custom_ranges.get(ex_key_norm, "")
+        # "Preacher Curl (Wellness)" takes Preacher Curl's rep range unless it has its own.
+        rng, rep_range_sets = lookup_rep_target(ex_name, custom_ranges, custom_sets)
         if not rng and plan_inline_range:
             rng = plan_inline_range
 
         declared_sets = plan_declared_sets
         if declared_sets is None:
-            declared_sets = custom_sets.get(ex_key)
-        if declared_sets is None and ex_key_norm:
-            declared_sets = custom_sets.get(ex_key_norm)
+            declared_sets = rep_range_sets
         if ex_key_norm in normalized_set_overrides:
             declared_sets = normalized_set_overrides[ex_key_norm]
         fmt_rng = ""

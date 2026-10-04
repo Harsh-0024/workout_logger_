@@ -216,6 +216,14 @@ class TestSetCountRule(unittest.TestCase):
         self.assertEqual(target_sets, 4)
         self.assertTrue(strict)
 
+    def test_a_gym_tag_takes_the_base_rep_range_set_count(self):
+        target_sets, strict = resolve_target_sets_for_exercise(
+            exercise_name="Preacher Curl (Wellness)",
+            exercise_string="Preacher Curl (Wellness)\n20, 10",
+            rep_target_sets={"preacher curl": 2},
+        )
+        self.assertEqual((target_sets, strict), (2, True))
+
 
 class TestRetrieveBestLineSelection(unittest.TestCase):
     def _user(self):
@@ -472,6 +480,23 @@ class TestRetrieveIntegration(unittest.TestCase):
         self.assertIn("Lat Pulldown - [2, 8–12]", output)
         self.assertNotIn("[3] -", output)
         self.assertNotIn("[2] -", output)
+
+    def test_a_gym_tag_takes_the_base_rep_range_but_keeps_its_own_numbers(self):
+        plan = Plan(user_id=self.user.id, text_content="Session 6 - Back & Biceps\nPreacher Curl (Wellness)\nPreacher Curl")
+        rep = RepRange(user_id=self.user.id, text_content="Preacher Curl: 2, 8-12")
+        self.db.add(plan)
+        self.db.add(rep)
+        for name, weight in (("Preacher Curl", 30), ("Preacher Curl (Wellness)", 20), ("Preacher Curl (YFC)", 25)):
+            self.db.add(WorkoutLog(user_id=self.user.id, date=datetime.now(), workout_name="Arms", exercise=name,
+                                   exercise_string=f"{name}\n{weight}, 10", sets_json={"weights": [weight, weight], "reps": [10, 10]}))
+        self.db.commit()
+
+        output, _, _ = generate_retrieve_output(self.db, self.user, "Session", 6)
+
+        # Same rep range; each exercise's own best, never another gym's.
+        self.assertIn("Preacher Curl (Wellness) - [2, 8-12]\n20, 10\n20, 10\n", output)
+        self.assertIn("Preacher Curl - [2, 8-12]\n30, 10\n30, 10", output)
+        self.assertNotIn("25", output)
 
     def test_an_exercise_without_a_rep_range_retrieves_without_one(self):
         plan = Plan(user_id=self.user.id, text_content="Session 6 - Back & Biceps\nChest Dips\nBarbell Squat - [2]")

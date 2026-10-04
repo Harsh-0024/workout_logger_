@@ -121,6 +121,39 @@ def merge_rep_entries(entries: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
     return [merged[k] for k in order]
 
 
+# A tag in round brackets at the end of a name says which gym or machine was used:
+# "Preacher Curl (Wellness)", "Hip Thrust - (wellness)". Weights there aren't comparable, so
+# everything that analyses training keeps the tagged name separate; only the rep range is
+# shared, taken from the base name when the tagged one has none of its own.
+_TAG_RE = re.compile(r"^(?P<base>.*?\S)[\s\-–—]*\([^()]*\)\s*$")
+
+
+def rep_range_names(name: str) -> List[str]:
+    """Where to look for an exercise's rep range, in order: the name itself, then the name
+    without its bracket tags, one at a time.
+    "Preacher Curl (Wellness)" -> ["Preacher Curl (Wellness)", "Preacher Curl"]."""
+    names: List[str] = []
+    current = re.sub(r"\s+", " ", name or "").strip()
+    while current:
+        names.append(current)
+        m = _TAG_RE.match(current)
+        if not m:
+            break
+        current = m.group("base").rstrip(" -–—").strip()
+    return names
+
+
+def lookup_rep_target(name: str, ranges: dict, sets: dict) -> Tuple[str, Optional[int]]:
+    """(range, set count) for an exercise from parsed rep ranges keyed by lower-case and
+    normalised names, falling back from a tagged name to its base. ("", None) if neither has one."""
+    for candidate in rep_range_names(name):
+        for key in (candidate.lower(), normalize_exercise_name(candidate)):
+            rep_range, set_count = ranges.get(key) or "", sets.get(key)
+            if rep_range or set_count:
+                return rep_range, set_count
+    return "", None
+
+
 def rep_entries_to_text(entries: List[Tuple[str, str]]) -> str:
     return "\n".join(f"{name}: {value}".rstrip() for name, value in entries)
 
