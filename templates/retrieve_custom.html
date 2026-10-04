@@ -731,8 +731,6 @@
             url.searchParams.delete('e');
             url.searchParams.delete('s');
             history.replaceState(history.state, '', url.pathname + url.search);
-            // Phones: show the workout being edited straight away.
-            setSheet(true);
         }
     })();
 </script>
