@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 import re
-from typing import Dict, Optional
+import statistics
+from typing import Dict, List, Optional
 
 from sqlalchemy import func
 
@@ -32,8 +33,9 @@ from services.exercise_matching import (
     resolve_equivalent_names,
     token_signature,
 )
+from services.rep_ranges import is_no_range, lookup_rep_target
 from services.workout_title import classify_by_name, infer_workout_title, split_title, title_from_plan_day
-from parsers.workout import _parse_plan_exercise_line, parse_bw_weight
+from parsers.workout import _parse_plan_exercise_line, join_set_rows, parse_bw_weight, parse_set_row
 from utils.dates import utc_now
 
 
@@ -44,6 +46,15 @@ CUSTOM_RETRIEVAL_SORT_MODES = {
 }
 DEFAULT_CUSTOM_RETRIEVAL_SORT_MODE = "most_retrieved"
 CUSTOM_RETRIEVAL_HISTORY_DAYS = 90
+# Custom workout: which exercises someone trains often. See often_trained_keys().
+PACE_HISTORY_DAYS = 182          # the pace is learned from the last 6 months
+BREAK_COUNTS_AS_DAYS = 14        # a longer stretch without workouts counts as two weeks
+WINDOW_PACES = 3                 # look back 3 times the pace...
+WINDOW_MIN_DAYS = 28             # ...but at least 4 weeks
+WINDOW_MAX_DAYS = 182            # ...and at most 6 months
+OFTEN_MIN_DAYS = 2               # trained on 2 days in that time: part of the routine
+MIN_REPEATS_TO_FOLD = 5          # fewer repeats than this: too early to tell, nothing folds
+PLAN_FOLLOWED_SHARE = 0.5        # the plan counts when half its exercises were trained lately
 
 
 def _normalize_text(text: str) -> str:
@@ -279,6 +290,25 @@ def generate_custom_retrieve_output(db_session, user, exercises, *, set_override
     )
 
 
+def picks_for_plan_lines(db_session, user, lines):
+    """[(picker key, sets)] for a plan day's lines, in order, with the sets a plan retrieve
+    gives each (the plan's own count, else the rep range's, else 3): what Edit loads."""
+    custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
+    picks, seen = [], set()
+    for line in lines or []:
+        parsed = _parse_plan_exercise_line(str(line or ""))
+        name = str(parsed.get("name") or line or "").strip()
+        key = normalize_exercise_name(name)
+        if not key or key == "unknown exercise" or key in seen:
+            continue
+        seen.add(key)
+        sets = parsed.get("declared_sets")
+        if sets is None:
+            sets = lookup_rep_target(name, custom_ranges, custom_sets)[1]
+        picks.append((key, int(sets) if isinstance(sets, int) and sets > 0 else 3))
+    return picks
+
+
 def get_custom_retrieval_sort_preference(db_session, user) -> str:
     preference = (
         db_session.query(CustomRetrievalPreference)
@@ -334,7 +364,8 @@ def record_custom_retrieval(db_session, user, exercise_keys):
 
 
 def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
-    """Return selectable exercises from the plan, shared catalogue, and user history."""
+    """Return selectable exercises from the plan, rep ranges, shared catalogue and user history,
+    each marked "often" when it's in the plan or trained regularly of late."""
     catalog = {}
 
     key_by_signature = {}
@@ -342,13 +373,13 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     def add_exercise(raw_exercise, *, preserve_plan_details=False, yours=False, merge_twins=False):
         raw_value = str(raw_exercise or "").strip()
         if not raw_value:
-            return
+            return None
 
         parsed = _parse_plan_exercise_line(raw_value)
         display_name = str(parsed.get("name") or raw_value).strip()
         key = normalize_exercise_name(display_name)
         if not key or key == "unknown exercise":
-            return
+            return None
         # "Lat Dumbbell Rows" in the history is the plan's "Dumbbell Lat Row": the same
         # words in another order. Keep one row, under the name already in the list.
         signature = token_signature(display_name)
@@ -356,7 +387,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         if merge_twins and twin and twin != key and key not in catalog:
             if yours:
                 catalog[twin]["yours"] = True
-            return
+            return twin
         if signature:
             key_by_signature.setdefault(signature, key)
 
@@ -371,7 +402,9 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
             }
         elif yours:
             catalog[key]["yours"] = True
+        return key
 
+    plan_keys = set()
     plan_text = get_effective_plan_text(db_session, user)
     plan_data = get_workout_days(plan_text or "")
     workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
@@ -383,7 +416,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
                 if not isinstance(exercises, list):
                     continue
                 for exercise in exercises:
-                    add_exercise(exercise, preserve_plan_details=True, yours=True)
+                    plan_keys.add(add_exercise(exercise, preserve_plan_details=True, yours=True))
 
     for exercise in list_of_exercises:
         add_exercise(exercise, merge_twins=True)
@@ -394,11 +427,24 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         .distinct()
         .all()
     )
+    key_by_logged_name = {}
     for row in logged_exercises or []:
         try:
-            add_exercise(row[0], yours=True, merge_twins=True)
+            name = row[0]
         except (IndexError, KeyError, TypeError):
-            add_exercise(row, yours=True, merge_twins=True)
+            name = row
+        key_by_logged_name[name] = add_exercise(name, yours=True, merge_twins=True)
+
+    # Every exercise in the rep ranges, too: the list can hold many not in the plan or history.
+    # They're yours when the rep ranges are; a list followed from the admin or the defaults
+    # shows like the built-in list.
+    rep_ranges_text = get_effective_rep_ranges_text(db_session, user)
+    own_rep_ranges = bool((_own_rep_ranges_text(db_session, user) or "").strip())
+    for line in (rep_ranges_text or "").splitlines():
+        if ":" in line:
+            add_exercise(line.split(":", 1)[0], yours=own_rep_ranges, merge_twins=True)
+
+    often_keys = _often_trained_catalog_keys(db_session, user, key_by_logged_name, plan_keys)
 
     cutoff = datetime.now() - timedelta(days=CUSTOM_RETRIEVAL_HISTORY_DAYS)
     usage_rows = (
@@ -423,7 +469,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     }
 
     plan_parts = _plan_parts_by_exercise(plan_data)
-    custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
+    custom_ranges, custom_sets = _parse_rep_ranges_text(rep_ranges_text)
     moved = get_exercise_group_choices(db_session, user)
     for key, item in catalog.items():
         usage = usage_by_key.get(key, {})
@@ -431,18 +477,85 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         item["last_retrieved_at"] = usage.get("last_retrieved_at")
         # The same sets and reps a plan retrieve would give this exercise.
         parsed = _parse_plan_exercise_line(item["exercise_line"])
+        rep_range, rep_range_sets = lookup_rep_target(item["name"], custom_ranges, custom_sets)
         declared = parsed.get("declared_sets")
         if declared is None:
-            declared = custom_sets.get(item["name"].lower(), custom_sets.get(key))
+            declared = rep_range_sets
         item["default_sets"] = int(declared) if isinstance(declared, int) and declared > 0 else 3
-        item["rep_range"] = (
-            custom_ranges.get(item["name"].lower()) or custom_ranges.get(key) or parsed.get("inline_range") or ""
-        )
+        item["rep_range"] = rep_range or parsed.get("inline_range") or ""
         item["auto_group"] = _picker_group(item["name"], plan_parts.get(key))
         item["group"] = moved.get(key) or item["auto_group"]
+        item["often"] = often_keys is None or key in often_keys
 
     mode = sort_mode if sort_mode in CUSTOM_RETRIEVAL_SORT_MODES else get_custom_retrieval_sort_preference(db_session, user)
     return _sort_custom_retrieval_catalog(list(catalog.values()), mode)
+
+
+def often_trained_keys(workouts, plan_keys=()) -> Optional[set]:
+    """Which exercises someone trains often, learned from their own workouts.
+
+    workouts: [(date, {exercise keys done that day})]. Returns the keys trained often, or
+    None when there isn't enough history yet to tell (then nothing is folded away).
+
+    1. The pace: how many days usually pass before an exercise comes back - the median of
+       every repeat in the last 6 months, so a rare comeback after months doesn't skew it.
+    2. Look back 3 paces from the latest workout (at least 4 weeks, at most 6 months).
+    3. Often = trained on 2+ days in that time. Also often: an exercise done for the first
+       time within the last pace (just started), and the plan's exercises when the plan is
+       followed (half of them trained in the last 6 months).
+    Throughout, a stretch without workouts counts as at most two weeks, so a holiday or an
+    illness doesn't fold away someone's routine. Worked out fresh each time, so it follows
+    any change in how often someone trains.
+    """
+    days = sorted({day for day, _ in workouts})
+    if not days:
+        return None
+    # A clock that runs on training time: breaks count as two weeks at most.
+    clock, now = {}, 0
+    for previous, day in zip([None] + days, days):
+        if previous is not None:
+            now += min(BREAK_COUNTS_AS_DAYS, (day - previous).days)
+        clock[day] = now
+    times = {}
+    for day, keys in workouts:
+        for key in keys or ():
+            if key:
+                times.setdefault(key, set()).add(clock[day])
+    times = {key: sorted(ts) for key, ts in times.items()}
+
+    gaps = [b - a for ts in times.values() for a, b in zip(ts, ts[1:]) if b > now - PACE_HISTORY_DAYS]
+    if len(gaps) < MIN_REPEATS_TO_FOLD:
+        return None
+    pace = statistics.median(gaps)
+    window = min(WINDOW_MAX_DAYS, max(WINDOW_MIN_DAYS, WINDOW_PACES * pace))
+
+    often = set()
+    for key, ts in times.items():
+        if sum(t > now - window for t in ts) >= OFTEN_MIN_DAYS:
+            often.add(key)
+        elif len(ts) == 1 and now - ts[0] <= pace:
+            often.add(key)
+    plan_keys = {key for key in plan_keys if key}
+    if plan_keys:
+        trained_lately = {key for key, ts in times.items() if ts[-1] > now - PACE_HISTORY_DAYS}
+        if len(plan_keys & trained_lately) >= PLAN_FOLLOWED_SHARE * len(plan_keys):
+            often |= plan_keys
+    return often
+
+
+def _often_trained_catalog_keys(db_session, user, key_by_logged_name, plan_keys) -> Optional[set]:
+    """often_trained_keys() for this user's logged workouts, under the picker's keys."""
+    rows = (
+        db_session.query(WorkoutLog.exercise, WorkoutLog.date)
+        .filter(WorkoutLog.user_id == user.id)
+        .all()
+    )
+    by_day = {}
+    for name, when in rows:
+        key = key_by_logged_name.get(name)
+        if key and when:
+            by_day.setdefault(when.date(), set()).add(key)
+    return often_trained_keys(sorted(by_day.items()), plan_keys)
 
 
 def _sort_custom_retrieval_catalog(catalog, sort_mode):
@@ -475,7 +588,7 @@ def _parse_rep_ranges_text(rep_text):
         exercise_key_raw = k.strip()
         exercise_key = exercise_key_raw.lower()
         exercise_key_norm = normalize_exercise_name(exercise_key_raw)
-        value = v.strip()
+        value = "" if is_no_range(v) else v.strip()
         m = re.match(r'^(\d+)\s*,\s*(.+)$', value)
         if m:
             try:
@@ -619,19 +732,15 @@ def _generate_retrieve_output_for_exercises(db_session, user, exercises, *, head
         plan_declared_sets = parsed_plan_ex.get("declared_sets")
         plan_inline_range = parsed_plan_ex.get("inline_range")
 
-        ex_key = ex_name.lower()
         ex_key_norm = normalize_exercise_name(ex_name)
-        rng = custom_ranges.get(ex_key, "")
-        if not rng and ex_key_norm:
-            rng = custom_ranges.get(ex_key_norm, "")
+        # "Preacher Curl (Wellness)" takes Preacher Curl's rep range unless it has its own.
+        rng, rep_range_sets = lookup_rep_target(ex_name, custom_ranges, custom_sets)
         if not rng and plan_inline_range:
             rng = plan_inline_range
 
         declared_sets = plan_declared_sets
         if declared_sets is None:
-            declared_sets = custom_sets.get(ex_key)
-        if declared_sets is None and ex_key_norm:
-            declared_sets = custom_sets.get(ex_key_norm)
+            declared_sets = rep_range_sets
         if ex_key_norm in normalized_set_overrides:
             declared_sets = normalized_set_overrides[ex_key_norm]
         fmt_rng = ""
@@ -666,7 +775,7 @@ def _generate_retrieve_output_for_exercises(db_session, user, exercises, *, head
 
         output_lines.append(f"{ex_name}{fmt_rng}")
         if sets_line:
-            output_lines.append(sets_line)
+            output_lines.extend(_sets_line_as_rows(sets_line, target_sets=target_sets))
         output_lines.append("")
 
     return "\n".join(output_lines).rstrip(), exercise_count, set_count
@@ -1188,6 +1297,15 @@ def _normalize_sets_line(sets_line: str, default_weight: str = "1", target_sets:
     return f"{' '.join(weights)}, {' '.join(reps)}"
 
 
+def _sets_line_as_rows(sets_line: str, target_sets: int = 3) -> List[str]:
+    """One set per line ("45, 3" then "40, 4"), shorthand spelled out, so every set reads
+    on its own and is edited on its own."""
+    weights, reps = _parse_sets_line_tokens(sets_line, target_sets=target_sets)
+    if not weights or len(weights) != len(reps):
+        return [sets_line]
+    return [f"{w}, {r}" for w, r in zip(weights, reps)]
+
+
 def _count_sets_from_line(sets_line: str, target_sets: int = 3) -> int:
     """Count sets for the display line.
 
@@ -1274,8 +1392,13 @@ def describe_retrieve_output(output: str) -> Dict:
         declared = plan.get("declared_sets")
         inline_range = plan.get("inline_range")
         target_sets = int(declared) if declared else 3
-        sets_line = lines[1] if len(lines) > 1 else ""
-        fresh = not sets_line or _is_default_numeric_sets(sets_line) or sets_line.lower().replace(" ", "") == "bw/4,1"
+        rows = lines[1:]
+        if len(rows) > 1 and all(parse_set_row(row) for row in rows):
+            fresh = all(row.lower().replace(" ", "") in {"1,1", "bw/4,1"} for row in rows)
+            sets_line = join_set_rows(rows)
+        else:
+            sets_line = rows[0] if rows else ""
+            fresh = not sets_line or _is_default_numeric_sets(sets_line) or sets_line.lower().replace(" ", "") == "bw/4,1"
         sets_label = ""
         if not fresh:
             try:

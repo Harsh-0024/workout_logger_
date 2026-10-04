@@ -544,6 +544,8 @@ def is_data_line(line):
     if not line:
         return False
     stripped = _sets_of(line.strip())
+    if parse_set_row(stripped):
+        return True
     if re.match(r'^\d+(?:[.)\-:])\s*[A-Za-z]', stripped):
         return False
     tokens = stripped.split()
@@ -745,6 +747,32 @@ _WEEKDAY_BEFORE_DATE = re.compile(
 )
 
 
+# One set on its own line. A dot counts only with a space after it ("25. 4", what a double
+# space types), so "25.4" stays a decimal weight.
+_SET_ROW_RE = re.compile(
+    r'^(?P<weight>bw(?:/\d+(?:\.\d+)?)?(?:\s*[+-]\s*\d+(?:\.\d+)?)?|-?\d+(?:\.\d+)?)'
+    r'\s*(?:kgs|kg|lbs|lb)?\s*(?:,|x|×|\*|\.(?=\s))\s*(?P<reps>\d+)$',
+    flags=re.IGNORECASE,
+)
+
+
+def parse_set_row(line: str) -> Optional[Tuple[str, str]]:
+    """One set on its own line: "45, 3" (as retrieve writes it), "25. 4", "bw+10, 7" or "45 x 3".
+    Returns the (weight, reps) tokens, or None when the line is anything else."""
+    line = re.sub(r'\bbody\s*weight\b', 'bw', (line or '').strip(), flags=re.IGNORECASE)
+    match = _SET_ROW_RE.match(line)
+    if not match:
+        return None
+    return re.sub(r'\s+', '', match.group('weight')), match.group('reps')
+
+
+def join_set_rows(rows: List[str]) -> str:
+    """Set rows as the classic one-line form ("45 40 35, 3 4 6"), which everything that
+    reads a logged exercise's text already understands."""
+    pairs = [parse_set_row(row) for row in rows]
+    return f"{' '.join(w for w, _ in pairs)}, {' '.join(r for _, r in pairs)}"
+
+
 def _title_case(name: str) -> str:
     """Capitalise the first letter of each word and leave every other letter as typed:
     "oh" -> "Oh", "oH" -> "OH", "EZ-bar" -> "EZ-Bar", "LEG PRESS" stays. A word starts after
@@ -938,7 +966,7 @@ def workout_parser(
                 data_part = data_line
                 consumed += 1
 
-                if "," not in data_part and i + 2 < len(list_of_lines) and is_data_line(list_of_lines[i + 2]):
+                if "," not in data_part and not parse_set_row(data_part) and i + 2 < len(list_of_lines) and is_data_line(list_of_lines[i + 2]):
                     reps_line = list_of_lines[i + 2].strip()
                     exercise_lines.append(reps_line)
                     data_part = f"{data_part}, {reps_line}"
@@ -980,7 +1008,7 @@ def workout_parser(
             data_part = data_line
             consumed += 1
 
-            if "," not in data_part and i + 2 < len(list_of_lines) and is_data_line(list_of_lines[i + 2]):
+            if "," not in data_part and not parse_set_row(data_part) and i + 2 < len(list_of_lines) and is_data_line(list_of_lines[i + 2]):
                 reps_line = list_of_lines[i + 2].strip()
                 exercise_lines.append(reps_line)
                 data_part = f"{data_part}, {reps_line}"
@@ -993,6 +1021,20 @@ def workout_parser(
                 exercise_lines.append(extra)
                 data_part = f"{data_part}, {extra}"
                 consumed += 1
+        # One set per line with a comma or a dot ("45, 3" / "40. 4"), as retrieve writes them:
+        # stored in the one-line form ("45 40, 3 4"), which reads exactly like the same sets on
+        # one line everywhere a logged exercise's text is read.
+        elif data_part and parse_set_row(data_part):
+            rows = [data_part]
+            if consumed > 1:
+                while i + consumed < len(list_of_lines) and parse_set_row(list_of_lines[i + consumed]):
+                    rows.append(list_of_lines[i + consumed].strip())
+                    consumed += 1
+            # A lone "45, 3" is already the one-line form; keep it as typed.
+            if len(rows) > 1 or ',' not in data_part:
+                data_part = join_set_rows(rows)
+                if consumed > 1:
+                    exercise_lines = [exercise_lines[0], data_part]
 
         if data_part and not is_probable_data_segment(data_part):
             data_part = ""

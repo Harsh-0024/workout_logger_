@@ -1,6 +1,7 @@
 """The one-page Custom workout picker: muscle groups, sets per exercise, order kept."""
 import re
 import unittest
+from datetime import timedelta
 
 import tests.test_route_regressions as base
 from models import ExerciseGroupChoice, Plan, RepRange, WorkoutLog
@@ -143,6 +144,53 @@ class TestCustomRetrievePage(unittest.TestCase):
         for data in ({"exercise": "no such lift", "group": "Chest"},
                      {"exercise": normalize_exercise_name("Dumbbell Curl"), "group": "Glutes"}):
             self.assertEqual(self.client.post("/retrieve/custom/group", data=data).status_code, 400)
+
+    def test_rep_range_exercises_are_listed_as_yours(self):
+        user = self._user_with_plan("picker_rep_list")
+        self.session.add(RepRange(user_id=user.id, text_content="Seated Zottman Curl: 10-12\nBarbell Curl: 4, 8-10"))
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        button = self._button(html, "Seated Zottman Curl")
+        self.assertNotIn("is-other", button)
+        self.assertIn('data-reps="10-12"', button)
+
+    def test_often_trained_first_and_the_rest_folded_under_less_often(self):
+        user = self._user_with_plan("picker_often")
+
+        def log(name, *days):
+            for day in days:
+                self.session.add(WorkoutLog(user_id=user.id, date=day, workout_name="W",
+                                            exercise=name, exercise_string="x", sets_json={}))
+
+        mondays = [base.datetime(2026, 8, 10) + timedelta(weeks=w) for w in range(6)]
+        for name in ("Flat Barbell Press", "Cable Fly", "Overhead Press", "Leg Curl"):
+            log(name, *mondays)                   # a weekly routine; Leg Curl is off the plan
+        log("Upright Rows", mondays[1])           # once, weeks ago
+        log("Hip Thrust", base.datetime(2026, 1, 5), base.datetime(2026, 1, 12))  # twice, months before
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        for name in ("Flat Barbell Press", "Cable Fly", "Leg Curl"):
+            self.assertIn('data-tier="often"', self._button(html, name), name)
+        for name in ("Upright Rows", "Hip Thrust", "Incline Barbell Press"):
+            self.assertIn('data-tier="rest"', self._button(html, name), name)
+        chest = html[html.index('data-group="Chest"'):html.index('data-group="Back"')]
+        self.assertLess(chest.index('data-name="Cable Fly"'), chest.index('class="cr-more"'))
+        self.assertLess(chest.index('class="cr-more"'), chest.index('data-name="Incline Barbell Press"'))
+        self.assertIn("Less often", chest)
+
+    def test_gym_tags_are_separate_exercises_sharing_the_base_rep_range(self):
+        user = self._user_with_plan("picker_gym_tags")
+        self.session.add(RepRange(user_id=user.id, text_content="Preacher Curl: 2, 8-12"))
+        for name in ("Preacher Curl", "Preacher Curl (Wellness)", "Preacher Curl (YFC)"):
+            self.session.add(WorkoutLog(user_id=user.id, date=base.datetime(2026, 9, 1), workout_name="Arms",
+                                        exercise=name, exercise_string="x", sets_json={}))
+        self.session.commit()
+        html = self.client.get("/retrieve/custom").get_data(as_text=True)
+        for name in ("Preacher Curl", "Preacher Curl (Wellness)", "Preacher Curl (YFC)"):
+            button = self._button(html, name)
+            self.assertIn('data-reps="8-12"', button)
+            self.assertIn('data-sets="2"', button)
+        self.assertEqual(len(re.findall(r'data-name="Preacher Curl[^"]*"', html)), 3)
 
     def test_an_empty_group_is_still_there_to_move_into(self):
         self._user_with_plan("picker_empty_group")

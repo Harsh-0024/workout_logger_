@@ -24,6 +24,7 @@ from services.best_scoring import (
     compare_timed_workouts,
 )
 from services.helpers import get_set_stats, get_timed_set_stats
+from services.rep_ranges import rep_range_names
 from services.bodyweight import (
     effective_sets_for_current,
     effective_sets_for_log,
@@ -326,9 +327,11 @@ def resolve_target_sets_for_exercise(
 
     key = normalize_exercise_name(exercise_name or "")
     if key and rep_target_sets:
-        mapped = rep_target_sets.get(key)
-        if isinstance(mapped, int) and mapped > 0:
-            return int(mapped), True
+        # A tagged name ("Preacher Curl (Wellness)") takes its base's rep range set count.
+        for name in rep_range_names(exercise_name):
+            mapped = rep_target_sets.get(normalize_exercise_name(name))
+            if isinstance(mapped, int) and mapped > 0:
+                return int(mapped), True
 
     if key and plan_target_sets:
         mapped = plan_target_sets.get(key)

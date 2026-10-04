@@ -1,7 +1,8 @@
 """Log page checks before saving, the workout page after saving, and the one-page Retrieve."""
 import unittest
 from datetime import datetime, timedelta
-from urllib.parse import urlsplit
+import re
+from urllib.parse import parse_qs, urlsplit
 
 import tests.test_route_regressions as base
 from models import Plan, WorkoutLog
@@ -298,12 +299,82 @@ class TestLogAndRetrieveFlow(unittest.TestCase):
         html = self.client.get("/retrieve/final/Session/1").get_data(as_text=True)
         self.assertIn("Session 1 · Cycle 1", html)
         self.assertNotIn("Your best under each", html)
-        self.assertIn("Ready for Notes", html)
+        self.assertIn('id="editBtn"', html)
         self.assertIn("Chest &amp; Biceps", html)
         self.assertIn("60×6 · 55×7 · 50×8", html)
         self.assertIn("No history yet", html)          # Barbell Curl
         self.assertIn('id="planText"', html)
         self.assertIn("Flat Barbell Press - [5–8]", html)  # the copy text itself
+
+
+class TestEditAWorkout(unittest.TestCase):
+    """Edit on a retrieved workout opens the Custom workout page holding it; Get workout comes back."""
+    setUp = base.TestRouteRegressions.setUp
+    tearDown = base.TestRouteRegressions.tearDown
+    _create_logged_in_user = base.TestRouteRegressions._create_logged_in_user
+
+    def _user(self, name):
+        user = self._create_logged_in_user(username=name)
+        self.session.add(Plan(user_id=user.id, text_content=PLAN))
+        self.session.commit()
+        return user
+
+    def _edit_href(self, html):
+        href = re.search(r'id="editBtn" href="([^"]+)"', html).group(1).replace("&amp;", "&")
+        return urlsplit(href), parse_qs(urlsplit(href).query)
+
+    def test_a_session_opens_in_the_picker_with_its_exercises_and_sets(self):
+        self._user("edit_session")
+        html = self.client.get("/retrieve/final/Session/2").get_data(as_text=True)
+        url, query = self._edit_href(html)
+        self.assertEqual(url.path, "/retrieve/custom")
+        self.assertEqual(query, {"e": ["leg press"], "s": ["2"], "c": ["Session"], "d": ["2"]})
+
+        picker = self.client.get(url.path + "?" + url.query, headers={"Referer": "http://localhost/retrieve/final/Session/2"})
+        page = picker.get_data(as_text=True)
+        self.assertIn('id="crPreset">[{"key": "leg press", "sets": 2}]', page)
+        self.assertIn("Session 2 · Legs", page)
+        self.assertIn("Your plan stays as it is", page)
+        self.assertIn('name="c" value="Session"', page)
+        self.assertIn('href="http://localhost/retrieve/final/Session/2"', page)  # Back
+
+    def test_an_edited_session_keeps_its_name_and_is_not_counted_as_a_custom_pick(self):
+        from models import CustomRetrievalEvent
+
+        self._user("edit_get")
+        # Today: Barbell Curl first and two sets, Leg Press added, Flat Barbell Press dropped.
+        response = self.client.post("/retrieve/custom", data={
+            "exercise": ["barbell curl", "leg press"], "set_count": ["2", "4"], "c": "Session", "d": "1",
+        })
+        location = urlsplit(response.headers["Location"])
+        self.assertEqual(location.path, "/retrieve/custom/plan")
+        self.assertEqual(self.session.query(CustomRetrievalEvent).count(), 0)
+
+        html = self.client.get(location.path + "?" + location.query).get_data(as_text=True)
+        self.assertIn("Session 1 · Cycle 1", html)                 # where it sits in the plan
+        self.assertRegex(html, r"\d+/\d+/\d+ - Session 1 - Chest &amp; Biceps\n")
+        self.assertLess(html.index("Barbell Curl - [2, "), html.index("Leg Press - [4, "))
+        self.assertNotIn("Flat Barbell Press - [", html)
+        _, query = self._edit_href(html)
+        self.assertEqual(query["e"], ["barbell curl", "leg press"])
+        self.assertEqual(query["s"], ["2", "4"])
+        self.assertEqual((query["c"], query["d"]), (["Session"], ["1"]))
+
+        # Renamed for today: the number stays in front.
+        renamed = self.client.get(location.path + "?" + location.query + "&n=Arms").get_data(as_text=True)
+        self.assertRegex(renamed, r"\d+/\d+/\d+ - Session 1 - Arms\n")
+
+    def test_a_custom_workout_edits_back_into_the_picker(self):
+        self._user("edit_custom")
+        html = self.client.get("/retrieve/custom/plan?e=leg+press&e=barbell+curl&s=3&s=2&n=Mixed").get_data(as_text=True)
+        self.assertIn('value="Mixed"', html)
+        self.assertRegex(html, r"\d+/\d+/\d+ - Mixed\n")
+        url, query = self._edit_href(html)
+        self.assertEqual(query, {"e": ["leg press", "barbell curl"], "s": ["3", "2"], "n": ["Mixed"]})
+        page = self.client.get(url.path + "?" + url.query).get_data(as_text=True)
+        self.assertIn('[{"key": "leg press", "sets": 3}, {"key": "barbell curl", "sets": 2}]', page)
+        self.assertIn('name="n" value="Mixed"', page)
+        self.assertIn("Custom workout", page)
 
 
 if __name__ == "__main__":

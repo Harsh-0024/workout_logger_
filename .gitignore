@@ -1,84 +1,90 @@
-# Python
+# What Git leaves out of this project. A leading "/" means "only at the top of the
+# project"; without it, the rule matches anywhere in the folder tree.
+
+# ── Secrets ──────────────────────────────────────────────
+# Real keys and passwords. .env.example (no secrets) stays tracked.
+.env
+.env.local
+.env.*.local
+
+# ── Local databases ──────────────────────────────────────
+# Your local copy of the data (workout.db) and SQLite's side files.
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+# Profile photos uploaded while running the app locally (the live app keeps them in R2)
+/static/uploads/
+
+# ── Personal folders (on this laptop only) ───────────────
+/local/
+/Related files/
+/DB_Update
+/workout_logger_ _ Railway_files
+# Claude Code's local settings and extra working copies (worktrees)
+/.claude/
+
+# ── Notes and text files ─────────────────────────────────
+# Markdown and text notes stay local, except the ones the project needs.
+*.md
+!README.md
+*.txt
+!requirements.txt
+
+# ── Python ───────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-workout_logger_ _ Railway_files
-DB_Update
-local/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
 
-# Virtual Environment
+# Packaging and build output (top level only, so a folder like static/lib/
+# is never hidden by accident)
+/build/
+/develop-eggs/
+/dist/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
+*.egg-info/
+*.egg
+.installed.cfg
+
+# ── Virtual environments ─────────────────────────────────
+.venv/
 venv/
 env/
 ENV/
-.venv
 
-# Database
-*.db
-*.sqlite
-*.sqlite3
-workout.db
+# ── Testing ──────────────────────────────────────────────
+.pytest_cache/
+.coverage
+htmlcov/
 
-# Environment variables
-.env
-.env.local
-.env.*.local
+# ── App output ───────────────────────────────────────────
+*.log
+logs/
+email_queue/
 
-# IDE
+# ── Editors and IDEs ─────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# ── Operating system ─────────────────────────────────────
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-logs/
-
-# Email queue
-email_queue/
-
-# Testing
-.pytest_cache/
-.coverage
-htmlcov/
-
-# Migration files (if needed)
-
-
-# Temporary files
+# ── Temporary files ──────────────────────────────────────
 *.tmp
 *.bak
-
-# 1. Ignore ALL .md files
-*.md
-
-# 2. Whitelist the specific files you want to keep
-!README.md
-
-
-# 1. Ignore ALL .md files
-*.txt
-
-# 2. Whitelist the specific files you want to keep
-!requirements.txt
