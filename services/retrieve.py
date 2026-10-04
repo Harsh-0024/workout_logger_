@@ -290,6 +290,25 @@ def generate_custom_retrieve_output(db_session, user, exercises, *, set_override
     )
 
 
+def picks_for_plan_lines(db_session, user, lines):
+    """[(picker key, sets)] for a plan day's lines, in order, with the sets a plan retrieve
+    gives each (the plan's own count, else the rep range's, else 3): what Edit loads."""
+    custom_ranges, custom_sets = _parse_rep_ranges_text(get_effective_rep_ranges_text(db_session, user))
+    picks, seen = [], set()
+    for line in lines or []:
+        parsed = _parse_plan_exercise_line(str(line or ""))
+        name = str(parsed.get("name") or line or "").strip()
+        key = normalize_exercise_name(name)
+        if not key or key == "unknown exercise" or key in seen:
+            continue
+        seen.add(key)
+        sets = parsed.get("declared_sets")
+        if sets is None:
+            sets = lookup_rep_target(name, custom_ranges, custom_sets)[1]
+        picks.append((key, int(sets) if isinstance(sets, int) and sets > 0 else 3))
+    return picks
+
+
 def get_custom_retrieval_sort_preference(db_session, user) -> str:
     preference = (
         db_session.query(CustomRetrievalPreference)

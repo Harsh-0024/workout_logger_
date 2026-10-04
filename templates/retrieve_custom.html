@@ -1,6 +1,6 @@
 {% extends 'base.html' %}
 {% import '_settings_ui.html' as st %}
-{% block title %}Custom workout - Workout Tracker{% endblock %}
+{% block title %}{{ 'Edit workout' if edit_session else 'Custom workout' }} - Workout Tracker{% endblock %}
 {% block content %}
 {% macro exercise_button(ex, tier) %}
 <button type="button" class="cr-ex{% if not ex.yours %} is-other{% endif %}" data-key="{{ ex.key }}" data-name="{{ ex.name }}" data-sets="{{ ex.default_sets }}" data-reps="{{ ex.rep_range }}" data-auto="{{ ex.auto_group }}" data-tier="{{ tier }}" aria-pressed="false">
@@ -200,7 +200,13 @@
 </style>
 
 <div class="st cr" id="crPage">
-    {{ st.head('Custom workout', 'Each exercise comes with your best numbers.', back=url_for('retrieve_categories'), back_label='Retrieve') }}
+    {% if edit_session %}
+    {# Edit on a plan session: its exercises are picked; changes are for today only. #}
+    {% set session_heading = (edit_session.number ~ ' · ' ~ edit_session.name) if edit_session.number and edit_session.name else (edit_session.name or edit_session.kicker) %}
+    {{ st.head(session_heading, 'Changes are for today only. Your plan stays as it is.', back=back_url, back_label='Back') }}
+    {% else %}
+    {{ st.head('Custom workout', 'Each exercise comes with your best numbers.', back=back_url, back_label='Back' if preset else 'Retrieve') }}
+    {% endif %}
 
     <form method="POST" action="{{ url_for('retrieve_custom') }}" id="crForm" data-no-loading="true" class="st-section">
         <div class="cr-layout">
@@ -258,7 +264,13 @@
             </div>
         </div>
         <div id="crFields"></div>
+        {% if edit_session %}
+        <input type="hidden" name="c" value="{{ edit_session.category }}">
+        <input type="hidden" name="d" value="{{ edit_session.day }}">
+        {% endif %}
+        {% if workout_name %}<input type="hidden" name="n" value="{{ workout_name }}">{% endif %}
     </form>
+    <script type="application/json" id="crPreset">{{ preset|tojson }}</script>
     <div class="cr-backdrop" id="crBackdrop"></div>
     <div class="cr-menu" id="crMenu" role="menu" aria-label="Move to" hidden>
         <div class="cr-menu-title">Move to</div>
@@ -275,7 +287,8 @@
 
         const MAX = 30;
         // Per account, so someone else signing in on this phone never sees these picks.
-        const DRAFT_KEY = 'wt-custom-draft:{{ current_user.id }}';
+        // A session being edited keeps its own draft, so an unfinished custom pick isn't lost.
+        const DRAFT_KEY = 'wt-custom-draft:{{ current_user.id }}'{% if edit_session %} + {{ (':' ~ edit_session.category ~ ':' ~ edit_session.day)|tojson }}{% endif %};
         try { localStorage.removeItem('wt-custom-draft'); } catch (e) { /* storage off */ }
         const DRAFT_HOURS = 12;
         const page = document.getElementById('crPage');
@@ -707,8 +720,20 @@
         // Coming back with the browser's Back button: the button works again.
         window.addEventListener('pageshow', () => { getBtn.textContent = 'Get workout'; render(); });
 
-        picks = load();
+        // From a workout's Edit button: start from exactly that workout. The address then
+        // drops it, so a reload keeps the changes made here.
+        const preset = JSON.parse(document.getElementById('crPreset').textContent || '[]')
+            .filter((p) => catalog.has(p.key)).slice(0, MAX);
+        picks = preset.length ? preset : load();
         render();
+        if (preset.length) {
+            const url = new URL(location.href);
+            url.searchParams.delete('e');
+            url.searchParams.delete('s');
+            history.replaceState(history.state, '', url.pathname + url.search);
+            // Phones: show the workout being edited straight away.
+            setSheet(true);
+        }
     })();
 </script>
 {% endblock %}

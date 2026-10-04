@@ -19,14 +19,18 @@ from services.retrieve import (
     get_effective_plan_text,
     _own_plan_text,
     is_plan_owner,
+    picks_for_plan_lines,
+    clean_custom_workout_title,
     record_custom_retrieval,
     set_custom_retrieval_sort_preference,
     set_exercise_group_choice,
 )
 from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
+from parsers.workout import _parse_plan_exercise_line
+from services.exercise_matching import normalize_exercise_name
 from services.rep_ranges import canonical_rep_text, merge_rep_entries, parse_rep_entries
 from utils.logger import logger
-from utils.validators import sanitize_text_input
+from utils.validators import is_safe_redirect_url, sanitize_text_input
 
 
 
@@ -175,6 +179,38 @@ def register_plan_routes(app):
             return kicker, name or f"Session {day_id}"
         return f"Day {day_id}", category
 
+    def _session_for_edit(plan_days, category, day_id):
+        """A plan day being edited as a custom pick, or None if it isn't in the plan (any more)."""
+        category = str(category or '').strip()
+        try:
+            day_id = int(day_id)
+        except (TypeError, ValueError):
+            return None
+        lines = ((plan_days.get('workout') or {}).get(category) or {}).get(f"{category} {day_id}")
+        if not category or not lines:
+            return None
+        kicker, name = _session_place(plan_days, category, day_id)
+        number = f"Session {day_id}" if category.lower() == 'session' else ''
+        return {
+            'category': category, 'day': day_id, 'kicker': kicker, 'lines': list(lines),
+            # The part of the title that stays put ("Session 6") and the name after it.
+            'number': number, 'name': '' if name == number else name,
+        }
+
+    def _session_title(session, name):
+        """The title in the copied text: a session keeps its number ("Session 6 - Back & Biceps")."""
+        if session['number']:
+            return f"{session['number']} - {name}" if name else session['number']
+        return name or f"{session['category']} {session['day']}"
+
+    def _edit_url(keys, sets, *, session=None, name=None):
+        """The Custom workout page holding this workout, for its Edit button."""
+        return url_for(
+            'retrieve_custom', e=list(keys), s=[str(n) for n in sets],
+            c=session['category'] if session else None, d=session['day'] if session else None,
+            n=name or None,
+        )
+
     @login_required
     def retrieve_final(category, day_id):
         user = current_user
@@ -193,6 +229,8 @@ def register_plan_routes(app):
                 return redirect(url_for('retrieve_categories'))
             output, exercise_count, set_count = generate_retrieve_output(Session, user, category, day_id)
             kicker, title = _session_place(plan_days, category, day_id)
+            session = _session_for_edit(plan_days, category, day_id)
+            picks = picks_for_plan_lines(Session, user, session['lines']) if session else []
             return render_template(
                 'retrieve_plan.html',
                 output=output,
@@ -202,6 +240,10 @@ def register_plan_routes(app):
                 kicker=kicker,
                 title=title,
                 back_url=url_for('retrieve_categories'),
+                title_value=session['name'] if session else title,
+                title_number=session['number'] if session else '',
+                title_fallback='',
+                edit_url=_edit_url([k for k, _ in picks], [n for _, n in picks], session=session) if picks else None,
             )
         except Exception as e:
             logger.error(f"Error in retrieve_final: {e}", exc_info=True)
@@ -255,10 +297,39 @@ def register_plan_routes(app):
                 return redirect(url_for('set_plan'))
 
             if request.method == 'GET':
+                # From a workout's Edit button: its exercises and sets, and for a plan
+                # session which one it is and its name.
+                by_key = {item['key']: item for item in catalog}
+                keys, counts = request.args.getlist('e'), request.args.getlist('s')
+                preset, seen = [], set()
+                for i, key in enumerate(keys):
+                    if key not in by_key or key in seen or len(preset) >= 30:
+                        continue
+                    seen.add(key)
+                    try:
+                        count = int(counts[i])
+                    except (IndexError, ValueError):
+                        count = by_key[key]['default_sets']
+                    preset.append({'key': key, 'sets': min(10, max(1, count))})
+                session = None
+                if request.args.get('c') and request.args.get('d'):
+                    plan_days = get_workout_days(get_effective_plan_text(Session, user) or "")
+                    session = _session_for_edit(plan_days, request.args.get('c'), request.args.get('d'))
+                # Back returns to the workout this came from.
+                back_url = url_for('retrieve_categories')
+                referrer = request.referrer or ''
+                if preset and is_safe_redirect_url(referrer, request.host_url) and '/retrieve/' in referrer:
+                    back_url = referrer
+                elif session:
+                    back_url = url_for('retrieve_final', category=session['category'], day_id=session['day'])
                 return render_template(
                     'retrieve_custom.html',
                     groups=_custom_picker_groups(catalog),
                     exercises=catalog,
+                    preset=preset,
+                    edit_session=session,
+                    workout_name=clean_custom_workout_title(request.args.get('n')),
+                    back_url=back_url,
                 )
 
             try:
@@ -273,11 +344,13 @@ def register_plan_routes(app):
                 flash(str(error), 'error')
                 return redirect(url_for('retrieve_custom'))
 
-            try:
-                record_custom_retrieval(Session, user, selected_keys)
-            except Exception as e:
-                Session.rollback()
-                logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
+            from_session = bool(request.form.get('c') and request.form.get('d'))
+            if not from_session:
+                try:
+                    record_custom_retrieval(Session, user, selected_keys)
+                except Exception as e:
+                    Session.rollback()
+                    logger.warning(f"Unable to record custom retrieval history: {e}", exc_info=True)
 
             # The plan is its own page, so refreshing or coming back to it doesn't ask to
             # send the form again (or count the pick twice).
@@ -286,6 +359,9 @@ def register_plan_routes(app):
                 e=selected_keys,
                 s=set_counts or None,
                 t=two_set_keys or None,
+                c=request.form.get('c') if from_session else None,
+                d=request.form.get('d') if from_session else None,
+                n=clean_custom_workout_title(request.form.get('n')) or None,
             ))
         except Exception as e:
             logger.error(f"Error generating custom workout: {e}", exc_info=True)
@@ -308,26 +384,48 @@ def register_plan_routes(app):
                 flash(str(error), 'error')
                 return redirect(url_for('retrieve_custom'))
 
-            try:
-                workout_title = infer_custom_workout_title(Session, user, selected_exercises)
-            except Exception as e:
-                logger.warning(f"Unable to infer custom workout title: {e}", exc_info=True)
-                workout_title = None
-            workout_title = workout_title or DEFAULT_CUSTOM_WORKOUT_TITLE
+            catalog_by_key = {item['key']: item for item in catalog}
+            set_counts = [set_overrides.get(key) or catalog_by_key[key]['default_sets'] for key in selected_keys]
+            name = clean_custom_workout_title(request.args.get('n'))
+            session = None
+            if request.args.get('c') and request.args.get('d'):
+                plan_days = get_workout_days(get_effective_plan_text(Session, user) or "")
+                session = _session_for_edit(plan_days, request.args.get('c'), request.args.get('d'))
 
             # Give retrieve the full plan line so a plan-only rep range (e.g. "[4, 6-8]")
             # still guides the output; set_overrides carries the sets chosen on the page.
-            catalog_by_key = {item['key']: item for item in catalog}
+            # An edited session uses its own lines for the exercises it has.
+            session_lines = {}
+            if session:
+                for line in session['lines']:
+                    parsed = _parse_plan_exercise_line(str(line or ''))
+                    session_lines.setdefault(normalize_exercise_name(str(parsed.get('name') or line)), line)
             selected_lines = [
-                catalog_by_key[key].get('exercise_line') or catalog_by_key[key]['name']
+                session_lines.get(key) or catalog_by_key[key].get('exercise_line') or catalog_by_key[key]['name']
                 for key in selected_keys
             ]
+
+            if session:
+                # An edited session keeps its number, place and name (unless renamed).
+                name = name or session['name']
+                header_title, kicker, shown_title = _session_title(session, name), session['kicker'], name
+                title_fallback = ''
+            else:
+                if not name:
+                    try:
+                        name = infer_custom_workout_title(Session, user, selected_exercises)
+                    except Exception as e:
+                        logger.warning(f"Unable to infer custom workout title: {e}", exc_info=True)
+                name = name or DEFAULT_CUSTOM_WORKOUT_TITLE
+                header_title, kicker, shown_title = name, 'Custom workout', name
+                title_fallback = DEFAULT_CUSTOM_WORKOUT_TITLE
+
             output, exercise_count, set_count = generate_custom_retrieve_output(
                 Session,
                 user,
                 selected_lines,
                 set_overrides=set_overrides,
-                title=workout_title,
+                title=header_title,
             )
             return render_template(
                 'retrieve_plan.html',
@@ -335,12 +433,13 @@ def register_plan_routes(app):
                 plan=describe_retrieve_output(output),
                 exercise_count=exercise_count,
                 set_count=set_count,
-                kicker='Custom workout',
-                title=workout_title,
-                back_url=url_for('retrieve_custom'),
-                custom_retrieval=True,
-                custom_workout_title=workout_title,
-                default_custom_workout_title=DEFAULT_CUSTOM_WORKOUT_TITLE,
+                kicker=kicker,
+                title=shown_title or kicker,
+                back_url=url_for('retrieve_categories') if session else url_for('retrieve_custom'),
+                title_value=shown_title,
+                title_number=session['number'] if session else '',
+                title_fallback=title_fallback,
+                edit_url=_edit_url(selected_keys, set_counts, session=session, name=request.args.get('n')),
             )
         except Exception as e:
             logger.error(f"Error generating custom workout: {e}", exc_info=True)

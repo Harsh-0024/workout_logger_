@@ -68,11 +68,12 @@
     <header class="st-head">
         <a class="st-back" href="{{ back_url }}" aria-label="Back" title="Back"><i class="bi bi-arrow-left"></i></a>
         <p class="rp-kicker">{{ kicker }}</p>
-        {% if custom_retrieval %}
-        <label for="customWorkoutTitle" class="visually-hidden">Workout title</label>
-        <input type="text" id="customWorkoutTitle" class="rp-title-input" maxlength="80" autocomplete="off"
-               value="{{ custom_workout_title }}" placeholder="{{ default_custom_workout_title }}"
-               data-default-title="{{ default_custom_workout_title }}">
+        {% if title_value is defined %}
+        {# The name can be changed for today; a session keeps its number ("Session 6 - …") in front. #}
+        <label for="workoutTitle" class="visually-hidden">Workout title</label>
+        <input type="text" id="workoutTitle" class="rp-title-input" maxlength="80" autocomplete="off"
+               value="{{ title_value }}" placeholder="{{ title_fallback or title_number or 'Workout' }}"
+               data-number="{{ title_number }}" data-fallback="{{ title_fallback }}">
         {% else %}
         <h1 class="st-title">{{ title }}</h1>
         {% endif %}
@@ -108,7 +109,11 @@
 
     <div class="rp-dock">
         <div class="rp-bar">
+            {% if edit_url %}
+            <a class="st-btn st-btn-quiet st-btn-sm" id="editBtn" href="{{ edit_url }}"><i class="bi bi-pencil"></i>Edit</a>
+            {% else %}
             <span class="rp-bar-meta">Ready for Notes</span>
+            {% endif %}
             <div class="rp-bar-actions">
                 <button type="button" class="st-btn st-btn-quiet st-btn-sm" id="shareBtn" hidden><i class="bi bi-box-arrow-up"></i>Share</button>
                 <button type="button" class="st-btn st-btn-primary st-btn-sm" id="copyBtn"><i class="bi bi-clipboard"></i>Copy</button>
@@ -124,21 +129,32 @@
         const preview = document.getElementById('planPreview');
         const copyBtn = document.getElementById('copyBtn');
         const shareBtn = document.getElementById('shareBtn');
-        const titleInput = document.getElementById('customWorkoutTitle');
+        const titleInput = document.getElementById('workoutTitle');
+        const editBtn = document.getElementById('editBtn');
         const sync = () => { preview.textContent = textArea.value; };
         sync();
 
         if (titleInput) {
-            // Header line looks like "24/9/26 - Chest & Triceps"; keep the date, swap the title.
-            const firstLine = textArea.value.split('\n', 1)[0];
-            const datePrefix = firstLine.split(' - ', 1)[0];
-            const fallback = titleInput.getAttribute('data-default-title') || 'Custom Workout';
+            // First line: "24/9/26 - Session 6 - Back & Biceps". Keep the date (and a session's
+            // number), swap the name; Edit takes a new name along.
+            const date = textArea.value.split('\n', 1)[0].split(' - ', 1)[0];
+            const number = titleInput.dataset.number || '';
+            const fallback = titleInput.dataset.fallback || '';
+            const initial = titleInput.value.replace(/\s+/g, ' ').trim();
+            const initialName = editBtn ? new URL(editBtn.href, location.href).searchParams.get('n') : null;
             titleInput.addEventListener('input', () => {
-                const title = titleInput.value.replace(/\s+/g, ' ').trim() || fallback;
+                const name = titleInput.value.replace(/\s+/g, ' ').trim();
                 const lines = textArea.value.split('\n');
-                lines[0] = `${datePrefix} - ${title}`;
+                lines[0] = [date, number, name || fallback].filter(Boolean).join(' - ');
                 textArea.value = lines.join('\n');
                 sync();
+                if (editBtn) {
+                    const url = new URL(editBtn.href, location.href);
+                    const n = name === initial ? initialName : name;
+                    if (n) url.searchParams.set('n', n);
+                    else url.searchParams.delete('n');
+                    editBtn.href = url.pathname + url.search;
+                }
             });
             titleInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') { e.preventDefault(); titleInput.blur(); }
