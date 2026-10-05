@@ -110,18 +110,29 @@
 
     {% if can_follow %}
     <section class="st-section">
-        <form action="/set_exercises" method="POST" class="st-group" data-no-loading="true">
-            <input type="hidden" name="form_type" value="toggle_follow_admin">
-            <input type="hidden" name="follow_admin_exercises" value="{{ '0' if follow_admin_exercises else '1' }}">
-            <div class="st-row">
+        <div class="st-group">
+            <form action="/set_exercises" method="POST" class="st-row" data-no-loading="true">
+                <input type="hidden" name="form_type" value="toggle_follow_admin">
+                <input type="hidden" name="follow_admin_exercises" value="{{ '0' if follow_admin_exercises else '1' }}">
                 <i class="bi bi-people st-row-ico"></i>
                 <span class="st-row-main">
                     <span class="st-row-title">Follow {{ admin_display_name ~ "'s" if admin_display_name else "the default" }} rep ranges</span>
                     <span class="st-row-desc">Use their exercise list and targets.</span>
                 </span>
                 <button type="submit" class="st-switch{{ ' is-on' if follow_admin_exercises }}" role="switch" aria-checked="{{ 'true' if follow_admin_exercises else 'false' }}" aria-label="Follow the default rep ranges"></button>
-            </div>
-        </form>
+            </form>
+            <form action="/set_exercises" method="POST" class="st-row"
+                  {% if copy_replaces %}data-confirm="true" data-confirm-title="Replace your rep ranges?"
+                  data-confirm-message="Your own rep ranges will be replaced by a copy of {{ admin_display_name ~ "'s" if admin_display_name else "the default" }} rep ranges." data-confirm-cta="Replace"{% endif %}>
+                <input type="hidden" name="form_type" value="copy_followed">
+                <i class="bi bi-copy st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">Copy and edit</span>
+                    <span class="st-row-desc">Make {{ admin_display_name ~ "'s" if admin_display_name else "the default" }} rep ranges your own to change.</span>
+                </span>
+                <button type="submit" class="st-btn st-btn-quiet st-btn-sm">Copy</button>
+            </form>
+        </div>
     </section>
     {% endif %}
 

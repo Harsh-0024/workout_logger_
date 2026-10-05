@@ -291,5 +291,62 @@ class TestRenamesReachFollowers(unittest.TestCase):
         self.assertIn("comes from the plan you follow", page)
 
 
+
+class TestCopyAndEdit(unittest.TestCase):
+    """Instead of following, take a copy of the owner's plan or rep ranges to change freely."""
+    setUp = base.TestRouteRegressions.setUp
+    tearDown = base.TestRouteRegressions.tearDown
+    _create_logged_in_user = base.TestRouteRegressions._create_logged_in_user
+    _log = TestExerciseRename._log
+    _names = TestExerciseRename._names
+    _owner = TestRenamesReachFollowers._owner
+
+    def test_copying_the_plan_makes_it_yours_and_stops_following(self):
+        owner = self._owner()
+        rename_exercise(self.session, owner, "Crunches A", "Decline Crunches")
+        user = self._create_logged_in_user(username="copier", follow_admin=True)
+        self._log(user, "Crunches A", 2)
+        user_id = user.id
+        self.client.post("/set_plan", data={"form_type": "copy_followed"})
+        user = self.session.get(User, user_id)
+        self.assertFalse(user.follow_admin_plan)
+        self.assertTrue(user.follow_admin_exercises)
+        self.assertEqual(self.session.query(Plan).filter_by(user_id=user.id).one().text_content,
+                         "Abs 1\nDecline Crunches\n")
+        self.assertEqual(self._names(user), ["Decline Crunches"])
+
+    def test_copying_clears_questions_about_the_old_text(self):
+        self._owner()
+        user = self._create_logged_in_user(username="q_then_copy")
+        self.session.add(Plan(user_id=user.id, text_content="Abs 1\nCrunches A\n"))
+        self.session.commit()
+        self._log(user, "Crunches A", 2)
+        self.client.post("/set_plan", data={"plan_text": "Abs 1\nCable Crunch\n"})
+        self.assertIn("the same exercise as", self.client.get("/set_plan").get_data(as_text=True))
+        self.client.post("/set_plan", data={"form_type": "copy_followed"})
+        self.assertNotIn("the same exercise as", self.client.get("/set_plan").get_data(as_text=True))
+
+    def test_copying_rep_ranges(self):
+        owner = self._owner()
+        self.session.add(RepRange(user_id=owner.id, text_content="Decline Crunches: 3, 10–15"))
+        self.session.commit()
+        user_id = self._create_logged_in_user(username="rep_copier", follow_admin=True).id
+        self.client.post("/set_exercises", data={"form_type": "copy_followed"})
+        user = self.session.get(User, user_id)
+        self.assertFalse(user.follow_admin_exercises)
+        self.assertEqual(self.session.query(RepRange).filter_by(user_id=user.id).one().text_content,
+                         "Decline Crunches: 3, 10–15")
+
+    def test_asks_first_only_when_it_would_replace_your_own_plan(self):
+        self._owner()
+        user = self._create_logged_in_user(username="has_own", follow_admin=True)
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertIn("Copy and edit", page)
+        self.assertNotIn("Replace your plan?", page)
+        self.session.add(Plan(user_id=user.id, text_content="Legs 1\nSquat\n"))
+        self.session.commit()
+        self.assertIn("Replace your plan?", self.client.get("/set_plan").get_data(as_text=True))
+
+
 if __name__ == "__main__":
     unittest.main()

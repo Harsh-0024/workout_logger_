@@ -17,7 +17,11 @@ from services.retrieve import (
     infer_custom_workout_title,
     get_admin_display_name,
     get_effective_plan_text,
+    _build_default_rep_text,
+    _get_admin_plan_text,
+    _get_admin_rep_ranges_text,
     _own_plan_text,
+    _own_rep_ranges_text,
     is_plan_owner,
     picks_for_plan_lines,
     clean_custom_workout_title,
@@ -554,10 +558,23 @@ def register_plan_routes(app):
                     if new_val:
                         catch_up_with_followed_renames(Session, user)
                     Session.commit()
+                    session.pop('rename_questions', None)  # about a text that's been replaced
                     if new_val:
                         flash("Now following admin's plan.", "success")
                     else:
                         flash("Switched to your own plan.", "success")
+                    return redirect(url_for('set_plan'))
+
+                if form_type == 'copy_followed' and not is_plan_owner(Session, user):
+                    # Their plan becomes this account's own, to change freely; following stops.
+                    plan.text_content = _get_admin_plan_text(Session) or DEFAULT_PLAN.strip()
+                    plan.updated_at = datetime.now()
+                    user.follow_admin_plan = False
+                    user.updated_at = datetime.now()
+                    catch_up_with_followed_renames(Session, user)
+                    Session.commit()
+                    session.pop('rename_questions', None)  # about a text that's been replaced
+                    flash("Copied. The plan is yours to edit now.", "success")
                     return redirect(url_for('set_plan'))
 
                 plan_text = request.form.get('plan_text', '').strip()
@@ -577,6 +594,9 @@ def register_plan_routes(app):
                 # Not following: the editor starts from the built-in plan if they haven't written one.
                 current_plan=_own_plan_text(Session, user) or DEFAULT_PLAN.strip(),
                 follow_admin_plan=can_follow and getattr(user, 'follow_admin_plan', False),
+                # Copying replaces the plan this account wrote, so that asks first.
+                copy_replaces=bool(_own_plan_text(Session, user))
+                and _own_plan_text(Session, user).strip() != (_get_admin_plan_text(Session) or '').strip(),
                 admin_display_name=get_admin_display_name(Session),
                 can_follow=can_follow,
                 rename_questions=_pending_rename_questions(),
@@ -609,10 +629,23 @@ def register_plan_routes(app):
                     if new_val:
                         catch_up_with_followed_renames(Session, user)
                     Session.commit()
+                    session.pop('rename_questions', None)  # about a text that's been replaced
                     if new_val:
                         flash("Now following admin's rep ranges.", "success")
                     else:
                         flash("Switched to your own rep ranges.", "success")
+                    return redirect(url_for('set_exercises'))
+
+                if form_type == 'copy_followed' and not is_plan_owner(Session, user):
+                    reps.text_content = canonical_rep_text(
+                        _get_admin_rep_ranges_text(Session) or _build_default_rep_text())
+                    reps.updated_at = datetime.now()
+                    user.follow_admin_exercises = False
+                    user.updated_at = datetime.now()
+                    catch_up_with_followed_renames(Session, user)
+                    Session.commit()
+                    session.pop('rename_questions', None)  # about a text that's been replaced
+                    flash("Copied. The rep ranges are yours to edit now.", "success")
                     return redirect(url_for('set_exercises'))
 
                 new_text = canonical_rep_text(request.form.get('rep_text', ''))
@@ -638,6 +671,9 @@ def register_plan_routes(app):
                 entries=[[name, value, groups[name]] for name, value in entries],
                 group_order=CUSTOM_PICKER_GROUPS,
                 follow_admin_exercises=can_follow and getattr(user, 'follow_admin_exercises', False),
+                copy_replaces=bool(_own_rep_ranges_text(Session, user))
+                and canonical_rep_text(_own_rep_ranges_text(Session, user))
+                != canonical_rep_text(_get_admin_rep_ranges_text(Session)),
                 admin_display_name=get_admin_display_name(Session),
                 can_follow=can_follow,
                 rename_questions=_pending_rename_questions(),
