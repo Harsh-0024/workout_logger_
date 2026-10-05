@@ -97,7 +97,8 @@ class User(Base):
     stats_preference = relationship("StatsPreference", uselist=False, back_populates="user", cascade="all, delete-orphan")
     stats_exercise_views = relationship("StatsExerciseView", back_populates="user", cascade="all, delete-orphan")
     exercise_groups = relationship("ExerciseGroupChoice", back_populates="user", cascade="all, delete-orphan")
-    
+    exercise_renames = relationship("ExerciseRename", back_populates="user", cascade="all, delete-orphan")
+
     def is_admin(self):
         """Check if user has admin role."""
         return self.role == UserRole.ADMIN
@@ -402,6 +403,25 @@ class ExerciseGroupChoice(Base):
     )
 
 
+class ExerciseRename(Base):
+    """A user renaming an exercise: its history was moved to the new name, and anything still
+    logged under the old name (habit, Shortcuts, offline logs) goes to the new one too."""
+    __tablename__ = 'exercise_renames'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    old_key = Column(String(160), nullable=False)
+    old_name = Column(String(160), nullable=False)
+    new_name = Column(String(160), nullable=False)
+    log_ids = Column(JSONType)  # the logs this rename moved, to undo it later if needed
+    created_at = Column(DateTime, default=datetime.now, nullable=False)
+
+    user = relationship("User", back_populates="exercise_renames")
+
+    __table_args__ = (
+        Index('idx_exercise_rename_user_old', 'user_id', 'old_key', unique=True),
+    )
+
+
 class AppIcon(Base):
     """The app icon an admin uploaded, stored here so every host serves the same one.
 
@@ -599,6 +619,9 @@ def migrate_schema():
 
             if 'exercise_group_choices' not in inspector.get_table_names():
                 ExerciseGroupChoice.__table__.create(bind=conn, checkfirst=True)
+
+            if 'exercise_renames' not in inspector.get_table_names():
+                ExerciseRename.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]

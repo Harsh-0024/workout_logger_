@@ -484,7 +484,8 @@ class TestRouteRegressions(unittest.TestCase):
         finally:
             event.remove(self.engine, "before_cursor_execute", listener)
         self.assertEqual(response.status_code, 302)
-        self.assertLess(len(queries), 11 * len(names))
+        # Per exercise, plus one per save for the user's renamed exercises.
+        self.assertLess(len(queries), 11 * len(names) + 1)
 
     def test_exercise_chart_asks_the_database_a_fixed_number_of_times(self):
         # One query per session made long histories slow to chart on a remote database.
