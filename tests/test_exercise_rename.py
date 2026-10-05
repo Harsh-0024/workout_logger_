@@ -4,6 +4,8 @@ from datetime import datetime
 
 import tests.test_route_regressions as base
 from models import (
+    User,
+    UserRole,
     BodyweightExercisePreference,
     ExerciseGroupChoice,
     ExerciseRename,
@@ -223,6 +225,70 @@ class TestRenameQuestionOnSave(unittest.TestCase):
                                                  "rep_text_ready": "1"})
         page = self.client.get("/set_exercises").get_data(as_text=True)
         self.assertIn("Is Decline Crunches the same exercise as Crunches A?", page)
+
+
+
+class TestRenamesReachFollowers(unittest.TestCase):
+    """Followers take their exercise names from the plan owner, so the owner's renames move
+    their history too."""
+    setUp = base.TestRouteRegressions.setUp
+    tearDown = base.TestRouteRegressions.tearDown
+    _create_logged_in_user = base.TestRouteRegressions._create_logged_in_user
+    _log = TestExerciseRename._log
+    _names = TestExerciseRename._names
+
+    def _owner(self):
+        owner = User(username="owner", role=UserRole.ADMIN, is_verified=True)
+        self.session.add(owner)
+        self.session.commit()
+        self.session.add(Plan(user_id=owner.id, text_content="Abs 1\nCrunches A\n"))
+        self.session.commit()
+        self._log(owner, "Crunches A", 1)
+        return owner
+
+    def _user(self, name, follow):
+        user = User(username=name, role=UserRole.USER, is_verified=True,
+                    follow_admin_plan=follow, follow_admin_exercises=follow)
+        self.session.add(user)
+        self.session.commit()
+        return user
+
+    def test_followers_who_logged_it_get_the_new_name(self):
+        owner = self._owner()
+        follower = self._user("fan", True)
+        loner = self._user("loner", False)
+        self._log(follower, "Crunches A", 2)
+        self._log(follower, "Crunches A (Wellness)", 3)
+        self._log(loner, "Crunches A", 2)
+        self.assertEqual(rename_preview(self.session, owner, "Crunches A", "Decline Crunches")["followers"], 1)
+        rename_exercise(self.session, owner, "Crunches A", "Decline Crunches")
+        self.assertEqual(self._names(follower), ["Decline Crunches", "Decline Crunches (Wellness)"])
+        self.assertEqual(self._names(loner), ["Crunches A"])
+        self.assertEqual(resolve_renamed_exercise(self.session, follower.id, "Crunches A"), "Decline Crunches")
+
+    def test_a_follower_who_renamed_it_their_way_keeps_their_name(self):
+        owner = self._owner()
+        follower = self._user("own_way", True)
+        self._log(follower, "Crunches A", 2)
+        rename_exercise(self.session, follower, "Crunches A", "Cable Crunch")
+        rename_exercise(self.session, owner, "Crunches A", "Decline Crunches")
+        self.assertEqual(self._names(follower), ["Cable Crunch"])
+        self.assertEqual(resolve_renamed_exercise(self.session, follower.id, "Crunches A"), "Cable Crunch")
+
+    def test_starting_to_follow_catches_up_with_earlier_renames(self):
+        owner = self._owner()
+        rename_exercise(self.session, owner, "Crunches A", "Decline Crunches")
+        newcomer = self._create_logged_in_user(username="newcomer")
+        self._log(newcomer, "Crunches A", 2)
+        self.client.post("/set_plan", data={"form_type": "toggle_follow_admin", "follow_admin_plan": "1"})
+        self.assertEqual(self._names(newcomer), ["Decline Crunches"])
+
+    def test_renaming_a_followed_name_for_yourself_is_flagged(self):
+        self._owner()
+        follower = self._create_logged_in_user(username="flagged", follow_admin=True)
+        self._log(follower, "Crunches A", 2)
+        page = self.client.get("/settings/exercise-names?from=Crunches+A&to=Cable+Crunch").get_data(as_text=True)
+        self.assertIn("comes from the plan you follow", page)
 
 
 if __name__ == "__main__":

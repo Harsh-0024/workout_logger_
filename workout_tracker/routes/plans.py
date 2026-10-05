@@ -29,6 +29,7 @@ from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
 from parsers.workout import _parse_plan_exercise_line
 from services.exercise_matching import normalize_exercise_name
 from services.exercise_rename import (
+    catch_up_with_followed_renames,
     detect_renames,
     plan_exercise_names,
     rename_exercise,
@@ -550,6 +551,8 @@ def register_plan_routes(app):
                     new_val = request.form.get('follow_admin_plan') == '1'
                     user.follow_admin_plan = new_val
                     user.updated_at = datetime.now()
+                    if new_val:
+                        catch_up_with_followed_renames(Session, user)
                     Session.commit()
                     if new_val:
                         flash("Now following admin's plan.", "success")
@@ -603,6 +606,8 @@ def register_plan_routes(app):
                     new_val = request.form.get('follow_admin_exercises') == '1'
                     user.follow_admin_exercises = new_val
                     user.updated_at = datetime.now()
+                    if new_val:
+                        catch_up_with_followed_renames(Session, user)
                     Session.commit()
                     if new_val:
                         flash("Now following admin's rep ranges.", "success")

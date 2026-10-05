@@ -27,6 +27,12 @@
                 {% if preview.already %}
                 <p class="en-line">{{ preview.new_name }} already has {{ preview.already }}. They become one history.</p>
                 {% endif %}
+                {% if preview.followers %}
+                <p class="en-line">The {{ preview.followers }} {{ 'person' if preview.followers == 1 else 'people' }} following your plan who logged it get the new name too.</p>
+                {% endif %}
+                {% if preview.from_followed_plan %}
+                <p class="en-line en-warn">This name comes from the plan you follow. Renamed here, your history won't match it.</p>
+                {% endif %}
                 {% if preview.tagged %}
                 <p class="en-line">Gym versions come along too: {{ preview.tagged|join(', ') }}.</p>
                 {% endif %}
@@ -85,6 +91,7 @@
     .en-old { color: var(--text-muted); }
     .en-pair-sm { font-size: 0.9rem; }
     .en-line { margin: 12px 0 0; font-size: 0.88rem; color: var(--text-muted); line-height: 1.45; }
+    .en-warn { color: var(--st-warn); }
     .en-error { margin: 12px 0 0; font-size: 0.85rem; color: var(--st-down); }
 </style>
 {% endblock %}

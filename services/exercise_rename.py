@@ -177,14 +177,32 @@ def rename_preview(db_session, user, old_name: str, new_name: str) -> Dict:
                 .filter(WorkoutLog.user_id == user.id, WorkoutLog.exercise.in_(new_names))
                 .count()
             )
+    followers = sum(1 for f in _followers(db_session, user) if _has_history(db_session, f.id, old_key))
     return {
         "old_name": old_name,
         "new_name": new_name,
         "moving": moving,
+        "followers": followers,
+        "from_followed_plan": _from_followed_plan(db_session, user, old_key),
         "already": already,
         "tagged": sorted(o for o, _ in pairs if o != old_name and o in logged),
         "same": old_name == new_name,
     }
+
+
+def _from_followed_plan(db_session, user, old_key: str) -> bool:
+    """Whether this name comes from a plan or rep ranges the user follows, where renaming it only
+    for themselves would cut their history off from it."""
+    from services.retrieve import get_effective_plan_text, get_effective_rep_ranges_text, is_plan_owner
+
+    if is_plan_owner(db_session, user):
+        return False
+    names = []
+    if getattr(user, "follow_admin_plan", False):
+        names += plan_exercise_names(get_effective_plan_text(db_session, user))
+    if getattr(user, "follow_admin_exercises", False):
+        names += rep_exercise_names(get_effective_rep_ranges_text(db_session, user))
+    return any(normalize_exercise_name(n) == old_key for n in names)
 
 
 def validate_rename(old_name: str, new_name: str) -> Optional[str]:
@@ -298,17 +316,11 @@ def _rename_in_rep_text(text: str, old_key: str, new_name: str) -> str:
     return rep_entries_to_text([(slots[k]["name"], slots[k]["own"] or slots[k]["moved"] or "") for k in order])
 
 
-def rename_exercise(db_session, user, old_name: str, new_name: str) -> Dict:
-    """Rename an exercise everywhere in this user's data. Commits. Returns rename_preview's
-    numbers as they were before the rename."""
+def _rename_for_user(db_session, user, old_name: str, new_name: str) -> None:
+    """The rename, for one user's data. Doesn't commit."""
     from services.logging import refresh_best_lift_pointers
 
-    error = validate_rename(old_name, new_name)
-    if error:
-        raise ValueError(error)
-    old_name, new_name = _clean(old_name), _clean(new_name)
     old_key = normalize_exercise_name(old_name)
-    summary = rename_preview(db_session, user, old_name, new_name)
     pairs = _name_pairs(db_session, user.id, old_name, new_name)
 
     moved_ids: List[int] = []
@@ -340,8 +352,65 @@ def rename_exercise(db_session, user, old_name: str, new_name: str) -> Dict:
     _remember(db_session, user.id, old_name, new_name, moved_ids)
     db_session.flush()
     refresh_best_lift_pointers(db_session, user, [new for _, new in pairs])
+
+
+def _has_history(db_session, user_id: int, old_key: str) -> bool:
+    return any(_split_tag(n, old_key) is not None for n in _logged_names(db_session, user_id))
+
+
+def _followers(db_session, user) -> List:
+    """Who takes their exercise names from this user's plan or rep ranges."""
+    from models import User
+    from services.retrieve import is_plan_owner
+
+    if not is_plan_owner(db_session, user):
+        return []
+    return (
+        db_session.query(User)
+        .filter(User.id != user.id)
+        .filter((User.follow_admin_plan.is_(True)) | (User.follow_admin_exercises.is_(True)))
+        .all()
+    )
+
+
+def rename_exercise(db_session, user, old_name: str, new_name: str) -> Dict:
+    """Rename an exercise everywhere in this user's data, and for everyone following their plan,
+    since their names come from it. Commits. Returns rename_preview's numbers from before."""
+    error = validate_rename(old_name, new_name)
+    if error:
+        raise ValueError(error)
+    old_name, new_name = _clean(old_name), _clean(new_name)
+    summary = rename_preview(db_session, user, old_name, new_name)
+    _rename_for_user(db_session, user, old_name, new_name)
+    old_key = normalize_exercise_name(old_name)
+    for follower in _followers(db_session, user):
+        # A follower who already renamed it their own way has nothing under the old name.
+        if _has_history(db_session, follower.id, old_key):
+            _rename_for_user(db_session, follower, old_name, new_name)
     db_session.commit()
     return summary
+
+
+def catch_up_with_followed_renames(db_session, user) -> bool:
+    """Someone starting to follow gets the renames the plan owner made before: their history
+    under an old name moves to the name the plan uses now. Doesn't commit."""
+    from services.retrieve import _get_admin_user
+
+    owner = _get_admin_user(db_session)
+    if owner is None or owner.id == user.id:
+        return False
+    renames = (
+        db_session.query(ExerciseRename)
+        .filter(ExerciseRename.user_id == owner.id)
+        .order_by(ExerciseRename.created_at.asc())
+        .all()
+    )
+    changed = False
+    for r in renames:
+        if _has_history(db_session, user.id, r.old_key) and not validate_rename(r.old_name, r.new_name):
+            _rename_for_user(db_session, user, r.old_name, r.new_name)
+            changed = True
+    return changed
 
 
 def exercise_names_for_rename(db_session, user) -> List[str]:
