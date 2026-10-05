@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
-{% block title %}Exercise names - Workout Tracker{% endblock %}
+{% block title %}Rename an exercise - Workout Tracker{% endblock %}
 {% import '_settings_ui.html' as st %}
 {% block content %}
 {{ st.styles() }}
 <div class="st">
-    {{ st.head('Exercise names', 'Rename an exercise and keep its history.', url_for('user_settings'), 'Back to settings') }}
+    {{ st.head('Rename an exercise', 'Its logged workouts move to the new name.', url_for('data_settings'), 'Back to your data') }}
 
     {% if preview %}
     <section class="st-section">
