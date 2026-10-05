@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+{% block title %}Exercise names - Workout Tracker{% endblock %}
+{% import '_settings_ui.html' as st %}
+{% block content %}
+{{ st.styles() }}
+<div class="st">
+    {{ st.head('Exercise names', 'Rename an exercise and keep its history.', url_for('user_settings'), 'Back to settings') }}
+
+    {% if preview %}
+    <section class="st-section">
+        <form method="POST" action="{{ url_for('exercise_names_settings') }}" class="st-group">
+            <input type="hidden" name="old_name" value="{{ preview.old_name }}">
+            <input type="hidden" name="new_name" value="{{ preview.new_name }}">
+            <div class="st-block">
+                <div class="en-pair">
+                    <span class="en-old">{{ preview.old_name }}</span>
+                    <i class="bi bi-arrow-right"></i>
+                    <span class="en-new">{{ preview.new_name }}</span>
+                </div>
+                <p class="en-line">
+                    {%- if preview.moving -%}
+                    {{ preview.moving }} logged workout{{ '' if preview.moving == 1 else 's' }} move{{ 's' if preview.moving == 1 }} to the new name.
+                    {%- else -%}
+                    Nothing logged under this name yet. Your plan and rep ranges will use the new name.
+                    {%- endif -%}
+                </p>
+                {% if preview.already %}
+                <p class="en-line">{{ preview.new_name }} already has {{ preview.already }}. They become one history.</p>
+                {% endif %}
+                {% if preview.tagged %}
+                <p class="en-line">Gym versions come along too: {{ preview.tagged|join(', ') }}.</p>
+                {% endif %}
+                <div class="d-flex gap-2 mt-3">
+                    <a href="{{ url_for('exercise_names_settings') }}" class="st-btn st-btn-quiet flex-fill">Cancel</a>
+                    <button type="submit" class="st-btn st-btn-primary flex-fill">Rename</button>
+                </div>
+            </div>
+        </form>
+    </section>
+    {% else %}
+    <section class="st-section">
+        <form method="GET" action="{{ url_for('exercise_names_settings') }}" class="st-group" data-no-loading="true">
+            <div class="st-block">
+                <div class="st-field">
+                    <label for="enFrom">Exercise</label>
+                    <input type="text" id="enFrom" name="from" class="form-control" list="enNames" value="{{ old_name }}" autocomplete="off" autocapitalize="words" required>
+                    <datalist id="enNames">
+                        {% for name in exercise_names %}<option value="{{ name }}">{% endfor %}
+                    </datalist>
+                </div>
+                <div class="st-field">
+                    <label for="enTo">New name</label>
+                    <input type="text" id="enTo" name="to" class="form-control" value="{{ new_name }}" maxlength="100" autocomplete="off" autocapitalize="words" required>
+                </div>
+                {% if error %}<p class="en-error">{{ error }}</p>{% endif %}
+                <button type="submit" class="st-btn st-btn-primary st-btn-block mt-3">Continue</button>
+            </div>
+        </form>
+    </section>
+    {% endif %}
+
+    {% if renames %}
+    <section class="st-section">
+        <div class="st-label">Renamed</div>
+        <div class="st-group">
+            {% for r in renames %}
+            <div class="st-row">
+                <span class="st-row-main">
+                    <span class="en-pair en-pair-sm">
+                        <span class="en-old">{{ r.old_name }}</span>
+                        <i class="bi bi-arrow-right"></i>
+                        <span class="en-new">{{ r.new_name }}</span>
+                    </span>
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+
+<style>
+    .en-pair { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; font-size: 1rem; font-weight: 600; line-height: 1.35; }
+    .en-pair > i { color: var(--st-accent); font-size: 0.9rem; }
+    .en-old { color: var(--text-muted); }
+    .en-pair-sm { font-size: 0.9rem; }
+    .en-line { margin: 12px 0 0; font-size: 0.88rem; color: var(--text-muted); line-height: 1.45; }
+    .en-error { margin: 12px 0 0; font-size: 0.85rem; color: var(--st-down); }
+</style>
+{% endblock %}

@@ -13,7 +13,13 @@ from parsers.workout import _WEEKDAY_BEFORE_DATE, workout_parser
 from services.logging import handle_workout_log
 
 from config import Config
-from models import Session, User, UserRole, UserApiKey, WorkoutLog
+from models import ExerciseRename, Session, User, UserRole, UserApiKey, WorkoutLog
+from services.exercise_rename import (
+    exercise_names_for_rename,
+    rename_exercise,
+    rename_preview,
+    validate_rename,
+)
 from services.bodyweight import (
     backfill_bodyweight_log_flags,
     build_bodyweight_settings_rows,
@@ -1229,6 +1235,50 @@ def register_auth_routes(app, email_service):
         )
 
     @login_required
+    def exercise_names_settings():
+        """Rename an exercise and keep its history: pick it, type the new name, confirm."""
+        user = current_user
+        if request.method == 'POST':
+            old_name = sanitize_text_input(request.form.get('old_name', ''), max_length=160)
+            new_name = sanitize_text_input(request.form.get('new_name', ''), max_length=160)
+            try:
+                rename_exercise(Session, user, old_name, new_name)
+            except ValueError as e:
+                flash(str(e), "error")
+                return redirect(url_for('exercise_names_settings'))
+            except Exception as e:
+                Session.rollback()
+                logger.error(f"Exercise rename failed: {e}", exc_info=True)
+                flash("Couldn't rename that right now. Please try again.", "error")
+                return redirect(url_for('exercise_names_settings'))
+            flash(f"Renamed to {new_name.strip()}. Its history came along.", "success")
+            return redirect(url_for('exercise_names_settings'))
+
+        old_name = (request.args.get('from') or '').strip()
+        new_name = (request.args.get('to') or '').strip()
+        preview = None
+        error = None
+        if old_name or new_name:
+            error = validate_rename(old_name, new_name)
+            if not error:
+                preview = rename_preview(Session, user, old_name, new_name)
+        renames = (
+            Session.query(ExerciseRename)
+            .filter(ExerciseRename.user_id == user.id)
+            .order_by(ExerciseRename.created_at.desc())
+            .all()
+        )
+        return render_template(
+            'settings_exercise_names.html',
+            exercise_names=exercise_names_for_rename(Session, user),
+            old_name=old_name,
+            new_name=new_name,
+            preview=preview,
+            error=error,
+            renames=renames,
+        )
+
+    @login_required
     def verify_profile_update_otp():
         pending_update = session.get('pending_profile_update')
         if not pending_update:
@@ -1893,6 +1943,12 @@ def register_auth_routes(app, email_service):
     app.add_url_rule('/settings/data', endpoint='data_settings', view_func=data_settings, methods=['GET'])
     app.add_url_rule('/settings/integrations', endpoint='integrations_settings', view_func=integrations_settings, methods=['GET'])
     app.add_url_rule('/settings/more', endpoint='more_settings', view_func=more_settings, methods=['GET', 'POST'])
+    app.add_url_rule(
+        '/settings/exercise-names',
+        endpoint='exercise_names_settings',
+        view_func=exercise_names_settings,
+        methods=['GET', 'POST'],
+    )
     app.add_url_rule(
         '/settings/verify-otp',
         endpoint='verify_profile_update_otp',

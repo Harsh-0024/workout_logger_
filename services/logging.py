@@ -25,6 +25,7 @@ from services.best_scoring import (
 )
 from services.helpers import get_set_stats, get_timed_set_stats
 from services.rep_ranges import rep_range_names
+from services.exercise_rename import apply_renames_to_parsed
 from services.bodyweight import (
     effective_sets_for_current,
     effective_sets_for_log,
@@ -1107,6 +1108,9 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
     if 'exercises' not in parsed_data or not parsed_data['exercises']:
         logger.warning(f"No exercises found in workout data for user {user.username}")
         return summary
+
+    # An exercise the user renamed is saved under its new name, whatever name it came in with.
+    apply_renames_to_parsed(db_session, user, parsed_data)
 
     for item in parsed_data["exercises"]:
         ex_name = item['name']
