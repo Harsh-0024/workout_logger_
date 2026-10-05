@@ -1,0 +1,29 @@
+{#- After a save that looks like it renamed an exercise: ask before its history moves.
+    Usage: {% include '_rename_questions.html' %} with `rename_questions` and `rename_next`. -#}
+{% if rename_questions %}
+<section class="st-section">
+    {% for q in rename_questions %}
+    <form method="POST" action="{{ url_for('answer_rename_question') }}" class="st-group rq-card" data-no-loading="true">
+        <input type="hidden" name="old_name" value="{{ q.old_name }}">
+        <input type="hidden" name="new_name" value="{{ q.new_name }}">
+        <input type="hidden" name="next" value="{{ rename_next }}">
+        <div class="st-block">
+            <div class="rq-title">Is {{ q.new_name }} the same exercise as {{ q.old_name }}?</div>
+            <p class="rq-line">
+                {{ q.old_name }} has {{ q.moving }} logged workout{{ '' if q.moving == 1 else 's' }}. Yes keeps {{ 'it' if q.moving == 1 else 'them' }} with the new name
+                {%- if q.already %}, together with the {{ q.already }} {{ q.new_name }} already has{% endif %}.
+            </p>
+            <div class="d-flex gap-2 mt-3">
+                <button type="submit" name="answer" value="no" class="st-btn st-btn-quiet flex-fill">No, it's new</button>
+                <button type="submit" name="answer" value="yes" class="st-btn st-btn-primary flex-fill">Yes</button>
+            </div>
+        </div>
+    </form>
+    {% endfor %}
+</section>
+<style>
+    .rq-card + .rq-card { margin-top: 12px; }
+    .rq-title { font-size: 0.98rem; font-weight: 600; line-height: 1.35; }
+    .rq-line { margin: 8px 0 0; font-size: 0.86rem; color: var(--text-muted); line-height: 1.45; }
+</style>
+{% endif %}

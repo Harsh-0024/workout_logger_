@@ -157,5 +157,73 @@ class TestExerciseRename(unittest.TestCase):
         self.assertIn("already its name", page)
 
 
+
+class TestRenameQuestionOnSave(unittest.TestCase):
+    """Saving the plan or rep ranges with an exercise renamed asks before its history moves."""
+    setUp = base.TestRouteRegressions.setUp
+    tearDown = base.TestRouteRegressions.tearDown
+    _create_logged_in_user = base.TestRouteRegressions._create_logged_in_user
+    _log = TestExerciseRename._log
+    _names = TestExerciseRename._names
+
+    PLAN = "Abs 1\nCrunches A - [3, 10-15]\nPlank\nPull 1\nDumbbell Lat Row\n"
+
+    def _user(self, name):
+        user = self._create_logged_in_user(username=name)
+        self.session.add(Plan(user_id=user.id, text_content=self.PLAN))
+        self.session.commit()
+        self._log(user, "Crunches A", 1)
+        self._log(user, "Crunches A", 3)
+        return user
+
+    def test_renaming_in_the_plan_asks_and_yes_keeps_the_history(self):
+        user = self._user("rq_yes")
+        self.client.post("/set_plan", data={"plan_text": self.PLAN.replace("Crunches A", "Decline Crunches")})
+        page = self.client.get("/set_plan").get_data(as_text=True)
+        self.assertIn("Is Decline Crunches the same exercise as Crunches A?", page)
+        self.assertIn("Crunches A has 2 logged workouts.", page)
+        self.assertEqual(self._names(user), ["Crunches A"])
+        self.client.post("/settings/exercise-names/answer", data={
+            "old_name": "Crunches A", "new_name": "Decline Crunches", "answer": "yes", "next": "/set_plan"})
+        self.assertEqual(self._names(user), ["Decline Crunches"])
+        self.assertNotIn("the same exercise as", self.client.get("/set_plan").get_data(as_text=True))
+
+    def test_no_leaves_the_history_alone_and_stops_asking(self):
+        user = self._user("rq_no")
+        self.client.post("/set_plan", data={"plan_text": self.PLAN.replace("Crunches A", "Cable Crunch")})
+        self.client.post("/settings/exercise-names/answer", data={
+            "old_name": "Crunches A", "new_name": "Cable Crunch", "answer": "no", "next": "/set_plan"})
+        self.assertEqual(self._names(user), ["Crunches A"])
+        self.assertNotIn("the same exercise as", self.client.get("/set_plan").get_data(as_text=True))
+
+    def test_a_missing_answer_keeps_the_question(self):
+        user = self._user("rq_blank")
+        self.client.post("/set_plan", data={"plan_text": self.PLAN.replace("Crunches A", "Decline Crunches")})
+        self.client.post("/settings/exercise-names/answer", data={
+            "old_name": "Crunches A", "new_name": "Decline Crunches", "next": "/set_plan"})
+        self.assertIn("the same exercise as", self.client.get("/set_plan").get_data(as_text=True))
+        self.assertEqual(self._names(user), ["Crunches A"])
+
+    def test_nothing_is_asked_without_history_or_without_a_replacement(self):
+        user = self._user("rq_quiet")
+        # Dumbbell Lat Row has no logs; Crunches A is only removed.
+        self.client.post("/set_plan", data={"plan_text": "Abs 1\nPlank\nPull 1\nSingle-Arm Row\n"})
+        self.assertNotIn("the same exercise as", self.client.get("/set_plan").get_data(as_text=True))
+
+    def test_reordering_is_not_a_rename(self):
+        self._user("rq_order")
+        self.client.post("/set_plan", data={"plan_text": "Abs 1\nPlank\nCrunches A\nPull 1\nDumbbell Lat Row\n"})
+        self.assertNotIn("the same exercise as", self.client.get("/set_plan").get_data(as_text=True))
+
+    def test_renaming_in_rep_ranges_asks_too(self):
+        user = self._user("rq_reps")
+        self.session.add(RepRange(user_id=user.id, text_content="Crunches A: 3, 10–15\nPlank: 30–60s"))
+        self.session.commit()
+        self.client.post("/set_exercises", data={"rep_text": "Plank: 30–60s\nDecline Crunches: 3, 10–15",
+                                                 "rep_text_ready": "1"})
+        page = self.client.get("/set_exercises").get_data(as_text=True)
+        self.assertIn("Is Decline Crunches the same exercise as Crunches A?", page)
+
+
 if __name__ == "__main__":
     unittest.main()

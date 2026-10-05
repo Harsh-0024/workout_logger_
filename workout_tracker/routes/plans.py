@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import flash, jsonify, redirect, render_template, request, session, url_for
 from flask_login import login_required, current_user
 
 from list_of_exercise import get_workout_days
@@ -28,6 +28,13 @@ from services.retrieve import (
 from list_of_exercise import DEFAULT_PLAN, DEFAULT_REP_RANGES
 from parsers.workout import _parse_plan_exercise_line
 from services.exercise_matching import normalize_exercise_name
+from services.exercise_rename import (
+    detect_renames,
+    plan_exercise_names,
+    rename_exercise,
+    rename_questions,
+    rep_exercise_names,
+)
 from services.rep_ranges import canonical_rep_text, merge_rep_entries, parse_rep_entries
 from utils.logger import logger
 from utils.validators import is_safe_redirect_url, sanitize_text_input
@@ -482,6 +489,48 @@ def register_plan_routes(app):
             logger.error(f"Error saving custom retrieval sort preference: {e}", exc_info=True)
             return jsonify({'ok': False, 'error': 'Unable to save sort preference.'}), 500
 
+    def _ask_about_renames(old_names, new_names):
+        """After a save: names that look renamed are asked about on the page it returns to."""
+        pairs = detect_renames(Session, current_user, old_names, new_names)
+        if pairs:
+            session['rename_questions'] = [list(p) for p in pairs]
+        else:
+            session.pop('rename_questions', None)
+
+    def _pending_rename_questions():
+        questions = rename_questions(Session, current_user, session.get('rename_questions'))
+        if not questions:
+            session.pop('rename_questions', None)
+        return questions
+
+    @login_required
+    def answer_rename_question():
+        """"Is Decline Crunches the same exercise as Crunches A?" Yes moves its history over."""
+        old_name = sanitize_text_input(request.form.get('old_name', ''), max_length=160)
+        new_name = sanitize_text_input(request.form.get('new_name', ''), max_length=160)
+        next_url = request.form.get('next') or url_for('set_plan')
+        if not is_safe_redirect_url(next_url, request.host_url):
+            next_url = url_for('set_plan')
+        answer = request.form.get('answer')
+        if answer not in ('yes', 'no'):
+            return redirect(next_url)
+        pending = [p for p in session.get('rename_questions') or [] if list(p) != [old_name, new_name]]
+        if pending:
+            session['rename_questions'] = pending
+        else:
+            session.pop('rename_questions', None)
+        if answer == 'yes':
+            try:
+                rename_exercise(Session, current_user, old_name, new_name)
+                flash(f"{new_name} kept the history of {old_name}.", "success")
+            except ValueError as e:
+                flash(str(e), "error")
+            except Exception as e:
+                Session.rollback()
+                logger.error(f"Exercise rename failed: {e}", exc_info=True)
+                flash("Couldn't move that history right now. Please try again.", "error")
+        return redirect(next_url)
+
     @login_required
     def set_plan():
         user = current_user
@@ -509,10 +558,12 @@ def register_plan_routes(app):
                     return redirect(url_for('set_plan'))
 
                 plan_text = request.form.get('plan_text', '').strip()
+                old_names = plan_exercise_names(_own_plan_text(Session, user) or DEFAULT_PLAN)
                 plan.text_content = plan_text
                 user.follow_admin_plan = False
                 plan.updated_at = datetime.now()
                 Session.commit()
+                _ask_about_renames(old_names, plan_exercise_names(plan_text))
                 flash("Workout plan saved.", "success")
                 # Stay on the plan, as Rep ranges does, so the saved text is right there to check.
                 return redirect(url_for('set_plan'))
@@ -525,6 +576,7 @@ def register_plan_routes(app):
                 follow_admin_plan=can_follow and getattr(user, 'follow_admin_plan', False),
                 admin_display_name=get_admin_display_name(Session),
                 can_follow=can_follow,
+                rename_questions=_pending_rename_questions(),
             )
         except Exception as e:
             Session.rollback()
@@ -564,10 +616,12 @@ def register_plan_routes(app):
                     # mark means the script never ran, not that every range was removed.
                     flash("Rep ranges weren't saved. Reload the page and try again.", "error")
                     return redirect(url_for('set_exercises'))
+                old_names = rep_exercise_names(reps.text_content or "")
                 reps.text_content = new_text
                 user.follow_admin_exercises = False
                 reps.updated_at = datetime.now()
                 Session.commit()
+                _ask_about_renames(old_names, rep_exercise_names(new_text))
                 flash("Rep ranges saved.", "success")
                 return redirect(url_for('set_exercises'))
 
@@ -581,6 +635,7 @@ def register_plan_routes(app):
                 follow_admin_exercises=can_follow and getattr(user, 'follow_admin_exercises', False),
                 admin_display_name=get_admin_display_name(Session),
                 can_follow=can_follow,
+                rename_questions=_pending_rename_questions(),
             )
         except Exception as e:
             Session.rollback()
@@ -588,6 +643,12 @@ def register_plan_routes(app):
             flash("Error saving rep ranges.", "error")
             return redirect(url_for('user_dashboard', username=user.username))
 
+    app.add_url_rule(
+        '/settings/exercise-names/answer',
+        endpoint='answer_rename_question',
+        view_func=answer_rename_question,
+        methods=['POST'],
+    )
     app.add_url_rule(
         '/retrieve/categories',
         endpoint='retrieve_categories',

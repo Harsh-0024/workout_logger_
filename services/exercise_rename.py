@@ -11,6 +11,7 @@ offline logs that sync later) is saved under the new name.
 """
 import re
 from datetime import datetime
+from difflib import SequenceMatcher
 from typing import Dict, List, Optional, Tuple
 
 from models import (
@@ -346,3 +347,65 @@ def rename_exercise(db_session, user, old_name: str, new_name: str) -> Dict:
 def exercise_names_for_rename(db_session, user) -> List[str]:
     """Every name the user has logged, for picking the one to rename."""
     return sorted(set(_logged_names(db_session, user.id)), key=str.lower)
+
+
+# --- Noticing a rename when the plan or rep ranges are saved ---
+
+def plan_exercise_names(text: str) -> List[str]:
+    """The exercises in a plan, in order (a name once per place it appears)."""
+    from list_of_exercise import get_workout_days
+    from parsers.workout import _parse_plan_exercise_line
+
+    names = []
+    for days in (get_workout_days(text or "").get("workout") or {}).values():
+        for lines in days.values():
+            for line in lines:
+                name = _parse_plan_exercise_line(line).get("name") or ""
+                if name:
+                    names.append(name)
+    return names
+
+
+def rep_exercise_names(text: str) -> List[str]:
+    return [name for name, _ in parse_rep_entries(text)]
+
+
+def detect_renames(db_session, user, old_names: List[str], new_names: List[str]) -> List[Tuple[str, str]]:
+    """Names that look renamed by an edit: gone from the text, with history of their own, and
+    replaced by a new name in the same spot (or the only name gone, for the only name added).
+    Only a guess; the user is asked before anything moves."""
+    old_keys = [normalize_exercise_name(n) for n in old_names]
+    new_keys = [normalize_exercise_name(n) for n in new_names]
+    old_set, new_set = set(old_keys), set(new_keys)
+    logged = {normalize_exercise_name(n) for n in _logged_names(db_session, user.id)}
+    gone = {k for k in old_set - new_set if k in logged}
+    added = {k for k in new_set - old_set if k}
+    display_old = dict(zip(old_keys, old_names))
+    display_new = dict(zip(new_keys, new_names))
+
+    pairs: List[Tuple[str, str]] = []
+    matcher = SequenceMatcher(a=old_keys, b=new_keys, autojunk=False)
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        if tag != "replace" or i2 - i1 != j2 - j1:
+            continue
+        for old_key, new_key in zip(old_keys[i1:i2], new_keys[j1:j2]):
+            if old_key in gone and new_key in added:
+                pairs.append((display_old[old_key], display_new[new_key]))
+                gone.discard(old_key)
+                added.discard(new_key)
+    # One name out and one in across the whole save, even if it moved (rep ranges group by muscle).
+    if not pairs and len(old_set - new_set) == 1 and len(added) == 1 and gone:
+        pairs.append((display_old[gone.pop()], display_new[added.pop()]))
+    return pairs
+
+
+def rename_questions(db_session, user, pairs) -> List[Dict]:
+    """Pending rename questions still worth asking, with how much history each would keep."""
+    questions = []
+    for old, new in pairs or []:
+        if validate_rename(old, new):
+            continue
+        preview = rename_preview(db_session, user, old, new)
+        if preview["moving"]:
+            questions.append(preview)
+    return questions

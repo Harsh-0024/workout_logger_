@@ -106,6 +106,8 @@
 <div class="st">
     {{ st.head('Rep ranges', 'The rep target for each exercise.', url_for('user_settings'), 'Back to settings') }}
 
+    {% with rename_next = url_for('set_exercises') %}{% include '_rename_questions.html' %}{% endwith %}
+
     {% if can_follow %}
     <section class="st-section">
         <form action="/set_exercises" method="POST" class="st-group" data-no-loading="true">

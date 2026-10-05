@@ -6,6 +6,8 @@
 <div class="st">
     {{ st.head('Workout plan', 'Your cycles, sessions and exercises, written as plain text.', url_for('user_settings'), 'Back to settings') }}
 
+    {% with rename_next = url_for('set_plan') %}{% include '_rename_questions.html' %}{% endwith %}
+
     {% if can_follow %}
     <section class="st-section">
         <form action="/set_plan" method="POST" class="st-group" data-no-loading="true">
