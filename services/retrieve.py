@@ -29,6 +29,7 @@ from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweigh
 from services.workout_quality import WorkoutQualityScorer
 from services.exercise_matching import (
     build_name_index,
+    compound_vocabulary,
     normalize_exercise_name,
     resolve_equivalent_names,
     token_signature,
@@ -230,7 +231,7 @@ def infer_custom_workout_title(db_session, user, exercises) -> Optional[str]:
         norm = normalize_exercise_name(parsed)
         if norm:
             keys.append(norm)
-        sig = token_signature(parsed)
+        sig = token_signature(parsed, title_vocabulary)
         if sig:
             keys.append("sig:" + " ".join(sig))
         return keys
@@ -268,6 +269,9 @@ def infer_custom_workout_title(db_session, user, exercises) -> Optional[str]:
             if split_title_key(workout_name) in plan_titles:
                 sessions.append((str(workout_name), [exercise_name]))
 
+    title_vocabulary = compound_vocabulary(
+        selected_names + [str(e) for _, day_exercises in sessions for e in day_exercises]
+    )
     try:
         return infer_workout_title(selected_names, sessions, key_fn=key_fn)
     except Exception:
@@ -369,6 +373,24 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     catalog = {}
 
     key_by_signature = {}
+    plan_text = get_effective_plan_text(db_session, user)
+    plan_data = get_workout_days(plan_text or "")
+    logged_exercises = (
+        db_session.query(WorkoutLog.exercise)
+        .filter(WorkoutLog.user_id == user.id)
+        .distinct()
+        .all()
+    )
+    rep_ranges_text = get_effective_rep_ranges_text(db_session, user)
+    # Words written as one anywhere here let the same word written as two join it:
+    # "Rod Push Down" in the history is the plan's "Rod Pushdown".
+    vocabulary = compound_vocabulary(
+        [str(e) for day_map in (plan_data.get("workout") or {}).values() if isinstance(day_map, dict)
+         for exercises in day_map.values() if isinstance(exercises, list) for e in exercises]
+        + list(list_of_exercises)
+        + [row[0] for row in logged_exercises or [] if row and row[0]]
+        + [line.split(":", 1)[0] for line in (rep_ranges_text or "").splitlines() if ":" in line]
+    )
 
     def add_exercise(raw_exercise, *, preserve_plan_details=False, yours=False, merge_twins=False):
         raw_value = str(raw_exercise or "").strip()
@@ -382,7 +404,7 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
             return None
         # "Lat Dumbbell Rows" in the history is the plan's "Dumbbell Lat Row": the same
         # words in another order. Keep one row, under the name already in the list.
-        signature = token_signature(display_name)
+        signature = token_signature(display_name, vocabulary)
         twin = key_by_signature.get(signature) if signature else None
         if merge_twins and twin and twin != key and key not in catalog:
             if yours:
@@ -405,8 +427,6 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
         return key
 
     plan_keys = set()
-    plan_text = get_effective_plan_text(db_session, user)
-    plan_data = get_workout_days(plan_text or "")
     workout_map = plan_data.get("workout", {}) if isinstance(plan_data, dict) else {}
     if isinstance(workout_map, dict):
         for day_map in workout_map.values():
@@ -421,12 +441,6 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     for exercise in list_of_exercises:
         add_exercise(exercise, merge_twins=True)
 
-    logged_exercises = (
-        db_session.query(WorkoutLog.exercise)
-        .filter(WorkoutLog.user_id == user.id)
-        .distinct()
-        .all()
-    )
     key_by_logged_name = {}
     for row in logged_exercises or []:
         try:
@@ -438,7 +452,6 @@ def get_custom_retrieval_exercise_catalog(db_session, user, *, sort_mode=None):
     # Every exercise in the rep ranges, too: the list can hold many not in the plan or history.
     # They're yours when the rep ranges are; a list followed from the admin or the defaults
     # shows like the built-in list.
-    rep_ranges_text = get_effective_rep_ranges_text(db_session, user)
     own_rep_ranges = bool((_own_rep_ranges_text(db_session, user) or "").strip())
     for line in (rep_ranges_text or "").splitlines():
         if ":" in line:

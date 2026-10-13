@@ -12,6 +12,7 @@ from sqlalchemy import desc
 from models import Session, WorkoutLog
 from services.stats import (
     _normalize_exercise_name,
+    stats_vocabulary,
     backfill_log_bodyweight,
     get_average_growth_data,
     get_chart_data,
@@ -71,9 +72,10 @@ def register_stats_routes(app):
             # Sessions (distinct days) and last trained day per exercise, for sorting.
             usage_by_key = {}
             key_by_name = {}
+            vocabulary = stats_vocabulary({log.exercise for log in logs})
             for log in logs:
                 if log.exercise not in key_by_name:
-                    key_by_name[log.exercise] = _normalize_exercise_name(log.exercise)
+                    key_by_name[log.exercise] = _normalize_exercise_name(log.exercise, vocabulary)
                 key = key_by_name[log.exercise]
                 if not key or not log.date:
                     continue
@@ -86,7 +88,7 @@ def register_stats_routes(app):
             for ex in exercises:
                 cleaned = re.sub(r'^\s*\d+\s*[\.)]\s*', '', ex).strip()
                 label = cleaned or ex
-                key = _normalize_exercise_name(label)
+                key = _normalize_exercise_name(label, vocabulary)
                 if not key or key in seen_keys:
                     continue
                 seen_keys.add(key)
@@ -107,9 +109,9 @@ def register_stats_routes(app):
                     requested_exercise,
                     max_length=100,
                 ))
-                requested_key = _normalize_exercise_name(requested_exercise)
+                requested_key = _normalize_exercise_name(requested_exercise, vocabulary)
                 for option in exercise_options:
-                    if _normalize_exercise_name(option.get("value") or "") == requested_key:
+                    if _normalize_exercise_name(option.get("value") or "", vocabulary) == requested_key:
                         initial_exercise = option.get("value") or requested_exercise
                         initial_exercise_label = option.get("label") or initial_exercise
                         break

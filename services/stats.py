@@ -77,7 +77,7 @@ def set_stats_preferences(db_session, user, sort_mode: Optional[str] = None, tim
 
 
 def record_stats_exercise_view(db_session, user, exercise_name: str, now: Optional[datetime] = None) -> None:
-    key = _normalize_exercise_name(exercise_name)
+    key = _normalize_exercise_name(exercise_name, _user_stats_vocabulary(db_session, user))
     if not key:
         return
     now = now or datetime.now()
@@ -302,6 +302,10 @@ def _normalize_exercise_name(exercise: str, vocabulary=None) -> str:
     return ' '.join(signature) if signature else value
 
 
+def _user_stats_vocabulary(db_session, user) -> frozenset:
+    rows = db_session.query(WorkoutLog.exercise).filter(WorkoutLog.user_id == user.id).distinct().all()
+    return stats_vocabulary(r[0] for r in rows)
+
 
 def _clean_workout_title(title: str) -> str:
     cleaned = str(title or "").strip()
@@ -309,16 +313,17 @@ def _clean_workout_title(title: str) -> str:
 
 
 def _resolve_exercise_aliases(db_session, user, exercise_name: str) -> List[str]:
-    key = _normalize_exercise_name(exercise_name)
-    if not key:
-        return []
     exercises = (
         db_session.query(WorkoutLog.exercise)
         .filter(WorkoutLog.user_id == user.id)
         .distinct()
         .all()
     )
-    aliases = [ex[0] for ex in exercises if _normalize_exercise_name(ex[0]) == key]
+    vocabulary = stats_vocabulary([ex[0] for ex in exercises] + [exercise_name])
+    key = _normalize_exercise_name(exercise_name, vocabulary)
+    if not key:
+        return []
+    aliases = [ex[0] for ex in exercises if _normalize_exercise_name(ex[0], vocabulary) == key]
     return aliases or [exercise_name]
 
 
@@ -658,8 +663,9 @@ def get_average_growth_data(db_session, user) -> Dict:
 
     logs_by_exercise = {}
     title_by_date = {}
+    vocabulary = stats_vocabulary({log.exercise for log in logs})
     for log in logs:
-        key = _normalize_exercise_name(log.exercise)
+        key = _normalize_exercise_name(log.exercise, vocabulary)
         if not key:
             continue
         if log.date:
@@ -809,10 +815,11 @@ def get_overall_progress_data(
     name_by_key: Dict[str, str] = {}
     sets_by_day: Dict = {}
 
+    vocabulary = stats_vocabulary({log.exercise for log in logs})
     for log in logs:
         if not log.date:
             continue
-        key = _normalize_exercise_name(log.exercise)
+        key = _normalize_exercise_name(log.exercise, vocabulary)
         if not key:
             continue
         day = local_date(log.date)

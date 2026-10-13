@@ -141,10 +141,12 @@ def build_name_index(names: Iterable[str]) -> Dict[str, Dict]:
     """
     by_norm: Dict[str, List[str]] = {}
     by_sig: Dict[Tuple[str, ...], List[str]] = {}
+    names_seen: List[str] = []
 
     for raw in names or []:
         if not raw:
             continue
+        names_seen.append(raw)
         norm = normalize_exercise_name(raw)
         sig = token_signature(raw)
         if norm:
@@ -156,7 +158,7 @@ def build_name_index(names: Iterable[str]) -> Dict[str, Dict]:
             if raw not in by_sig[sig]:
                 by_sig[sig].append(raw)
 
-    return {"by_norm": by_norm, "by_sig": by_sig}
+    return {"by_norm": by_norm, "by_sig": by_sig, "names": list(dict.fromkeys(n for n in names_seen))}
 
 
 def resolve_equivalent_names(input_name: str, index: Dict[str, Dict]) -> List[str]:
@@ -200,5 +202,17 @@ def resolve_equivalent_names(input_name: str, index: Dict[str, Dict]) -> List[st
         }
         if len(normalized_matches) == 1:
             return signature_matches
+
+    # 3) A word written as one or two: "Rod Push Down" is the logged "Rod Pushdown".
+    joined_matches = [n for n in (index or {}).get("names") or [] if same_exercise(input_name, n)]
+    if joined_matches:
+        vocabulary = compound_vocabulary([input_name, *joined_matches])
+        orders = {
+            " ".join(join_known_compounds(normalize_exercise_name(n).split(" "), vocabulary))
+            for n in joined_matches
+        }
+        # Same caution as above: different word orders among the matches stay ambiguous.
+        if len(joined_matches) == 1 or len(orders) == 1:
+            return joined_matches
 
     return []
