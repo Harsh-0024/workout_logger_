@@ -26,7 +26,7 @@ from models import (
     TimedExercisePreference,
     WorkoutLog,
 )
-from services.exercise_matching import normalize_exercise_name
+from services.exercise_matching import normalize_exercise_name, token_signature
 from services.rep_ranges import _TAG_RE, parse_rep_entries, rep_entries_to_text
 
 
@@ -37,11 +37,21 @@ def _clean(name: str) -> str:
     return re.sub(r"\s+", " ", str(name or "")).strip()
 
 
+def _same(name: str, key: str) -> bool:
+    """Whether a name is the exercise `key` (a normalised name) stands for. Like the rest of the
+    app (stats, logging, the picker), the same words in another order count as the same exercise:
+    "Triceps Rod Pushdown" is "Rod Triceps Pushdown"."""
+    if normalize_exercise_name(name) == key:
+        return True
+    signature = token_signature(name)
+    return bool(signature) and signature == token_signature(key)
+
+
 def _split_tag(name: str, old_key: str) -> Optional[str]:
     """The part of `name` after its base when the base is the old exercise: "" for the exercise
     itself, " (Wellness)" for a tagged version, None for anything else."""
     current = _clean(name)
-    if normalize_exercise_name(current) == old_key:
+    if _same(current, old_key):
         return ""
     full = current
     while True:
@@ -49,7 +59,7 @@ def _split_tag(name: str, old_key: str) -> Optional[str]:
         if not m:
             return None
         current = m.group("base").rstrip(" -–—").strip()
-        if normalize_exercise_name(current) == old_key:
+        if _same(current, old_key):
             return full[len(current):]
 
 
@@ -77,8 +87,9 @@ def resolve_renamed_exercise(db_session, user_id: int, name: str, redirects: Opt
         return name
     current = _clean(name)
     full = current
+    by_words = {token_signature(key): new for key, new in redirects.items() if token_signature(key)}
     while current:
-        new_name = redirects.get(normalize_exercise_name(current))
+        new_name = redirects.get(normalize_exercise_name(current)) or by_words.get(token_signature(current))
         if new_name:
             return new_name + full[len(current):]
         m = _TAG_RE.match(current)
@@ -110,10 +121,10 @@ def _remember(db_session, user_id: int, old_name: str, new_name: str, log_ids: L
     rows = db_session.query(ExerciseRename).filter(ExerciseRename.user_id == user_id).all()
     for row in rows:
         # Earlier renames to the old name now lead to the new one (A -> B, then B -> C).
-        if normalize_exercise_name(row.new_name) == old_key:
+        if _same(row.new_name, old_key):
             row.new_name = new_name
         # The new name is in use again, so nothing should send it elsewhere (A -> B, then B -> A).
-        if row.old_key == new_key or normalize_exercise_name(row.new_name) == row.old_key:
+        if _same(new_name, row.old_key) or normalize_exercise_name(row.new_name) == row.old_key:
             db_session.delete(row)
     if old_key == new_key:
         return
@@ -389,6 +400,31 @@ def rename_exercise(db_session, user, old_name: str, new_name: str) -> Dict:
             _rename_for_user(db_session, follower, old_name, new_name)
     db_session.commit()
     return summary
+
+
+def finish_partial_renames(db_session) -> int:
+    """Renames made before word order counted moved "Rod Triceps Pushdown" but left "Triceps Rod
+    Pushdown" behind under the old name. Move what's left. Once done there's nothing left to
+    move, so this is safe on every start. Commits. Returns how many renames it finished."""
+    from models import User
+
+    rows = [
+        (r.user_id, r.old_key, r.old_name, r.new_name)
+        for r in db_session.query(ExerciseRename).order_by(ExerciseRename.created_at.asc()).all()
+    ]
+    finished = 0
+    for user_id, old_key, old_name, new_name in rows:
+        if _same(new_name, old_key) or validate_rename(old_name, new_name):
+            continue
+        if not _has_history(db_session, user_id, old_key):
+            continue
+        user = db_session.get(User, user_id)
+        if user is None:
+            continue
+        _rename_for_user(db_session, user, old_name, new_name)
+        db_session.commit()
+        finished += 1
+    return finished
 
 
 def catch_up_with_followed_renames(db_session, user) -> bool:
