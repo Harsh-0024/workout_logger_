@@ -740,6 +740,17 @@ def initialize_database():
     finally:
         session.close()
 
+    # Read-only: log which names a word written as one or two would merge, to check on real data.
+    session = Session()
+    try:
+        from services.compound_report import report_new_merges
+        report_new_merges(session)
+    except Exception as e:
+        from utils.logger import logger
+        logger.error(f"Compound-name report failed: {e}", exc_info=True)
+    finally:
+        session.close()
+
 
 def _bootstrap_admin_user(session):
     admin_password = Config.ADMIN_PASSWORD

@@ -15,7 +15,7 @@ from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweigh
 from services.helpers import get_set_stats, timed_set_score
 from services.workout_quality import WorkoutQualityScorer
 from services.logging import _has_time_hint_in_exercise_string, resolve_timed_exercise_status
-from services.exercise_matching import token_signature
+from services.exercise_matching import compound_vocabulary, token_signature
 from utils.dates import local_date
 
 
@@ -281,14 +281,26 @@ def _get_timed_target_range(db_session, user, exercise_name: str) -> Optional[Tu
     return _get_target_rep_range(db_session, user, exercise_name)
 
 
-def _normalize_exercise_name(exercise: str) -> str:
+def _clean_exercise_text(exercise: str) -> str:
     value = str(exercise or '').strip().lower()
     value = re.sub(r'^\s*\d+\s*[\.)\-:]\s*', '', value)
     value = re.sub(r'[-–—]+', ' ', value)
     value = re.sub(r'[^a-z0-9\s]+', ' ', value)
-    value = re.sub(r'\s+', ' ', value).strip()
-    signature = token_signature(value)
+    return re.sub(r'\s+', ' ', value).strip()
+
+
+def stats_vocabulary(names) -> frozenset:
+    """The words in a user's exercise names, so "Push Down" groups with a logged "Pushdown"."""
+    return compound_vocabulary(_clean_exercise_text(n) for n in names or [])
+
+
+def _normalize_exercise_name(exercise: str, vocabulary=None) -> str:
+    """The key an exercise is grouped under: its words in any order. Pass the user's
+    stats_vocabulary to also count a word written as one or two alike."""
+    value = _clean_exercise_text(exercise)
+    signature = token_signature(value, vocabulary)
     return ' '.join(signature) if signature else value
+
 
 
 def _clean_workout_title(title: str) -> str:
