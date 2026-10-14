@@ -15,7 +15,13 @@ from models import (
     StatsExerciseView,
     WorkoutLog,
 )
-from services.exercise_rename import rename_exercise, rename_preview, resolve_renamed_exercise
+from services.exercise_matching import normalize_exercise_name
+from services.exercise_rename import (
+    finish_partial_renames,
+    rename_exercise,
+    rename_preview,
+    resolve_renamed_exercise,
+)
 
 
 class TestExerciseRename(unittest.TestCase):
@@ -158,6 +164,52 @@ class TestExerciseRename(unittest.TestCase):
         page = self.client.get("/settings/exercise-names?from=Plank&to=Plank").get_data(as_text=True)
         self.assertIn("already its name", page)
 
+
+
+class TestWordOrder(unittest.TestCase):
+    """The app counts the same words in another order as the same exercise, so a rename does too."""
+    setUp = base.TestRouteRegressions.setUp
+    tearDown = base.TestRouteRegressions.tearDown
+    _create_logged_in_user = base.TestRouteRegressions._create_logged_in_user
+    _log = TestExerciseRename._log
+    _names = TestExerciseRename._names
+
+    def test_every_word_order_moves_with_the_rename(self):
+        user = self._create_logged_in_user(username="wo_rename")
+        self._log(user, "Triceps Rod Pushdown", 1)
+        self._log(user, "Rod Triceps Pushdown", 5)
+        self._log(user, "Triceps Rod Pushdown (Wellness)", 6)
+        self.assertEqual(rename_preview(self.session, user, "Rod Triceps Pushdown",
+                                        "Straight-Bar Triceps Pushdown")["moving"], 3)
+        rename_exercise(self.session, user, "Rod Triceps Pushdown", "Straight-Bar Triceps Pushdown")
+        self.assertEqual(self._names(user), ["Straight-Bar Triceps Pushdown", "Straight-Bar Triceps Pushdown (Wellness)"])
+
+    def test_logging_another_word_order_of_the_old_name_redirects(self):
+        user = self._create_logged_in_user(username="wo_redirect")
+        self._log(user, "Rod Triceps Pushdown", 1)
+        rename_exercise(self.session, user, "Rod Triceps Pushdown", "Straight-Bar Triceps Pushdown")
+        self.assertEqual(resolve_renamed_exercise(self.session, user.id, "Triceps Rod Pushdown"),
+                         "Straight-Bar Triceps Pushdown")
+
+    def test_a_rename_that_left_another_word_order_behind_is_finished(self):
+        # What the first version did: only the exact spelling moved.
+        user = self._create_logged_in_user(username="wo_repair")
+        self._log(user, "Triceps Rod Pushdown", 1)
+        self._log(user, "Straight-Bar Triceps Pushdown", 5)
+        self.session.add(ExerciseRename(user_id=user.id, old_key=normalize_exercise_name("Rod Triceps Pushdown"),
+                                        old_name="Rod Triceps Pushdown", new_name="Straight-Bar Triceps Pushdown",
+                                        log_ids=[]))
+        self.session.commit()
+        self.assertEqual(finish_partial_renames(self.session), 1)
+        self.assertEqual(self._names(user), ["Straight-Bar Triceps Pushdown"])
+        self.assertEqual(finish_partial_renames(self.session), 0)
+
+    def test_finishing_never_touches_a_rename_that_only_reordered_words(self):
+        user = self._create_logged_in_user(username="wo_reorder")
+        self._log(user, "Rod Triceps Pushdown", 1)
+        rename_exercise(self.session, user, "Triceps Rod Pushdown", "Rod Triceps Pushdown")
+        self.assertEqual(finish_partial_renames(self.session), 0)
+        self.assertEqual(self._names(user), ["Rod Triceps Pushdown"])
 
 
 class TestRenameQuestionOnSave(unittest.TestCase):

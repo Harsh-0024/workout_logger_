@@ -725,6 +725,32 @@ def initialize_database():
     finally:
         session.close()
 
+    # Data fix-ups that must never stop the app from starting.
+    session = Session()
+    try:
+        from services.exercise_rename import finish_partial_renames
+        finished = finish_partial_renames(session)
+        if finished:
+            from utils.logger import logger
+            logger.info(f"Finished {finished} exercise rename(s) that had left a reordered name behind")
+    except Exception as e:
+        session.rollback()
+        from utils.logger import logger
+        logger.error(f"Finishing exercise renames failed: {e}", exc_info=True)
+    finally:
+        session.close()
+
+    # Read-only: log which names a word written as one or two would merge, to check on real data.
+    session = Session()
+    try:
+        from services.compound_report import report_new_merges
+        report_new_merges(session)
+    except Exception as e:
+        from utils.logger import logger
+        logger.error(f"Compound-name report failed: {e}", exc_info=True)
+    finally:
+        session.close()
+
 
 def _bootstrap_admin_user(session):
     admin_password = Config.ADMIN_PASSWORD

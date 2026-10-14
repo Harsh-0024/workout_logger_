@@ -1,5 +1,5 @@
 import re
-from typing import Dict, Iterable, List, Sequence, Tuple
+from typing import Dict, FrozenSet, Iterable, List, Optional, Sequence, Tuple
 
 
 _DASH_CHARS = "-‐‑‒–—−"
@@ -79,7 +79,34 @@ def normalize_exercise_name(name: str) -> str:
     return " ".join(norm_tokens)
 
 
-def token_signature(name: str) -> Tuple[str, ...]:
+def compound_vocabulary(names: Iterable[str]) -> FrozenSet[str]:
+    """Every single word used in these names. A word written as two ("Push Down") is joined only
+    when the joined word is in here, i.e. some name already writes it as one ("Pushdown"): words
+    are never invented, and the app needn't know what's an English word."""
+    return frozenset(t for name in names or [] for t in normalize_exercise_name(name).split(" ") if t)
+
+
+def join_known_compounds(tokens: Sequence[str], vocabulary: Optional[FrozenSet[str]]) -> List[str]:
+    """Join two neighbouring words whose joined form is a word in `vocabulary`:
+    ["rod", "push", "down"] with "pushdown" known -> ["rod", "pushdown"]. Only pairs, left first."""
+    tokens = list(tokens)
+    if not vocabulary or len(tokens) < 2:
+        return tokens
+    out: List[str] = []
+    i = 0
+    while i < len(tokens):
+        if i + 1 < len(tokens):
+            joined = _normalize_token(tokens[i] + tokens[i + 1])
+            if joined in vocabulary:
+                out.append(joined)
+                i += 2
+                continue
+        out.append(tokens[i])
+        i += 1
+    return out
+
+
+def token_signature(name: str, vocabulary: Optional[FrozenSet[str]] = None) -> Tuple[str, ...]:
     """
     Order-insensitive signature used only as a conservative fallback when an exact
     normalized match is missing.
@@ -87,12 +114,21 @@ def token_signature(name: str) -> Tuple[str, ...]:
     Important: signature is intentionally conservative:
     - It uses a normalized token stream (plural/oh normalized).
     - It keeps all remaining tokens (including 'machine', 'barbell', etc.) to reduce accidental merging.
+    - Given a vocabulary, a word split in two is joined when the vocabulary writes it as one.
     """
     norm = normalize_exercise_name(name)
     if not norm:
         return tuple()
-    tokens = [t for t in norm.split(" ") if t]
+    tokens = join_known_compounds([t for t in norm.split(" ") if t], vocabulary)
     return tuple(sorted(tokens))
+
+
+def same_exercise(a: str, b: str) -> bool:
+    """Whether two names are the same exercise: the same words in any order, a word written as one
+    or two counted alike ("Rod Push-Down" / "Pushdown Rod")."""
+    vocabulary = compound_vocabulary([a, b])
+    signature = token_signature(a, vocabulary)
+    return bool(signature) and signature == token_signature(b, vocabulary)
 
 
 def build_name_index(names: Iterable[str]) -> Dict[str, Dict]:
