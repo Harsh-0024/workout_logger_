@@ -26,7 +26,7 @@ from models import (
     TimedExercisePreference,
     WorkoutLog,
 )
-from services.exercise_matching import normalize_exercise_name, token_signature
+from services.exercise_matching import normalize_exercise_name, same_exercise
 from services.rep_ranges import _TAG_RE, parse_rep_entries, rep_entries_to_text
 
 
@@ -39,12 +39,9 @@ def _clean(name: str) -> str:
 
 def _same(name: str, key: str) -> bool:
     """Whether a name is the exercise `key` (a normalised name) stands for. Like the rest of the
-    app (stats, logging, the picker), the same words in another order count as the same exercise:
-    "Triceps Rod Pushdown" is "Rod Triceps Pushdown"."""
-    if normalize_exercise_name(name) == key:
-        return True
-    signature = token_signature(name)
-    return bool(signature) and signature == token_signature(key)
+    app (stats, logging, the picker): the same words in any order, and a word written as one or
+    two alike. "Tricep Rod Push-Down" is "Rod Triceps Pushdown"."""
+    return normalize_exercise_name(name) == key or same_exercise(name, key)
 
 
 def _split_tag(name: str, old_key: str) -> Optional[str]:
@@ -87,9 +84,9 @@ def resolve_renamed_exercise(db_session, user_id: int, name: str, redirects: Opt
         return name
     current = _clean(name)
     full = current
-    by_words = {token_signature(key): new for key, new in redirects.items() if token_signature(key)}
     while current:
-        new_name = redirects.get(normalize_exercise_name(current)) or by_words.get(token_signature(current))
+        new_name = redirects.get(normalize_exercise_name(current)) or next(
+            (new for key, new in redirects.items() if _same(current, key)), None)
         if new_name:
             return new_name + full[len(current):]
         m = _TAG_RE.match(current)
@@ -494,13 +491,17 @@ def detect_renames(db_session, user, old_names: List[str], new_names: List[str])
         if tag != "replace" or i2 - i1 != j2 - j1:
             continue
         for old_key, new_key in zip(old_keys[i1:i2], new_keys[j1:j2]):
+            if same_exercise(display_old[old_key], display_new[new_key]):
+                continue  # only respelled ("Pull Up" -> "Pullups"): already the same exercise
             if old_key in gone and new_key in added:
                 pairs.append((display_old[old_key], display_new[new_key]))
                 gone.discard(old_key)
                 added.discard(new_key)
     # One name out and one in across the whole save, even if it moved (rep ranges group by muscle).
     if not pairs and len(old_set - new_set) == 1 and len(added) == 1 and gone:
-        pairs.append((display_old[gone.pop()], display_new[added.pop()]))
+        old, new = display_old[gone.pop()], display_new[added.pop()]
+        if not same_exercise(old, new):
+            pairs.append((old, new))
     return pairs
 
 
