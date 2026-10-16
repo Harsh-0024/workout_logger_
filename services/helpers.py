@@ -26,6 +26,19 @@ def get_set_stats(sets):
         volume += weight * reps_value
     return peak, strength_sum, volume
 
+def top_set(weights, reps):
+    """The heaviest weight and the most reps done at it: (60, 16) for 60x12, 60x16.
+    Returns (None, None) when there are no usable sets."""
+    best = None
+    for w, r in zip(weights or [], reps or []):
+        try:
+            pair = (float(w), int(r))
+        except (TypeError, ValueError):
+            continue
+        if best is None or pair > best:
+            best = pair
+    return best if best else (None, None)
+
 def timed_set_score(weight: float, seconds: int) -> float:
     """Load-duration score for timed exercises: weight * sqrt(seconds).
     Blends semantically with 1RM-based scores across charts."""

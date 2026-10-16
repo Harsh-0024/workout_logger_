@@ -9,7 +9,7 @@ from parsers.workout import (
     align_sets, _extract_declared_sets, _extract_sets_from_bracket,
     is_data_line, is_probable_data_segment, parse_bw_weight
 )
-from services.helpers import get_set_stats
+from services.helpers import get_set_stats, top_set
 
 
 class WorkoutParsingService:
@@ -91,14 +91,11 @@ class WorkoutParsingService:
         sets_json = {'weights': all_weights, 'reps': all_reps}
         top_weight = max(all_weights) if all_weights else 0
         top_reps = 0
-        
+
         if all_weights and all_reps:
-            # Find reps for the top weight
-            try:
-                top_weight_idx = all_weights.index(top_weight)
-                top_reps = all_reps[top_weight_idx] if top_weight_idx < len(all_reps) else 0
-            except (ValueError, IndexError):
-                top_reps = max(all_reps) if all_reps else 0
+            # The most reps done at the top weight
+            _, top_r = top_set(all_weights, all_reps)
+            top_reps = top_r or 0
         
         # Calculate 1RM and volume
         estimated_1rm, _, volume = get_set_stats(sets_json)

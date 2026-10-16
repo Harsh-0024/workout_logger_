@@ -12,7 +12,7 @@ from datetime import datetime, timedelta, date, time
 from sqlalchemy import func, desc
 from models import WorkoutLog, RepRange, StatsExerciseView, StatsPreference
 from services.bodyweight import effective_sets_for_log, infer_log_uses_bodyweight
-from services.helpers import get_set_stats, timed_set_score
+from services.helpers import get_set_stats, timed_set_score, top_set
 from services.workout_quality import WorkoutQualityScorer
 from services.logging import _has_time_hint_in_exercise_string, resolve_timed_exercise_status
 from services.exercise_matching import compound_vocabulary, token_signature
@@ -213,13 +213,8 @@ def _normalize_sets_for_log(db_session, log):
 def _get_top_weight(weights, reps):
     if not weights or not reps:
         return 0, 0
-    top_weight = max(weights)
-    try:
-        idx = weights.index(top_weight)
-        top_reps = reps[idx] if idx < len(reps) else reps[0]
-    except Exception:
-        top_reps = reps[0] if reps else 0
-    return top_weight, top_reps
+    top_weight, top_reps = top_set(weights, reps)
+    return top_weight or 0, top_reps or 0
 
 
 def _get_log_metrics(db_session, log):

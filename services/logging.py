@@ -23,7 +23,7 @@ from services.best_scoring import (
     compare_strength_workouts,
     compare_timed_workouts,
 )
-from services.helpers import get_set_stats, get_timed_set_stats
+from services.helpers import get_set_stats, get_timed_set_stats, top_set
 from services.rep_ranges import rep_range_names
 from services.exercise_rename import apply_renames_to_parsed
 from services.bodyweight import (
@@ -1184,10 +1184,9 @@ def handle_workout_log(db_session, user, parsed_data: Dict) -> List[Dict]:
         effective_weights = list((effective_new_sets or {}).get("weights") or [])
         effective_reps = list((effective_new_sets or {}).get("reps") or [])
         if is_valid and effective_weights:
-            daily_max_weight = max(effective_weights)
-            # Find reps corresponding to that max weight
-            idx = effective_weights.index(daily_max_weight)
-            daily_max_reps = effective_reps[idx] if idx < len(effective_reps) else 0
+            # The heaviest weight, and the most reps done at it
+            top_w, top_r = top_set(effective_weights, effective_reps)
+            daily_max_weight, daily_max_reps = top_w or 0, top_r or 0
 
         best_log = _get_best_log(
             db_session,

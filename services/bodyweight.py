@@ -7,7 +7,7 @@ from typing import Dict, Iterable, List, Optional
 from list_of_exercise import BW_EXERCISES, list_of_exercises
 from models import BodyweightExercisePreference, WorkoutLog
 from services.exercise_matching import normalize_exercise_name
-from services.helpers import get_set_stats, get_timed_set_stats
+from services.helpers import get_set_stats, get_timed_set_stats, top_set
 
 
 BODYWEIGHT_TOKEN_RE = re.compile(
@@ -221,16 +221,7 @@ def recalculate_log_metrics(db_session, log: WorkoutLog, *, is_timed: Optional[b
 
     weights = list((effective_sets or {}).get("weights") or [])
     reps = list((effective_sets or {}).get("reps") or [])
-    top_weight = None
-    top_reps = None
-    if weights and reps:
-        try:
-            top_weight = max(float(w) for w in weights if w is not None)
-            idx = [float(w) for w in weights].index(top_weight)
-            top_reps = int(reps[idx]) if idx < len(reps) else None
-        except (TypeError, ValueError):
-            top_weight = None
-            top_reps = None
+    top_weight, top_reps = top_set(weights, reps)
 
     log.top_weight = top_weight
     log.top_reps = top_reps
