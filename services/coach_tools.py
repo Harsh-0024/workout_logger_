@@ -14,8 +14,8 @@ from typing import Any, Callable, Dict, List, Optional
 from sqlalchemy import func
 
 from models import WorkoutLog
-from services.retrieve import get_effective_plan_text
-from services.stats import _resolve_exercise_aliases
+from services.retrieve import get_effective_plan_text, get_effective_rep_ranges_text
+from services.stats import _build_rep_range_map, _resolve_exercise_aliases
 from services.workout_title import classify_by_name
 from utils.dates import utc_now
 
@@ -377,6 +377,79 @@ def get_plan(db_session, user) -> Dict[str, Any]:
     }
 
 
+DEFAULT_REP_RANGE = (6, 10)
+
+
+def _session_sets(log: WorkoutLog) -> List[tuple]:
+    sets = log.sets_json if isinstance(log.sets_json, dict) else {}
+    out = []
+    for w, r in zip(sets.get("weights") or [], sets.get("reps") or []):
+        try:
+            out.append((float(w or 0), int(r)))
+        except (TypeError, ValueError):
+            continue
+    if not out and log.top_reps:
+        out.append((float(log.top_weight or 0), int(log.top_reps)))
+    return out
+
+
+def _round_to(value: float, step: float) -> float:
+    return round(round(value / step) * step, 2)
+
+
+def suggest_next_session(db_session, user, exercise: str) -> Dict[str, Any]:
+    """Double progression: fill the rep range at a weight, then add weight and start at the bottom.
+    Two sessions in a row under the range at the same weight -> a ~10% back-off."""
+    names = resolve_exercise(db_session, user, exercise)
+    logs = (
+        _logs_query(db_session, user).filter(WorkoutLog.exercise.in_(names))
+        .order_by(WorkoutLog.date.desc(), WorkoutLog.id.desc()).limit(4).all()
+    )
+    if not logs:
+        raise ToolError(f"Nothing logged for {names[0]}.")
+
+    ranges = _build_rep_range_map(get_effective_rep_ranges_text(db_session, user) or "")
+    rep_range = next((ranges[n.lower()] for n in names if n.lower() in ranges), None)
+    range_source = "your rep ranges"
+    if not rep_range:
+        rep_range, range_source = DEFAULT_REP_RANGE, "a default (no rep range set for this exercise)"
+    lo, hi = rep_range
+
+    last = _session_sets(logs[0])
+    if not last:
+        raise ToolError(f"The last {names[0]} session has no sets to work from.")
+    top_weight = max(w for w, _ in last)
+    working = [r for w, r in last if w == top_weight]
+    bodyweight_only = top_weight <= 0
+
+    if bodyweight_only:
+        target = {"weight_kg": None, "reps": [r + 1 for r in working]}
+        rule = "Bodyweight movement: add a rep to each set."
+    elif min(working) >= hi:
+        step = 1.0 if top_weight < 20 else 2.5
+        target = {"weight_kg": _round_to(top_weight + step, 0.5), "reps": [lo] * len(working)}
+        rule = f"Every working set reached the top of the range ({hi}), so add {step:g} kg and restart at {lo} reps."
+    else:
+        prev = _session_sets(logs[1]) if len(logs) > 1 else []
+        prev_top = max((w for w, _ in prev), default=None)
+        prev_working = [r for w, r in prev if w == prev_top]
+        if max(working) < lo and prev_top == top_weight and prev_working and max(prev_working) < lo:
+            target = {"weight_kg": _round_to(top_weight * 0.9, 2.5), "reps": [lo] * len(working)}
+            rule = f"Two sessions in a row below {lo} reps at {top_weight:g} kg: back off ~10% and build up again."
+        else:
+            target = {"weight_kg": top_weight, "reps": [min(r + 1, hi) if r < hi else r for r in working]}
+            rule = f"Stay at {top_weight:g} kg and add a rep to sets below {hi}."
+
+    return {
+        "exercise": names[0],
+        "rep_range": {"low": lo, "high": hi, "source": range_source},
+        "last_session": {"date": _iso(logs[0].date), "sets": _sets_text(logs[0])},
+        "target": target,
+        "rule": rule,
+        "recent_sessions": [{"date": _iso(l.date), "sets": _sets_text(l)} for l in logs[1:]],
+    }
+
+
 # --- registry ------------------------------------------------------------------------------
 
 _STR = {"type": "string"}
@@ -424,6 +497,12 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Compare the last N days with the N days before: workout days, sets, volume, best e1RM. "
                        "Optionally for one exercise.",
         "parameters": {"type": "object", "properties": {"period_days": _INT, "exercise": _STR}},
+    },
+    "suggest_next_session": {
+        "fn": suggest_next_session,
+        "description": "Concrete target for the next session of one exercise (weight and reps per set) using double "
+                       "progression against the user's rep range. Use for 'what should I aim for/lift next time'.",
+        "parameters": {"type": "object", "properties": {"exercise": _STR}, "required": ["exercise"]},
     },
     "get_plan": {
         "fn": get_plan,

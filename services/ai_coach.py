@@ -47,6 +47,7 @@ TOOL_LABELS = {
     "get_progress_trend": "Progress trend",
     "compare_periods": "Period comparison",
     "get_plan": "Workout plan",
+    "suggest_next_session": "Next-session target",
 }
 
 
@@ -85,7 +86,8 @@ def system_prompt(user, context: Optional[Dict[str, Any]] = None) -> str:
         "- Lead with the answer in one sentence, then supporting numbers. Keep it under ~150 words unless asked for detail.",
         "- Use short bullet points ('- ') and **bold** for key numbers. No tables, no headings.",
         "- Write dates as YYYY-MM-DD so the app can link them to the workout.",
-        "- When it helps, end with one concrete, specific next step (e.g. a load/rep target for next session).",
+        "- When it helps, end with one concrete, specific next step. For load/rep targets use suggest_next_session "
+        "rather than inventing numbers.",
         "- Training advice should be evidence-based and conservative; for pain or injury, suggest seeing a professional.",
         "- Stay on training, nutrition-for-training and recovery. Politely decline unrelated requests.",
     ]

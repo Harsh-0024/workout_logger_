@@ -9,7 +9,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from config import Config
-from models import Base, User, UserRole, WorkoutLog
+from models import Base, RepRange, User, UserRole, WorkoutLog
 from services import ai_coach, coach_tools
 from workout_tracker import create_app
 
@@ -107,6 +107,34 @@ class TestCoachTools(_CoachDb):
         cmp = coach_tools.compare_periods(self.db, self.user, period_days=14, exercise="back squat")
         self.assertEqual(cmp["current"]["workout_days"], 2)
         self.assertEqual(cmp["previous"]["workout_days"], 1)
+
+    def test_next_session_uses_double_progression(self):
+        self.user.follow_admin_exercises = False
+        self.db.add(RepRange(user_id=self.user.id, text_content="Back Squat: 3, 3-5\nFlat Barbell Press: 3, 6-8"))
+        self.db.commit()
+        days = lambda n: self.today - timedelta(days=n)
+
+        # Squat: 120 x 5 on every set = top of 3-5 -> add weight, restart at 3.
+        squat = coach_tools.suggest_next_session(self.db, self.user, "back squat")
+        self.assertEqual(squat["target"], {"weight_kg": 122.5, "reps": [3, 3, 3]})
+        self.assertEqual(squat["rep_range"]["source"], "your rep ranges")
+
+        # Bench: 85 x 5 twice in a row, under 6 -> back off ~10%.
+        bench = coach_tools.suggest_next_session(self.db, self.user, "flat barbell press")
+        self.assertEqual(bench["target"]["weight_kg"], 77.5)
+
+        # Inside the range: same weight, one more rep where there's room.
+        self.db.add(WorkoutLog(user_id=self.user.id, date=days(0), exercise="Flat Barbell Press",
+                               sets_json={"weights": [80, 80, 80], "reps": [8, 7, 6]}, top_weight=80, top_reps=8,
+                               estimated_1rm=99))
+        self.db.commit()
+        bench = coach_tools.suggest_next_session(self.db, self.user, "flat barbell press")
+        self.assertEqual(bench["target"], {"weight_kg": 80.0, "reps": [8, 8, 7]})
+
+        # No range set -> the default, said so.
+        press = coach_tools.suggest_next_session(self.db, self.user, "leg press")
+        self.assertIn("default", press["rep_range"]["source"])
+        self.assertEqual(press["target"], {"weight_kg": 252.5, "reps": [6, 6, 6]})
 
     def test_run_tool_reports_problems_to_the_model(self):
         self.assertIn("error", coach_tools.run_tool(self.db, self.user, "drop_tables", {}))
