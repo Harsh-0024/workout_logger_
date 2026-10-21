@@ -6,7 +6,7 @@
 {% block content %}
 {{ st.styles() }}
 <div class="st">
-    {{ st.head('Admin', 'Everyone using the app, plus a few tools.', url_for('user_settings'), 'Back to settings') }}
+    {{ st.head('Admin', 'Everyone using the app, what they tell you, plus a few tools.', url_for('user_settings'), 'Back to settings') }}
 
     {# ── Numbers ── #}
     <section class="st-section">
@@ -25,6 +25,15 @@
     <section class="st-section">
         <div class="st-label">Tools</div>
         <div class="st-group">
+            <a href="{{ url_for('admin_feedback') }}" class="st-row">
+                <i class="bi bi-chat-heart st-row-ico ad-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">Feedback</span>
+                    <span class="st-row-desc">{% if feedback_counts.total %}{{ feedback_counts.total }} from users{% else %}Nothing yet{% endif %}</span>
+                </span>
+                {% if feedback_counts.new %}<span class="ad-badge">{{ feedback_counts.new }} new</span>{% endif %}
+                <i class="bi bi-chevron-right st-chev"></i>
+            </a>
             <form method="POST" action="{{ url_for('admin_update_app_icon') }}" enctype="multipart/form-data" class="st-row" id="appIconForm">
                 <img id="appIconPreview" src="{{ app_icon_url('app-icon-192.png') }}" alt="App icon" class="ad-icon">
                 <span class="st-row-main">
@@ -139,6 +148,7 @@
 
 <style>
     .ad-gold { color: var(--st-accent); }
+    .ad-badge { flex: none; padding: 3px 10px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; color: var(--st-on-accent); background: var(--st-accent-fill); }
     .ad-icon { flex: none; width: 40px; height: 40px; border-radius: 10px; object-fit: cover; border: 1px solid var(--st-hair); }
     .ad-ico { width: 40px; }
     .ad-file { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

@@ -435,6 +435,23 @@ class AppIcon(Base):
     updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, nullable=False)
 
 
+class Feedback(Base):
+    """Something a user told the developer: what they like or don't, what could be better, an idea.
+
+    `kind` is one of FEEDBACK_KINDS; `status` moves new -> seen -> done as the admin works through it.
+    """
+    __tablename__ = 'feedback'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    kind = Column(String(16), nullable=False)
+    message = Column(Text, nullable=False)
+    page = Column(String(200))  # where they were in the app when they wrote it
+    status = Column(String(8), nullable=False, default='new', index=True)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("User")
+
+
 # --- MIGRATION HELPERS ---
 def migrate_schema():
     """Add missing columns to existing database tables."""
@@ -622,6 +639,9 @@ def migrate_schema():
 
             if 'exercise_renames' not in inspector.get_table_names():
                 ExerciseRename.__table__.create(bind=conn, checkfirst=True)
+
+            if 'feedback' not in inspector.get_table_names():
+                Feedback.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]

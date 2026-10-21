@@ -22,6 +22,7 @@ from .app_icons import IPHONE_SCREENS, splash_filename
 from .routes.admin import register_admin_routes
 from .routes.app_icon import register_app_icon_routes
 from .routes.auth import register_auth_routes
+from .routes.feedback import register_feedback_routes
 from .routes.plans import register_plan_routes
 from .routes.stats import register_stats_routes
 from .routes.workouts import SHORTCUT_KEY_MISSING, deployment_name, register_workout_routes
@@ -146,6 +147,7 @@ def create_app(config_object=Config, init_db: bool = True):
     register_auth_routes(app, email_service)
     register_app_icon_routes(app)
     register_admin_routes(app)
+    register_feedback_routes(app)
     register_workout_routes(app)
     register_stats_routes(app)
     register_plan_routes(app)

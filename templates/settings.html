@@ -124,6 +124,21 @@
         </div>
     </section>
 
+    {# ── Feedback ── #}
+    <section class="st-section">
+        <div class="st-label">Help make it better</div>
+        <div class="st-group">
+            <a href="{{ url_for('feedback') }}" class="st-row">
+                <i class="bi bi-chat-heart st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">Send feedback</span>
+                    <span class="st-row-desc">What you like, what you don’t, ideas</span>
+                </span>
+                <i class="bi bi-chevron-right st-chev"></i>
+            </a>
+        </div>
+    </section>
+
     {% if current_user.is_admin() %}
     <section class="st-section">
         <div class="st-label">Admin</div>
@@ -132,7 +147,7 @@
                 <i class="bi bi-shield-lock st-row-ico"></i>
                 <span class="st-row-main">
                     <span class="st-row-title">Admin dashboard</span>
-                    <span class="st-row-desc">Users, app icon, clean-up</span>
+                    <span class="st-row-desc">Users, feedback, app icon, clean-up</span>
                 </span>
                 <i class="bi bi-chevron-right st-chev"></i>
             </a>
