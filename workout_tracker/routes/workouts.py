@@ -2294,6 +2294,69 @@ def register_workout_routes(app):
             logger.error(f"History QA failed: {e}", exc_info=True)
             return jsonify({"ok": False, "error": "Unable to answer right now."}), 500
 
+    def _active_api_key_payloads(user):
+        return [
+            {"id": key.id, "api_key": key.api_key, "account_label": key.account_label}
+            for key in (
+                Session.query(UserApiKey)
+                .filter_by(user_id=user.id, is_active=True)
+                .order_by(UserApiKey.created_at.desc())
+                .all()
+            )
+            if key.api_key
+        ]
+
+    @login_required
+    def ai_coach_api():
+        user = current_user
+        if not user.is_admin():
+            return jsonify({"ok": False, "error": "The AI coach is currently limited to admins."}), 403
+        from services import ai_coach
+
+        if not ai_coach.allow_request(user.id):
+            return jsonify({"ok": False, "error": "You're asking a lot! Give it a few minutes and try again."}), 429
+        try:
+            body = request.get_json(silent=True) or {}
+            raw_context = body.get('context') if isinstance(body.get('context'), dict) else {}
+            context = {
+                k: str(raw_context.get(k) or '').strip()[:120]
+                for k in ('page', 'exercise', 'metric', 'date')
+                if str(raw_context.get(k) or '').strip()
+            }
+            payload = ai_coach.run_coach(
+                Session,
+                user,
+                messages=body.get('messages') or [],
+                api_keys=_active_api_key_payloads(user),
+                context=context,
+            )
+            key_id = payload.pop("key_id", None)
+            if key_id:
+                key_row = Session.query(UserApiKey).filter_by(id=key_id, user_id=user.id).first()
+                if key_row:
+                    key_row.last_used_at = utc_now()
+                    Session.commit()
+            return jsonify(payload), (200 if payload.get('ok') else 400)
+        except Exception as e:
+            Session.rollback()
+            logger.error(f"AI coach request failed: {e}", exc_info=True)
+            return jsonify({"ok": False, "error": "Unable to answer right now."}), 500
+
+    @login_required
+    def ai_coach_suggestions_api():
+        user = current_user
+        if not user.is_admin():
+            return jsonify({"ok": False, "error": "The AI coach is currently limited to admins."}), 403
+        from config import Config
+        from services import ai_coach
+
+        try:
+            has_key = bool(_active_api_key_payloads(user)) or bool(getattr(Config, 'GEMINI_API_KEY', None))
+            return jsonify({"ok": True, "suggestions": ai_coach.suggestions(Session, user), "ai_enabled": has_key})
+        except Exception as e:
+            logger.error(f"AI coach suggestions failed: {e}", exc_info=True)
+            return jsonify({"ok": True, "suggestions": [], "ai_enabled": False})
+
     def _format_reco_label(category: str, day_id: int) -> str:
         cat = str(category or "").strip()
         if not cat:
@@ -3592,3 +3655,6 @@ def register_workout_routes(app):
     app.add_url_rule('/api/csrf-token', endpoint='csrf_token_api', view_func=csrf_token_api, methods=['GET'])
     app.add_url_rule('/api/offline-workouts', endpoint='upload_offline_workout', view_func=upload_offline_workout, methods=['POST'])
     app.add_url_rule('/api/history-qa', endpoint='history_qa_api', view_func=history_qa_api, methods=['POST'])
+    app.add_url_rule('/api/ai-coach', endpoint='ai_coach_api', view_func=ai_coach_api, methods=['POST'])
+    app.add_url_rule('/api/ai-coach/suggestions', endpoint='ai_coach_suggestions_api',
+                     view_func=ai_coach_suggestions_api, methods=['GET'])
