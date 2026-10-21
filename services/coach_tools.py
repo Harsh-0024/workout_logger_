@@ -22,6 +22,7 @@ from utils.dates import utc_now
 
 MAX_ROWS = 40
 PLAN_TEXT_LIMIT = 4000
+MAX_E1RM_REPS = 12  # past this, an e1RM from reps is a guess
 
 
 class ToolError(Exception):
@@ -146,8 +147,10 @@ def _log_row(log: WorkoutLog, timed: bool = False) -> Dict[str, Any]:
         row.update(top_seconds=log.top_reps, hold_score=_num(log.estimated_1rm))
     else:
         row.update(top_reps=log.top_reps, e1rm_kg=_num(log.estimated_1rm))
+        if (log.top_reps or 0) > MAX_E1RM_REPS:
+            row["e1rm_unreliable"] = True
     if log.uses_bodyweight:
-        row["includes_bodyweight"] = True
+        row["includes_bodyweight"] = True  # top_weight_kg is bodyweight + added load
     return row
 
 
@@ -212,6 +215,8 @@ def get_personal_records(db_session, user, exercise: str = "", limit: int = 10) 
     limit = _clamp(limit, 1, 30, 10)
     best: Dict[str, WorkoutLog] = {}
     for log in _logs_query(db_session, user).filter(WorkoutLog.estimated_1rm.isnot(None)).all():
+        if (log.top_reps or 0) > MAX_E1RM_REPS:
+            continue  # rep-max formulas overshoot on long sets, so these would outrank real heavy lifts
         cur = best.get(log.exercise)
         if cur is None or float(log.estimated_1rm or 0) > float(cur.estimated_1rm or 0):
             best[log.exercise] = log
@@ -223,7 +228,8 @@ def get_personal_records(db_session, user, exercise: str = "", limit: int = 10) 
     )[:limit]
     return {
         "records_by_estimated_1rm": [{"exercise": l.exercise, **_log_row(l)} for l in ranked],
-        "note": "Timed holds are left out. Rows marked includes_bodyweight count bodyweight in the load.",
+        "note": f"Timed holds and sets over {MAX_E1RM_REPS} reps are left out. On includes_bodyweight rows "
+                "top_weight_kg is bodyweight + added load.",
     }
 
 

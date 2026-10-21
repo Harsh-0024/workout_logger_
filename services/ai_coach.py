@@ -92,6 +92,9 @@ def system_prompt(user, context: Optional[Dict[str, Any]] = None) -> str:
         "- Write dates as YYYY-MM-DD so the app can link them to the workout.",
         "- When it helps, end with one concrete, specific next step. For load/rep targets use suggest_next_session "
         "rather than inventing numbers.",
+        "- Never mention tool names, field names or JSON to the user; just use what you found.",
+        "- An e1RM marked e1rm_unreliable comes from a long set (over 12 reps); don't present it as a strength record. "
+        "On includes_bodyweight rows the weight is bodyweight + added load, so say so.",
         "- Training advice should be evidence-based and conservative; for pain or injury, suggest seeing a professional.",
         "- Stay on training, nutrition-for-training and recovery. Politely decline unrelated requests.",
     ]
@@ -171,6 +174,9 @@ class _Transport:
         self.keys = keys
         self.chosen: Optional[tuple] = None
         self.skipped: List[tuple] = []
+        self.calls = 0
+        self.tokens = 0
+        self.failures: List[str] = []
 
     def skip_chosen(self) -> None:
         """Leave the current pair out for the rest of this turn (e.g. it answered with nothing)."""
@@ -197,12 +203,15 @@ class _Transport:
             if _bad_models.get(bad_key, 0) > time.time():
                 continue
             try:
+                self.calls += 1
                 data = _post(key["api_key"], model, payload)
                 self.chosen = (key, model)
+                self.tokens += int((data.get("usageMetadata") or {}).get("totalTokenCount") or 0)
                 return data, key, model
             except requests.HTTPError as e:
                 last_error = e
                 status = e.response.status_code if e.response is not None else None
+                self.failures.append(f"{model}:{status}")
                 if status == 404:
                     _bad_models[bad_key] = time.time() + _BAD_MODEL_TTL_S
                     continue
@@ -211,6 +220,7 @@ class _Transport:
                 dead_keys.add(id(key))  # 401/403 or a refusal: try the next key
             except requests.RequestException as e:
                 last_error = e
+                self.failures.append(f"{model}:{type(e).__name__}")
                 continue
         raise CoachUnavailable(_describe(last_error) if last_error else "no usable key")
 
@@ -221,6 +231,17 @@ def _candidate_parts(data: dict) -> List[Dict[str, Any]]:
         return list((cand.get("content") or {}).get("parts") or [])
     except (AttributeError, IndexError, TypeError):
         return []
+
+
+def _answer_text(parts: List[Dict[str, Any]]) -> str:
+    """The answer's text parts, minus stray leading fragments ("0", "oon") that flash-lite sometimes emits."""
+    texts = [p.get("text") or "" for p in parts if isinstance(p, dict) and not p.get("thought")]
+    while len(texts) > 1 and not re.search(r"\s", texts[0].strip()):
+        texts.pop(0)
+    text = "".join(texts).strip()
+    if not re.search(r"[A-Za-z]", text) or (len(text) < 4 and not re.search(r"\s", text)):
+        return ""  # a lone fragment; the caller asks another model
+    return text
 
 
 def _finish_reason(data: dict) -> str:
@@ -271,13 +292,15 @@ def run_coach(
     transport = _Transport(keys)
     steps: List[Dict[str, Any]] = []
     retried_empty = False
+    started_at = time.perf_counter()
+    outcome = "rules"
     try:
         for _ in range(MAX_TOOL_ROUNDS + 1):
             data, key, model = transport.generate(payload)
             parts = _candidate_parts(data)
             calls = [p["functionCall"] for p in parts if isinstance(p, dict) and isinstance(p.get("functionCall"), dict)]
             if not calls:
-                text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought")).strip()
+                text = _answer_text(parts)
                 if not text:
                     if not retried_empty:
                         # Gemini sometimes ends a turn with no text after reading tool results; ask another model.
@@ -286,6 +309,7 @@ def run_coach(
                         continue
                     reason = _finish_reason(data)
                     raise CoachUnavailable(f"empty answer ({reason or 'no reason'})")
+                outcome = f"ai:{model}"
                 return {
                     "ok": True,
                     "answer": text,
@@ -312,7 +336,10 @@ def run_coach(
                     "ok": "error" not in result,
                     "ms": int((time.perf_counter() - started) * 1000),
                 })
-                responses.append({"functionResponse": {"name": name, "response": _compact(result)}})
+                response = {"name": name, "response": _compact(result)}
+                if call.get("id"):
+                    response["id"] = call["id"]  # Gemini 3 pairs each result with its call by id
+                responses.append({"functionResponse": response})
             payload["contents"].append({"role": "user", "parts": responses})
         raise CoachUnavailable("too many tool rounds")
     except CoachUnavailable as e:
@@ -321,6 +348,13 @@ def run_coach(
     except Exception as e:
         logger.error(f"AI coach failed: {type(e).__name__}: {e}", exc_info=True)
         return _rules_answer(db_session, user, question, ctx, note="The AI hit an error, so this is the built-in answer.")
+    finally:
+        # One line per question while the beta is tested: where it went, what it cost, how long it took.
+        logger.info(
+            f"AI coach user={getattr(user, 'id', None)} outcome={outcome} calls={transport.calls} "
+            f"tokens={transport.tokens} tools={len(steps)} ms={int((time.perf_counter() - started_at) * 1000)}"
+            + (f" failed={','.join(transport.failures)}" if transport.failures else "")
+        )
 
 
 def _compact(result: Dict[str, Any], limit: int = 12000) -> Dict[str, Any]:

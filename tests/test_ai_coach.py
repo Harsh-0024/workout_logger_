@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from config import Config
 from models import Base, RepRange, User, UserRole, WorkoutLog
 from services import ai_coach, coach_tools
+from utils.dates import utc_now
 from workout_tracker import create_app
 
 
@@ -31,7 +32,8 @@ class _CoachDb(unittest.TestCase):
         self.other = User(username="someone", role=UserRole.USER, is_verified=True)
         self.db.add_all([self.user, self.other])
         self.db.commit()
-        self.today = datetime.now().replace(hour=18, minute=0, second=0, microsecond=0)
+        # The tools count days in UTC; a local "today" breaks these tests after local midnight.
+        self.today = utc_now().replace(hour=12, minute=0, second=0, microsecond=0)
         days = lambda n: self.today - timedelta(days=n)
         rows = [
             _log(self.user, days(1), "Back Squat", 120, 5, 140, "Legs"),
@@ -94,6 +96,15 @@ class TestCoachTools(_CoachDb):
         self.assertTrue(history["timed_hold"])
         self.assertEqual(history["sessions_newest_first"][0]["top_seconds"], 90)
         self.assertNotIn("e1rm_kg", history["sessions_newest_first"][0])
+
+    def test_long_sets_dont_rank_as_strength_records(self):
+        # 60 kg x 20 "estimates" 100 kg, more than the real 5-rep bench; it mustn't outrank it.
+        self.db.add(_log(self.user, self.today - timedelta(days=2), "Cable Row", 60, 20, 100, "Pull"))
+        self.db.commit()
+        ranked = coach_tools.get_personal_records(self.db, self.user)["records_by_estimated_1rm"]
+        self.assertNotIn("Cable Row", [r["exercise"] for r in ranked])
+        row = coach_tools.get_exercise_history(self.db, self.user, "cable row")["sessions_newest_first"][0]
+        self.assertTrue(row["e1rm_unreliable"])
 
     def test_trend_spots_progress_and_a_stall(self):
         squat = coach_tools.get_progress_trend(self.db, self.user, "Back Squat", days=90)
@@ -181,7 +192,7 @@ class TestCoachLoop(_CoachDb):
         def fake_post(api_key, model, payload):
             sent.append(payload)
             if len(sent) == 1:
-                return _reply({"functionCall": {"name": "get_progress_trend", "args": {"exercise": "squat back"}},
+                return _reply({"functionCall": {"name": "get_progress_trend", "args": {"exercise": "squat back"}, "id": "call_1"},
                                "thoughtSignature": "sig"})
             return _reply({"text": f"Your squat is up. Best **140 kg** on {self.iso(1)}."})
 
@@ -198,6 +209,7 @@ class TestCoachLoop(_CoachDb):
         self.assertEqual(second[1]["parts"][0]["thoughtSignature"], "sig")
         result = second[2]["parts"][0]["functionResponse"]
         self.assertEqual(result["name"], "get_progress_trend")
+        self.assertEqual(result["id"], "call_1")
         self.assertEqual(result["response"]["exercise"], "Back Squat")
         self.assertIn("Sam", sent[0]["systemInstruction"]["parts"][0]["text"])
         self.assertIn("page 'stats'", sent[0]["systemInstruction"]["parts"][0]["text"])
@@ -233,6 +245,31 @@ class TestCoachLoop(_CoachDb):
         self.assertEqual(out["source"], "ai")
         self.assertEqual(out["model"], second)
         self.assertEqual(models, [first, first, second])
+
+    def test_stray_fragments_are_dropped_or_asked_again(self):
+        self.assertEqual(ai_coach._answer_text([{"text": "oon\n"}, {"text": "Your squat is up."}]), "Your squat is up.")
+        self.assertEqual(ai_coach._answer_text([{"text": "Your squat is "}, {"text": "up."}]), "Your squat is up.")
+        self.assertEqual(ai_coach._answer_text([{"text": "oz"}]), "")
+        self.assertEqual(ai_coach._answer_text([{"text": "Fine."}]), "Fine.")
+        replies = iter([_reply({"text": "0"}), _reply({"text": "Squats, mostly."})])
+        with patch.object(ai_coach, "_post", side_effect=lambda *a: next(replies)):
+            self.assertEqual(self.ask("What do I train most?")["answer"], "Squats, mostly.")
+
+    def test_each_question_logs_its_cost(self):
+        first = ai_coach.MODEL_CANDIDATES[0]
+
+        def fake_post(api_key, model, payload):
+            if model == first:
+                raise _http_error(429)
+            return {**_reply({"text": "Fine."}), "usageMetadata": {"totalTokenCount": 321}}
+
+        with patch.object(ai_coach, "_post", side_effect=fake_post), \
+                self.assertLogs("workout_tracker", level="INFO") as logs:
+            self.ask("hi")
+        line = [l for l in logs.output if "AI coach user=" in l][-1]
+        self.assertIn(f"outcome=ai:{ai_coach.MODEL_CANDIDATES[1]}", line)
+        self.assertIn("calls=2 tokens=321", line)
+        self.assertIn(f"failed={first}:429", line)
 
     def test_an_empty_answer_is_asked_again_on_another_model(self):
         models = []
