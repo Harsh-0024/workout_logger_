@@ -68,6 +68,8 @@ class TestCoachTools(_CoachDb):
         self.assertEqual(coach_tools.resolve_exercise(self.db, self.user, "bak squat"), ["Back Squat"])
         with self.assertRaises(coach_tools.ToolError):
             coach_tools.resolve_exercise(self.db, self.user, "zercher carry")
+        with self.assertRaisesRegex(coach_tools.ToolError, "Flat Barbell Press"):
+            coach_tools.resolve_exercise(self.db, self.user, "bench press")
 
     def test_history_and_records_are_only_this_users(self):
         history = coach_tools.get_exercise_history(self.db, self.user, "Back Squat", limit=2)
@@ -80,6 +82,18 @@ class TestCoachTools(_CoachDb):
         ranked = coach_tools.get_personal_records(self.db, self.user)["records_by_estimated_1rm"]
         self.assertEqual(ranked[0]["exercise"], "Leg Press")
         self.assertNotIn(233, [r["e1rm_kg"] for r in ranked])
+
+    def test_timed_holds_are_not_ranked_as_lifts(self):
+        # 20 kg x 90 s scores like a huge "e1RM"; it is a hold, not a lift.
+        self.db.add(_log(self.user, self.today - timedelta(days=2), "Plank", 20, 90, 190, "Core"))
+        self.db.commit()
+        ranked = coach_tools.get_personal_records(self.db, self.user)["records_by_estimated_1rm"]
+        self.assertNotIn("Plank", [r["exercise"] for r in ranked])
+
+        history = coach_tools.get_exercise_history(self.db, self.user, "plank")
+        self.assertTrue(history["timed_hold"])
+        self.assertEqual(history["sessions_newest_first"][0]["top_seconds"], 90)
+        self.assertNotIn("e1rm_kg", history["sessions_newest_first"][0])
 
     def test_trend_spots_progress_and_a_stall(self):
         squat = coach_tools.get_progress_trend(self.db, self.user, "Back Squat", days=90)
@@ -201,6 +215,38 @@ class TestCoachLoop(_CoachDb):
             self.assertTrue(self.ask("hi")["ok"])
             self.assertTrue(self.ask("hi again")["ok"])
         self.assertEqual(models, [ai_coach.MODEL_CANDIDATES[0], ai_coach.MODEL_CANDIDATES[1], ai_coach.MODEL_CANDIDATES[1]])
+
+    def test_rate_limit_mid_answer_moves_to_another_model(self):
+        first, second = ai_coach.MODEL_CANDIDATES[:2]
+        models = []
+
+        def fake_post(api_key, model, payload):
+            models.append(model)
+            if len(models) == 1:
+                return _reply({"functionCall": {"name": "list_exercises", "args": {}}})
+            if model == first:
+                raise _http_error(429)
+            return _reply({"text": "You log squats most."})
+
+        with patch.object(ai_coach, "_post", side_effect=fake_post):
+            out = self.ask("What do I train most?")
+        self.assertEqual(out["source"], "ai")
+        self.assertEqual(out["model"], second)
+        self.assertEqual(models, [first, first, second])
+
+    def test_an_empty_answer_is_asked_again_on_another_model(self):
+        models = []
+
+        def fake_post(api_key, model, payload):
+            models.append(model)
+            if len(models) == 1:
+                return _reply()
+            return _reply({"text": "Squats, mostly."})
+
+        with patch.object(ai_coach, "_post", side_effect=fake_post):
+            out = self.ask("What do I train most?")
+        self.assertEqual(out["answer"], "Squats, mostly.")
+        self.assertEqual(models, list(ai_coach.MODEL_CANDIDATES[:2]))
 
     def test_falls_back_to_rules_when_gemini_is_down_or_missing(self):
         with patch.object(ai_coach, "_post", side_effect=_http_error(503)):

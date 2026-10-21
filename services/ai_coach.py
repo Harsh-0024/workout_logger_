@@ -22,7 +22,7 @@ from utils.dates import utc_now
 from utils.logger import logger
 
 BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-MODEL_CANDIDATES = ("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash")
+MODEL_CANDIDATES = ("gemini-2.5-flash", "gemini-3.5-flash-lite", "gemini-3.8-flash")
 MAX_TOOL_ROUNDS = 6
 MAX_HISTORY_TURNS = 12
 MAX_MESSAGE_CHARS = 1500
@@ -79,8 +79,12 @@ def system_prompt(user, context: Optional[Dict[str, Any]] = None) -> str:
         "How to work:",
         "- Answer from their real data. Call tools to look things up; never guess or invent numbers, dates or lifts.",
         "- Call several tools if needed (e.g. summary + trend) before answering. Resolve vague exercise names with list_exercises.",
-        "- If a tool returns an error, fix the arguments or tell the user plainly what's missing.",
-        "- e1RM means estimated one-rep max (from the logged weight and reps).",
+        "- If a tool returns an error, fix the arguments and try again. When an exercise name doesn't match, use the "
+        "closest logged name it suggests (e.g. 'bench press' -> 'Flat Barbell Press') and say which one you used.",
+        "- e1RM means estimated one-rep max (from the logged weight and reps). Timed holds (timed_hold, hold_score) "
+        "log seconds, not reps, and have no e1RM; never compare them with lifts.",
+        "- If the period they ask about has no workouts, say so in one line, then still answer from their most recent "
+        "training (e.g. widen the trend window) instead of stopping there.",
         "",
         "How to answer:",
         "- Lead with the answer in one sentence, then supporting numbers. Keep it under ~150 words unless asked for detail.",
@@ -153,42 +157,62 @@ def _post(api_key: str, model: str, payload: dict) -> dict:
     return resp.json() if resp.content else {}
 
 
+def _describe(error: Exception) -> str:
+    response = getattr(error, "response", None)
+    if response is not None:
+        return f"{type(error).__name__} {response.status_code}"
+    return type(error).__name__
+
+
 class _Transport:
-    """Sticks with the first key/model that works for the rest of the conversation turn."""
+    """Prefers the first key/model that works for the rest of the turn, moving on when it fails."""
 
     def __init__(self, keys: List[Dict[str, Any]]):
         self.keys = keys
         self.chosen: Optional[tuple] = None
+        self.skipped: List[tuple] = []
+
+    def skip_chosen(self) -> None:
+        """Leave the current pair out for the rest of this turn (e.g. it answered with nothing)."""
+        if self.chosen:
+            self.skipped.append(self.chosen)
+            self.chosen = None
+
+    def _pairs(self) -> List[tuple]:
+        pairs = [(key, model) for key in self.keys for model in _models() if (key, model) not in self.skipped]
+        if self.chosen in pairs:
+            pairs.remove(self.chosen)
+            pairs.insert(0, self.chosen)
+        return pairs
 
     def generate(self, payload: dict) -> tuple[dict, Dict[str, Any], str]:
-        if self.chosen:
-            key, model = self.chosen
-            return _post(key["api_key"], model, payload), key, model
+        # Mid-turn the chosen pair goes first; if it's rate-limited or down, any other model can
+        # pick the conversation up (Gemini accepts another model's thought signatures).
         last_error: Optional[Exception] = None
-        for key in self.keys:
-            for model in _models():
-                bad_key = f"{key.get('id') or key.get('source')}:{model}"
-                if _bad_models.get(bad_key, 0) > time.time():
+        dead_keys: set = set()
+        for key, model in self._pairs():
+            if id(key) in dead_keys:
+                continue
+            bad_key = f"{key.get('id') or key.get('source')}:{model}"
+            if _bad_models.get(bad_key, 0) > time.time():
+                continue
+            try:
+                data = _post(key["api_key"], model, payload)
+                self.chosen = (key, model)
+                return data, key, model
+            except requests.HTTPError as e:
+                last_error = e
+                status = e.response.status_code if e.response is not None else None
+                if status == 404:
+                    _bad_models[bad_key] = time.time() + _BAD_MODEL_TTL_S
                     continue
-                try:
-                    data = _post(key["api_key"], model, payload)
-                    self.chosen = (key, model)
-                    return data, key, model
-                except requests.HTTPError as e:
-                    last_error = e
-                    status = e.response.status_code if e.response is not None else None
-                    if status == 404:
-                        _bad_models[bad_key] = time.time() + _BAD_MODEL_TTL_S
-                        continue
-                    if status in (401, 403):
-                        break  # this key is bad; try the next key
-                    if status == 429 or (status and status >= 500):
-                        continue
-                    break
-                except requests.RequestException as e:
-                    last_error = e
+                if status == 429 or (status and status >= 500):
                     continue
-        raise CoachUnavailable(type(last_error).__name__ if last_error else "no usable key")
+                dead_keys.add(id(key))  # 401/403 or a refusal: try the next key
+            except requests.RequestException as e:
+                last_error = e
+                continue
+        raise CoachUnavailable(_describe(last_error) if last_error else "no usable key")
 
 
 def _candidate_parts(data: dict) -> List[Dict[str, Any]]:
@@ -246,6 +270,7 @@ def run_coach(
     }
     transport = _Transport(keys)
     steps: List[Dict[str, Any]] = []
+    retried_empty = False
     try:
         for _ in range(MAX_TOOL_ROUNDS + 1):
             data, key, model = transport.generate(payload)
@@ -254,6 +279,11 @@ def run_coach(
             if not calls:
                 text = "".join(p.get("text", "") for p in parts if isinstance(p, dict) and not p.get("thought")).strip()
                 if not text:
+                    if not retried_empty:
+                        # Gemini sometimes ends a turn with no text after reading tool results; ask another model.
+                        retried_empty = True
+                        transport.skip_chosen()
+                        continue
                     reason = _finish_reason(data)
                     raise CoachUnavailable(f"empty answer ({reason or 'no reason'})")
                 return {

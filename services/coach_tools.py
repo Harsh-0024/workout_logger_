@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sqlalchemy import func
 
 from models import WorkoutLog
+from services.logging import resolve_timed_exercise_status
 from services.retrieve import get_effective_plan_text, get_effective_rep_ranges_text
 from services.stats import _build_rep_range_map, _resolve_exercise_aliases
 from services.workout_title import classify_by_name
@@ -117,10 +118,12 @@ def resolve_exercise(db_session, user, exercise: str) -> List[str]:
     contains = [n for low, n in lowered.items() if exercise.lower() in low]
     if len(contains) == 1:
         return contains
-    close = difflib.get_close_matches(exercise.lower(), list(lowered), n=3, cutoff=0.6)
+    close = difflib.get_close_matches(exercise.lower(), list(lowered), n=3, cutoff=0.8)  # 0.6 took "bench press" for "Leg Press"
     if close:
         return [lowered[close[0]]]
-    hint = contains[:5] or [lowered[c] for c in difflib.get_close_matches(exercise.lower(), list(lowered), n=5, cutoff=0.3)]
+    words = set(exercise.lower().split())
+    sharing = sorted((n for low, n in lowered.items() if words & set(low.split())), key=len)
+    hint = contains[:5] or sharing[:5] or [lowered[c] for c in difflib.get_close_matches(exercise.lower(), list(lowered), n=5, cutoff=0.3)]
     suffix = f" Did you mean one of: {', '.join(hint)}?" if hint else " Call list_exercises to see what's logged."
     raise ToolError(f"No logged exercise matches {exercise!r}.{suffix}")
 
@@ -129,14 +132,23 @@ def _logs_query(db_session, user):
     return db_session.query(WorkoutLog).filter(WorkoutLog.user_id == user.id)
 
 
-def _log_row(log: WorkoutLog) -> Dict[str, Any]:
-    return {
-        "date": _iso(log.date),
-        "sets": _sets_text(log),
-        "top_weight_kg": _num(log.top_weight),
-        "top_reps": log.top_reps,
-        "e1rm_kg": _num(log.estimated_1rm),
-    }
+def _is_timed(db_session, user, name: str) -> bool:
+    """Holds like planks log seconds as reps, and their 'e1RM' column is a weight*sqrt(seconds) score."""
+    try:
+        return bool(resolve_timed_exercise_status(db_session, user.id, name or "", "").get("is_timed"))
+    except Exception:
+        return False
+
+
+def _log_row(log: WorkoutLog, timed: bool = False) -> Dict[str, Any]:
+    row = {"date": _iso(log.date), "sets": _sets_text(log), "top_weight_kg": _num(log.top_weight)}
+    if timed:
+        row.update(top_seconds=log.top_reps, hold_score=_num(log.estimated_1rm))
+    else:
+        row.update(top_reps=log.top_reps, e1rm_kg=_num(log.estimated_1rm))
+    if log.uses_bodyweight:
+        row["includes_bodyweight"] = True
+    return row
 
 
 # --- tools ---------------------------------------------------------------------------------
@@ -168,11 +180,13 @@ def get_exercise_history(db_session, user, exercise: str, limit: int = 12, since
         q = q.filter(WorkoutLog.date >= datetime.combine(_today() - timedelta(days=since), datetime.min.time()))
     total = q.count()
     logs = q.order_by(WorkoutLog.date.desc(), WorkoutLog.id.desc()).limit(limit).all()
+    timed = _is_timed(db_session, user, names[0])
     return {
         "exercise": names[0],
         "also_logged_as": names[1:],
+        "timed_hold": timed,
         "total_sessions": total,
-        "sessions_newest_first": [_log_row(l) for l in logs],
+        "sessions_newest_first": [_log_row(l, timed) for l in logs],
     }
 
 
@@ -185,10 +199,12 @@ def get_personal_records(db_session, user, exercise: str = "", limit: int = 10) 
         best_e1rm = max(logs, key=lambda l: (float(l.estimated_1rm or 0), l.date))
         heaviest = max(logs, key=lambda l: (float(l.top_weight or 0), int(l.top_reps or 0)))
         most_volume = max(logs, key=_volume)
+        timed = _is_timed(db_session, user, names[0])
         return {
             "exercise": names[0],
-            "best_estimated_1rm": {**_log_row(best_e1rm)},
-            "heaviest_top_set": {**_log_row(heaviest)},
+            "timed_hold": timed,
+            ("best_hold_score" if timed else "best_estimated_1rm"): _log_row(best_e1rm, timed),
+            "heaviest_top_set": _log_row(heaviest, timed),
             "most_volume_session": {"date": _iso(most_volume.date), "volume_kg": round(_volume(most_volume)), "sets": _sets_text(most_volume)},
             "sessions_logged": len(logs),
         }
@@ -199,8 +215,16 @@ def get_personal_records(db_session, user, exercise: str = "", limit: int = 10) 
         cur = best.get(log.exercise)
         if cur is None or float(log.estimated_1rm or 0) > float(cur.estimated_1rm or 0):
             best[log.exercise] = log
-    ranked = sorted(best.values(), key=lambda l: float(l.estimated_1rm or 0), reverse=True)[:limit]
-    return {"records_by_estimated_1rm": [{"exercise": l.exercise, **_log_row(l)} for l in ranked]}
+    # Timed holds have no e1RM, so they'd rank on a score in different units.
+    ranked = sorted(
+        (l for l in best.values() if not _is_timed(db_session, user, l.exercise)),
+        key=lambda l: float(l.estimated_1rm or 0),
+        reverse=True,
+    )[:limit]
+    return {
+        "records_by_estimated_1rm": [{"exercise": l.exercise, **_log_row(l)} for l in ranked],
+        "note": "Timed holds are left out. Rows marked includes_bodyweight count bodyweight in the load.",
+    }
 
 
 def get_workouts(db_session, user, start_date: str = "", end_date: str = "", limit: int = 5) -> Dict[str, Any]:
@@ -284,8 +308,9 @@ def get_progress_trend(db_session, user, exercise: str, days: int = 90) -> Dict[
     )
     if not logs:
         raise ToolError(f"No strength data logged for {names[0]}.")
+    metric = "hold_score" if _is_timed(db_session, user, names[0]) else "e1rm_kg"
 
-    # One point per day: the day's best e1RM.
+    # One point per day: the day's best e1RM (or hold score).
     per_day: Dict[date, float] = {}
     for log in logs:
         d = log.date.date()
@@ -296,7 +321,7 @@ def get_progress_trend(db_session, user, exercise: str, days: int = 90) -> Dict[
         return {
             "exercise": names[0],
             "note": f"Fewer than two sessions in the last {days} days.",
-            "last_session": {"date": all_points[-1][0].isoformat(), "e1rm_kg": round(all_points[-1][1], 1)},
+            "last_session": {"date": all_points[-1][0].isoformat(), metric: round(all_points[-1][1], 1)},
         }
 
     xs = [(d - points[0][0]).days for d, _ in points]
@@ -312,19 +337,22 @@ def get_progress_trend(db_session, user, exercise: str, days: int = 90) -> Dict[
             running_best, last_pr = v, d
     first, last = points[0], points[-1]
     change_pct = ((last[1] - first[1]) / first[1] * 100.0) if first[1] else None
-    weeks_since_pr = (_today() - last_pr).days // 7 if last_pr else None
+    # Counted to the latest session, not today, so a break from training doesn't read as a stall.
+    weeks_since_pr = (all_points[-1][0] - last_pr).days // 7 if last_pr else None
     return {
         "exercise": names[0],
+        "metric": metric,
         "window_days": days,
         "sessions_in_window": n,
-        "first": {"date": first[0].isoformat(), "e1rm_kg": round(first[1], 1)},
-        "latest": {"date": last[0].isoformat(), "e1rm_kg": round(last[1], 1)},
+        "first": {"date": first[0].isoformat(), metric: round(first[1], 1)},
+        "latest": {"date": last[0].isoformat(), metric: round(last[1], 1)},
         "change_pct": round(change_pct, 1) if change_pct is not None else None,
         "trend_kg_per_week": round(slope_per_day * 7, 2),
-        "all_time_best": {"date": last_pr.isoformat() if last_pr else None, "e1rm_kg": round(running_best, 1)},
-        "weeks_since_all_time_best": weeks_since_pr,
+        "all_time_best": {"date": last_pr.isoformat() if last_pr else None, metric: round(running_best, 1)},
+        "weeks_from_best_to_latest_session": weeks_since_pr,
+        "days_since_latest_session": (_today() - all_points[-1][0]).days,
         "looks_stalled": bool(weeks_since_pr is not None and weeks_since_pr >= 6 and n >= 4),
-        "recent_points": [{"date": d.isoformat(), "e1rm_kg": round(v, 1)} for d, v in points[-12:]],
+        "recent_points": [{"date": d.isoformat(), metric: round(v, 1)} for d, v in points[-12:]],
     }
 
 
@@ -352,11 +380,18 @@ def compare_periods(db_session, user, period_days: int = 28, exercise: str = "")
             "best_e1rm_kg": _num(max((float(l.estimated_1rm or 0) for l in sel), default=0)) or None,
         }
 
-    return {
+    out = {
         "scope": label,
         "current": summarize(cur_start, today),
         "previous": summarize(prev_start, cur_start - timedelta(days=1)),
     }
+    if not out["current"]["workout_days"]:
+        last = q.order_by(WorkoutLog.date.desc()).first()
+        if last:
+            # Coming back from a break: point the model at their last block rather than an empty window.
+            out["note"] = (f"Nothing logged in the current period; the latest workout was {_iso(last.date)}. "
+                           "For stalls or progress, use get_progress_trend with a longer window (e.g. days=180).")
+    return out
 
 
 def get_plan(db_session, user) -> Dict[str, Any]:
