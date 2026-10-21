@@ -652,6 +652,7 @@ def answer_history_question(
     context_date: Optional[str] = None,
     api_keys: Optional[List[Dict[str, Any]]] = None,
     exercise_options: Optional[List[str]] = None,
+    use_ai: bool = True,
 ) -> Dict[str, Any]:
     question = str(question or '').strip()
     if not question:
@@ -696,6 +697,9 @@ def answer_history_question(
         ex = (context_exercise or '').strip() or None
         metric = (context_metric or 'e1rm').strip()
         return _answer_explain_drop(db_session, user, target_date=ctx_date, exercise=ex, metric=metric)
+
+    if not use_ai:
+        return {"ok": False, "error": "I can only answer a few kinds of questions without AI."}
 
     # Gemini planning fallback.
     keys_to_try = []

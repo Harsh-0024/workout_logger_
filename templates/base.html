@@ -2507,28 +2507,55 @@
     </div>
 
     {% if current_user.is_authenticated and current_user.is_admin() %}
-        <div class="modal fade" id="aiAssistantModal" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered modal-lg">
+        <style>
+            #aiAssistantModal .coach-thread { background: rgba(127,127,127,0.06); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 0.9rem; height: 52vh; overflow-y: auto; scroll-behavior: smooth; }
+            #aiAssistantModal .coach-msg { display: flex; margin-bottom: 0.85rem; }
+            #aiAssistantModal .coach-msg.is-user { justify-content: flex-end; }
+            #aiAssistantModal .coach-bubble { max-width: 88%; padding: 0.65rem 0.9rem; border-radius: 14px; border: 1px solid var(--border-subtle); background: rgba(255,255,255,0.04); line-height: 1.5; overflow-wrap: anywhere; }
+            #aiAssistantModal .is-user .coach-bubble { background: var(--gold-subtle); border-color: rgba(212,175,55,0.25); white-space: pre-wrap; }
+            #aiAssistantModal .coach-bubble p { margin: 0 0 0.45rem; }
+            #aiAssistantModal .coach-bubble p:last-child, #aiAssistantModal .coach-bubble ul:last-child { margin-bottom: 0; }
+            #aiAssistantModal .coach-bubble ul { margin: 0 0 0.45rem; padding-left: 1.1rem; }
+            #aiAssistantModal .coach-bubble a { color: var(--gold-primary); text-decoration: none; border-bottom: 1px dotted var(--gold-primary); }
+            #aiAssistantModal .coach-meta { margin-top: 0.45rem; font-size: var(--fs-xs); color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+            #aiAssistantModal .coach-pill { border: 1px solid var(--border-subtle); border-radius: 999px; padding: 0.05rem 0.5rem; white-space: nowrap; }
+            #aiAssistantModal .coach-pill.is-error { border-color: rgba(220,53,69,0.5); }
+            #aiAssistantModal .coach-note { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.4rem; font-style: italic; }
+            #aiAssistantModal .coach-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+            #aiAssistantModal .coach-chip { border: 1px solid var(--border-subtle); background: transparent; color: inherit; border-radius: 999px; padding: 0.3rem 0.75rem; font-size: var(--fs-xs); text-align: left; }
+            #aiAssistantModal .coach-chip:hover, #aiAssistantModal .coach-chip:focus-visible { border-color: var(--gold-primary); color: var(--gold-primary); }
+            #aiAssistantModal .coach-empty { text-align: center; padding: 1.5rem 0.5rem; color: var(--text-muted); }
+            #aiAssistantModal .coach-empty .bi { font-size: 1.8rem; color: var(--gold-primary); }
+            #aiAssistantModal .coach-typing span { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; background: var(--text-muted); animation: coachBlink 1.2s infinite both; }
+            #aiAssistantModal .coach-typing span:nth-child(2) { animation-delay: 0.2s; }
+            #aiAssistantModal .coach-typing span:nth-child(3) { animation-delay: 0.4s; }
+            #aiAssistantModal .coach-context { font-size: var(--fs-xs); color: var(--text-muted); }
+            [data-theme="light"] #aiAssistantModal .btn-close { filter: none; }
+            #aiAssistantModal textarea { resize: none; min-height: 44px !important; height: 44px; max-height: 140px; line-height: 1.4; }
+            @keyframes coachBlink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+            @media (prefers-reduced-motion: reduce) { #aiAssistantModal .coach-typing span { animation: none; } #aiAssistantModal .coach-thread { scroll-behavior: auto; } }
+        </style>
+        <div class="modal fade" id="aiAssistantModal" tabindex="-1" aria-hidden="true" aria-labelledby="aiAssistantTitle">
+            <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
                 <div class="modal-content" style="background: var(--card-bg-solid); border: 1px solid var(--border-subtle);">
-                    <div class="modal-header border-0">
-                        <h5 class="modal-title"><i class="bi bi-stars text-gold me-2"></i>AI Assistant</h5>
-                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="text-muted mb-3" style="font-size: var(--fs-xs);">
-                            Examples:
-                            <span class="mono">When did I last hit 100kg squat?</span>
-                            <span class="mx-2">•</span>
-                            <span class="mono">Best pull day in the last 30 days</span>
-                            <span class="mx-2">•</span>
-                            <span class="mono">Why is the graph low on this day?</span>
+                    <div class="modal-header border-0 pb-1">
+                        <div>
+                            <h5 class="modal-title" id="aiAssistantTitle"><i class="bi bi-stars text-gold me-2"></i>AI Coach <span class="badge rounded-pill ms-1" style="font-size: 0.6rem; border: 1px solid var(--gold-primary); color: var(--gold-primary);">ADMIN BETA</span></h5>
+                            <div id="aiCoachContext" class="coach-context mt-1" style="display:none;"></div>
                         </div>
-                        <div id="aiAssistantMessages" class="p-3 rounded-3" style="background: rgba(0,0,0,0.18); border: 1px solid var(--border-subtle); max-height: 46vh; overflow-y: auto;"></div>
+                        <div class="d-flex align-items-center gap-2">
+                            <button type="button" id="aiCoachClear" class="btn btn-sm btn-link text-muted text-decoration-none" title="Start a new chat"><i class="bi bi-arrow-counterclockwise"></i> New</button>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                    </div>
+                    <div class="modal-body pt-2">
+                        <div id="aiAssistantMessages" class="coach-thread" role="log" aria-live="polite"></div>
                         <div id="aiAssistantError" class="text-danger mt-2" style="display:none; font-size: var(--fs-sm);"></div>
                         <div class="input-group mt-3">
-                            <input id="aiAssistantInput" type="text" class="form-control" placeholder="Ask about your history..." autocomplete="off">
-                            <button id="aiAssistantSend" type="button" class="btn btn-gold-solid">Send</button>
+                            <textarea id="aiAssistantInput" rows="1" class="form-control" placeholder="Ask your coach about your training…" autocomplete="off" maxlength="1500"></textarea>
+                            <button id="aiAssistantSend" type="button" class="btn btn-gold-solid" aria-label="Send"><i class="bi bi-send"></i></button>
                         </div>
+                        <div class="coach-context mt-2">Answers come from your logs. Enter to send, Shift+Enter for a new line.</div>
                     </div>
                 </div>
             </div>
@@ -2593,18 +2620,35 @@
                 const inputEl = document.getElementById('aiAssistantInput');
                 const sendBtn = document.getElementById('aiAssistantSend');
                 const errorEl = document.getElementById('aiAssistantError');
+                const clearBtn = document.getElementById('aiCoachClear');
+                const contextEl = document.getElementById('aiCoachContext');
                 const navBtn = document.getElementById('openAiAssistantNav');
                 const mobileBtn = document.getElementById('openAiAssistantMobile');
                 const csrfTokenMeta = document.querySelector('meta[name="csrf-token"]');
                 const csrfToken = csrfTokenMeta ? csrfTokenMeta.getAttribute('content') : null;
+                const STORAGE_KEY = 'aiCoachChat:v1';
+                const MAX_STORED = 30;
 
                 let modalInstance = null;
                 let isSending = false;
+                let suggestions = null;
+                let aiEnabled = true;
+                // [{role: 'user'|'assistant', text, steps?, links?, note?, source?}]
+                let thread = [];
+
+                const load = () => {
+                    try {
+                        const raw = window.sessionStorage.getItem(STORAGE_KEY);
+                        const parsed = raw ? JSON.parse(raw) : [];
+                        thread = Array.isArray(parsed) ? parsed.filter(m => m && typeof m.text === 'string') : [];
+                    } catch (e) { thread = []; }
+                };
+                const save = () => {
+                    try { window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(thread.slice(-MAX_STORED))); } catch (e) {}
+                };
 
                 const ensureModal = () => {
-                    if (!modalInstance) {
-                        modalInstance = new bootstrap.Modal(modalEl);
-                    }
+                    if (!modalInstance) modalInstance = new bootstrap.Modal(modalEl);
                     return modalInstance;
                 };
 
@@ -2614,166 +2658,303 @@
                             const ctx = window.getAiAssistantContext();
                             if (ctx && typeof ctx === 'object') return ctx;
                         }
-                    } catch (e) {
-                    }
+                    } catch (e) {}
                     return { page: window.location.pathname || '' };
+                };
+
+                const renderContext = () => {
+                    if (!contextEl) return;
+                    const ctx = getContext();
+                    const bits = [];
+                    if (ctx.exercise) bits.push(ctx.exercise);
+                    if (ctx.date || ctx.selected_date) bits.push(ctx.date || ctx.selected_date);
+                    contextEl.textContent = bits.length ? `Looking at: ${bits.join(' · ')}` : '';
+                    contextEl.style.display = bits.length ? 'block' : 'none';
                 };
 
                 const setError = (msg) => {
                     if (!errorEl) return;
-                    if (msg) {
-                        errorEl.textContent = msg;
-                        errorEl.style.display = 'block';
-                    } else {
-                        errorEl.textContent = '';
-                        errorEl.style.display = 'none';
+                    errorEl.textContent = msg || '';
+                    errorEl.style.display = msg ? 'block' : 'none';
+                };
+
+                const scrollToBottom = () => { if (messagesEl) messagesEl.scrollTop = messagesEl.scrollHeight; };
+
+                // Minimal, safe markdown: paragraphs, "- " bullets, **bold**, and YYYY-MM-DD dates
+                // linked to that day's workout. Everything goes in as text nodes, never innerHTML.
+                const appendInline = (parent, text) => {
+                    const re = /(\*\*[^*]+\*\*)|(\b20\d{2}-\d{2}-\d{2}\b)/g;
+                    let last = 0;
+                    let m;
+                    while ((m = re.exec(text)) !== null) {
+                        if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+                        if (m[1]) {
+                            const b = document.createElement('strong');
+                            b.textContent = m[1].slice(2, -2);
+                            parent.appendChild(b);
+                        } else {
+                            const a = document.createElement('a');
+                            a.href = `/workout/${m[2]}`;
+                            a.textContent = m[2];
+                            a.title = 'Open this workout';
+                            parent.appendChild(a);
+                        }
+                        last = re.lastIndex;
                     }
+                    if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
                 };
 
-                const scrollToBottom = () => {
-                    if (!messagesEl) return;
-                    messagesEl.scrollTop = messagesEl.scrollHeight;
+                const renderMarkdown = (container, text) => {
+                    const lines = String(text || '').replace(/\r/g, '').split('\n');
+                    let list = null;
+                    let para = null;
+                    lines.forEach((raw) => {
+                        const line = raw.trimEnd();
+                        const bullet = line.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)$/);
+                        if (bullet) {
+                            para = null;
+                            if (!list) { list = document.createElement('ul'); container.appendChild(list); }
+                            const li = document.createElement('li');
+                            appendInline(li, bullet[1]);
+                            list.appendChild(li);
+                        } else if (!line.trim()) {
+                            list = null; para = null;
+                        } else {
+                            list = null;
+                            const clean = line.replace(/^#{1,6}\s+/, '');
+                            if (!para) { para = document.createElement('p'); container.appendChild(para); }
+                            else para.appendChild(document.createElement('br'));
+                            appendInline(para, clean);
+                        }
+                    });
                 };
 
-                const addMessage = (role, text, opts) => {
-                    if (!messagesEl) return;
+                const pill = (text, isError) => {
+                    const s = document.createElement('span');
+                    s.className = 'coach-pill' + (isError ? ' is-error' : '');
+                    s.textContent = text;
+                    return s;
+                };
+
+                const renderMessage = (msg) => {
                     const wrap = document.createElement('div');
-                    wrap.className = 'mb-3';
-
+                    wrap.className = 'coach-msg' + (msg.role === 'user' ? ' is-user' : '');
                     const bubble = document.createElement('div');
-                    const isUser = role === 'user';
-                    bubble.style.maxWidth = '92%';
-                    bubble.style.padding = '0.7rem 0.9rem';
-                    bubble.style.borderRadius = '14px';
-                    bubble.style.border = '1px solid var(--border-subtle)';
-                    bubble.style.background = isUser ? 'rgba(212, 175, 55, 0.12)' : 'rgba(255,255,255,0.04)';
-                    bubble.style.marginLeft = isUser ? 'auto' : '0';
-                    bubble.style.marginRight = isUser ? '0' : 'auto';
-
-                    const content = document.createElement('div');
-                    content.style.whiteSpace = 'pre-wrap';
-                    content.textContent = String(text || '');
-                    bubble.appendChild(content);
-
-                    if (opts && opts.linkUrl) {
-                        const linkWrap = document.createElement('div');
-                        linkWrap.className = 'mt-2';
-                        const a = document.createElement('a');
-                        a.href = String(opts.linkUrl);
-                        a.className = 'text-muted text-decoration-none small hover-gold tracking-wide';
-                        a.textContent = opts.linkLabel || 'Open workout';
-                        linkWrap.appendChild(a);
-                        bubble.appendChild(linkWrap);
+                    bubble.className = 'coach-bubble';
+                    if (msg.role === 'user') {
+                        bubble.textContent = msg.text;
+                    } else {
+                        renderMarkdown(bubble, msg.text);
+                        const linked = new Set((msg.text.match(/\b20\d{2}-\d{2}-\d{2}\b/g) || []).map(d => `/workout/${d}`));
+                        const extraLinks = (msg.links || []).filter(l => l && l.url && !linked.has(l.url));
+                        const steps = Array.isArray(msg.steps) ? msg.steps : [];
+                        if (steps.length || extraLinks.length || msg.source === 'rules') {
+                            const meta = document.createElement('div');
+                            meta.className = 'coach-meta';
+                            if (steps.length) {
+                                const icon = document.createElement('i');
+                                icon.className = 'bi bi-search';
+                                icon.title = 'Data the coach looked up';
+                                meta.appendChild(icon);
+                                const seen = new Set();
+                                steps.forEach((s) => {
+                                    const detail = s.args && (s.args.exercise || s.args.query || s.args.days || s.args.period_days);
+                                    const label = detail ? `${s.label}: ${detail}` : s.label;
+                                    if (seen.has(label)) return;
+                                    seen.add(label);
+                                    meta.appendChild(pill(label, s.ok === false));
+                                });
+                            }
+                            if (msg.source === 'rules') meta.appendChild(pill('Built-in answer'));
+                            extraLinks.forEach((l) => {
+                                const a = document.createElement('a');
+                                a.href = String(l.url);
+                                a.className = 'coach-pill text-decoration-none';
+                                a.style.color = 'var(--gold-primary)';
+                                a.textContent = l.label || 'Open workout';
+                                meta.appendChild(a);
+                            });
+                            bubble.appendChild(meta);
+                        }
+                        if (msg.note) {
+                            const note = document.createElement('div');
+                            note.className = 'coach-note';
+                            note.textContent = msg.note;
+                            bubble.appendChild(note);
+                        }
                     }
-
                     wrap.appendChild(bubble);
-                    messagesEl.appendChild(wrap);
+                    return wrap;
+                };
+
+                const renderEmpty = () => {
+                    const box = document.createElement('div');
+                    box.className = 'coach-empty';
+                    const icon = document.createElement('i');
+                    icon.className = 'bi bi-stars';
+                    const title = document.createElement('div');
+                    title.className = 'mt-2 mb-1';
+                    title.style.color = 'var(--text-primary, inherit)';
+                    title.textContent = 'Your training, explained.';
+                    const sub = document.createElement('div');
+                    sub.className = 'mb-3';
+                    sub.style.fontSize = 'var(--fs-xs)';
+                    sub.textContent = aiEnabled
+                        ? 'Ask about progress, records, plateaus, volume or what to do next. The coach looks up your logs before answering.'
+                        : 'No Gemini key yet — add one in Settings → Integrations. Until then only built-in questions work (e.g. "When did I last hit 100kg squat?").';
+                    const chips = document.createElement('div');
+                    chips.className = 'coach-chips justify-content-center';
+                    (suggestions || []).forEach((q) => {
+                        const b = document.createElement('button');
+                        b.type = 'button';
+                        b.className = 'coach-chip';
+                        b.textContent = q;
+                        b.addEventListener('click', () => send(q));
+                        chips.appendChild(b);
+                    });
+                    box.append(icon, title, sub, chips);
+                    return box;
+                };
+
+                const render = (typing) => {
+                    if (!messagesEl) return;
+                    messagesEl.replaceChildren();
+                    if (!thread.length && !typing) {
+                        messagesEl.appendChild(renderEmpty());
+                        return;
+                    }
+                    thread.forEach(m => messagesEl.appendChild(renderMessage(m)));
+                    if (typing) {
+                        const wrap = document.createElement('div');
+                        wrap.className = 'coach-msg';
+                        const bubble = document.createElement('div');
+                        bubble.className = 'coach-bubble coach-typing';
+                        bubble.setAttribute('aria-label', 'Coach is thinking');
+                        bubble.innerHTML = '<span></span><span></span><span></span>';
+                        wrap.appendChild(bubble);
+                        messagesEl.appendChild(wrap);
+                    }
                     scrollToBottom();
+                };
+
+                const loadSuggestions = async () => {
+                    if (suggestions) return;
+                    suggestions = [];
+                    try {
+                        const res = await fetch('/api/ai-coach/suggestions', { credentials: 'same-origin' });
+                        const data = await res.json();
+                        if (data && Array.isArray(data.suggestions)) suggestions = data.suggestions;
+                        if (data && data.ai_enabled === false) aiEnabled = false;
+                    } catch (e) {}
+                    if (!thread.length && !isSending) render(false);
+                };
+
+                const autosize = () => {
+                    if (!inputEl) return;
+                    inputEl.style.height = 'auto';
+                    inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
                 };
 
                 const setSending = (sending) => {
                     isSending = sending;
                     if (sendBtn) sendBtn.disabled = sending;
                     if (inputEl) inputEl.disabled = sending;
-                    if (sendBtn) {
-                        if (sending) {
-                            sendBtn.dataset.originalLabel = sendBtn.dataset.originalLabel || sendBtn.textContent;
-                            sendBtn.textContent = '...';
-                        } else if (sendBtn.dataset.originalLabel) {
-                            sendBtn.textContent = sendBtn.dataset.originalLabel;
-                        }
-                    }
                 };
 
-                const renderResults = (items) => {
-                    if (!Array.isArray(items) || items.length === 0) return;
-                    const lines = items.slice(0, 6).map((it) => {
-                        if (!it || typeof it !== 'object') return null;
-                        const ex = it.exercise ? String(it.exercise) : '';
-                        const w = (it.top_weight !== undefined && it.top_weight !== null) ? String(it.top_weight) : '';
-                        const r = (it.top_reps !== undefined && it.top_reps !== null) ? String(it.top_reps) : '';
-                        const e1 = (it.estimated_1rm !== undefined && it.estimated_1rm !== null) ? Number(it.estimated_1rm).toFixed(1) : '';
-                        const dt = it.date ? String(it.date) : '';
-                        const right = [w && r ? `${w} x ${r}` : '', e1 ? `e1RM ${e1}` : ''].filter(Boolean).join(' • ');
-                        return [ex || dt, right].filter(Boolean).join(' — ');
-                    }).filter(Boolean);
-                    if (lines.length) {
-                        addMessage('assistant', lines.join('\n'));
-                    }
-                };
-
-                const send = async () => {
+                const send = async (preset) => {
                     if (isSending) return;
-                    const q = (inputEl ? inputEl.value : '').trim();
-                    if (!q) {
-                        setError('Type a question first.');
-                        return;
-                    }
+                    const q = String(preset || (inputEl ? inputEl.value : '')).trim();
+                    if (!q) { setError('Type a question first.'); return; }
                     setError('');
-                    addMessage('user', q);
-                    if (inputEl) inputEl.value = '';
+                    thread.push({ role: 'user', text: q });
+                    save();
+                    if (inputEl) { inputEl.value = ''; autosize(); }
                     setSending(true);
+                    render(true);
+                    const controller = 'AbortController' in window ? new AbortController() : null;
+                    const timer = controller ? window.setTimeout(() => controller.abort(), 90000) : null;
                     try {
                         const ctx = getContext();
                         const headers = { 'Content-Type': 'application/json' };
                         if (csrfToken) headers['X-CSRFToken'] = csrfToken;
-                        const res = await fetch('/api/history-qa', {
+                        const res = await fetch('/api/ai-coach', {
                             method: 'POST',
                             headers,
                             credentials: 'same-origin',
+                            signal: controller ? controller.signal : undefined,
                             body: JSON.stringify({
-                                question: q,
-                                exercise: ctx.exercise || '',
-                                metric: ctx.metric || 'e1rm',
-                                date: ctx.date || ctx.selected_date || '',
-                                page: ctx.page || '',
+                                messages: thread.slice(-12).map(m => ({ role: m.role, text: m.text })),
+                                context: {
+                                    page: ctx.page || window.location.pathname || '',
+                                    exercise: ctx.exercise || '',
+                                    metric: ctx.metric || '',
+                                    date: ctx.date || ctx.selected_date || '',
+                                },
                             }),
                         });
-
                         const contentType = (res.headers.get('content-type') || '').toLowerCase();
                         if (!contentType.includes('application/json')) {
-                            const text = await res.text();
-                            if (String(text || '').toLowerCase().includes('<html')) {
-                                throw new Error('Session expired. Refresh the page and try again.');
-                            }
-                            throw new Error('Unexpected response from server.');
+                            throw new Error('Session expired. Refresh the page and try again.');
                         }
-
                         const data = await res.json();
                         if (!res.ok || !data || !data.ok) {
                             throw new Error((data && data.error) ? data.error : 'Unable to answer');
                         }
-                        addMessage('assistant', String(data.answer || ''), data.workout_url ? { linkUrl: data.workout_url, linkLabel: 'Open workout' } : null);
-                        renderResults(data.results || []);
+                        thread.push({
+                            role: 'assistant',
+                            text: String(data.answer || ''),
+                            steps: data.steps || [],
+                            links: data.links || [],
+                            note: data.note || '',
+                            source: data.source || 'ai',
+                        });
+                        save();
                     } catch (e) {
-                        setError(e && e.message ? e.message : 'Unable to answer right now.');
+                        // Drop the unanswered question so a retry doesn't send it twice.
+                        const last = thread.pop();
+                        if (inputEl && last && last.role === 'user') { inputEl.value = last.text; autosize(); }
+                        save();
+                        const aborted = e && e.name === 'AbortError';
+                        setError(aborted ? 'That took too long. Try again.' : (e && e.message ? e.message : 'Unable to answer right now.'));
                     } finally {
+                        if (timer) window.clearTimeout(timer);
                         setSending(false);
+                        render(false);
+                        if (inputEl) inputEl.focus();
                     }
                 };
 
-                const open = () => {
-                    ensureModal().show();
-                };
-
+                const open = () => { ensureModal().show(); };
                 window.openAiAssistantModal = open;
 
+                load();
                 if (navBtn) navBtn.addEventListener('click', open);
                 if (mobileBtn) mobileBtn.addEventListener('click', open);
-                if (sendBtn) sendBtn.addEventListener('click', send);
+                if (sendBtn) sendBtn.addEventListener('click', () => send());
+                if (clearBtn) clearBtn.addEventListener('click', () => {
+                    if (isSending) return;
+                    thread = [];
+                    save();
+                    setError('');
+                    render(false);
+                    if (inputEl) inputEl.focus();
+                });
                 if (inputEl) {
+                    inputEl.addEventListener('input', autosize);
                     inputEl.addEventListener('keydown', (e) => {
-                        if (e.key === 'Enter') {
+                        if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                             e.preventDefault();
                             send();
                         }
                     });
                 }
+                modalEl.addEventListener('show.bs.modal', () => {
+                    renderContext();
+                    render(isSending);
+                    loadSuggestions();
+                });
                 modalEl.addEventListener('shown.bs.modal', () => {
-                    if (inputEl) {
-                        inputEl.focus();
-                        inputEl.select();
-                    }
+                    if (inputEl) inputEl.focus();
                     scrollToBottom();
                 });
             })();
