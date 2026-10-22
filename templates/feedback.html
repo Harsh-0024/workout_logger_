@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+{% block title %}Feedback - Workout Tracker{% endblock %}
+{% import '_settings_ui.html' as st %}
+{% block content %}
+{{ st.styles() }}
+<div class="st">
+    {{ st.head('Feedback', 'Tell the developer what works for you, what doesn’t, and what you’d like next. Every note is read.', url_for('user_settings'), 'Back to settings') }}
+
+    <form method="POST" action="{{ url_for('feedback') }}" id="feedbackForm" class="st-section" novalidate>
+        <input type="hidden" name="page" value="{{ from_page }}">
+
+        <div class="st-label">What is it about?</div>
+        <div class="fb-kinds" role="radiogroup" aria-label="Kind of feedback">
+            {% for key, (label, short, icon) in kinds.items() %}
+            <label class="fb-kind">
+                <input type="radio" name="kind" value="{{ key }}" {{ 'checked' if key == draft_kind or (loop.first and draft_kind not in kinds) }}>
+                <span>
+                    <i class="bi {{ icon }}"></i>
+                    <b>{{ label }}</b>
+                </span>
+            </label>
+            {% endfor %}
+        </div>
+
+        <div class="st-group fb-box">
+            <textarea
+                name="message"
+                id="feedbackMessage"
+                class="fb-text"
+                rows="6"
+                maxlength="{{ max_length }}"
+                required
+                aria-label="Your feedback"
+                placeholder="Tell us what you’d like the app to do…"
+            >{{ draft_message }}</textarea>
+            <div class="fb-bar">
+                <span class="fb-count" id="feedbackCount" aria-live="polite"></span>
+                <button type="submit" class="st-btn st-btn-primary st-btn-sm" id="feedbackSend" data-loading-text="Sending" disabled>
+                    <i class="bi bi-send"></i>Send
+                </button>
+            </div>
+        </div>
+        <p class="st-foot">Sent with your name and email, so the developer can follow up if needed.</p>
+    </form>
+
+    {% if sent %}
+    <section class="st-section">
+        <div class="st-label">
+            <span>What you’ve sent</span>
+            <span class="st-label-aside">{{ sent|length }}</span>
+        </div>
+        <div class="st-group">
+            {% for item in sent %}
+            <div class="st-row fb-sent">
+                <i class="bi {{ item.kind_icon }} st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="fb-sent-msg">{{ item.message }}</span>
+                    <span class="st-row-desc">
+                        {{ item.kind_short }}<span class="st-dot"></span>{{ item.when }}
+                    </span>
+                </span>
+                <span class="fb-state fb-state-{{ item.status }}">
+                    {%- if item.status == 'done' %}<i class="bi bi-check2-circle"></i>Done
+                    {%- elif item.status == 'seen' %}<i class="bi bi-eye"></i>Read
+                    {%- else %}<i class="bi bi-clock"></i>Sent{% endif -%}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+</div>
+
+<style>
+    .fb-kinds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .fb-kind { margin: 0; position: relative; cursor: pointer; }
+    .fb-kind > input { position: absolute; opacity: 0; pointer-events: none; }
+    .fb-kind > span {
+        display: flex; align-items: center; gap: 12px;
+        height: 100%; min-height: 60px; padding: 12px 16px;
+        border-radius: 14px;
+        border: 1px solid var(--border-subtle);
+        background: var(--card-bg-solid);
+        color: var(--text-muted);
+        transition: border-color var(--transition-fast), background var(--transition-fast), color var(--transition-fast);
+    }
+    .fb-kind > span i { flex: none; font-size: 1.15rem; color: var(--text-subtle); transition: color var(--transition-fast); }
+    .fb-kind > span b { font-size: 0.9rem; font-weight: 600; line-height: 1.3; }
+    .fb-kind:hover > span { border-color: var(--border-gold); }
+    .fb-kind > input:checked + span { border-color: var(--gold-primary); background: var(--gold-subtle); color: var(--text-primary); }
+    .fb-kind > input:checked + span i { color: var(--st-accent); }
+    .fb-kind > input:focus-visible + span { box-shadow: 0 0 0 3px var(--gold-glow); }
+
+    .fb-box:focus-within { border-color: var(--gold-primary); box-shadow: 0 0 0 3px var(--gold-subtle); }
+    .st .fb-text {
+        display: block; width: 100%;
+        min-height: 150px;
+        padding: 16px 18px;
+        border: 0; outline: 0;
+        background: transparent;
+        color: var(--text-primary);
+        font: 1rem/1.55 'Inter', system-ui, sans-serif;
+        resize: vertical;
+    }
+    .fb-text::placeholder { color: var(--text-subtle); }
+    .fb-bar {
+        display: flex; align-items: center; justify-content: space-between; gap: 12px;
+        padding: 10px 12px 10px 18px;
+        border-top: 1px solid var(--st-hair);
+    }
+    .fb-count { font-size: 0.78rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+    .fb-count.is-near { color: var(--st-warn); }
+
+    .fb-sent { align-items: flex-start; }
+    .fb-sent .st-row-ico { margin-top: 2px; }
+    .fb-sent-msg { display: block; font-size: 0.92rem; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .fb-state {
+        flex: none; display: inline-flex; align-items: center; gap: 5px;
+        margin-top: 2px;
+        font-size: 0.74rem; font-weight: 600; white-space: nowrap;
+        color: var(--text-subtle);
+    }
+    .fb-state-seen { color: var(--st-accent); }
+    .fb-state-done { color: var(--st-up); }
+
+    @media (max-width: 420px) {
+        .fb-kind > span { flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px 14px; }
+    }
+</style>
+
+<script>
+(() => {
+    const form = document.getElementById('feedbackForm');
+    const text = document.getElementById('feedbackMessage');
+    const count = document.getElementById('feedbackCount');
+    const send = document.getElementById('feedbackSend');
+    if (!form || !text) return;
+    const max = {{ max_length }};
+    const hints = {
+        like: 'What do you enjoy? It helps to know what to keep.',
+        dislike: 'What gets in your way or annoys you?',
+        improve: 'What could work better, and how?',
+        idea: 'What would you like the app to do?',
+    };
+    const update = () => {
+        const len = text.value.trim().length;
+        send.disabled = len === 0;
+        count.textContent = text.value.length > max * 0.8 ? (max - text.value.length) + ' left' : '';
+        count.classList.toggle('is-near', text.value.length > max * 0.9);
+    };
+    const syncHint = () => {
+        const picked = form.querySelector('input[name="kind"]:checked');
+        if (picked && hints[picked.value]) text.placeholder = hints[picked.value];
+    };
+    form.querySelectorAll('input[name="kind"]').forEach((r) => r.addEventListener('change', () => { syncHint(); text.focus(); }));
+    text.addEventListener('input', update);
+    syncHint();
+    update();
+})();
+</script>
+{% endblock %}

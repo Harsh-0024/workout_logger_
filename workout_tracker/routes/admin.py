@@ -6,6 +6,7 @@ from PIL import Image
 
 from services.admin import AdminError, AdminService
 from services.email_queue import email_queue
+from services.feedback import FeedbackService
 from utils.profile_images import delete_profile_image
 from utils.logger import logger
 
@@ -86,11 +87,17 @@ def register_admin_routes(app):
         try:
             users = AdminService.get_all_users()
             stats = AdminService.get_user_count()
+            try:
+                feedback_counts = FeedbackService.counts()
+            except Exception as e:
+                logger.warning(f"Could not count feedback: {e}")
+                feedback_counts = {'total': 0, 'new': 0}
 
             return render_template(
                 'admin_dashboard.html',
                 users=users,
                 stats=stats,
+                feedback_counts=feedback_counts,
             )
         except Exception as e:
             logger.error(f"Admin dashboard error: {e}", exc_info=True)
