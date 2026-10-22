@@ -97,12 +97,18 @@ class TestCoachTools(_CoachDb):
         self.assertEqual(history["sessions_newest_first"][0]["top_seconds"], 90)
         self.assertNotIn("e1rm_kg", history["sessions_newest_first"][0])
 
-    def test_long_sets_dont_rank_as_strength_records(self):
-        # 60 kg x 20 "estimates" 100 kg, more than the real 5-rep bench; it mustn't outrank it.
+    def test_long_sets_count_only_twelve_reps_when_ranking(self):
+        # 60 kg x 20 "estimates" 100 kg; counted as 12 reps it's 84, below the real 5-rep bench (99).
         self.db.add(_log(self.user, self.today - timedelta(days=2), "Cable Row", 60, 20, 100, "Pull"))
+        # Heavier and more reps is still better: 140 x 15 beats 130 x 10 even though 15 > 12.
+        self.db.add(_log(self.user, self.today - timedelta(days=4), "Lat Pulldown", 130, 10, 173, "Pull"))
+        self.db.add(_log(self.user, self.today - timedelta(days=5), "Lat Pulldown", 140, 15, 210, "Pull"))
         self.db.commit()
         ranked = coach_tools.get_personal_records(self.db, self.user)["records_by_estimated_1rm"]
-        self.assertNotIn("Cable Row", [r["exercise"] for r in ranked])
+        names = [r["exercise"] for r in ranked]
+        self.assertLess(names.index("Flat Barbell Press"), names.index("Cable Row"))
+        pulldown = ranked[names.index("Lat Pulldown")]
+        self.assertEqual((pulldown["top_weight_kg"], pulldown["ranking_e1rm_kg"]), (140, 196.0))
         row = coach_tools.get_exercise_history(self.db, self.user, "cable row")["sessions_newest_first"][0]
         self.assertTrue(row["e1rm_unreliable"])
 
