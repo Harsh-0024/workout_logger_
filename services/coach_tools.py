@@ -14,6 +14,7 @@ from typing import Any, Callable, Dict, List, Optional
 from sqlalchemy import func
 
 from models import WorkoutLog
+from services.bodyweight import effective_sets_for_log
 from services.logging import resolve_timed_exercise_status
 from services.retrieve import get_effective_plan_text, get_effective_rep_ranges_text
 from services.stats import _build_rep_range_map, _resolve_exercise_aliases
@@ -22,6 +23,7 @@ from utils.dates import utc_now
 
 MAX_ROWS = 40
 PLAN_TEXT_LIMIT = 4000
+MAX_E1RM_REPS = 12  # rep-max formulas overshoot past this, so ranking counts at most this many
 
 
 class ToolError(Exception):
@@ -132,6 +134,21 @@ def _logs_query(db_session, user):
     return db_session.query(WorkoutLog).filter(WorkoutLog.user_id == user.id)
 
 
+def _ranking_e1rm(db_session, log: WorkoutLog) -> float:
+    """Best Epley e1RM over the log's sets with reps capped at MAX_E1RM_REPS.
+
+    More weight or more reps never lowers it, but a 20-rep set can't outrank a heavy 5.
+    """
+    sets = effective_sets_for_log(db_session, log) or {}
+    best = 0.0
+    for w, r in zip(sets.get("weights") or [], sets.get("reps") or []):
+        try:
+            best = max(best, float(w) * (1 + min(int(r), MAX_E1RM_REPS) / 30))
+        except (TypeError, ValueError):
+            continue
+    return best or float(log.estimated_1rm or 0)
+
+
 def _is_timed(db_session, user, name: str) -> bool:
     """Holds like planks log seconds as reps, and their 'e1RM' column is a weight*sqrt(seconds) score."""
     try:
@@ -146,8 +163,14 @@ def _log_row(log: WorkoutLog, timed: bool = False) -> Dict[str, Any]:
         row.update(top_seconds=log.top_reps, hold_score=_num(log.estimated_1rm))
     else:
         row.update(top_reps=log.top_reps, e1rm_kg=_num(log.estimated_1rm))
+        if (log.top_reps or 0) > MAX_E1RM_REPS:
+            row["e1rm_unreliable"] = True
     if log.uses_bodyweight:
-        row["includes_bodyweight"] = True
+        row["includes_bodyweight"] = True  # top_weight_kg is bodyweight + added load
+        if log.bodyweight and log.top_weight:
+            # Spelled out: models read a bare flag as "plus bodyweight" on top of the total.
+            added = float(log.top_weight) - float(log.bodyweight)
+            row["load"] = f"{float(log.top_weight):g} kg total = {float(log.bodyweight):g} kg bodyweight + {added:g} kg added"
     return row
 
 
@@ -196,7 +219,7 @@ def get_personal_records(db_session, user, exercise: str = "", limit: int = 10) 
         logs = _logs_query(db_session, user).filter(WorkoutLog.exercise.in_(names)).all()
         if not logs:
             raise ToolError(f"Nothing logged for {exercise!r}.")
-        best_e1rm = max(logs, key=lambda l: (float(l.estimated_1rm or 0), l.date))
+        best_e1rm = max(logs, key=lambda l: (_ranking_e1rm(db_session, l), l.date))
         heaviest = max(logs, key=lambda l: (float(l.top_weight or 0), int(l.top_reps or 0)))
         most_volume = max(logs, key=_volume)
         timed = _is_timed(db_session, user, names[0])
@@ -210,20 +233,24 @@ def get_personal_records(db_session, user, exercise: str = "", limit: int = 10) 
         }
 
     limit = _clamp(limit, 1, 30, 10)
-    best: Dict[str, WorkoutLog] = {}
+    best: Dict[str, tuple] = {}
     for log in _logs_query(db_session, user).filter(WorkoutLog.estimated_1rm.isnot(None)).all():
+        score = _ranking_e1rm(db_session, log)
         cur = best.get(log.exercise)
-        if cur is None or float(log.estimated_1rm or 0) > float(cur.estimated_1rm or 0):
-            best[log.exercise] = log
+        if cur is None or score > cur[0]:
+            best[log.exercise] = (score, log)
     # Timed holds have no e1RM, so they'd rank on a score in different units.
     ranked = sorted(
-        (l for l in best.values() if not _is_timed(db_session, user, l.exercise)),
-        key=lambda l: float(l.estimated_1rm or 0),
+        (pair for pair in best.values() if not _is_timed(db_session, user, pair[1].exercise)),
+        key=lambda pair: pair[0],
         reverse=True,
     )[:limit]
     return {
-        "records_by_estimated_1rm": [{"exercise": l.exercise, **_log_row(l)} for l in ranked],
-        "note": "Timed holds are left out. Rows marked includes_bodyweight count bodyweight in the load.",
+        "records_by_estimated_1rm": [
+            {"exercise": l.exercise, **_log_row(l), "ranking_e1rm_kg": round(score, 1)} for score, l in ranked
+        ],
+        "note": f"Ranked by e1RM counting at most {MAX_E1RM_REPS} reps a set; timed holds are left out. "
+                "On includes_bodyweight rows top_weight_kg is bodyweight + added load.",
     }
 
 

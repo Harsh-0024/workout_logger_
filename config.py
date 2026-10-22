@@ -74,6 +74,10 @@ class Config:
     GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')
     # Optional: the model the admin AI coach tries first (falls back to its built-in list).
     GEMINI_COACH_MODEL = os.environ.get('GEMINI_COACH_MODEL', '')
+    # Groq (OpenAI-compatible) key for the AI coach; saved gsk_ keys in Integrations work too.
+    GROQ_API_KEY = os.environ.get('GROQ_API_KEY')
+    # Optional: the coach's model order, e.g. "groq:openai/gpt-oss-120b,gemini:gemini-2.5-flash".
+    AI_MODEL_ORDER = os.environ.get('AI_MODEL_ORDER', '')
 
     # Profile image storage (Cloudflare R2)
     R2_ACCESS_KEY_ID = os.environ.get('R2_ACCESS_KEY_ID')

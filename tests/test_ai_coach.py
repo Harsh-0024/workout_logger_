@@ -1,4 +1,5 @@
 """The admin AI coach: its data tools on a real database, and the agent loop with Gemini faked."""
+import json
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import patch
@@ -9,8 +10,9 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from config import Config
-from models import Base, RepRange, User, UserRole, WorkoutLog
+from models import Base, RepRange, User, UserApiKey, UserRole, WorkoutLog
 from services import ai_coach, coach_tools
+from utils.dates import utc_now
 from workout_tracker import create_app
 
 
@@ -31,7 +33,8 @@ class _CoachDb(unittest.TestCase):
         self.other = User(username="someone", role=UserRole.USER, is_verified=True)
         self.db.add_all([self.user, self.other])
         self.db.commit()
-        self.today = datetime.now().replace(hour=18, minute=0, second=0, microsecond=0)
+        # The tools count days in UTC; a local "today" breaks these tests after local midnight.
+        self.today = utc_now().replace(hour=12, minute=0, second=0, microsecond=0)
         days = lambda n: self.today - timedelta(days=n)
         rows = [
             _log(self.user, days(1), "Back Squat", 120, 5, 140, "Legs"),
@@ -94,6 +97,28 @@ class TestCoachTools(_CoachDb):
         self.assertTrue(history["timed_hold"])
         self.assertEqual(history["sessions_newest_first"][0]["top_seconds"], 90)
         self.assertNotIn("e1rm_kg", history["sessions_newest_first"][0])
+
+    def test_long_sets_count_only_twelve_reps_when_ranking(self):
+        # 60 kg x 20 "estimates" 100 kg; counted as 12 reps it's 84, below the real 5-rep bench (99).
+        self.db.add(_log(self.user, self.today - timedelta(days=2), "Cable Row", 60, 20, 100, "Pull"))
+        # Heavier and more reps is still better: 140 x 15 beats 130 x 10 even though 15 > 12.
+        self.db.add(_log(self.user, self.today - timedelta(days=4), "Lat Pulldown", 130, 10, 173, "Pull"))
+        self.db.add(_log(self.user, self.today - timedelta(days=5), "Lat Pulldown", 140, 15, 210, "Pull"))
+        self.db.commit()
+        ranked = coach_tools.get_personal_records(self.db, self.user)["records_by_estimated_1rm"]
+        names = [r["exercise"] for r in ranked]
+        self.assertLess(names.index("Flat Barbell Press"), names.index("Cable Row"))
+        pulldown = ranked[names.index("Lat Pulldown")]
+        self.assertEqual((pulldown["top_weight_kg"], pulldown["ranking_e1rm_kg"]), (140, 196.0))
+        row = coach_tools.get_exercise_history(self.db, self.user, "cable row")["sessions_newest_first"][0]
+        self.assertTrue(row["e1rm_unreliable"])
+
+        dips = _log(self.user, self.today - timedelta(days=6), "Dips", 135, 8, 171, "Push")
+        dips.uses_bodyweight, dips.bodyweight = True, 73
+        self.db.add(dips)
+        self.db.commit()
+        row = coach_tools.get_exercise_history(self.db, self.user, "dips")["sessions_newest_first"][0]
+        self.assertEqual(row["load"], "135 kg total = 73 kg bodyweight + 62 kg added")
 
     def test_trend_spots_progress_and_a_stall(self):
         squat = coach_tools.get_progress_trend(self.db, self.user, "Back Squat", days=90)
@@ -164,6 +189,19 @@ def _reply(*parts):
     return {"candidates": [{"content": {"role": "model", "parts": list(parts)}, "finishReason": "STOP"}]}
 
 
+def _groq_reply(content=None, tool_calls=None):
+    message = {"role": "assistant", "content": content}
+    if tool_calls:
+        message["tool_calls"] = tool_calls
+    return {"choices": [{"message": message, "finish_reason": "tool_calls" if tool_calls else "stop"}],
+            "usage": {"total_tokens": 100}}
+
+
+def _gemini_models():
+    """The Gemini part of the model order; the tests' keys are all Gemini keys."""
+    return [model for provider, model in ai_coach._model_order() if provider == "gemini"]
+
+
 def _http_error(status):
     resp = requests.Response()
     resp.status_code = status
@@ -181,7 +219,7 @@ class TestCoachLoop(_CoachDb):
         def fake_post(api_key, model, payload):
             sent.append(payload)
             if len(sent) == 1:
-                return _reply({"functionCall": {"name": "get_progress_trend", "args": {"exercise": "squat back"}},
+                return _reply({"functionCall": {"name": "get_progress_trend", "args": {"exercise": "squat back"}, "id": "call_1"},
                                "thoughtSignature": "sig"})
             return _reply({"text": f"Your squat is up. Best **140 kg** on {self.iso(1)}."})
 
@@ -198,6 +236,7 @@ class TestCoachLoop(_CoachDb):
         self.assertEqual(second[1]["parts"][0]["thoughtSignature"], "sig")
         result = second[2]["parts"][0]["functionResponse"]
         self.assertEqual(result["name"], "get_progress_trend")
+        self.assertEqual(result["id"], "call_1")
         self.assertEqual(result["response"]["exercise"], "Back Squat")
         self.assertIn("Sam", sent[0]["systemInstruction"]["parts"][0]["text"])
         self.assertIn("page 'stats'", sent[0]["systemInstruction"]["parts"][0]["text"])
@@ -207,17 +246,17 @@ class TestCoachLoop(_CoachDb):
 
         def fake_post(api_key, model, payload):
             models.append(model)
-            if model == ai_coach.MODEL_CANDIDATES[0]:
+            if model == _gemini_models()[0]:
                 raise _http_error(404)
             return _reply({"text": "Fine."})
 
         with patch.object(ai_coach, "_post", side_effect=fake_post):
             self.assertTrue(self.ask("hi")["ok"])
             self.assertTrue(self.ask("hi again")["ok"])
-        self.assertEqual(models, [ai_coach.MODEL_CANDIDATES[0], ai_coach.MODEL_CANDIDATES[1], ai_coach.MODEL_CANDIDATES[1]])
+        self.assertEqual(models, [_gemini_models()[0], _gemini_models()[1], _gemini_models()[1]])
 
     def test_rate_limit_mid_answer_moves_to_another_model(self):
-        first, second = ai_coach.MODEL_CANDIDATES[:2]
+        first, second = _gemini_models()[:2]
         models = []
 
         def fake_post(api_key, model, payload):
@@ -234,6 +273,31 @@ class TestCoachLoop(_CoachDb):
         self.assertEqual(out["model"], second)
         self.assertEqual(models, [first, first, second])
 
+    def test_stray_fragments_are_dropped_or_asked_again(self):
+        self.assertEqual(ai_coach._answer_text([{"text": "oon\n"}, {"text": "Your squat is up."}]), "Your squat is up.")
+        self.assertEqual(ai_coach._answer_text([{"text": "Your squat is "}, {"text": "up."}]), "Your squat is up.")
+        self.assertEqual(ai_coach._answer_text([{"text": "oz"}]), "")
+        self.assertEqual(ai_coach._answer_text([{"text": "Fine."}]), "Fine.")
+        replies = iter([_reply({"text": "0"}), _reply({"text": "Squats, mostly."})])
+        with patch.object(ai_coach, "_post", side_effect=lambda *a: next(replies)):
+            self.assertEqual(self.ask("What do I train most?")["answer"], "Squats, mostly.")
+
+    def test_each_question_logs_its_cost(self):
+        first = _gemini_models()[0]
+
+        def fake_post(api_key, model, payload):
+            if model == first:
+                raise _http_error(429)
+            return {**_reply({"text": "Fine."}), "usageMetadata": {"totalTokenCount": 321}}
+
+        with patch.object(ai_coach, "_post", side_effect=fake_post), \
+                self.assertLogs("workout_tracker", level="INFO") as logs:
+            self.ask("hi")
+        line = [l for l in logs.output if "AI coach user=" in l][-1]
+        self.assertIn(f"outcome=ai:{_gemini_models()[1]}", line)
+        self.assertIn("calls=2 tokens=321", line)
+        self.assertIn(f"failed={first}:429", line)
+
     def test_an_empty_answer_is_asked_again_on_another_model(self):
         models = []
 
@@ -246,7 +310,7 @@ class TestCoachLoop(_CoachDb):
         with patch.object(ai_coach, "_post", side_effect=fake_post):
             out = self.ask("What do I train most?")
         self.assertEqual(out["answer"], "Squats, mostly.")
-        self.assertEqual(models, list(ai_coach.MODEL_CANDIDATES[:2]))
+        self.assertEqual(models, list(_gemini_models()[:2]))
 
     def test_falls_back_to_rules_when_gemini_is_down_or_missing(self):
         with patch.object(ai_coach, "_post", side_effect=_http_error(503)):
@@ -259,11 +323,98 @@ class TestCoachLoop(_CoachDb):
             out = self.ask("when did I last hit 120kg back squat", api_keys=[])
             never.assert_not_called()
         self.assertEqual(out["source"], "rules")
-        self.assertIn("No Gemini key", out["note"])
+        self.assertIn("No AI key", out["note"])
 
         out = self.ask("Write me a poem", api_keys=[])
         self.assertFalse(out["ok"])
-        self.assertIn("No Gemini key", out["error"])
+        self.assertIn("No AI key", out["error"])
+
+    GROQ_KEY = {"id": 8, "api_key": "gsk_test"}
+    GEMINI_KEY = {"id": 7, "api_key": "AIza-test"}
+
+    def test_groq_goes_first_in_openai_format(self):
+        sent = []
+
+        def fake_groq(api_key, model, payload):
+            sent.append(payload)
+            if len(sent) == 1:
+                return _groq_reply(tool_calls=[{"id": "t1", "type": "function", "function": {
+                    "name": "get_progress_trend", "arguments": '{"exercise": "squat back"}'}}])
+            return _groq_reply(content="Your squat is up.")
+
+        with patch.object(ai_coach, "_post_groq", side_effect=fake_groq), patch.object(ai_coach, "_post") as gemini:
+            out = self.ask("How's my squat?", api_keys=[self.GEMINI_KEY, self.GROQ_KEY])
+            gemini.assert_not_called()
+        self.assertEqual((out["answer"], out["model"], out["key_id"]), ("Your squat is up.", "openai/gpt-oss-120b", 8))
+        first, second = sent
+        self.assertEqual(first["messages"][0]["role"], "system")
+        self.assertEqual(first["reasoning_effort"], ai_coach.GROQ_REASONING_EFFORT)
+        plan = next(t for t in first["tools"] if t["function"]["name"] == "get_plan")
+        self.assertEqual(plan["function"]["parameters"], {"type": "object", "properties": {}})
+        call, result = second["messages"][2], second["messages"][3]
+        self.assertEqual(call["tool_calls"][0]["id"], "t1")
+        self.assertEqual((result["role"], result["tool_call_id"]), ("tool", "t1"))
+        self.assertEqual(json.loads(result["content"])["exercise"], "Back Squat")
+
+    def test_groq_hands_a_question_to_gemini_mid_way(self):
+        groq_calls = []
+
+        def fake_groq(api_key, model, payload):
+            groq_calls.append(model)
+            if len(groq_calls) == 1:
+                return _groq_reply(tool_calls=[{"id": "t1", "type": "function",
+                                                "function": {"name": "list_exercises", "arguments": "{}"}}])
+            raise _http_error(429)
+
+        sent = []
+
+        def fake_gemini(api_key, model, payload):
+            sent.append(payload)
+            return _reply({"text": "You log squats most."})
+
+        with patch.object(ai_coach, "_post_groq", side_effect=fake_groq), \
+                patch.object(ai_coach, "_post", side_effect=fake_gemini):
+            out = self.ask("What do I train most?", api_keys=[self.GEMINI_KEY, self.GROQ_KEY])
+        self.assertEqual(out["model"], _gemini_models()[0])
+        model_turn, tool_turn = sent[0]["contents"][1], sent[0]["contents"][2]
+        # Gemini 3 needs a signature on calls it didn't write, and the result pairs with the call by id.
+        self.assertEqual(model_turn["parts"][0]["thoughtSignature"], ai_coach.SKIP_SIGNATURE)
+        self.assertEqual(model_turn["parts"][0]["functionCall"]["id"], "t1")
+        self.assertEqual(tool_turn["parts"][0]["functionResponse"]["id"], "t1")
+
+    def test_gemini_hands_a_question_to_groq_mid_way(self):
+        def fake_gemini(api_key, model, payload):
+            if len(payload["contents"]) == 1:
+                return _reply({"functionCall": {"name": "list_exercises", "args": {}}})  # 2.5: no call id
+            raise _http_error(503)
+
+        sent = []
+
+        def fake_groq(api_key, model, payload):
+            sent.append(payload)
+            return _groq_reply(content="Squats, mostly.")
+
+        with patch.object(ai_coach.Config, "AI_MODEL_ORDER", "gemini-2.5-flash,groq:openai/gpt-oss-120b"), \
+                patch.object(ai_coach, "_post", side_effect=fake_gemini), \
+                patch.object(ai_coach, "_post_groq", side_effect=fake_groq):
+            out = self.ask("What do I train most?", api_keys=[self.GEMINI_KEY, self.GROQ_KEY])
+        self.assertEqual(out["answer"], "Squats, mostly.")
+        call, result = sent[0]["messages"][2], sent[0]["messages"][3]
+        self.assertEqual(result["tool_call_id"], call["tool_calls"][0]["id"])
+
+    def test_a_rejected_groq_key_falls_through_to_gemini(self):
+        with patch.object(ai_coach, "_post_groq", side_effect=_http_error(401)) as groq, \
+                patch.object(ai_coach, "_post", return_value=_reply({"text": "Fine."})):
+            out = self.ask("hi", api_keys=[self.GEMINI_KEY, self.GROQ_KEY])
+        self.assertEqual(out["source"], "ai")
+        self.assertEqual(groq.call_count, 1)  # a 401 key isn't retried on its other models
+
+    def test_keys_and_model_order(self):
+        self.assertEqual(ai_coach.key_provider("gsk_abc"), "groq")
+        self.assertEqual(ai_coach.key_provider("AIzaSy"), "gemini")
+        with patch.object(ai_coach.Config, "AI_MODEL_ORDER", "gemini-2.5-flash, groq:qwen/qwen3.8-27b, nope:x"), \
+                patch.object(ai_coach.Config, "GEMINI_COACH_MODEL", ""):
+            self.assertEqual(ai_coach._model_order(), [("gemini", "gemini-2.5-flash"), ("groq", "qwen/qwen3.8-27b")])
 
     def test_history_is_cleaned(self):
         contents = ai_coach._clean_history([
@@ -272,8 +423,8 @@ class TestCoachLoop(_CoachDb):
             {"role": "assistant", "text": "c"}, {"role": "user", "text": "x" * 5000}, "junk",
         ])
         self.assertEqual([c["role"] for c in contents], ["user", "model", "user"])
-        self.assertEqual(contents[0]["parts"][0]["text"], "a\n\nb")
-        self.assertEqual(len(contents[-1]["parts"][0]["text"]), ai_coach.MAX_MESSAGE_CHARS)
+        self.assertEqual(contents[0]["text"], "a\n\nb")
+        self.assertEqual(len(contents[-1]["text"]), ai_coach.MAX_MESSAGE_CHARS)
 
     def test_rate_limit(self):
         for i in range(ai_coach.RATE_LIMIT):
@@ -324,6 +475,15 @@ class TestCoachRoutes(_CoachDb):
         page = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("aiAssistantModal", page)
 
+    def test_integrations_label_each_keys_provider(self):
+        self.db.add_all([UserApiKey(user_id=self.user_id, api_key="gsk_groq1234", account_label="Fast"),
+                         UserApiKey(user_id=self.user_id, api_key="AIza-gem5678")])
+        self.db.commit()
+        self.login(self.user_id)
+        page = self.client.get("/settings/integrations").get_data(as_text=True)
+        self.assertIn("Groq · •••• 1234", page)
+        self.assertIn("Gemini · •••• 5678", page)
+
     def test_admin_chat_round_trip(self):
         self.login(self.user_id)
         with patch.object(ai_coach, "_post", return_value=_reply({"text": "Train legs."})):
@@ -333,9 +493,9 @@ class TestCoachRoutes(_CoachDb):
             })
         # No key configured anywhere → the rules engine, which can't answer this one.
         self.assertEqual(res.status_code, 400)
-        self.assertIn("No Gemini key", res.get_json()["error"])
+        self.assertIn("No AI key", res.get_json()["error"])
 
-        with patch.object(ai_coach, "_keys", return_value=[{"id": None, "api_key": "k", "source": "env"}]), \
+        with patch.object(ai_coach, "_keys", return_value=[{"id": None, "api_key": "k", "source": "env", "provider": "gemini"}]), \
                 patch.object(ai_coach, "_post", return_value=_reply({"text": "Train legs."})):
             res = self.client.post("/api/ai-coach", json={"messages": [{"role": "user", "text": "What now?"}]})
         body = res.get_json()

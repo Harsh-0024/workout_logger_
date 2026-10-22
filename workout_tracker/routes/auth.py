@@ -1148,10 +1148,13 @@ def register_auth_routes(app, email_service):
             .order_by(UserApiKey.created_at.desc())
             .all()
         )
+        from services.ai_coach import key_provider
+
         return render_template(
             'settings_integrations.html',
             user=user,
             user_api_keys=user_api_keys,
+            key_providers={k.id: ("Groq" if key_provider(k.api_key) == "groq" else "Gemini") for k in user_api_keys},
         )
 
     @login_required

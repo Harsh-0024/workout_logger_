@@ -26,6 +26,7 @@ from services.logging import (
     resolve_target_sets_for_exercise,
     refresh_best_lift_pointers,
 )
+from services.ai_coach import key_provider
 from services.retrieve import generate_retrieve_output, get_effective_plan_text
 from parsers.workout import workout_parser
 from services.log_check import check_workout_text, public_check
@@ -2065,7 +2066,7 @@ def register_workout_routes(app):
             api_key_payloads = [
                 {"id": key.id, "api_key": key.api_key, "account_label": key.account_label}
                 for key in api_keys
-                if key.api_key
+                if key.api_key and key_provider(key.api_key) == "gemini"  # this feature only speaks Gemini
             ]
 
             fallback_warning = None
@@ -2261,7 +2262,7 @@ def register_workout_routes(app):
             api_key_payloads = [
                 {"id": key.id, "api_key": key.api_key, "account_label": key.account_label}
                 for key in api_keys
-                if key.api_key
+                if key.api_key and key_provider(key.api_key) == "gemini"  # this feature only speaks Gemini
             ]
 
             from services.history_qa import answer_history_question
@@ -2351,7 +2352,8 @@ def register_workout_routes(app):
         from services import ai_coach
 
         try:
-            has_key = bool(_active_api_key_payloads(user)) or bool(getattr(Config, 'GEMINI_API_KEY', None))
+            has_key = (bool(_active_api_key_payloads(user)) or bool(getattr(Config, 'GEMINI_API_KEY', None))
+                       or bool(getattr(Config, 'GROQ_API_KEY', None)))
             return jsonify({"ok": True, "suggestions": ai_coach.suggestions(Session, user), "ai_enabled": has_key})
         except Exception as e:
             logger.error(f"AI coach suggestions failed: {e}", exc_info=True)
