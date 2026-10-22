@@ -167,6 +167,10 @@ def _log_row(log: WorkoutLog, timed: bool = False) -> Dict[str, Any]:
             row["e1rm_unreliable"] = True
     if log.uses_bodyweight:
         row["includes_bodyweight"] = True  # top_weight_kg is bodyweight + added load
+        if log.bodyweight and log.top_weight:
+            # Spelled out: models read a bare flag as "plus bodyweight" on top of the total.
+            added = float(log.top_weight) - float(log.bodyweight)
+            row["load"] = f"{float(log.top_weight):g} kg total = {float(log.bodyweight):g} kg bodyweight + {added:g} kg added"
     return row
 
 
