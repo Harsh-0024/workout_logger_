@@ -12,7 +12,7 @@ import re
 import threading
 import time
 from collections import Counter, deque
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, Iterator, List, Optional
 
 import requests
 
@@ -38,7 +38,7 @@ GROQ_REASONING_EFFORT = "high"  # gpt-oss thinks harder before answering; worth 
 # Gemini 3 rejects a function call without a thought signature; this is its documented stand-in
 # for calls another model wrote (e.g. when a question started on Groq).
 SKIP_SIGNATURE = "skip_thought_signature_validator"
-MAX_TOOL_ROUNDS = 6
+MAX_TOOL_ROUNDS = 8  # careful answers can need several lookups; the last round must answer
 MAX_HISTORY_TURNS = 12
 MAX_MESSAGE_CHARS = 1500
 REQUEST_TIMEOUT_S = 30
@@ -60,6 +60,7 @@ TOOL_LABELS = {
     "get_workouts": "Workouts",
     "get_training_summary": "Training summary",
     "get_progress_trend": "Progress trend",
+    "review_lifts": "Lift review",
     "compare_periods": "Period comparison",
     "get_plan": "Workout plan",
     "suggest_next_session": "Next-session target",
@@ -95,7 +96,7 @@ def system_prompt(user, context: Optional[Dict[str, Any]] = None) -> str:
         "- Answer from their real data. Call tools to look things up; never guess or invent numbers, dates or lifts.",
         "- Call several tools if needed (e.g. summary + trend) before answering. Resolve vague exercise names with list_exercises.",
         "- Before answering, check you have every number the answer rests on. Look one more thing up rather than "
-        "answer vaguely.",
+        "answer vaguely, and never end by asking the user for something you could look up yourself.",
         "- If a tool returns an error, fix the arguments and try again. When an exercise name doesn't match, use the "
         "closest logged name it suggests (e.g. 'bench press' -> 'Flat Barbell Press') and say which one you used.",
         "- e1RM means estimated one-rep max (from the logged weight and reps). Timed holds (timed_hold, hold_score) "
@@ -220,7 +221,7 @@ def _post_groq(api_key: str, model: str, payload: dict) -> dict:
 # A turn is {role: user, text} | {role: model, text, calls, gemini_parts} | {role: tool, results}.
 # Calls carry an id either way; native_id says whether the model itself sent one (Gemini 2.5 doesn't).
 
-def _gemini_payload(system: str, turns: List[Dict[str, Any]]) -> dict:
+def _gemini_payload(system: str, turns: List[Dict[str, Any]], final: bool = False) -> dict:
     contents = []
     for t in turns:
         if t["role"] == "user":
@@ -246,13 +247,14 @@ def _gemini_payload(system: str, turns: List[Dict[str, Any]]) -> dict:
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": contents,
         "tools": [{"functionDeclarations": coach_tools.function_declarations()}],
-        "toolConfig": {"functionCallingConfig": {"mode": "AUTO"}},
+        # On the last round the tools stay declared (the history uses them) but can't be called.
+        "toolConfig": {"functionCallingConfig": {"mode": "NONE" if final else "AUTO"}},
         # 2.5 counts its thinking against this cap, so a tight one can cut answers short.
         "generationConfig": {"temperature": 0.4, "maxOutputTokens": 8192},
     }
 
 
-def _openai_payload(system: str, turns: List[Dict[str, Any]], model: str) -> dict:
+def _openai_payload(system: str, turns: List[Dict[str, Any]], model: str, final: bool = False) -> dict:
     messages: List[Dict[str, Any]] = [{"role": "system", "content": system}]
     for t in turns:
         if t["role"] == "user":
@@ -282,7 +284,7 @@ def _openai_payload(system: str, turns: List[Dict[str, Any]], model: str) -> dic
             }}
             for d in coach_tools.function_declarations()
         ],
-        "tool_choice": "auto",
+        "tool_choice": "none" if final else "auto",
         "temperature": 0.4,
         "max_completion_tokens": 8192,
     }
@@ -338,10 +340,10 @@ def _parse_openai(data: dict, round_no: int) -> Dict[str, Any]:
 
 
 def _call(provider: str, key: Dict[str, Any], model: str, system: str, turns: List[Dict[str, Any]],
-          round_no: int) -> Dict[str, Any]:
+          round_no: int, final: bool) -> Dict[str, Any]:
     if provider == "groq":
-        return _parse_openai(_post_groq(key["api_key"], model, _openai_payload(system, turns, model)), round_no)
-    return _parse_gemini(_post(key["api_key"], model, _gemini_payload(system, turns)), round_no)
+        return _parse_openai(_post_groq(key["api_key"], model, _openai_payload(system, turns, model, final)), round_no)
+    return _parse_gemini(_post(key["api_key"], model, _gemini_payload(system, turns, final)), round_no)
 
 
 def _describe(error: Exception) -> str:
@@ -381,7 +383,7 @@ class _Transport:
             pairs.insert(0, self.chosen)
         return pairs
 
-    def generate(self, system: str, turns: List[Dict[str, Any]], round_no: int) -> tuple:
+    def generate(self, system: str, turns: List[Dict[str, Any]], round_no: int, final: bool = False) -> tuple:
         # Mid-turn the chosen pair goes first; if it's rate-limited or down, any other model, on
         # either provider, can pick the conversation up from the shared turns.
         last_error: Optional[Exception] = None
@@ -394,7 +396,7 @@ class _Transport:
                 continue
             try:
                 self.calls += 1
-                reply = _call(provider, key, model, system, turns, round_no)
+                reply = _call(provider, key, model, system, turns, round_no, final)
                 self.chosen = (provider, model, key)
                 self.tokens += reply["tokens"]
                 return reply, key, model
@@ -451,18 +453,41 @@ def _links_for(text: str) -> List[Dict[str, str]]:
     return links[:6]
 
 
-def run_coach(
+def run_coach(db_session, user, **kwargs) -> Dict[str, Any]:
+    """Answer one question; the result is the last event of run_coach_events."""
+    result: Dict[str, Any] = {}
+    for event in run_coach_events(db_session, user, **kwargs):
+        if event["type"] == "done":
+            result = event["result"]
+    return result
+
+
+def run_coach_events(
     db_session,
     user,
     *,
     messages: List[Dict[str, Any]],
     api_keys: Optional[List[Dict[str, Any]]] = None,
     context: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+) -> Iterator[Dict[str, Any]]:
+    """{type: step, step} as each lookup finishes, then {type: done, result}.
+
+    result["usage"] holds what the answer cost (question, model calls, tokens, ms, failed models)
+    for the caller to record; it isn't meant for the client.
+    """
+    usage: Dict[str, Any] = {}
+    result = yield from _answer(db_session, user, messages, api_keys, context, usage)
+    if result.get("ok"):
+        result["usage"] = usage
+    yield {"type": "done", "result": result}
+
+
+def _answer(db_session, user, messages, api_keys, context, usage: Dict[str, Any]):
     turns = _clean_history(messages)
     if not turns or turns[-1]["role"] != "user":
         return {"ok": False, "error": "Please enter a question."}
     question = turns[-1]["text"]
+    usage["question"] = question
     ctx = context or {}
 
     keys = _keys(api_keys)
@@ -478,7 +503,11 @@ def run_coach(
     outcome = "rules"
     try:
         for round_no in range(MAX_TOOL_ROUNDS + 1):
-            reply, key, model = transport.generate(system, turns, round_no)
+            # Out of rounds (or lookups): the model must answer from what it has rather than lose it all.
+            final = round_no == MAX_TOOL_ROUNDS or len(steps) >= MAX_TOOL_ROUNDS * 4
+            reply, key, model = transport.generate(system, turns, round_no, final)
+            if final and reply["calls"]:
+                reply = {**reply, "calls": []}  # a model that calls anyway: keep whatever text it wrote
             if not reply["calls"]:
                 text = reply["text"]
                 if not text:
@@ -498,8 +527,6 @@ def run_coach(
                     "key_id": key.get("id"),
                     "source": "ai",
                 }
-            if len(steps) >= MAX_TOOL_ROUNDS * 4:
-                break
             turns.append({"role": "model", "text": reply["text"], "calls": reply["calls"],
                           "gemini_parts": reply["gemini_parts"]})
             results = []
@@ -513,6 +540,7 @@ def run_coach(
                     "ok": "error" not in result,
                     "ms": int((time.perf_counter() - started) * 1000),
                 })
+                yield {"type": "step", "step": steps[-1]}
                 results.append({"id": call["id"], "native_id": call["native_id"], "name": call["name"],
                                 "response": _compact(result)})
             turns.append({"role": "tool", "results": results})
@@ -524,6 +552,8 @@ def run_coach(
         logger.error(f"AI coach failed: {type(e).__name__}: {e}", exc_info=True)
         return _rules_answer(db_session, user, question, ctx, note="The AI hit an error, so this is the built-in answer.")
     finally:
+        usage.update(calls=transport.calls, tokens=transport.tokens, steps=steps,
+                     ms=int((time.perf_counter() - started_at) * 1000), failed=",".join(transport.failures))
         # One line per question while the beta is tested: where it went, what it cost, how long it took.
         logger.info(
             f"AI coach user={getattr(user, 'id', None)} outcome={outcome} calls={transport.calls} "

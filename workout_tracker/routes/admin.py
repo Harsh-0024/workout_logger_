@@ -105,6 +105,32 @@ def register_admin_routes(app):
             return redirect(url_for('user_dashboard', username=current_user.username))
 
     @require_admin
+    def admin_coach():
+        from models import CoachAnswer, Session
+        from services import coach_answers
+
+        show = request.args.get('show', 'all')
+        if show not in ('all', 'down', 'up', 'unrated'):
+            show = 'all'
+        limit = 100
+        ratings = [r for (r,) in Session.query(CoachAnswer.rating).all()]
+        sources = [s for (s,) in Session.query(CoachAnswer.source).all()]
+        totals = {
+            'answers': len(ratings),
+            'up': ratings.count(1),
+            'down': ratings.count(-1),
+            'rules': sources.count('rules'),
+        }
+        return render_template(
+            'admin_coach.html',
+            totals=totals,
+            models=coach_answers.model_summary(Session),
+            answers=coach_answers.recent(Session, show=show, limit=limit),
+            show=show,
+            limit=limit,
+        )
+
+    @require_admin
     def admin_delete_user():
         try:
             start = time.perf_counter()
@@ -199,6 +225,7 @@ def register_admin_routes(app):
         return redirect(url_for('admin_dashboard'))
 
     app.add_url_rule('/admin', endpoint='admin_dashboard', view_func=admin_dashboard, methods=['GET'])
+    app.add_url_rule('/admin/coach', endpoint='admin_coach', view_func=admin_coach, methods=['GET'])
     app.add_url_rule(
         '/admin/delete-user',
         endpoint='admin_delete_user',

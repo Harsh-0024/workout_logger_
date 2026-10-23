@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% import '_settings_ui.html' as st %}
+
+{% block title %}AI coach - Admin - Workout Tracker{% endblock %}
+
+{% block content %}
+{{ st.styles() }}
+<div class="st">
+    {{ st.head('AI coach', 'Every answer it gave, how it was rated, and which models do best.', url_for('admin_dashboard'), 'Back to admin') }}
+
+    <section class="st-section">
+        <div class="st-group">
+            <div class="st-nums" style="--st-cols: 4;">
+                <div class="st-num {{ '' if totals.answers else 'is-zero' }}"><b>{{ totals.answers }}</b><span>Answers</span></div>
+                <div class="st-num {{ 'is-good' if totals.up else 'is-zero' }}"><b>{{ totals.up }}</b><span>Helpful</span></div>
+                <div class="st-num {{ 'is-bad' if totals.down else 'is-zero' }}"><b>{{ totals.down }}</b><span>Not helpful</span></div>
+                <div class="st-num {{ '' if totals.rules else 'is-zero' }}"><b>{{ totals.rules }}</b><span>Built-in</span></div>
+            </div>
+        </div>
+    </section>
+
+    {% if models %}
+    <section class="st-section">
+        <div class="st-label">By model</div>
+        <div class="st-group">
+            {% for m in models %}
+            <div class="st-row">
+                <i class="bi {{ 'bi-cpu' if m.model != 'Built-in answer' else 'bi-book' }} st-row-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">{{ m.model }}</span>
+                    <span class="st-row-desc">
+                        {{ m.answers }} answer{{ '' if m.answers == 1 else 's' }}
+                        {% if m.median_s is not none %}<span class="st-dot"></span>~{{ m.median_s }}s{% endif %}
+                        {% if m.median_tokens %}<span class="st-dot"></span>~{{ '{:,}'.format(m.median_tokens) }} tokens{% endif %}
+                    </span>
+                </span>
+                <span class="ac-score">
+                    {% if m.helpful_pct is not none %}<b>{{ m.helpful_pct }}%</b> helpful <span class="ac-faint">({{ m.up }}/{{ m.up + m.down }})</span>
+                    {% else %}<span class="ac-faint">Unrated</span>{% endif %}
+                </span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="st-section">
+        <div class="st-label">
+            <span>Answers</span>
+            <span class="st-label-aside">{{ answers|length }}{% if answers|length == limit %}+{% endif %}</span>
+        </div>
+        <div class="ac-filters">
+            <form class="st-seg" method="GET" action="{{ url_for('admin_coach') }}" role="group" aria-label="Show">
+                {% for key, label in [('all', 'All'), ('down', 'Not helpful'), ('up', 'Helpful'), ('unrated', 'Unrated')] %}
+                <button type="submit" name="show" value="{{ key }}" class="{{ 'is-active' if show == key }}">{{ label }}</button>
+                {% endfor %}
+            </form>
+        </div>
+
+        {% if answers %}
+        <div class="st-group">
+            {% for a in answers %}
+            <article class="ac-item" id="answer-{{ a.id }}">
+                <div class="ac-q">{{ a.question }}</div>
+                <div class="ac-a">{{ a.answer }}</div>
+                {% if a.comment %}<div class="ac-comment"><i class="bi bi-chat-left-quote"></i>{{ a.comment }}</div>{% endif %}
+                <div class="ac-foot">
+                    {% if a.rating == 1 %}<span class="ac-rate is-up"><i class="bi bi-hand-thumbs-up-fill"></i></span>
+                    {% elif a.rating == -1 %}<span class="ac-rate is-down"><i class="bi bi-hand-thumbs-down-fill"></i></span>{% endif %}
+                    <span class="ac-meta">
+                        {{ a.created_at.strftime('%Y-%m-%d %H:%M') }}
+                        <span class="st-dot"></span>{{ a.model if a.source == 'ai' and a.model else 'Built-in answer' }}
+                        {% if a.ms %}<span class="st-dot"></span>{{ '%.1f'|format(a.ms / 1000) }}s{% endif %}
+                        {% if a.tokens %}<span class="st-dot"></span>{{ '{:,}'.format(a.tokens) }} tokens{% endif %}
+                        {% if a.steps %}<span class="st-dot"></span>{{ a.steps|map(attribute='tool')|join(', ') }}{% endif %}
+                        {% if a.failed %}<span class="st-dot"></span><span class="ac-failed" title="Tried first and failed">{{ a.failed }}</span>{% endif %}
+                    </span>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <p class="st-foot">Nothing here yet.</p>
+        {% endif %}
+    </section>
+</div>
+<style>
+    .ac-score { font-size: var(--fs-sm); white-space: nowrap; }
+    .ac-score b { color: var(--st-accent); font-weight: 600; }
+    .ac-faint { color: var(--text-subtle); }
+    .ac-filters { margin: 0 0 12px; }
+    .ac-item { padding: 18px 20px; }
+    .ac-item + .ac-item { border-top: 1px solid var(--st-hair); }
+    .ac-q { font-weight: 600; margin-bottom: 8px; }
+    .ac-a { white-space: pre-wrap; color: var(--text-secondary, inherit); font-size: var(--fs-sm); line-height: 1.55; }
+    .ac-comment { margin-top: 10px; font-size: var(--fs-sm); color: var(--text-primary, inherit); }
+    .ac-comment i { margin-right: 6px; color: var(--text-subtle); }
+    .ac-foot { display: flex; align-items: baseline; gap: 10px; margin-top: 12px; }
+    .ac-meta { color: var(--text-subtle); font-size: var(--fs-xs); }
+    .ac-rate.is-up { color: #6fcf97; }
+    .ac-rate.is-down { color: #eb5757; }
+    .ac-failed { font-family: var(--font-mono, monospace); }
+    @media (max-width: 576px) {
+        .ac-item { padding: 16px; }
+    }
+</style>
+{% endblock %}

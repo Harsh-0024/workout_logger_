@@ -6,7 +6,7 @@ import threading
 import time
 from urllib.parse import urlsplit
 
-from flask import Response, flash, jsonify, redirect, render_template, request, session, url_for
+from flask import Response, flash, jsonify, redirect, render_template, request, session, stream_with_context, url_for
 from flask_login import login_required, current_user
 from flask_wtf.csrf import generate_csrf
 from itsdangerous import URLSafeSerializer, BadSignature
@@ -2307,6 +2307,22 @@ def register_workout_routes(app):
             if key.api_key
         ]
 
+    def _coach_finish(user, payload):
+        """Record the answer for review, stamp the key's last use, and shape it for the client."""
+        from services import coach_answers
+
+        answer_id = coach_answers.record(Session, user, payload)
+        payload.pop("usage", None)
+        if answer_id:
+            payload["answer_id"] = answer_id
+        key_id = payload.pop("key_id", None)
+        if key_id:
+            key_row = Session.query(UserApiKey).filter_by(id=key_id, user_id=user.id).first()
+            if key_row:
+                key_row.last_used_at = utc_now()
+                Session.commit()
+        return payload
+
     @login_required
     def ai_coach_api():
         user = current_user
@@ -2316,32 +2332,53 @@ def register_workout_routes(app):
 
         if not ai_coach.allow_request(user.id):
             return jsonify({"ok": False, "error": "You're asking a lot! Give it a few minutes and try again."}), 429
+        body = request.get_json(silent=True) or {}
+        raw_context = body.get('context') if isinstance(body.get('context'), dict) else {}
+        context = {
+            k: str(raw_context.get(k) or '').strip()[:120]
+            for k in ('page', 'exercise', 'metric', 'date')
+            if str(raw_context.get(k) or '').strip()
+        }
+        kwargs = dict(messages=body.get('messages') or [], api_keys=_active_api_key_payloads(user), context=context)
+
+        if body.get('stream'):
+            # One JSON object per line: each lookup as it happens, then the answer, so the
+            # chat can show its progress on long, careful answers.
+            def events():
+                try:
+                    for event in ai_coach.run_coach_events(Session, user, **kwargs):
+                        if event["type"] == "step":
+                            step = event["step"]
+                            yield json.dumps({"type": "step", "label": step["label"], "args": step["args"],
+                                              "ok": step["ok"]}) + "\n"
+                        else:
+                            yield json.dumps({"type": "done", **_coach_finish(user, event["result"])}) + "\n"
+                except Exception as e:
+                    Session.rollback()
+                    logger.error(f"AI coach stream failed: {e}", exc_info=True)
+                    yield json.dumps({"type": "done", "ok": False, "error": "Unable to answer right now."}) + "\n"
+
+            return Response(stream_with_context(events()), mimetype='application/x-ndjson',
+                            headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'})
         try:
-            body = request.get_json(silent=True) or {}
-            raw_context = body.get('context') if isinstance(body.get('context'), dict) else {}
-            context = {
-                k: str(raw_context.get(k) or '').strip()[:120]
-                for k in ('page', 'exercise', 'metric', 'date')
-                if str(raw_context.get(k) or '').strip()
-            }
-            payload = ai_coach.run_coach(
-                Session,
-                user,
-                messages=body.get('messages') or [],
-                api_keys=_active_api_key_payloads(user),
-                context=context,
-            )
-            key_id = payload.pop("key_id", None)
-            if key_id:
-                key_row = Session.query(UserApiKey).filter_by(id=key_id, user_id=user.id).first()
-                if key_row:
-                    key_row.last_used_at = utc_now()
-                    Session.commit()
+            payload = _coach_finish(user, ai_coach.run_coach(Session, user, **kwargs))
             return jsonify(payload), (200 if payload.get('ok') else 400)
         except Exception as e:
             Session.rollback()
             logger.error(f"AI coach request failed: {e}", exc_info=True)
             return jsonify({"ok": False, "error": "Unable to answer right now."}), 500
+
+    @login_required
+    def ai_coach_rate_api():
+        user = current_user
+        if not user.is_admin():
+            return jsonify({"ok": False, "error": "The AI coach is currently limited to admins."}), 403
+        from services import coach_answers
+
+        body = request.get_json(silent=True) or {}
+        if not coach_answers.rate(Session, user, body.get('answer_id'), body.get('rating'), body.get('comment')):
+            return jsonify({"ok": False, "error": "That answer can't be rated."}), 400
+        return jsonify({"ok": True})
 
     @login_required
     def ai_coach_suggestions_api():
@@ -3658,5 +3695,6 @@ def register_workout_routes(app):
     app.add_url_rule('/api/offline-workouts', endpoint='upload_offline_workout', view_func=upload_offline_workout, methods=['POST'])
     app.add_url_rule('/api/history-qa', endpoint='history_qa_api', view_func=history_qa_api, methods=['POST'])
     app.add_url_rule('/api/ai-coach', endpoint='ai_coach_api', view_func=ai_coach_api, methods=['POST'])
+    app.add_url_rule('/api/ai-coach/rate', endpoint='ai_coach_rate_api', view_func=ai_coach_rate_api, methods=['POST'])
     app.add_url_rule('/api/ai-coach/suggestions', endpoint='ai_coach_suggestions_api',
                      view_func=ai_coach_suggestions_api, methods=['GET'])

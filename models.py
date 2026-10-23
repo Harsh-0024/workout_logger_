@@ -452,6 +452,31 @@ class Feedback(Base):
     user = relationship("User")
 
 
+class CoachAnswer(Base):
+    """One answer from the admin AI coach, kept so its quality can be reviewed and models compared.
+
+    `source` is 'ai' or 'rules' (the built-in fallback); `rating` is 1 (helpful), -1 (not) or None.
+    `steps` is the tools the model looked things up with, in order.
+    """
+    __tablename__ = 'coach_answers'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    source = Column(String(8), nullable=False, default='ai')
+    model = Column(String(80))
+    steps = Column(JSONType)
+    calls = Column(Integer)
+    tokens = Column(Integer)
+    ms = Column(Integer)
+    failed = Column(String(300))  # models that errored first, e.g. "gemini-2.5-flash:429"
+    rating = Column(Integer, index=True)
+    comment = Column(Text)
+    created_at = Column(DateTime, default=datetime.now, nullable=False, index=True)
+
+    user = relationship("User")
+
+
 # --- MIGRATION HELPERS ---
 def migrate_schema():
     """Add missing columns to existing database tables."""
@@ -642,6 +667,9 @@ def migrate_schema():
 
             if 'feedback' not in inspector.get_table_names():
                 Feedback.__table__.create(bind=conn, checkfirst=True)
+
+            if 'coach_answers' not in inspector.get_table_names():
+                CoachAnswer.__table__.create(bind=conn, checkfirst=True)
 
             if 'workout_logs' in inspector.get_table_names():
                 logs_columns = [col['name'] for col in inspector.get_columns('workout_logs')]
