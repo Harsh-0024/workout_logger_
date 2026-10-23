@@ -34,6 +34,14 @@
                 {% if feedback_counts.new %}<span class="ad-badge">{{ feedback_counts.new }} new</span>{% endif %}
                 <i class="bi bi-chevron-right st-chev"></i>
             </a>
+            <a href="{{ url_for('admin_coach') }}" class="st-row">
+                <i class="bi bi-stars st-row-ico ad-ico"></i>
+                <span class="st-row-main">
+                    <span class="st-row-title">AI coach</span>
+                    <span class="st-row-desc">Answers, ratings and how each model does</span>
+                </span>
+                <i class="bi bi-chevron-right st-chev"></i>
+            </a>
             <form method="POST" action="{{ url_for('admin_update_app_icon') }}" enctype="multipart/form-data" class="st-row" id="appIconForm">
                 <img id="appIconPreview" src="{{ app_icon_url('app-icon-192.png') }}" alt="App icon" class="ad-icon">
                 <span class="st-row-main">

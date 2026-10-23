@@ -307,7 +307,7 @@ def get_training_summary(db_session, user, days: int = 28) -> Dict[str, Any]:
     gaps = [(b - a).days for a, b in zip(trained_days, trained_days[1:])]
     last_any = _logs_query(db_session, user).with_entities(func.max(WorkoutLog.date)).scalar()
     weeks = days / 7.0
-    return {
+    out = {
         "window": {"from": start.isoformat(), "to": today.isoformat(), "days": days},
         "workout_days": len(trained_days),
         "workouts_per_week": round(len(trained_days) / weeks, 1),
@@ -320,6 +320,11 @@ def get_training_summary(db_session, user, days: int = 28) -> Dict[str, Any]:
             g for g in ("Chest", "Back", "Shoulders", "Biceps", "Triceps", "Legs", "Abs") if not sets_by_group.get(g)
         ],
     }
+    if not trained_days and isinstance(last_any, datetime):
+        # An empty window says nothing about balance or habits; point at the last block instead.
+        out["note"] = (f"Nothing logged in this window; the latest workout was {_iso(last_any)}. Call again with "
+                       f"days={min(365, days + (today - last_any.date()).days + 60)} to describe their recent training.")
+    return out
 
 
 def get_progress_trend(db_session, user, exercise: str, days: int = 90) -> Dict[str, Any]:
@@ -383,6 +388,49 @@ def get_progress_trend(db_session, user, exercise: str, days: int = 90) -> Dict[
     }
 
 
+def review_lifts(db_session, user, days: int = 180, limit: int = 8) -> Dict[str, Any]:
+    """Trend for each lift trained regularly in the window, so 'what's stalling?' takes one call.
+
+    At least 90 days: a stall means 6+ weeks without a new best over 4+ sessions, which a shorter
+    window can't show, so a model asking about "the last 4 weeks" still gets a real answer.
+    """
+    days = _clamp(days, 90, 3650, 180)
+    limit = _clamp(limit, 1, 15, 8)
+    since = datetime.combine(_today() - timedelta(days=days), datetime.min.time())
+    rows = (
+        db_session.query(WorkoutLog.exercise, func.count(func.distinct(func.date(WorkoutLog.date))))
+        .filter(WorkoutLog.user_id == user.id, WorkoutLog.date >= since, WorkoutLog.estimated_1rm.isnot(None))
+        .group_by(WorkoutLog.exercise)
+        .order_by(func.count(func.distinct(func.date(WorkoutLog.date))).desc())
+        .all()
+    )
+    lifts = []
+    for name, sessions in rows:
+        if len(lifts) >= limit:
+            break
+        if sessions < 3 or _is_timed(db_session, user, name):
+            continue
+        trend = get_progress_trend(db_session, user, name, days=days)
+        if "trend_kg_per_week" not in trend:
+            continue
+        lifts.append({
+            "exercise": name,
+            "sessions": trend["sessions_in_window"],
+            "first": trend["first"],
+            "latest": trend["latest"],
+            "change_pct": trend["change_pct"],
+            "trend_kg_per_week": trend["trend_kg_per_week"],
+            "all_time_best": trend["all_time_best"],
+            "weeks_from_best_to_latest_session": trend["weeks_from_best_to_latest_session"],
+            "looks_stalled": trend["looks_stalled"],
+        })
+    lifts.sort(key=lambda l: (not l["looks_stalled"], l["trend_kg_per_week"]))
+    out = {"window_days": days, "lifts_stalled_first": lifts}
+    if not lifts:
+        out["note"] = f"No lift was logged 3+ times with weights in the last {days} days; try a longer window."
+    return out
+
+
 def compare_periods(db_session, user, period_days: int = 28, exercise: str = "") -> Dict[str, Any]:
     period_days = _clamp(period_days, 7, 180, 28)
     today = _today()
@@ -417,7 +465,7 @@ def compare_periods(db_session, user, period_days: int = 28, exercise: str = "")
         if last:
             # Coming back from a break: point the model at their last block rather than an empty window.
             out["note"] = (f"Nothing logged in the current period; the latest workout was {_iso(last.date)}. "
-                           "For stalls or progress, use get_progress_trend with a longer window (e.g. days=180).")
+                           "For stalls or progress, use review_lifts (or get_progress_trend) over a longer window, e.g. days=180.")
     return out
 
 
@@ -553,6 +601,13 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "description": "Strength trend for one exercise over N days: first vs latest e1RM, % change, kg/week trend "
                        "line, all-time best and whether progress looks stalled.",
         "parameters": {"type": "object", "properties": {"exercise": _STR, "days": _INT}, "required": ["exercise"]},
+    },
+    "review_lifts": {
+        "fn": review_lifts,
+        "description": "Progress check on every lift trained regularly in the last N days (default 180, at least 90) in one "
+                       "call: per lift first/latest e1RM, % change, kg/week trend, all-time best and looks_stalled. "
+                       "Stalled lifts come first. Use it for 'what's stalling / progressing / how are my lifts'.",
+        "parameters": {"type": "object", "properties": {"days": _INT, "limit": _INT}},
     },
     "compare_periods": {
         "fn": compare_periods,

@@ -10,7 +10,7 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from config import Config
-from models import Base, RepRange, User, UserApiKey, UserRole, WorkoutLog
+from models import Base, CoachAnswer, RepRange, User, UserApiKey, UserRole, WorkoutLog
 from services import ai_coach, coach_tools
 from utils.dates import utc_now
 from workout_tracker import create_app
@@ -129,6 +129,16 @@ class TestCoachTools(_CoachDb):
         bench = coach_tools.get_progress_trend(self.db, self.user, "Flat Barbell Press", days=180)
         self.assertEqual(bench["all_time_best"]["date"], self.iso(120))
         self.assertTrue(bench["looks_stalled"])
+
+    def test_review_lifts_puts_stalls_first(self):
+        review = coach_tools.review_lifts(self.db, self.user, days=180)
+        names = [l["exercise"] for l in review["lifts_stalled_first"]]
+        # Bench's best is months old (stalled); squat is climbing; leg press has too few sessions.
+        self.assertEqual(names, ["Flat Barbell Press", "Back Squat"])
+        self.assertTrue(review["lifts_stalled_first"][0]["looks_stalled"])
+        self.assertGreater(review["lifts_stalled_first"][1]["trend_kg_per_week"], 0)
+        self.assertIn("note", coach_tools.review_lifts(self.db, self.other, days=28))
+        self.assertEqual(coach_tools.review_lifts(self.db, self.user, days=28)["window_days"], 90)
 
     def test_summary_workouts_and_comparison(self):
         summary = coach_tools.get_training_summary(self.db, self.user, days=28)
@@ -409,6 +419,39 @@ class TestCoachLoop(_CoachDb):
         self.assertEqual(out["source"], "ai")
         self.assertEqual(groq.call_count, 1)  # a 401 key isn't retried on its other models
 
+    def test_the_last_round_must_answer_from_what_it_found(self):
+        sent = []
+
+        def fake_post(api_key, model, payload):
+            sent.append(payload["toolConfig"]["functionCallingConfig"]["mode"])
+            if payload["toolConfig"]["functionCallingConfig"]["mode"] == "NONE":
+                return _reply({"text": "From everything I looked up: squats lead."})
+            return _reply({"functionCall": {"name": "list_exercises", "args": {"limit": len(sent)}}})
+
+        with patch.object(ai_coach, "_post", side_effect=fake_post):
+            out = self.ask("What do I train most?")
+        self.assertEqual(out["source"], "ai")
+        self.assertEqual(out["answer"], "From everything I looked up: squats lead.")
+        self.assertEqual(sent, ["AUTO"] * ai_coach.MAX_TOOL_ROUNDS + ["NONE"])
+        self.assertEqual(len(out["steps"]), ai_coach.MAX_TOOL_ROUNDS)
+
+    def test_answers_read_as_words_not_code(self):
+        self.assertEqual(ai_coach._plain_words("Use `suggest_next_session` before your back day."),
+                         "Use next-session target before your back day.")
+        self.assertEqual(ai_coach._plain_words("**179.9 kg** ranking e1rm"), "**179.9 kg** e1RM")
+        self.assertEqual(ai_coach._plain_words("Your plan says push."), "Your plan says push.")
+
+    def test_an_empty_summary_points_at_the_last_block(self):
+        away = User(username="away", role=UserRole.USER, is_verified=True)
+        self.db.add(away)
+        self.db.commit()
+        self.db.add(_log(away, self.today - timedelta(days=40), "Back Squat", 100, 5, 117))
+        self.db.commit()
+        summary = coach_tools.get_training_summary(self.db, away, days=28)
+        self.assertEqual(summary["workout_days"], 0)
+        self.assertIn(f"latest workout was {self.iso(40)}", summary["note"])
+        self.assertIn("days=128", summary["note"])  # 28 + 40 days away + 60
+
     def test_keys_and_model_order(self):
         self.assertEqual(ai_coach.key_provider("gsk_abc"), "groq")
         self.assertEqual(ai_coach.key_provider("AIzaSy"), "gemini")
@@ -474,6 +517,57 @@ class TestCoachRoutes(_CoachDb):
         self.assertEqual(self.client.get("/api/ai-coach/suggestions").status_code, 403)
         page = self.client.get("/", follow_redirects=True).get_data(as_text=True)
         self.assertNotIn("aiAssistantModal", page)
+
+    def test_streamed_answer_is_recorded_and_can_be_rated(self):
+        self.login(self.user_id)
+        replies = iter([
+            _reply({"functionCall": {"name": "list_exercises", "args": {}, "id": "c1"}, "thoughtSignature": "s"}),
+            _reply({"text": "You train squats most."}),
+        ])
+        with patch.object(ai_coach, "_keys", return_value=[{"id": None, "api_key": "k", "source": "env", "provider": "gemini"}]), \
+                patch.object(ai_coach, "_post", side_effect=lambda *a: next(replies)):
+            res = self.client.post("/api/ai-coach", json={"stream": True, "messages": [{"role": "user", "text": "What do I train most?"}]})
+            events = [json.loads(line) for line in res.get_data(as_text=True).splitlines() if line.strip()]
+        self.assertEqual(res.mimetype, "application/x-ndjson")
+        self.assertEqual([e["type"] for e in events], ["step", "done"])
+        self.assertEqual(events[0]["label"], "Exercise list")
+        done = events[-1]
+        self.assertEqual(done["answer"], "You train squats most.")
+        self.assertNotIn("usage", done)
+
+        fresh = lambda: self.db.query(CoachAnswer).filter_by(id=done["answer_id"]).one()
+        row = fresh()
+        self.assertEqual((row.question, row.model, row.source), ("What do I train most?", _gemini_models()[0], "ai"))
+        self.assertEqual([s["tool"] for s in row.steps], ["list_exercises"])
+        self.assertEqual(row.calls, 2)
+
+        ok = self.client.post("/api/ai-coach/rate", json={"answer_id": row.id, "rating": -1, "comment": "Too vague"})
+        self.assertEqual(ok.status_code, 200)
+        row = fresh()
+        self.assertEqual((row.rating, row.comment), (-1, "Too vague"))
+        self.client.post("/api/ai-coach/rate", json={"answer_id": row.id, "rating": 0})
+        row = fresh()
+        self.assertEqual((row.rating, row.comment), (None, None))
+        self.assertEqual(self.client.post("/api/ai-coach/rate", json={"answer_id": row.id, "rating": 5}).status_code, 400)
+
+        page = self.client.get("/admin/coach").get_data(as_text=True)
+        self.assertIn("What do I train most?", page)
+        self.assertIn(_gemini_models()[0], page)
+
+        # Someone else can't rate it (and non-admins can't rate at all).
+        self.login(self.other_id)
+        self.assertEqual(self.client.post("/api/ai-coach/rate", json={"answer_id": row.id, "rating": 1}).status_code, 403)
+
+    def test_model_summary_ranks_by_helpfulness(self):
+        from services import coach_answers
+        for model, rating, ms in [("a", 1, 4000), ("a", -1, 6000), ("b", 1, 9000), ("b", 1, 11000), ("b", None, 10000)]:
+            self.db.add(CoachAnswer(user_id=self.user_id, question="q", answer="x", model=model, rating=rating, ms=ms))
+        self.db.add(CoachAnswer(user_id=self.user_id, question="q", answer="x", source="rules"))
+        self.db.commit()
+        summary = coach_answers.model_summary(self.db)
+        self.assertEqual([r["model"] for r in summary], ["b", "a", "Built-in answer"])
+        self.assertEqual((summary[0]["helpful_pct"], summary[0]["answers"], summary[0]["median_s"]), (100, 3, 10.0))
+        self.assertEqual(summary[1]["helpful_pct"], 50)
 
     def test_integrations_label_each_keys_provider(self):
         self.db.add_all([UserApiKey(user_id=self.user_id, api_key="gsk_groq1234", account_label="Fast"),
