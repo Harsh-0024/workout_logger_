@@ -435,6 +435,23 @@ class TestCoachLoop(_CoachDb):
         self.assertEqual(sent, ["AUTO"] * ai_coach.MAX_TOOL_ROUNDS + ["NONE"])
         self.assertEqual(len(out["steps"]), ai_coach.MAX_TOOL_ROUNDS)
 
+    def test_answers_read_as_words_not_code(self):
+        self.assertEqual(ai_coach._plain_words("Use `suggest_next_session` before your back day."),
+                         "Use next-session target before your back day.")
+        self.assertEqual(ai_coach._plain_words("**179.9 kg** ranking e1rm"), "**179.9 kg** e1RM")
+        self.assertEqual(ai_coach._plain_words("Your plan says push."), "Your plan says push.")
+
+    def test_an_empty_summary_points_at_the_last_block(self):
+        away = User(username="away", role=UserRole.USER, is_verified=True)
+        self.db.add(away)
+        self.db.commit()
+        self.db.add(_log(away, self.today - timedelta(days=40), "Back Squat", 100, 5, 117))
+        self.db.commit()
+        summary = coach_tools.get_training_summary(self.db, away, days=28)
+        self.assertEqual(summary["workout_days"], 0)
+        self.assertIn(f"latest workout was {self.iso(40)}", summary["note"])
+        self.assertIn("days=128", summary["note"])  # 28 + 40 days away + 60
+
     def test_keys_and_model_order(self):
         self.assertEqual(ai_coach.key_provider("gsk_abc"), "groq")
         self.assertEqual(ai_coach.key_provider("AIzaSy"), "gemini")

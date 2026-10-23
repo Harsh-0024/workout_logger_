@@ -111,7 +111,8 @@ def system_prompt(user, context: Optional[Dict[str, Any]] = None) -> str:
         "- Write dates as YYYY-MM-DD so the app can link them to the workout.",
         "- When it helps, end with one concrete, specific next step. For load/rep targets use suggest_next_session "
         "rather than inventing numbers.",
-        "- Never mention tool names, field names or JSON to the user; just use what you found.",
+        "- Never mention tool names, field names or JSON to the user; just use what you found. Call any e1RM "
+        "just 'e1RM'.",
         "- An e1RM marked e1rm_unreliable comes from a long set (over 12 reps); say so once, briefly, not per line. "
         "Strength rankings use ranking_e1rm_kg, which counts at most 12 reps a set; quote that when ranking. "
         "On includes_bodyweight rows top_weight_kg already includes bodyweight; use the load text as given.",
@@ -434,6 +435,20 @@ def _answer_text(parts: List[Dict[str, Any]]) -> str:
     return text
 
 
+_TOOL_NAME_RE = None
+
+
+def _plain_words(text: str) -> str:
+    """Models sometimes name a tool or field despite the prompt ("use `suggest_next_session`");
+    swap those for their plain label so the answer never reads like code."""
+    global _TOOL_NAME_RE
+    if _TOOL_NAME_RE is None:
+        names = sorted(coach_tools.TOOLS, key=len, reverse=True)
+        _TOOL_NAME_RE = re.compile(r"`?\b(" + "|".join(map(re.escape, names)) + r")\b`?")
+    text = _TOOL_NAME_RE.sub(lambda m: TOOL_LABELS.get(m.group(1), m.group(1)).lower(), text)
+    return re.sub(r"\branking[ _]e1rm(?:_kg)?\b", "e1RM", text, flags=re.IGNORECASE)
+
+
 def _finish_reason(data: dict) -> str:
     try:
         return str((data.get("candidates") or [])[0].get("finishReason") or "")
@@ -518,6 +533,7 @@ def _answer(db_session, user, messages, api_keys, context, usage: Dict[str, Any]
                         continue
                     raise CoachUnavailable(f"empty answer ({reply['finish'] or 'no reason'})")
                 outcome = f"ai:{model}"
+                text = _plain_words(text)
                 return {
                     "ok": True,
                     "answer": text,
@@ -602,8 +618,8 @@ def suggestions(db_session, user) -> List[str]:
     out = ["How has my training gone over the last 4 weeks?"]
     if top:
         out.append(f"How is my {top[0]['exercise']} progressing?")
-    out.append("Which muscle groups am I neglecting?")
+    out.append("Which of my lifts are stalling?")
     if len(top) > 1:
         out.append(f"What should I aim for next time on {top[1]['exercise']}?")
-    out += ["What are my strongest lifts?", "What should I train today?"]
+    out += ["What should I train today?", "Which muscle groups am I neglecting?", "What are my strongest lifts?"]
     return out[:6]

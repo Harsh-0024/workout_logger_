@@ -307,7 +307,7 @@ def get_training_summary(db_session, user, days: int = 28) -> Dict[str, Any]:
     gaps = [(b - a).days for a, b in zip(trained_days, trained_days[1:])]
     last_any = _logs_query(db_session, user).with_entities(func.max(WorkoutLog.date)).scalar()
     weeks = days / 7.0
-    return {
+    out = {
         "window": {"from": start.isoformat(), "to": today.isoformat(), "days": days},
         "workout_days": len(trained_days),
         "workouts_per_week": round(len(trained_days) / weeks, 1),
@@ -320,6 +320,11 @@ def get_training_summary(db_session, user, days: int = 28) -> Dict[str, Any]:
             g for g in ("Chest", "Back", "Shoulders", "Biceps", "Triceps", "Legs", "Abs") if not sets_by_group.get(g)
         ],
     }
+    if not trained_days and isinstance(last_any, datetime):
+        # An empty window says nothing about balance or habits; point at the last block instead.
+        out["note"] = (f"Nothing logged in this window; the latest workout was {_iso(last_any)}. Call again with "
+                       f"days={min(365, days + (today - last_any.date()).days + 60)} to describe their recent training.")
+    return out
 
 
 def get_progress_trend(db_session, user, exercise: str, days: int = 90) -> Dict[str, Any]:
