@@ -2508,62 +2508,108 @@
 
     {% if current_user.is_authenticated and current_user.is_admin() %}
         <style>
-            #aiAssistantModal .coach-thread { background: rgba(127,127,127,0.06); border: 1px solid var(--border-subtle); border-radius: 14px; padding: 0.9rem; height: 52vh; overflow-y: auto; scroll-behavior: smooth; }
-            #aiAssistantModal .coach-msg { display: flex; margin-bottom: 0.85rem; }
-            #aiAssistantModal .coach-msg.is-user { justify-content: flex-end; }
-            #aiAssistantModal .coach-bubble { max-width: 88%; padding: 0.65rem 0.9rem; border-radius: 14px; border: 1px solid var(--border-subtle); background: rgba(255,255,255,0.04); line-height: 1.5; overflow-wrap: anywhere; }
-            #aiAssistantModal .is-user .coach-bubble { background: var(--gold-subtle); border-color: rgba(212,175,55,0.25); white-space: pre-wrap; }
-            #aiAssistantModal .coach-bubble p { margin: 0 0 0.45rem; }
+            /* One surface: header, a scrolling conversation, and the composer pinned below. */
+            #aiAssistantModal .coach-shell { display: flex; flex-direction: column; height: min(84vh, 780px); background: var(--card-bg-solid); border: 1px solid var(--border-subtle); border-radius: 22px; overflow: hidden; }
+            #aiAssistantModal .coach-head { display: flex; align-items: center; gap: 0.25rem; padding: 0.95rem 0.9rem 0.85rem 1.4rem; border-bottom: 1px solid var(--border-subtle); flex: none; }
+            #aiAssistantModal .coach-head-main { flex: 1; min-width: 0; }
+            #aiAssistantModal .coach-title { margin: 0; display: flex; align-items: center; gap: 0.5rem; font-family: 'Cormorant Garamond', 'Playfair Display', serif; font-size: 1.45rem; font-weight: 600; letter-spacing: 0.01em; color: var(--text-primary); }
+            #aiAssistantModal .coach-title .bi { color: var(--gold-primary); font-size: 1.05rem; }
+            #aiAssistantModal .coach-beta { font-family: 'Inter', sans-serif; font-size: 0.6rem; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold-primary); opacity: 0.85; margin-left: 0.15rem; transform: translateY(1px); }
+            #aiAssistantModal .coach-context { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.15rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            #aiAssistantModal .coach-head-btn { flex: none; width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 12px; background: transparent; color: var(--text-muted); font-size: 1.05rem; }
+            #aiAssistantModal .coach-head-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--gold-primary); }
+
+            #aiAssistantModal .coach-thread { position: relative; flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1.5rem 1.4rem 0.75rem; scroll-behavior: smooth; display: flex; flex-direction: column; }
+            #aiAssistantModal .coach-msg { display: flex; margin-bottom: 1.5rem; }
+            #aiAssistantModal .coach-msg.is-user { justify-content: flex-end; margin-bottom: 1.1rem; }
+            #aiAssistantModal .coach-bubble { line-height: 1.6; overflow-wrap: anywhere; color: var(--text-primary); min-width: 0; }
+            /* The coach's words read as text, not as a card; only the question sits in a bubble. */
+            #aiAssistantModal .coach-msg:not(.is-user) .coach-bubble { width: 100%; }
+            #aiAssistantModal .is-user .coach-bubble { max-width: 82%; padding: 0.6rem 0.95rem; border-radius: 18px 18px 6px 18px; background: var(--gold-subtle); border: 1px solid rgba(212,175,55,0.22); white-space: pre-wrap; }
+            #aiAssistantModal .coach-bubble p { margin: 0 0 0.6rem; }
+            #aiAssistantModal .coach-bubble ul { margin: 0 0 0.6rem; padding-left: 1.15rem; }
+            #aiAssistantModal .coach-bubble li { margin-bottom: 0.3rem; padding-left: 0.1rem; }
+            #aiAssistantModal .coach-bubble li::marker { color: var(--gold-primary); }
             #aiAssistantModal .coach-bubble p:last-child, #aiAssistantModal .coach-bubble ul:last-child { margin-bottom: 0; }
-            #aiAssistantModal .coach-bubble ul { margin: 0 0 0.45rem; padding-left: 1.1rem; }
-            #aiAssistantModal .coach-bubble a { color: var(--gold-primary); text-decoration: none; border-bottom: 1px dotted var(--gold-primary); }
-            #aiAssistantModal .coach-meta { margin-top: 0.45rem; font-size: var(--fs-xs); color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
-            #aiAssistantModal .coach-pill { border: 1px solid var(--border-subtle); border-radius: 999px; padding: 0.05rem 0.5rem; white-space: nowrap; }
+            #aiAssistantModal .coach-bubble strong { font-weight: 600; }
+            /* Dates link to that day's workout; quiet in the text, gold when pointed at. */
+            #aiAssistantModal .coach-bubble a { color: inherit; text-decoration: none; border-bottom: 1px dotted rgba(212,175,55,0.6); }
+
+            #aiAssistantModal .coach-foot { display: flex; align-items: center; gap: 0.75rem; margin-top: 0.75rem; }
+            #aiAssistantModal .coach-foot .coach-meta { margin-top: 0; flex: 1; min-width: 0; }
+            #aiAssistantModal .coach-meta { margin-top: 0.75rem; font-size: var(--fs-xs); color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 0.35rem; align-items: center; }
+            #aiAssistantModal .coach-pill { border: 1px solid var(--border-subtle); border-radius: 999px; padding: 0.1rem 0.55rem; white-space: nowrap; }
             #aiAssistantModal .coach-pill.is-error { border-color: rgba(220,53,69,0.5); }
-            #aiAssistantModal .coach-note { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.4rem; font-style: italic; }
-            #aiAssistantModal .coach-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
-            #aiAssistantModal .coach-chip { border: 1px solid var(--border-subtle); background: transparent; color: inherit; border-radius: 999px; padding: 0.3rem 0.75rem; font-size: var(--fs-xs); text-align: left; }
-            #aiAssistantModal .coach-chip:hover, #aiAssistantModal .coach-chip:focus-visible { border-color: var(--gold-primary); color: var(--gold-primary); }
-            #aiAssistantModal .coach-empty { text-align: center; padding: 1.5rem 0.5rem; color: var(--text-muted); }
-            #aiAssistantModal .coach-empty .bi { font-size: 1.8rem; color: var(--gold-primary); }
-            #aiAssistantModal .coach-dots span { display: inline-block; width: 6px; height: 6px; margin-right: 3px; border-radius: 50%; background: var(--text-muted); animation: coachBlink 1.2s infinite both; }
+            #aiAssistantModal .coach-note { font-size: var(--fs-xs); color: var(--text-muted); margin-top: 0.5rem; font-style: italic; }
+            #aiAssistantModal .coach-rate { display: flex; gap: 0.1rem; margin-left: auto; flex: none; }
+            #aiAssistantModal .coach-rate button { border: 0; background: transparent; color: var(--text-muted); opacity: 0.6; width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; border-radius: 10px; }
+            #aiAssistantModal .coach-rate button.is-on { opacity: 1; color: var(--gold-primary); }
+            #aiAssistantModal .coach-rate button:focus-visible { opacity: 1; outline: none; box-shadow: 0 0 0 2px var(--gold-primary); }
+            #aiAssistantModal .coach-why { margin-top: 0.5rem; max-width: 420px; margin-left: auto; }
+            #aiAssistantModal .coach-why input { width: 100%; border: 1px solid var(--border-subtle); background: transparent; color: inherit; border-radius: 12px; padding: 0.5rem 0.8rem; font-size: var(--fs-sm); font-family: inherit; }
+            #aiAssistantModal .coach-why input:focus { outline: none; border-color: var(--gold-primary); }
+
+            #aiAssistantModal .coach-empty { margin: auto 0; text-align: center; padding: 0.5rem 0 1rem; color: var(--text-muted); }
+            #aiAssistantModal .coach-empty .bi-stars { font-size: 1.7rem; color: var(--gold-primary); }
+            #aiAssistantModal .coach-empty-title { font-family: 'Cormorant Garamond', 'Playfair Display', serif; font-size: 1.6rem; font-weight: 600; color: var(--text-primary); margin: 0.4rem 0 0.35rem; }
+            #aiAssistantModal .coach-empty-sub { font-size: var(--fs-sm); max-width: 400px; margin: 0 auto 1.4rem; line-height: 1.55; }
+            #aiAssistantModal .coach-chips { display: flex; flex-direction: column; gap: 0.5rem; max-width: 440px; margin: 0 auto; }
+            #aiAssistantModal .coach-chip { display: flex; align-items: center; gap: 0.75rem; width: 100%; border: 1px solid var(--border-subtle); background: transparent; color: var(--text-primary); border-radius: 14px; padding: 0.7rem 0.95rem; font-size: var(--fs-sm); text-align: left; line-height: 1.4; }
+            #aiAssistantModal .coach-chip .bi { color: var(--text-muted); font-size: 0.8rem; margin-left: auto; flex: none; }
+            #aiAssistantModal .coach-chip:focus-visible { outline: none; border-color: var(--gold-primary); }
+
+            #aiAssistantModal .coach-dots { display: flex; align-items: center; height: 1.6rem; }
+            #aiAssistantModal .coach-status { margin-left: 0.45rem; font-size: var(--fs-sm); color: var(--text-muted); }
+            #aiAssistantModal .coach-dots span { display: inline-block; width: 6px; height: 6px; margin-right: 4px; border-radius: 50%; background: var(--gold-primary); animation: coachBlink 1.2s infinite both; }
             #aiAssistantModal .coach-dots span:nth-child(2) { animation-delay: 0.2s; }
             #aiAssistantModal .coach-dots span:nth-child(3) { animation-delay: 0.4s; }
-            #aiAssistantModal .coach-typing .coach-meta { margin-top: 0.55rem; }
-            #aiAssistantModal .coach-rate { display: flex; justify-content: flex-end; gap: 0.15rem; margin-top: 0.35rem; }
-            #aiAssistantModal .coach-rate button { border: 0; background: transparent; color: var(--text-muted); opacity: 0.55; padding: 0.15rem 0.35rem; font-size: 0.85rem; line-height: 1; border-radius: 6px; }
-            #aiAssistantModal .coach-rate button:hover, #aiAssistantModal .coach-rate button:focus-visible { opacity: 1; }
-            #aiAssistantModal .coach-rate button.is-on { opacity: 1; color: var(--gold-primary); }
-            #aiAssistantModal .coach-why { margin-top: 0.4rem; }
-            #aiAssistantModal .coach-why input { width: 100%; border: 1px solid var(--border-subtle); background: transparent; color: inherit; border-radius: 8px; padding: 0.35rem 0.6rem; font-size: var(--fs-xs); }
-            #aiAssistantModal .coach-why input:focus { outline: none; border-color: var(--gold-primary); }
-            #aiAssistantModal .coach-context { font-size: var(--fs-xs); color: var(--text-muted); }
-            [data-theme="light"] #aiAssistantModal .btn-close { filter: none; }
-            #aiAssistantModal textarea { resize: none; min-height: 44px !important; height: 44px; max-height: 140px; line-height: 1.4; }
+            #aiAssistantModal .coach-typing .coach-meta { margin-top: 0.4rem; }
+
+            #aiAssistantModal .coach-error { flex: none; padding: 0 1.4rem 0.5rem; font-size: var(--fs-sm); color: #e5534b; }
+            #aiAssistantModal .coach-composer { flex: none; display: flex; align-items: flex-end; gap: 0.5rem; margin: 0.25rem 1rem 1rem; padding: 0.35rem 0.35rem 0.35rem 1.1rem; border: 1px solid var(--border-subtle); border-radius: 24px; background: rgba(127,127,127,0.06); transition: border-color 0.15s ease; }
+            #aiAssistantModal .coach-composer:focus-within { border-color: rgba(212,175,55,0.55); }
+            #aiAssistantModal .coach-input { flex: 1; min-width: 0; border: 0; outline: none; background: transparent; color: var(--text-primary); font-family: 'Inter', system-ui, -apple-system, sans-serif; font-size: 1rem; line-height: 1.45; padding: 0.42rem 0; resize: none; max-height: 140px; height: auto; }
+            #aiAssistantModal .coach-input::placeholder { color: var(--text-muted); opacity: 0.8; }
+            #aiAssistantModal .coach-send { flex: none; width: 38px; height: 38px; border: 0; border-radius: 50%; background: var(--gold-primary); color: #111; display: inline-flex; align-items: center; justify-content: center; font-size: 1.05rem; transition: opacity 0.15s ease, transform 0.15s ease; }
+            #aiAssistantModal .coach-send:disabled { opacity: 0.35; }
+            #aiAssistantModal .coach-send:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(212,175,55,0.35); }
+
+            /* Hover only where there is a pointer: on touch it would make every tap a double tap. */
+            @media (hover: hover) {
+                #aiAssistantModal .coach-head-btn:hover { background: rgba(127,127,127,0.1); color: var(--text-primary); }
+                #aiAssistantModal .coach-chip:hover { border-color: var(--gold-primary); }
+                #aiAssistantModal .coach-bubble a:hover { color: var(--gold-primary); border-bottom-color: var(--gold-primary); }
+                #aiAssistantModal .coach-chip:hover .bi { color: var(--gold-primary); }
+                #aiAssistantModal .coach-rate button:hover { opacity: 1; background: rgba(127,127,127,0.1); }
+                #aiAssistantModal .coach-send:not(:disabled):hover { transform: translateY(-1px); }
+            }
+            @media (max-width: 575.98px) {
+                #aiAssistantModal .coach-shell { height: 100%; border: 0; border-radius: 0; }
+                #aiAssistantModal .coach-head { padding: 0.75rem 0.6rem 0.7rem 1.15rem; }
+                #aiAssistantModal .coach-thread { padding: 1.25rem 1.15rem 0.5rem; }
+                #aiAssistantModal .is-user .coach-bubble { max-width: 88%; }
+                #aiAssistantModal .coach-error { padding: 0 1.15rem 0.5rem; }
+                #aiAssistantModal .coach-composer { margin: 0.25rem 0.75rem calc(0.75rem + env(safe-area-inset-bottom)); }
+            }
             @keyframes coachBlink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
             @media (prefers-reduced-motion: reduce) { #aiAssistantModal .coach-dots span { animation: none; } #aiAssistantModal .coach-thread { scroll-behavior: auto; } }
         </style>
         <div class="modal fade" id="aiAssistantModal" tabindex="-1" aria-hidden="true" aria-labelledby="aiAssistantTitle">
             <div class="modal-dialog modal-dialog-centered modal-lg modal-fullscreen-sm-down">
-                <div class="modal-content" style="background: var(--card-bg-solid); border: 1px solid var(--border-subtle);">
-                    <div class="modal-header border-0 pb-1">
-                        <div>
-                            <h5 class="modal-title" id="aiAssistantTitle"><i class="bi bi-stars text-gold me-2"></i>AI Coach <span class="badge rounded-pill ms-1" style="font-size: 0.6rem; border: 1px solid var(--gold-primary); color: var(--gold-primary);">ADMIN BETA</span></h5>
-                            <div id="aiCoachContext" class="coach-context mt-1" style="display:none;"></div>
+                <div class="modal-content coach-shell">
+                    <header class="coach-head">
+                        <div class="coach-head-main">
+                            <h5 class="coach-title" id="aiAssistantTitle"><i class="bi bi-stars"></i>Coach<span class="coach-beta">Beta</span></h5>
+                            <div id="aiCoachContext" class="coach-context" style="display:none;"></div>
                         </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <button type="button" id="aiCoachClear" class="btn btn-sm btn-link text-muted text-decoration-none" title="Start a new chat"><i class="bi bi-arrow-counterclockwise"></i> New</button>
-                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                        </div>
-                    </div>
-                    <div class="modal-body pt-2">
-                        <div id="aiAssistantMessages" class="coach-thread" role="log" aria-live="polite"></div>
-                        <div id="aiAssistantError" class="text-danger mt-2" style="display:none; font-size: var(--fs-sm);"></div>
-                        <div class="input-group mt-3">
-                            <textarea id="aiAssistantInput" rows="1" class="form-control" placeholder="Ask your coach about your training…" autocomplete="off" maxlength="1500"></textarea>
-                            <button id="aiAssistantSend" type="button" class="btn btn-gold-solid" aria-label="Send"><i class="bi bi-send"></i></button>
-                        </div>
-                        <div class="coach-context mt-2">Answers come from your logs. Enter to send, Shift+Enter for a new line.</div>
+                        <button type="button" id="aiCoachClear" class="coach-head-btn" title="Start a new chat" aria-label="Start a new chat"><i class="bi bi-pencil-square"></i></button>
+                        <button type="button" class="coach-head-btn" data-bs-dismiss="modal" aria-label="Close"><i class="bi bi-x-lg"></i></button>
+                    </header>
+                    <div id="aiAssistantMessages" class="coach-thread" role="log" aria-live="polite"></div>
+                    <div id="aiAssistantError" class="coach-error" style="display:none;"></div>
+                    <div class="coach-composer">
+                        <textarea id="aiAssistantInput" rows="1" class="coach-input" placeholder="Ask about your training…" autocomplete="off" maxlength="1500" enterkeyhint="send" aria-label="Your question"></textarea>
+                        <button id="aiAssistantSend" type="button" class="coach-send" aria-label="Send"><i class="bi bi-arrow-up"></i></button>
                     </div>
                 </div>
             </div>
@@ -2766,8 +2812,9 @@
                     } catch (e) {}
                 };
 
+                // The thumbs (for the answer's footer line) and, after a thumbs down, the "what was off?" box.
                 const renderRating = (msg) => {
-                    const box = document.createElement('div');
+                    let whyBox = null;
                     const row = document.createElement('div');
                     row.className = 'coach-rate';
                     [[1, 'up', 'Helpful'], [-1, 'down', 'Not helpful']].forEach(([value, dir, label]) => {
@@ -2789,7 +2836,6 @@
                         });
                         row.appendChild(b);
                     });
-                    box.appendChild(row);
                     if (msg.askWhy) {
                         const why = document.createElement('div');
                         why.className = 'coach-why';
@@ -2808,10 +2854,10 @@
                             render(isSending);
                         });
                         why.appendChild(input);
-                        box.appendChild(why);
+                        whyBox = why;
                         window.setTimeout(() => input.focus(), 0);
                     }
-                    return box;
+                    return { row, whyBox };
                 };
 
                 const renderMessage = (msg) => {
@@ -2826,6 +2872,8 @@
                         const linked = new Set((msg.text.match(/\b20\d{2}-\d{2}-\d{2}\b/g) || []).map(d => `/workout/${d}`));
                         const extraLinks = (msg.links || []).filter(l => l && l.url && !linked.has(l.url));
                         const steps = Array.isArray(msg.steps) ? msg.steps : [];
+                        const foot = document.createElement('div');
+                        foot.className = 'coach-foot';
                         if (steps.length || extraLinks.length || msg.source === 'rules') {
                             const meta = document.createElement('div');
                             meta.className = 'coach-meta';
@@ -2845,7 +2893,7 @@
                                 a.textContent = l.label || 'Open workout';
                                 meta.appendChild(a);
                             });
-                            bubble.appendChild(meta);
+                            foot.appendChild(meta);
                         }
                         if (msg.note) {
                             const note = document.createElement('div');
@@ -2853,7 +2901,10 @@
                             note.textContent = msg.note;
                             bubble.appendChild(note);
                         }
-                        if (msg.answerId) bubble.appendChild(renderRating(msg));
+                        const rating = msg.answerId ? renderRating(msg) : null;
+                        if (rating) foot.appendChild(rating.row);
+                        if (foot.childNodes.length) bubble.appendChild(foot);
+                        if (rating && rating.whyBox) bubble.appendChild(rating.whyBox);
                     }
                     wrap.appendChild(bubble);
                     return wrap;
@@ -2865,22 +2916,24 @@
                     const icon = document.createElement('i');
                     icon.className = 'bi bi-stars';
                     const title = document.createElement('div');
-                    title.className = 'mt-2 mb-1';
-                    title.style.color = 'var(--text-primary, inherit)';
+                    title.className = 'coach-empty-title';
                     title.textContent = 'Your training, explained.';
                     const sub = document.createElement('div');
-                    sub.className = 'mb-3';
-                    sub.style.fontSize = 'var(--fs-xs)';
+                    sub.className = 'coach-empty-sub';
                     sub.textContent = aiEnabled
                         ? 'Ask about progress, records, plateaus, volume or what to do next. The coach looks up your logs before answering.'
                         : 'No AI key yet — add a Gemini or Groq key in Settings → Integrations. Until then only built-in questions work (e.g. "When did I last hit 100kg squat?").';
                     const chips = document.createElement('div');
-                    chips.className = 'coach-chips justify-content-center';
+                    chips.className = 'coach-chips';
                     (suggestions || []).forEach((q) => {
                         const b = document.createElement('button');
                         b.type = 'button';
                         b.className = 'coach-chip';
-                        b.textContent = q;
+                        const label = document.createElement('span');
+                        label.textContent = q;
+                        const arrow = document.createElement('i');
+                        arrow.className = 'bi bi-arrow-up-right';
+                        b.append(label, arrow);
                         b.addEventListener('click', () => send(q));
                         chips.appendChild(b);
                     });
@@ -2895,7 +2948,8 @@
                         messagesEl.appendChild(renderEmpty());
                         return;
                     }
-                    thread.forEach(m => messagesEl.appendChild(renderMessage(m)));
+                    const nodes = thread.map(m => renderMessage(m));
+                    nodes.forEach(n => messagesEl.appendChild(n));
                     if (typing) {
                         const wrap = document.createElement('div');
                         wrap.className = 'coach-msg';
@@ -2905,6 +2959,10 @@
                         const dots = document.createElement('div');
                         dots.className = 'coach-dots';
                         dots.innerHTML = '<span></span><span></span><span></span>';
+                        const status = document.createElement('em');
+                        status.className = 'coach-status';
+                        status.textContent = liveSteps.length ? 'Looking at your logs…' : 'Thinking…';
+                        dots.appendChild(status);
                         bubble.appendChild(dots);
                         if (liveSteps.length) {
                             const meta = document.createElement('div');
@@ -2919,7 +2977,14 @@
                         wrap.appendChild(bubble);
                         messagesEl.appendChild(wrap);
                     }
-                    scrollToBottom();
+                    // A fresh answer is read from its start: put the question just above it at the top.
+                    const last = thread[thread.length - 1];
+                    if (!typing && last && last.role === 'assistant' && nodes.length > 1) {
+                        const question = nodes[nodes.length - 2];
+                        messagesEl.scrollTop = Math.max(0, question.offsetTop - 16);
+                    } else {
+                        scrollToBottom();
+                    }
                 };
 
                 const loadSuggestions = async () => {
@@ -2940,10 +3005,14 @@
                     inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
                 };
 
+                const syncSend = () => {
+                    if (sendBtn) sendBtn.disabled = isSending || !(inputEl && inputEl.value.trim());
+                };
+
                 const setSending = (sending) => {
                     isSending = sending;
-                    if (sendBtn) sendBtn.disabled = sending;
                     if (inputEl) inputEl.disabled = sending;
+                    syncSend();
                 };
 
                 const send = async (preset) => {
@@ -2953,7 +3022,7 @@
                     setError('');
                     thread.push({ role: 'user', text: q });
                     save();
-                    if (inputEl) { inputEl.value = ''; autosize(); }
+                    if (inputEl) { inputEl.value = ''; autosize(); syncSend(); }
                     setSending(true);
                     liveSteps = [];
                     render(true);
@@ -3035,7 +3104,7 @@
                     } catch (e) {
                         // Drop the unanswered question so a retry doesn't send it twice.
                         const last = thread.pop();
-                        if (inputEl && last && last.role === 'user') { inputEl.value = last.text; autosize(); }
+                        if (inputEl && last && last.role === 'user') { inputEl.value = last.text; autosize(); syncSend(); }
                         save();
                         const aborted = e && e.name === 'AbortError';
                         setError(aborted ? 'That took too long. Try again.' : (e && e.message ? e.message : 'Unable to answer right now.'));
@@ -3052,6 +3121,7 @@
                 window.openAiAssistantModal = open;
 
                 load();
+                syncSend();
                 if (navBtn) navBtn.addEventListener('click', open);
                 if (mobileBtn) mobileBtn.addEventListener('click', open);
                 if (sendBtn) sendBtn.addEventListener('click', () => send());
@@ -3064,7 +3134,7 @@
                     if (inputEl) inputEl.focus();
                 });
                 if (inputEl) {
-                    inputEl.addEventListener('input', autosize);
+                    inputEl.addEventListener('input', () => { autosize(); syncSend(); });
                     inputEl.addEventListener('keydown', (e) => {
                         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
                             e.preventDefault();
