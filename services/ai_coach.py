@@ -110,7 +110,8 @@ def system_prompt(user, context: Optional[Dict[str, Any]] = None) -> str:
         "- Use short bullet points ('- ') and **bold** for key numbers. No tables, no headings.",
         "- Write dates as YYYY-MM-DD so the app can link them to the workout.",
         "- When it helps, end with one concrete, specific next step. For load/rep targets use suggest_next_session "
-        "rather than inventing numbers.",
+        "rather than inventing numbers, and give the targets themselves: never tell the user to run, check or "
+        "look something up that you could fetch now (for several lifts, fetch each).",
         "- Never mention tool names, field names or JSON to the user; just use what you found. Call any e1RM "
         "just 'e1RM'.",
         "- An e1RM marked e1rm_unreliable comes from a long set (over 12 reps); say so once, briefly, not per line. "

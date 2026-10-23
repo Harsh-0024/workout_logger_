@@ -136,6 +136,8 @@ class TestCoachTools(_CoachDb):
         # Bench's best is months old (stalled); squat is climbing; leg press has too few sessions.
         self.assertEqual(names, ["Flat Barbell Press", "Back Squat"])
         self.assertTrue(review["lifts_stalled_first"][0]["looks_stalled"])
+        self.assertIn("weight_kg", review["lifts_stalled_first"][0]["next_session_target"]["target"])
+        self.assertNotIn("next_session_target", review["lifts_stalled_first"][1])  # squat is progressing
         self.assertGreater(review["lifts_stalled_first"][1]["trend_kg_per_week"], 0)
         self.assertIn("note", coach_tools.review_lifts(self.db, self.other, days=28))
         self.assertEqual(coach_tools.review_lifts(self.db, self.user, days=28)["window_days"], 90)

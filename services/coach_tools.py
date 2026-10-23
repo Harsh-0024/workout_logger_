@@ -425,6 +425,14 @@ def review_lifts(db_session, user, days: int = 180, limit: int = 8) -> Dict[str,
             "looks_stalled": trend["looks_stalled"],
         })
     lifts.sort(key=lambda l: (not l["looks_stalled"], l["trend_kg_per_week"]))
+    # A stall comes with what to do about it, so the answer can give targets instead of offering to.
+    for lift in [l for l in lifts if l["looks_stalled"]][:4]:
+        try:
+            nxt = suggest_next_session(db_session, user, lift["exercise"])
+            lift["next_session_target"] = {"target": nxt["target"], "rule": nxt["rule"],
+                                           "last_session": nxt["last_session"]}
+        except ToolError:
+            pass
     out = {"window_days": days, "lifts_stalled_first": lifts}
     if not lifts:
         out["note"] = f"No lift was logged 3+ times with weights in the last {days} days; try a longer window."
@@ -606,7 +614,8 @@ TOOLS: Dict[str, Dict[str, Any]] = {
         "fn": review_lifts,
         "description": "Progress check on every lift trained regularly in the last N days (default 180, at least 90) in one "
                        "call: per lift first/latest e1RM, % change, kg/week trend, all-time best and looks_stalled. "
-                       "Stalled lifts come first. Use it for 'what's stalling / progressing / how are my lifts'.",
+                       "Stalled lifts come first, each with its next-session target (weight and reps). Use it for "
+                       "'what's stalling / progressing / how are my lifts'.",
         "parameters": {"type": "object", "properties": {"days": _INT, "limit": _INT}},
     },
     "compare_periods": {
